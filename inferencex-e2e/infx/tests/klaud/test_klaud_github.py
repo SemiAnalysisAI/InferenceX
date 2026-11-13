@@ -625,7 +625,7 @@ def test_sweep_frees_klaud_work_only_after_its_session_and_final_sweep_end(
 
 
 UNEXPECTED_ERROR = CandidateOutcome(
-    outcome="no-outcome", phase="cleanup", pull_request=7, run_ids=[9], repairs_used=None,
+    outcome="no-outcome", phase="cleanup", pull_request=7, run_ids=[9], repairs_used=0,
 )
 
 
@@ -1496,6 +1496,32 @@ def test_finishing_a_pr_a_maintainer_closed_leaves_it_closed_as_is(monkeypatch, 
     assert "PR closed; branch deleted.\n" in world.comments[-1]["body"]
 
 
+def test_finishing_a_failed_candidate_closes_its_pr_without_unlabeling_it(monkeypatch):
+    world = ended_session_sweep(monkeypatch, conclusion="failure", sessions=("failure",))
+    world.reads[f"git/ref/heads/{world.session.branch}"] = {"object": {"sha": "c" * 40}}
+    monkeypatch.setattr(lifecycle, "subprocess_ready", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(lifecycle.Session, "finish", REAL_FINISH)
+    serve = github.write
+
+    def write(repository, path, method, payload=None):
+        if (method, path) == ("PATCH", "pulls/7"):
+            world.pull["state"] = "closed"
+        if (method, path) == ("DELETE", f"git/refs/heads/{world.session.branch}"):
+            world.listings[f"git/matching-refs/heads/{world.session.branch}"] = []
+        return serve(repository, path, method, payload)
+
+    monkeypatch.setattr(github, "write", write)
+
+    outcome = world.session.finish(CandidateOutcome(
+        outcome="failed", phase="final-sweep", pull_request=7, run_ids=[9], repairs_used=1,
+    ))
+
+    assert [path for method, path in world.writes
+            if method == "DELETE" and path.startswith("issues/7/labels/")] == []
+    assert world.pull["state"] == "closed"
+    world.session.verify(outcome)
+
+
 def test_a_session_whose_pr_a_maintainer_closed_may_stop_without_its_own_outcome(
     tmp_path, monkeypatch
 ):
@@ -1887,7 +1913,8 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
     ]
     contexts = [
         {"id": candidate_id, "family": family, "base": base, "source": {},
-         "clusters": ["cluster-a"], "node-demand": 1, "sweep-node-demand": 1}
+         "baseline-model": "Model", "clusters": ["cluster-a"], "node-demand": 1,
+         "sweep-node-demand": 1}
         for candidate_id, family in zip((first_id, second_id), families, strict=True)
     ]
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
@@ -1901,7 +1928,6 @@ def test_select_continues_after_one_baseline_state_failure(tmp_path, monkeypatch
                 "decision": "proceed",
                 "family": family,
                 "pull-requests": [],
-                "baseline-model": "Model",
                 "reason": "No overlap",
             }
             for candidate_id, family in zip(
@@ -1963,7 +1989,8 @@ def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wa
                "elsewhere": (["h200-dgxc"], 1)}
     contexts = [
         {"id": ids[name], "family": f"configs/nvidia-master.yaml:{name}", "base": "a" * 40,
-         "source": {}, "clusters": clusters, "node-demand": demand, "sweep-node-demand": demand}
+         "source": {}, "baseline-model": "Model", "clusters": clusters, "node-demand": demand,
+         "sweep-node-demand": demand}
         for name, (clusters, demand) in targets.items()
     ]  # fmt: skip
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
@@ -1973,7 +2000,7 @@ def test_select_needs_headroom_on_every_target_cluster_and_shares_it_within_a_wa
     (tmp_path / "producers.json").write_text("{}\n")
     review = {"decisions": [
         {"candidate-id": context["id"], "decision": "proceed", "family": context["family"],
-         "pull-requests": [], "baseline-model": "Model", "reason": "No overlap"}
+         "pull-requests": [], "reason": "No overlap"}
         for context in contexts
     ]}  # fmt: skip
 
@@ -2018,8 +2045,8 @@ def test_select_leaves_the_slots_of_running_and_resumed_sessions_to_them(
     ids = [f"{digit * 16}-{digit * 16}" for digit in "123"]
     contexts = [
         {"id": candidate_id, "family": f"configs/nvidia-master.yaml:family-{digit}",
-         "base": "a" * 40, "source": {}, "clusters": ["cluster-a"], "node-demand": 1,
-         "sweep-node-demand": 1}
+         "base": "a" * 40, "source": {}, "baseline-model": "Model", "clusters": ["cluster-a"],
+         "node-demand": 1, "sweep-node-demand": 1}
         for candidate_id, digit in zip(ids, "123", strict=True)
     ]  # fmt: skip
     (tmp_path / "candidates.json").write_text(json.dumps(contexts))
@@ -2029,7 +2056,7 @@ def test_select_leaves_the_slots_of_running_and_resumed_sessions_to_them(
     (tmp_path / "producers.json").write_text("{}\n")
     review = {"decisions": [
         {"candidate-id": context["id"], "decision": "proceed", "family": context["family"],
-         "pull-requests": [], "baseline-model": "Model", "reason": "No overlap"}
+         "pull-requests": [], "reason": "No overlap"}
         for context in contexts
     ]}  # fmt: skip
 
@@ -2344,6 +2371,7 @@ def test_baseline_freezes_published_points_of_every_curve_key(monkeypatch):
         "benchmark-siblings": {
             "sku": {"github_run_id": 42, "dataset_slug": "cc-traces-weka-062126"},
         },
+        "derived-agentic-metrics": {"4": {"id": 4, "p90_e2e_norm_intvty": 30.0}},
         "evaluations": [],
     }
     monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
@@ -2365,11 +2393,14 @@ def test_baseline_freezes_published_points_of_every_curve_key(monkeypatch):
     )  # fmt: skip
 
     assert {
-        point.key: (point.result, point.values.output_tps_gpu) for point in baseline.points
+        point.key: (
+            point.result, point.values.output_tps_gpu, point.values.dashboard.e2e_norm_intvty
+        )
+        for point in baseline.points
     } == {
-        reporting.point_key({**entry("none"), "conc": 4}): ("passed", 8.0),
-        reporting.point_key({**entry("mtp"), "conc": 4}): ("passed", 12.0),
-    }
+        reporting.point_key({**entry("none"), "conc": 4}): ("passed", 8.0, 30.0),
+        reporting.point_key({**entry("mtp"), "conc": 4}): ("passed", 12.0, None),
+    }  # fmt: skip
 
 
 MIXED_FAMILY = "configs/nvidia-master.yaml:agg,mtp"
@@ -2427,7 +2458,8 @@ def serve_mixed_curve(monkeypatch, agg="published"):
             url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
             retrieved_at="2026-09-20T00:00:00Z", sha256="0" * 64,
             payload=[] if resource == "evaluations" else {"sku": sku}
-            if resource == "benchmark-siblings" else feeds[date][resource],
+            if resource == "benchmark-siblings" else {}
+            if resource == "derived-agentic-metrics" else feeds[date][resource],
         )  # fmt: skip
 
     monkeypatch.setattr(api, "fetch", fetch)
@@ -2502,7 +2534,8 @@ def test_select_freezes_a_mixed_image_curve_or_defers_a_key_without_published_po
     context, producers, matrix = serve_mixed_curve(monkeypatch, agg)
     (tmp_path / "candidates.json").write_text(json.dumps([{
         **context, "id": CANDIDATE_ID, "family": MIXED_FAMILY, "base": "a" * 40,
-        "clusters": ["cluster-a"], "node-demand": 1, "sweep-node-demand": 1,
+        "baseline-model": "DeepSeek-R1", "clusters": ["cluster-a"], "node-demand": 1,
+        "sweep-node-demand": 1,
     }]))  # fmt: skip
     (tmp_path / "producers.json").write_text(json.dumps({MIXED_FAMILY: producers}))
     (tmp_path / "cluster-state.json").write_text(
@@ -2512,7 +2545,7 @@ def test_select_freezes_a_mixed_image_curve_or_defers_a_key_without_published_po
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{
         "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": MIXED_FAMILY,
-        "pull-requests": [], "baseline-model": "DeepSeek-R1", "reason": "No overlap",
+        "pull-requests": [], "reason": "No overlap",
     }]}))  # fmt: skip
     monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: api.Capacity(
         idle={"cluster-a": 1}, queued={}, size={"cluster-a": 1}))  # fmt: skip
@@ -2799,6 +2832,7 @@ def publish(monkeypatch, head, slug="cc-traces-weka-062126"):
         "benchmark-siblings": {
             "sku": {"github_run_id": 42, **({"dataset_slug": slug} if slug else {})},
         },
+        "derived-agentic-metrics": {},
         "evaluations": [],
     }
     monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
@@ -2816,7 +2850,8 @@ def review_candidate(directory, monkeypatch, source):
     directory.mkdir()
     (directory / "candidates.json").write_text(json.dumps(
         [{"id": CANDIDATE_ID, "family": FAMILY, "base": "a" * 40, "source": source,
-          "clusters": ["cluster-a"], "node-demand": 1, "sweep-node-demand": 1}]
+          "baseline-model": "DeepSeek-R1", "clusters": ["cluster-a"], "node-demand": 1,
+          "sweep-node-demand": 1}]
     ))
     (directory / "cluster-state.json").write_text(json.dumps({
         "committed-demand": {}, "infra-backoff": [], "headroom": {"cluster-a": 1},
@@ -2825,7 +2860,7 @@ def review_candidate(directory, monkeypatch, source):
     monkeypatch.setenv("GITHUB_RUN_ID", "42")
     monkeypatch.setenv("KLAUD_PR_REVIEW", json.dumps({"decisions": [{
         "candidate-id": CANDIDATE_ID, "decision": "proceed", "family": FAMILY, "pull-requests": [],
-        "baseline-model": "DeepSeek-R1", "reason": "No overlap",
+        "reason": "No overlap",
     }]}))
 
 
@@ -3973,6 +4008,7 @@ def test_plan_blocks_a_curve_sharing_a_key_with_a_blocked_or_held_family(
     monkeypatch.setattr(klaud, "fetch_catalog", lambda _policy: ([{
         "source-status": "baseline", "source-id": "1", "source": source,
         "benchmark-age-days": 0}], []))  # fmt: skip
+    monkeypatch.setattr(klaud, "display_models", lambda: {"dsr1": "DeepSeek-R1-0528"})
     monkeypatch.setattr(klaud, "github_read", lambda *_a, **_k: [[]])
     monkeypatch.setattr(klaud, "fetch_capacity", lambda _policy: api.Capacity(
         idle={"h100-cw": 1}, queued={}, size={"h100-cw": 1}))
@@ -4076,6 +4112,27 @@ def test_a_fixed_sequence_result_reports_its_failed_requests(completed, errors, 
     assert values.output_tps_gpu == 50.0
     notes = [line.rstrip() for line in text.splitlines() if "request error" in line]
     assert notes == ([note] if note else [])
+
+
+def test_a_fixed_sequence_result_reads_the_dashboards_median_axes():
+    from infx.results.fixed_sequence import build_result
+
+    raw = {
+        "max_concurrency": 4, "model_id": "m", "num_prompts": 100, "completed": 100,
+        "total_token_throughput": 800.0, "output_throughput": 400.0,
+        "mean_ttft_ms": 300.0, "median_ttft_ms": 200.0, "p90_ttft_ms": 900.0,
+        "mean_tpot_ms": 30.0, "median_tpot_ms": 20.0, "p90_tpot_ms": 50.0,
+        "mean_e2el_ms": 9000.0, "median_e2el_ms": 8000.0, "p90_e2el_ms": 20000.0,
+    }  # fmt: skip
+    env = {
+        "RUNNER_TYPE": "h100", "FRAMEWORK": "sglang", "PRECISION": "fp8", "SPEC_DECODING": "none",
+        "ISL": "1024", "OSL": "1024", "DISAGG": "false", "MODEL_PREFIX": "dsr1", "IMAGE": "i:1",
+        "TP": "8", "EP_SIZE": "1", "DP_ATTENTION": "false",
+    }  # fmt: skip
+
+    axes = reporting.values(build_result(raw, env)).dashboard
+
+    assert axes == reporting.Dashboard(intvty=50.0, e2el_ms=8000.0, ttft_ms=200.0)
 
 
 def test_baseline_notes_name_concurrency_rows_like_their_table():
