@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # Install Infera, at the master config's router version, into the stock SGLang image for the
-# infera-sglang points, then apply the SGLang fix the pinned image still lacks
-# (infera-sglang-patches/apply.sh, waiver docs/waiver/4629.md). amd-infera's Linux x86_64
-# wheel on PyPI bundles the infera-router binary next to the infera.engine.sglang worker
-# wrapper, so the master's router version is the Infera version. Only nats-py is missing from
-# the lmsysorg ROCm image; --no-deps keeps every package the image ships (torch, sglang,
-# transformers, ...) at its pinned version.
+# infera-sglang points. amd-infera's Linux x86_64 wheel on PyPI bundles the infera-router
+# binary next to the infera.engine.sglang worker wrapper, so the master's router version is the
+# Infera version. Only nats-py is missing from the lmsysorg ROCm image; --no-deps keeps every
+# package the image ships (torch, sglang, transformers, ...) at its pinned version.
 set -eo pipefail
 source /infmax-workspace/benchmarks/check_env.sh
 check_env_vars ROUTER_VERSION
@@ -19,7 +17,3 @@ fi
 # The router the launcher will exec: the wheel's bundled binary, not one on PATH. Fails if pip
 # fell back to the pure-Python wheel (a platform outside manylinux_2_28 x86_64).
 python3 -c "import infera.engine.sglang; from infera.server.launch_rust import _find_binary; _find_binary()"
-# INFERA_SGLANG_PATCHES=0 only for the installer unit test, which has no SGLang tree.
-if [[ "${INFERA_SGLANG_PATCHES:-1}" != 0 ]]; then
-    bash "$(dirname "${BASH_SOURCE[0]}")/infera-sglang-patches/apply.sh"
-fi
