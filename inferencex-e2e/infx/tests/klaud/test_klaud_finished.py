@@ -3,9 +3,8 @@ import subprocess
 
 import pytest
 
-from infx.klaud import __main__ as klaud
-from infx.klaud import finished, github
-from infx.klaud.models import OwnedCandidate, Ownership, identity, utc
+from infx.klaud import finished, github, reporting
+from infx.klaud.models import OwnedCandidate, Ownership, utc
 from infx.tests.klaud.test_klaud_github import ended_session_sweep, recovery_pass
 from infx.workflows.validate_perf_changelog import parse_changelog
 
@@ -181,39 +180,35 @@ def test_a_conflict_beyond_the_changelog_does_not_use_up_the_limit(tmp_path, mon
     assert git(remote, "rev-parse", f"refs/heads/{OLDER}") != heads[OLDER]
 
 
-def test_offered_images_name_the_image_of_the_candidate_choose_builds():
-    source = {"model": "m1", "hardware": "h100", "framework": "sglang", "precision": "fp8",
-              "spec_method": "none", "disagg": False, "benchmark_type": "agentic_traces",
-              "isl": None, "osl": None, "image": "example/sglang:v2", "date": "2026-10-20"}  # fmt: skip
-    family = "configs/nvidia-master.yaml:agg,mtp"
-    families = {klaud.observation_key(source): {
-        family: klaud.Family(frozenset({"a"}), 1, 1, False)}}  # fmt: skip
-    items = [{"source-status": "baseline", "source-id": "1", "source": source,
-              "benchmark-age-days": 0}]  # fmt: skip
-
-    [candidate] = klaud.choose(items, {"a": 8}, set(), families)
-    prefix, image = candidate["id"].split("-")
-
-    offered = klaud.offered_images(items, families)
-    assert offered[prefix] == {image}
-    assert offered[identity("configs/nvidia-master.yaml:agg")[:16]] == {image}
+FAMILY = "configs/nvidia-master.yaml:agg"
+SINGLE_POINT = "configs/nvidia-master.yaml:agg-c1"
+OLD, NEW = "example/sglang:v1", "example/sglang:v2"
 
 
-NEWER = {"1" * 16: {"3" * 16}}
+def baseline_body():
+    record = reporting.Baseline(
+        family=FAMILY, date="2026-10-19", image=OLD,
+        goal=reporting.Prose(en="Check the baseline.", zh="检查基线。"),
+        sources=["https://inferencex.semianalysis.com/api/v1/benchmarks"], points=[],
+    )  # fmt: skip
+    return "Summary\n" + reporting.baseline_marker(record) + "\n"
 
 
-@pytest.mark.parametrize(("created", "offered", "owned", "closed"), [
-    pytest.param("2026-10-20T00:00:00Z", NEWER, False, True, id="stale-with-newer-image"),
-    pytest.param("2026-10-22T00:00:01Z", NEWER, False, False, id="fresh"),
-    pytest.param("2026-10-20T00:00:00Z", {"1" * 16: {"2" * 16, "3" * 16}}, False, False,
-                 id="image-still-offered"),
-    pytest.param("2026-10-20T00:00:00Z", {}, False, False, id="family-not-offered"),
-    pytest.param("2026-10-20T00:00:00Z", NEWER, True, False, id="owned-by-a-session"),
+@pytest.mark.parametrize(("created", "main", "owned", "reason"), [
+    pytest.param("2026-10-20T00:00:00Z", {FAMILY: NEW, SINGLE_POINT: NEW}, False,
+                 "main moved config key `agg` of this family to another image",
+                 id="own-key-moved"),
+    pytest.param("2026-10-20T00:00:00Z", {SINGLE_POINT: OLD}, False,
+                 "main removed config key `agg` of this family", id="own-key-removed"),
+    pytest.param("2026-10-20T00:00:00Z", {FAMILY: OLD, SINGLE_POINT: NEW}, False, None,
+                 id="only-another-key-of-the-curve-moved"),
+    pytest.param("2026-10-22T00:00:01Z", {FAMILY: NEW}, False, None, id="fresh"),
+    pytest.param("2026-10-20T00:00:00Z", {FAMILY: NEW}, True, None, id="owned-by-a-session"),
 ])  # fmt: skip
-def test_a_stale_finished_pr_whose_family_moved_to_a_newer_image_is_requeued(
-    monkeypatch, created, offered, owned, closed
+def test_a_stale_finished_pr_that_main_superseded_is_requeued(
+    monkeypatch, created, main, owned, reason
 ):
-    pull = {**finished_pr("c" * 40), "created_at": created}
+    pull = {**finished_pr("c" * 40), "created_at": created, "body": baseline_body()}
     writes = []
     monkeypatch.setenv("KLAUD_REQUEUE_TOKEN", "pat-fixture")
     monkeypatch.setattr(
@@ -244,20 +239,22 @@ def test_a_stale_finished_pr_whose_family_moved_to_a_newer_image_is_requeued(
     numbers = finished.requeue_superseded(
         REPOSITORY,
         [pull, {**pull, "number": 8, "draft": True}],
-        offered,
+        main,
         claimed if owned else [],
         utc("2026-10-27T00:00:00Z"),
     )
 
-    assert numbers == ([7] if closed else [])
+    assert numbers == ([7] if reason else [])
     assert [(method, path, token) for method, path, _, token in writes] == ([
         ("POST", "issues/7/labels", "pat-fixture"),
         ("POST", "issues/7/comments", "pat-fixture"),
         ("PATCH", "pulls/7", "pat-fixture"),
-    ] if closed else [])  # fmt: skip
-    if closed:
+    ] if reason else [])  # fmt: skip
+    if reason:
         assert writes[0][2] == {"labels": ["klaud-requeue"]}
-        assert writes[1][2]["body"].startswith("**requeued** · ")
+        assert writes[1][2]["body"].startswith(
+            f"**requeued** · Open for over 5 days while {reason},"
+        )
         assert writes[2][2] == {"state": "closed"}
 
 

@@ -823,7 +823,7 @@ HOSTED = {
     "started_at": "2026-10-14T20:00:00Z",
 }
 NO_CAPACITY = CandidateOutcome(
-    outcome="no-capacity", phase="final-sweep", pull_request=7, run_ids=[9], repairs_used=None
+    outcome="no-capacity", phase="final-sweep", pull_request=7, run_ids=[9], repairs_used=0
 )
 
 
@@ -991,13 +991,43 @@ def test_recovery_finishes_a_validated_pr_a_maintainer_closed_as_closed_by_maint
                 phase="cleanup",
                 pull_request=7,
                 run_ids=[9],
-                repairs_used=None,
+                repairs_used=0,
             )
         ]
     else:
         with pytest.raises(github.VerificationError, match="must remain ready for review"):
             lifecycle.reconcile(world.session, NOW)
         assert world.finished == []
+
+
+def attempt_report(world, run, kind, number, chunked=False):
+    """A Klaud report of attempt ``kind`` ``number`` on attempt 1 of the world's run ``run``."""
+    record = reporting.Attempt(
+        kind=kind, number=number, head="c" * 40, image="example/image:next", run_id=run,
+        run_attempt=1, status="failed", change=reporting.Prose(en="Pin the image.", zh="固定镜像。"),
+        next=reporting.Prose(en="Pin the image.", zh="固定镜像。"), benchmarks_expected=1,
+        benchmarks_passed=0, evals_expected=0, evals_passed=0, points=[],
+    ).model_dump(by_alias=True)
+    data = {"record": record, "chunks": [f"run-{run}-1-part-1-{'0' * 16}"]} if chunked else record
+    return {"id": 60 + run, "user": {"login": "Klaud-Cold"}, "body": (
+        reporting.marker(world.session, f"run-{run}-1") + json.dumps(data) + "\n-->\nRendered.")}
+
+
+def test_recovery_reports_the_repairs_its_session_published(monkeypatch):
+    world = ended_session_sweep(monkeypatch, conclusion="success")
+    monkeypatch.setattr(world.session, "validation", lambda _run: None)
+    world.comments.extend([
+        attempt_report(world, 4, "initial", 0),
+        attempt_report(world, 5, "repair", 1),
+        attempt_report(world, 6, "repair", 2, chunked=True),
+        attempt_report(world, 7, "infrastructure-retry", 2),
+        attempt_report(world, 9, "final", 0),
+    ])
+
+    assert lifecycle.reconcile(world.session, NOW) is True
+    assert world.finished == [CandidateOutcome(
+        outcome="validated", phase="final-sweep", pull_request=7, run_ids=[9], repairs_used=2,
+    )]
 
 
 @pytest.mark.parametrize(("closer", "complete"), [("maintainer", True), ("Klaud-Cold", False)])
