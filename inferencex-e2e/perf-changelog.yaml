@@ -12808,7 +12808,7 @@
     - "Concurrency 4 drops DRAM offload (kv-offloading none, override_gpu_kv_c4) and stays TP8 x DCP8 with max-num-seqs 2; it switches to the latency_specialized decode backend, 5 draft tokens (golden AL 3.41, from 7), decode-only capture sizes 6 and 12 and breakable CUDA graphs off."
     - "Concurrency 48 uses 3 draft tokens (golden AL 2.88, from 6) with decode capture sizes 4-192, and drops prefill-schedule-interval 8, long-prefill-token-threshold 10240 and long-prefill-token-threshold-adaptive (back to vLLM defaults)."
     - "Concurrency 16, 24 and 32 set prefill-schedule-interval 32 (from 1, 1 and 8) and VLLM_PREFILL_CADENCE_NO_ESCAPE=1. Their max-num-seqs is below the concurrency, so requests always wait; without the flag vLLM drops the prefill hold (capacity escape)."
-    - "Add concurrency 52 and 56 (override_dram_c52, override_dram_c56) on the c48 settings: TP8 x DCP8, DRAM offload, 3 draft tokens, max-num-batched-tokens 10240, gpu-memory-utilization 0.91, max-num-seqs equal to the concurrency, decode capture sizes 4-208 and 4-224."
+    - "Add concurrency 52, 56 and 60 (override_dram_c52, override_dram_c56, override_dram_c60) on the c48 settings: TP8 x DCP8, DRAM offload, 3 draft tokens, max-num-batched-tokens 10240, gpu-memory-utilization 0.91, max-num-seqs equal to the concurrency, decode capture sizes 4-208, 4-224 and 4-240."
     - "Remove override_dram_c10, unused since concurrency 10 left the sweep."
     - "No change to the DSpark draft's precision: Inferact/Kimi-K3.1-Pro-DSpark-preview (revision 6a2ef20a) still loads in BF16 with no quantization and an FP8 KV cache; the new draft lengths do not change these types."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5043
