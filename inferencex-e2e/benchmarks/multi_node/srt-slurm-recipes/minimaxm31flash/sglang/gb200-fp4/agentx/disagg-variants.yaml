@@ -542,17 +542,38 @@ override_1p_dep8_dep8_nightly1112:
 
 override_1p_dep8_dep8_linker:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker
-  # The unified-cache external linker replaces HiCache: one Mooncake pool that
-  # every prefill and decode rank contributes 190 GB to, read by RDMA straight
-  # into device memory. L3 = 8 x 190 GB (prefill) + 8 x 190 GB (decode) +
-  # 4 x 190 GB (infra) = 3800 GB. Prefetch mode loads before the forward pass;
-  # layer-wise reads stalled the forward on DSV4.1 GB300 (#4595).
+  # The unified-cache external linker replaces the prefill HiCache: one
+  # Mooncake pool read by RDMA straight into device memory. Each prefill rank
+  # contributes a 190 GB segment; decode keeps its radix cache off (the linker
+  # needs it on, which DP attention marks experimental), so decode nodes host
+  # 4 x 190 GB stores instead. L3 = 8 x 190 GB (prefill) + 2 x 4 x 190 GB
+  # (decode) + 4 x 190 GB (infra) = 3800 GB. Prefetch mode loads before the
+  # forward pass; layer-wise reads stalled the forward on DSV4.1 GB300 (#4595).
   identity:
     frameworks:
       sglang: "0.0.0.dev1+g36027fd15"
   services:
     - *l3-etcd
     - *l3-master
+    - *big-decode-store
+    - <<: *big-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
     - *big-infra-store
     - <<: *big-infra-store
       name: store-infra-1
@@ -597,12 +618,6 @@ override_1p_dep8_dep8_linker:
         enable-unified-cache-external-linker: true
         unified-cache-external-linker-backend: mooncake
         unified-cache-external-linker-config: &linker-config '{"load_mode":"prefetch","enable_group_semantics":false}'
-    decode:
-      env: *linker-env
-      args:
-        enable-unified-cache-external-linker: true
-        unified-cache-external-linker-backend: mooncake
-        unified-cache-external-linker-config: *linker-config
 
 override_1p_dep8_dep8_linker_least_loaded:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-least-loaded
@@ -615,6 +630,25 @@ override_1p_dep8_dep8_linker_least_loaded:
   services:
     - *l3-etcd
     - *l3-master
+    - *big-decode-store
+    - <<: *big-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
     - *big-infra-store
     - <<: *big-infra-store
       name: store-infra-1
@@ -662,12 +696,6 @@ override_1p_dep8_dep8_linker_least_loaded:
         enable-hierarchical-cache: null
         hicache-size: null
         hicache-write-policy: null
-        enable-unified-cache-external-linker: true
-        unified-cache-external-linker-backend: mooncake
-        unified-cache-external-linker-config: *linker-config
-    decode:
-      env: *linker-env
-      args:
         enable-unified-cache-external-linker: true
         unified-cache-external-linker-backend: mooncake
         unified-cache-external-linker-config: *linker-config
