@@ -988,9 +988,7 @@ kimik3.1-fp4-mi355x-vllm-agentic-dspark:
     - dram-utilization: 0.6
       search-space:
       # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. c1 and c4 keep the KV cache on the GPUs.
-      # c1 runs twice, with 7 and with 5 draft tokens; each row names its override.
-      - { tp: 8, ep: 1, dcp-size: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml:override_gpu_kv_c1 }
-      - { tp: 8, ep: 1, dcp-size: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml:override_gpu_kv_c1_nst5 }
+      - { tp: 8, ep: 1, dcp-size: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [16, 24, 32, 48], srt-recipe: agentic.yaml }
 

@@ -12804,7 +12804,7 @@
   description:
     - "Update the image from vllm/vllm-openai-rocm:kimi-k31-d73dd529 (sha256:5b54f223) to vllm/vllm-openai-rocm:kimi-k31-2ded1ca (sha256:5661b15c), vLLM mum-tracking 2ded1caaf9, which includes a KV null-block fix."
     - "Every point sets VLLM_ROCM_DCP_VUP_RS=1 (DCP V-up reduce-scatter, on top of the existing VLLM_ROCM_DCP_AITER_ALLGATHER=1), VLLM_ROCM_DSA_MULTISTREAM=1 and VLLM_ROCM_MEM_HEADROOM_GIB=8."
-    - "Concurrency 1 runs two variants, both TP8 x DCP1 with GPU-resident KV, the latency_specialized decode backend, VLLM_KIMI_SD_DSA_PROLOGUE=1 (each DSA layer's decode prologue in one launch) and breakable CUDA graphs off: override_gpu_kv_c1 keeps 7 draft tokens (golden AL 3.69) and capture sizes 2-16; the new override_gpu_kv_c1_nst5 uses 5 draft tokens (golden AL 3.41) with capture size 6. Each master-config row selects its override."
+    - "Concurrency 1 (TP8 x DCP1, latency_specialized decode backend) sets VLLM_KIMI_SD_DSA_PROLOGUE=1, which runs each DSA layer's decode prologue in one launch."
     - "Concurrency 4 drops DRAM offload (kv-offloading none, override_gpu_kv_c4) and stays TP8 x DCP8 with max-num-seqs 2; it switches to the latency_specialized decode backend, 5 draft tokens (golden AL 3.41, from 7), decode-only capture sizes 6 and 12 and breakable CUDA graphs off."
     - "Concurrency 48 uses 3 draft tokens (golden AL 2.88, from 6) with decode capture sizes 4-192."
     - "Remove override_dram_c10, unused since concurrency 10 left the sweep."

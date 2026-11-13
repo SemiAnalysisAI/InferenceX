@@ -125,26 +125,6 @@ override_gpu_kv_c1:
       CONC: '1'
       KV_OFFLOADING: 'none'
 
-override_gpu_kv_c1_nst5:
-  roles:
-    agg:
-      args:
-        max-num-seqs: 1
-        decode-context-parallel-size: null
-        dcp-comm-backend: null
-        cp-kv-cache-interleave-size: null
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":6,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6]}'
-        additional-config: '{"decode_backend":"latency_specialized","kda_prefill_backend":"fused"}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        kv-transfer-config: null
-      env:
-        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
-        VLLM_KIMI_SD_DSA_PROLOGUE: '1'
-  benchmark:
-    env:
-      CONC: '1'
-      KV_OFFLOADING: 'none'
-
 override_gpu_kv_c4:
   roles:
     agg:
