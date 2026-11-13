@@ -12822,5 +12822,5 @@
   scenario-type: [agentic-coding]
   description:
     - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X at DEP8 (TP1 x DP8 with expert parallelism over the 8 ranks) behind a consistent-hash vLLM router at concurrency 256, 512 and 1024, on vllm/vllm-openai-rocm:nightly-be47189f (index digest sha256:a6263de19d7e68fc12d7ee37da0cc0d2817b8eb9a83c4f22911783befd133ebc), with the per-tensor-scale FP8 KV cache (--kv-cache-dtype fp8_e4m3, vllm-project/vllm#66036)."
-    - "Prefill uses the engine's cadence scheduling (prefill-schedule-interval 11, 16384-token budget). The cross-DP delayer (vllm-project/vllm#65655) is not used."
+    - "Experts run on AITER MegaMoE over MoRI (--moe-backend aiter_mega_moe, --all2all-backend mori). Prefill uses the engine's cadence scheduling (prefill-schedule-interval 96, 32768-token budget, long-prefill-token-threshold 8192) with max-num-seqs 128 (160 at concurrency 1024), as in the B300 recipe. The cross-DP delayer (vllm-project/vllm#65655) is not used."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5056
