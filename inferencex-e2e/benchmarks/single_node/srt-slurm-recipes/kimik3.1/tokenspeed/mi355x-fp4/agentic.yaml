@@ -1,0 +1,243 @@
+base:
+  schema: 2
+  name: kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark
+  identity:
+    model:
+      revision: d9e99b0792a5e93b78ea9bea62a68167e36ddd9e
+    container: {}
+    # TODO(k31-tokenspeed-wheels): the versions of the wheels in environment.
+    frameworks:
+      tokenspeed: TODO
+      tokenspeed-kernel: TODO
+      tokenspeed-kernel-amd: TODO
+      tokenspeed-scheduler: TODO
+      tokenspeed-engine: TODO
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  # Up to two hours to load the 1.56 TB checkpoint, capture graphs and compile the first kernels.
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+    # srtctl runs SMG directly: these are the gateway settings `ts serve` applies.
+    args:
+      reasoning-parser: passthrough
+      tool-call-parser: passthrough
+      policy: round_robin
+      # TODO(k31-gateway-tokenizer): set tokenizer-path. The K3.1 checkpoint ships a Python chat
+      # encoder instead of a Jinja chat template, so SMG needs a tokenizer directory that has one
+      # (a K3-era directory served the measured runs). How CI provides it is open.
+      disable-circuit-breaker: true
+      disable-retries: true
+      disable-load-monitoring: true
+      tokenizer-cache-enable-l0: true
+      tokenizer-cache-enable-l1: true
+      log-level: warn
+  engine: tokenspeed
+  setup_script: tokenspeed-nightly-rocm.sh
+  environment:
+    # TODO(k31-tokenspeed-wheels): wheels built from the TokenSpeed stack-head commit are not
+    # published yet; set each to its release URL with a #sha256= fragment.
+    TOKENSPEED_WHEEL_URL: TODO-tokenspeed-wheel-url
+    TOKENSPEED_KERNEL_WHEEL_URL: TODO-tokenspeed-kernel-wheel-url
+    TOKENSPEED_KERNEL_AMD_WHEEL_URL: TODO-tokenspeed-kernel-amd-wheel-url
+    TOKENSPEED_SCHEDULER_VERSION: TODO-tokenspeed-scheduler-version
+    TOKENSPEED_ENGINE_WHEEL_URL: TODO-tokenspeed-engine-wheel-url
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env:
+        GPU_MAX_HW_QUEUES: '2'
+        PYTHONNOUSERSITE: '1'
+        # Serve from the pre-seeded shared HF cache with no Hub API calls.
+        HF_HUB_OFFLINE: '1'
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        revision: d9e99b0792a5e93b78ea9bea62a68167e36ddd9e
+        trust-remote-code: true
+        # Attention and MoE TP8; EP1 keeps every expert on every GPU.
+        attn-tp-size: 8
+        data-parallel-size: 1
+        ep-size: 1
+        pipeline-parallel-size: 1
+        moe-backend: auto
+        kv-cache-dtype: fp8
+        # The K3.1 precision policy's FP4 DSA indexer key cache.
+        dsa-index-k-format: mxfp4
+        language-model-only: true
+        max-model-len: 1048560
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        gpu-memory-utilization: 0.95
+        enable-prefix-caching: true
+        # Host L2 holds eight times the GPU KV blocks: 294.86 GB per GPU without KV
+        # parallelism, 217.95 GB with KVP8.
+        kvstore-ratio: 8
+        reasoning-parser: passthrough
+        drafter-attention-backend: gluon
+        speculative-algorithm: DSPARK
+        speculative-draft-model-path: Inferact/Kimi-K3.1-Pro-DSpark-preview
+        speculative-draft-model-revision: 6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94
+        # Drafts per step (overrides change it); the verify window adds the current token.
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
+        speculative-eagle-topk: 1
+        # Real verification. The connector selects greedy sampling and the golden acceptance
+        # length for synthetic throughput.
+        sampling-backend: triton
+        enable-speculative-sampling: true
+        speculative-rejection-sample-method: block
+        enable-metrics: true
+        metrics-host: 0.0.0.0
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'tokenspeed:'
+
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 1
+        max-cudagraph-capture-size: 1
+        cudagraph-capture-sizes: [1]
+        disable-prefill-graph: true
+        speculative-num-steps: 7
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2360'
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        # Running cap below concurrency: the other sessions wait for their first token.
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 2
+        cudagraph-capture-sizes: [1, 2]
+        disable-prefill-graph: true
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2360'
+
+override_tp8_dcp8_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 8
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8]
+        # Each GPU stores one eighth of every request's KV pages and decode attends its own shard.
+        kv-parallel-size: 8
+        decode-context-parallel-size: 8
+        prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
+        prefill-graph-max-tokens: 3072
+        # Up to 64 decode rounds run after each prefill chunk before the next prefill round.
+        prefill-decode-interval: 64
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2360'
+
+override_tp8_dcp8_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 8
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8]
+        kv-parallel-size: 8
+        decode-context-parallel-size: 8
+        prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
+        prefill-graph-max-tokens: 3072
+        prefill-decode-interval: 80
+        # At least 8 decode rounds after every prefill chunk, also once a prompt waited the full interval.
+        prefill-decode-min-interval: 8
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2360'
+
+override_tp8_dcp8_c24:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 12
+        max-cudagraph-capture-size: 12
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        kv-parallel-size: 8
+        decode-context-parallel-size: 8
+        prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
+        prefill-graph-max-tokens: 3072
+        prefill-decode-interval: 64
+        prefill-decode-min-interval: 16
+        enable-short-prefill-first: true
+        speculative-num-steps: 4
+        speculative-num-draft-tokens: 5
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2360'
+
+override_tp8_dcp8_c32:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 16
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        kv-parallel-size: 8
+        decode-context-parallel-size: 8
+        prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
+        prefill-graph-max-tokens: 3072
+        prefill-decode-interval: 64
+        prefill-decode-min-interval: 16
+        enable-short-prefill-first: true
+        enable-mixed-batch: true
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2360'
+
+override_tp8_dcp8_c48:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 48
+        max-cudagraph-capture-size: 48
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48]
+        kv-parallel-size: 8
+        decode-context-parallel-size: 8
+        prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
+        prefill-graph-max-tokens: 3072
+        prefill-decode-interval: 32
+        prefill-decode-min-interval: 1
+        enable-mixed-batch: true
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2360'
