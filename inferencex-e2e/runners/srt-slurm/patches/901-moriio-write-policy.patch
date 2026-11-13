@@ -1,0 +1,20 @@
+--- a/src/srtctl/backends/vllm.py
++++ b/src/srtctl/backends/vllm.py
+@@ -571,6 +571,9 @@
+             raise ValueError(f"discovery kv_role must be {expected_role} for {mode}")
+         target["kv_role"] = expected_role
+         extra = target.setdefault("kv_connector_extra_config", {})
++        read_mode = extra.setdefault("read_mode", True)
++        if type(read_mode) is not bool:
++            raise ValueError("discovery read_mode must be a boolean")
+         for key, value in self._discovery_extra_config(process, runtime).items():
+             configured = extra.get(key, value)
+             if key.endswith("_port") and type(configured) is int:
+@@ -604,7 +607,6 @@
+             "host_ip": get_hostname_ip(process.node, runtime.network_interface),
+             "handshake_port": str(process.moriio_handshake_port),
+             "notify_port": str(process.moriio_notify_port),
+-            "read_mode": True,
+         }
+ 
+     def get_process_environment(self, process: Process) -> dict[str, str]:

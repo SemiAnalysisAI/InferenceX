@@ -1015,3 +1015,33 @@ def test_synthetic_throughput_drops_kimi_vllm_parsers(
     else:
         assert parsers.keys().isdisjoint(args)
 
+
+
+def test_experimental_al_changes_native_args_and_marks_provenance(
+    golden_dir: Path, tmp_path: Path,
+) -> None:
+    recipe = vllm_recipe()
+    recipe["environment"] = {"INFX_EXPERIMENTAL_ACCEPTANCE_LENGTH": "3.25"}
+    result = apply_native(recipe, build_overrides(recipe, "vllm", ENV, golden_dir=golden_dir))
+    spec = json.loads(result["roles"]["agg"]["args"]["speculative-config"])
+    assert spec["synthetic_acceptance_length"] == 3.25
+    path = tmp_path / "experimental.yaml"
+    path.write_text(yaml.safe_dump(recipe))
+    plans = plan_commands(str(path), "vllm", [], ENV, golden_dir=golden_dir)
+    assert plans[0].acceptance_source == "experimental_override"
+    assert plans[0].acceptance_length == 3.25
+    real = apply_native(
+        recipe,
+        build_overrides(recipe, "vllm", {**ENV, "EVAL_ONLY": "true"}, golden_dir=golden_dir),
+    )
+    assert "synthetic_acceptance_length" not in json.loads(
+        real["roles"]["agg"]["args"]["speculative-config"]
+    )
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "0.9", "4.1"])
+def test_experimental_al_rejects_invalid_verify_target(golden_dir: Path, value: str) -> None:
+    recipe = vllm_recipe()
+    recipe["environment"] = {"INFX_EXPERIMENTAL_ACCEPTANCE_LENGTH": value}
+    with pytest.raises(ValueError, match="finite and within"):
+        build_overrides(recipe, "vllm", ENV, golden_dir=golden_dir)

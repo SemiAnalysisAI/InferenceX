@@ -1,0 +1,272 @@
+schema: 2
+identity:
+  model:
+    revision: 6d0a0202956796543364d666ab19c6ad1a494ee1
+  frameworks:
+    vllm: 0.0.0+mum.181bd93fc6
+    vllm-router: 0.1.15
+slurm:
+  time_limit: 08:00:00
+sbatch_directives:
+  mem: '0'
+srun_options:
+  container-remap-root: ''
+  container-writable: ''
+  mem: '0'
+  container-workdir: /infmax-workspace
+  overlap: ''
+container_mounts:
+  /dev/infiniband: /dev/infiniband
+extra_mount:
+- /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
+- /var/lib/hf-hub-cache:/k31-preview:ro
+resources:
+  gpu_type: mi355x
+  gpus_per_node: 8
+frontend:
+  type: vllm-router
+  enable_multiple_frontends: false
+  placement:
+    node: head
+  container_image: registry-1.docker.io#vllm/vllm-router:sha256:1fbf06701abce8c8cd459414e472d63999c05b201baffc62e00727c10583f5ea
+  args:
+    policy: consistent_hash
+    prefill-policy: consistent_hash
+    decode-policy: consistent_hash
+    log-level: info
+  env:
+    K31_ROUTER_ONLY: '1'
+observability:
+  enabled: false
+  tachometer:
+    enabled: false
+health_check:
+  interval_seconds: 10
+  max_attempts: 720
+engine:
+  type: vllm
+  connector: moriio
+roles:
+  prefill:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    args:
+      served-model-name: moonshotai/Kimi-K3.1-Pro
+      trust-remote-code: true
+      moe-backend: auto
+      tensor-parallel-size: 8
+      load-format: fastsafetensors
+      gpu-memory-utilization: 0.89
+      language-model-only: true
+      max-model-len: 1048576
+      enable-prefix-caching: true
+      kv-cache-dtype: fp8
+      stream-interval: 1
+      seed: 42
+      decode-context-parallel-size: 8
+      dcp-comm-backend: a2a
+      max-num-seqs: 48
+      max-num-batched-tokens: 16384
+      compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":4096,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[256,512,768,1024,1536,2048,3072,4096]}'
+      speculative-config: '{"model": "/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94",
+        "num_speculative_tokens": 4, "method": "dspark", "attention_backend": "ROCM_AITER_MLA",
+        "kv_cache_dtype": "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method":
+        "synthetic", "synthetic_acceptance_length": 3.25}'
+      additional-config: '{"kda_prefill_backend":"fused"}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false,"defer_timeout":300}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}]}}'
+      attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+      hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
+      prefix-match-unit: 512
+      cp-kv-cache-interleave-size: 1
+      quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
+      mamba-ssm-cache-dtype: float32
+      mamba-cache-mode: align
+      block-size: 64
+      scheduling-policy: shortest-prefill-first
+    env:
+      HOME: /private-state/k31-clean-home
+      HF_HOME: /private-state/huggingface
+      HF_HUB_CACHE: /private-state/huggingface/hub
+      HF_HUB_OFFLINE: '1'
+      VLLM_USE_V2_MODEL_RUNNER: '1'
+      VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
+      NCCL_IB_HCA: '@fabric.rdma-devices'
+      NCCL_SOCKET_IFNAME: '@fabric.socket-ifname'
+      GLOO_SOCKET_IFNAME: '@fabric.socket-ifname'
+      VLLM_ROCM_USE_AITER: '1'
+      AITER_BF16_FP8_MOE_BOUND: '0'
+      AITER_FLYDSL_STAGE2_FP8: '0'
+      VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
+      VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
+      VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+      SAFETENSORS_FAST_GPU: '1'
+      VLLM_SSM_CONV_STATE_LAYOUT: DS
+      VLLM_KV_CACHE_LAYOUT: BLHNC
+      NCCL_DMABUF_ENABLE: '0'
+      HSA_ENABLE_IPC_MODE_LEGACY: '1'
+      HIP_FORCE_DEV_KERNARG: '1'
+      PYTHONHASHSEED: '42'
+      VLLM_USE_DIRECT_DCP_A2A: '0'
+      VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+      VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+      VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+      VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
+      PYTHONNOUSERSITE: '1'
+      VLLM_SERVER_DEV_MODE: '0'
+      MORI_IO_SQ_BACKOFF_TIMEOUT_US: '500000'
+      MORI_IO_QP_MAX_SEND_WR: '8192'
+      MORI_IO_QP_MAX_CQE: '16384'
+      MORI_IO_QP_MAX_SGE: '2'
+      MORI_RDMA_TC: '104'
+      MORI_IO_TC: '104'
+      MORI_IO_TC_DISABLE: '0'
+      HSA_NO_SCRATCH_RECLAIM: '0'
+      VLLM_FASTSAFETENSORS_QUEUE_SIZE: '-1'
+      VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
+      VLLM_ROCM_USE_AITER_FLYDSL_SPARSE_MLA: '1'
+      AITER_FLYDSL_SPARSE_MLA: '1'
+      VLLM_ROCM_DCP_AITER_ALLGATHER: '1'
+      VLLM_ROCM_DSA_DCP_GLOBAL_KEY_PREFILL: '1'
+      VLLM_ROCM_DSA_DCP_ROWSHARD_PREFILL: '1'
+      MORI_IO_ENABLE_NOTIFICATION: '0'
+      THP_MEM_ALLOC_ENABLE: '1'
+      MORI_IO_LOG_LEVEL: info
+      PYTORCH_CUDA_ALLOC_CONF: backend:native,expandable_segments:False
+      VLLM_K3_FUSED_INDEXER_PREP: '1'
+      VLLM_K3_DSA_FUSED_NORM_GATE: '1'
+      VLLM_K3_KDA_FB_STRIDED: '1'
+      VLLM_K3_ATTN_RES_REGTILE: '1'
+      VLLM_K3_LATENT_NORM_UP_PROJ: '1'
+      VLLM_ROCM_MEM_HEADROOM_GIB: '8'
+      VLLM_ROCM_DCP_VUP_RS: '0'
+      VLLM_ROCM_DSA_MULTISTREAM: '0'
+      TRITON_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/triton
+      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/inductor
+      K31_SIMPLECPU_OBSERVER: '1'
+  decode:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    args:
+      served-model-name: moonshotai/Kimi-K3.1-Pro
+      trust-remote-code: true
+      moe-backend: auto
+      tensor-parallel-size: 8
+      load-format: fastsafetensors
+      gpu-memory-utilization: 0.92
+      language-model-only: true
+      max-model-len: 1048576
+      enable-prefix-caching: true
+      kv-cache-dtype: fp8
+      stream-interval: 1
+      seed: 42
+      decode-context-parallel-size: 8
+      dcp-comm-backend: a2a
+      max-num-seqs: 144
+      max-num-batched-tokens: 720
+      compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":720,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,50,60,70,80,90,100,110,120,130,140,150,160,200,220,240,260,280,300,320,360,400,440,480,520,560,600,640,680,720]}'
+      speculative-config: '{"model": "/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94",
+        "num_speculative_tokens": 4, "method": "dspark", "attention_backend": "ROCM_AITER_MLA",
+        "kv_cache_dtype": "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method":
+        "synthetic", "synthetic_acceptance_length": 3.25}'
+      additional-config: '{"kda_prefill_backend":"fused"}'
+      kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false}}'
+      attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+      hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
+      prefix-match-unit: 512
+      cp-kv-cache-interleave-size: 1
+      quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
+      mamba-ssm-cache-dtype: float32
+      mamba-cache-mode: align
+      block-size: 64
+      scheduling-policy: fcfs
+      use-replayssm: true
+      watermark: 0.02
+    env:
+      HOME: /private-state/k31-clean-home
+      HF_HOME: /private-state/huggingface
+      HF_HUB_CACHE: /private-state/huggingface/hub
+      HF_HUB_OFFLINE: '1'
+      VLLM_USE_V2_MODEL_RUNNER: '1'
+      VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
+      NCCL_IB_HCA: '@fabric.rdma-devices'
+      NCCL_SOCKET_IFNAME: '@fabric.socket-ifname'
+      GLOO_SOCKET_IFNAME: '@fabric.socket-ifname'
+      VLLM_ROCM_USE_AITER: '1'
+      AITER_BF16_FP8_MOE_BOUND: '0'
+      AITER_FLYDSL_STAGE2_FP8: '0'
+      VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
+      VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
+      VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+      SAFETENSORS_FAST_GPU: '1'
+      VLLM_SSM_CONV_STATE_LAYOUT: DS
+      VLLM_KV_CACHE_LAYOUT: BLHNC
+      NCCL_DMABUF_ENABLE: '0'
+      HSA_ENABLE_IPC_MODE_LEGACY: '1'
+      HIP_FORCE_DEV_KERNARG: '1'
+      PYTHONHASHSEED: '42'
+      VLLM_USE_DIRECT_DCP_A2A: '0'
+      VLLM_USE_DIRECT_DCP_Q_GATHER: '0'
+      VLLM_USE_DIRECT_DCP_KV_GATHER: '0'
+      VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+      VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: '1200'
+      PYTHONNOUSERSITE: '1'
+      VLLM_SERVER_DEV_MODE: '0'
+      MORI_IO_SQ_BACKOFF_TIMEOUT_US: '500000'
+      MORI_IO_QP_MAX_SEND_WR: '8192'
+      MORI_IO_QP_MAX_CQE: '16384'
+      MORI_IO_QP_MAX_SGE: '2'
+      MORI_RDMA_TC: '104'
+      MORI_IO_TC: '104'
+      MORI_IO_TC_DISABLE: '0'
+      HSA_NO_SCRATCH_RECLAIM: '0'
+      VLLM_FASTSAFETENSORS_QUEUE_SIZE: '-1'
+      VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+      VLLM_ROCM_USE_AITER_FLYDSL_SPARSE_MLA: '1'
+      AITER_FLYDSL_SPARSE_MLA: '1'
+      VLLM_ROCM_DCP_AITER_ALLGATHER: '1'
+      VLLM_ROCM_DSA_DCP_GLOBAL_KEY_PREFILL: '1'
+      VLLM_ROCM_DSA_DCP_ROWSHARD_PREFILL: '1'
+      MORI_IO_ENABLE_NOTIFICATION: '0'
+      THP_MEM_ALLOC_ENABLE: '1'
+      MORI_IO_LOG_LEVEL: info
+      PYTORCH_CUDA_ALLOC_CONF: backend:native,expandable_segments:False
+      VLLM_K3_FUSED_INDEXER_PREP: '1'
+      VLLM_K3_DSA_FUSED_NORM_GATE: '1'
+      VLLM_K3_KDA_FB_STRIDED: '1'
+      VLLM_K3_ATTN_RES_REGTILE: '1'
+      VLLM_K3_LATENT_NORM_UP_PROJ: '1'
+      VLLM_ROCM_MEM_HEADROOM_GIB: '8'
+      VLLM_ROCM_DCP_VUP_RS: '1'
+      VLLM_ROCM_DSA_MULTISTREAM: '1'
+      TRITON_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/triton
+      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/inductor
+      VLLM_DCP_Q_REPLICATE: '1'
+      VLLM_K31_CPRR_SPLIT96: '1'
+benchmark:
+  env:
+    AGENTIC_MODEL_READY_TIMEOUT_SECONDS: '300'
+    AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+    AIPERF_BENCHMARK_GRACE_PERIOD: '30'
+    AGENTIC_WARMUP_GRACE_PERIOD: '300'
+    AIPERF_FAILED_REQUEST_THRESHOLD: '0.1'
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '900'
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'false'
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_EXPERIMENTAL_FAST: '0'
+setup_script: k31-r10.sh
+services: []
+environment:
+  KV_OFFLOADING: dram
+  KV_OFFLOAD_BACKEND: simplecpu
+  TOTAL_CPU_DRAM_GB: '1799'
+  DECODE_CPU_DRAM_GB: '0'
+  KV_P2P_TRANSFER: moriio
+  K31_CLEAN_RUN_ID: k31-r10-sa-full-1113
+  INFX_EXPERIMENTAL_ACCEPTANCE_LENGTH: '3.25'
+telemetry:
+  storage_subdir: power
+  startup_timeout_seconds: 300
+  required: false
+name: k31-r10-1p1d

@@ -12593,3 +12593,9 @@
     - Trial the combined 2P3D c176 stack with GMU 0.90, native 8192 MiB unused ordinary-segment retention, the prefill DCP workspace and prefill EP8 MegaMoE A4W4. Align prefill max sequences 32, batch 16384 and breakable captures through 8192 with the verified NV K3.1 recipe; use NST4 with native golden acceptance, prefill Dynamo admission limits 1024/1024, and decode max sequences 128 with full captures through 640. Preserve full-NIC TC104, READ limits, 128 GiB pool MR segmentation and health diagnostics; minimum single-node validation precedes the formal throughput experiment, without claiming a performance gain.
     - Opt in to sparse DCP prefill index compaction for the 2P3D c176 prefill workers, with decode explicitly disabled. Preserve the combined stack, graph sizes, cache budgets, native golden AL and full-NIC UMBP settings. Packaged numerical checks passed; formal multi-node performance remains unverified.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Run the validated r10 SimpleCPU and MoRIIO WRITE 1P1D c128 stack for a full 3600-second AgentX profile, with standard warmup, K4 synthetic AL3.25 and the pinned portable image. Preserve prefill SPF/BCG, decode RecoverSSM/Q replication/split96 and native source checks; use the SA cluster model and network paths.
+  pr-link: XXX

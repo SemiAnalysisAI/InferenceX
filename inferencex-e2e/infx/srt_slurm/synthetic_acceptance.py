@@ -6,6 +6,7 @@ import argparse
 import copy
 import fnmatch
 import json
+import math
 import os
 import subprocess
 import sys
@@ -205,6 +206,13 @@ def _simulated_length(
         golden_dir,
         verifier(generation, engine).value,
     )
+    experiment = (recipe.get("environment") or {}).get("INFX_EXPERIMENTAL_ACCEPTANCE_LENGTH")
+    if experiment is not None:
+        if engine != "vllm":
+            raise ValueError("Experimental acceptance override currently supports only vLLM")
+        al = float(experiment)
+        if not math.isfinite(al) or not 1 <= al <= spec["num_speculative_tokens"] + 1:
+            raise ValueError("Experimental acceptance must be finite and within the verify width")
     if engine == "tokenspeed":
         args = generation.get("args", {})
         drafts = args.get("speculative-num-draft-tokens")
@@ -255,7 +263,7 @@ def build_overrides(
     *,
     golden_dir: Path = GOLDEN_DIR,
 ) -> list[str]:
-    """Infer acceptance from generation parameters; never accept a caller AL."""
+    """Select golden acceptance, or an explicitly requested experimental vLLM target."""
     engine = ENGINES.get(framework)
     if engine is None:
         return []
@@ -400,6 +408,7 @@ class Planned(NamedTuple):
     acceptance_length: float | None
     al_gate: dict[str, Any] | None = None
     environment: tuple[tuple[str, str], ...] = ()
+    acceptance_source: str = "golden"
 
 
 def plan_commands(
@@ -452,7 +461,13 @@ def plan_commands(
                 arguments_to_add = [*arguments_to_add, *al_gate.overrides(gate, environment)]
                 srt_environment = al_gate.SRT_ENVIRONMENT
         argv = [*command, "--file", selected_file, *arguments_to_add]
-        plans.append(Planned(argv, length, gate, tuple(srt_environment.items())))
+        source = (
+            "experimental_override"
+            if length is not None
+            and "INFX_EXPERIMENTAL_ACCEPTANCE_LENGTH" in (recipe.get("environment") or {})
+            else "golden"
+        )
+        plans.append(Planned(argv, length, gate, tuple(srt_environment.items()), source))
     return plans
 
 
@@ -478,7 +493,13 @@ def main(argv: list[str] | None = None) -> int:
         lengths = {plan.acceptance_length for plan in plans}
         length = lengths.pop() if len(lengths) == 1 else None
         gate = next((plan.al_gate for plan in plans if plan.al_gate is not None), None)
-        record = {"golden_acceptance_length": length, "al_gate": gate}
+        experimental = any(plan.acceptance_source == "experimental_override" for plan in plans)
+        record = {"golden_acceptance_length": None if experimental else length, "al_gate": gate}
+        if experimental:
+            record.update(
+                experimental_acceptance_length=length,
+                acceptance_source="experimental_override",
+            )
         args.record.write_text(json.dumps(record) + "\n")
     for plan in plans:
         result = subprocess.run(
