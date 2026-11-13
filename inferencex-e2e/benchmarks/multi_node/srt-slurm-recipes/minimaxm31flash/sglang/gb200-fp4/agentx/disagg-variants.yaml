@@ -392,6 +392,85 @@ override_1p_dep8_dep8_l3_buffer:
         hicache-storage-backend: mooncake
         hicache-storage-backend-extra-config: '{"enable_group_semantics":false}'
 
+override_1p_dep8_dep8_l3_buffer150:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-l3-buffer150
+  # A 48 GB staging buffer deferred half of the L3 prefetches, so each prefill
+  # rank gets 150 GB of staging (~1.2x its device KV) and a 75 GB segment. L3 =
+  # 8 x 75 GB + 4 x 190 GB on each decode node + 4 x 190 GB on the infra node
+  # = 2880 GB.
+  services:
+    - *l3-etcd
+    - *l3-master
+    - *big-decode-store
+    - <<: *big-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    - &big-infra-store
+      <<: *infra-store
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node_ip}"
+    - <<: *big-infra-store
+      name: store-infra-1
+      args: ["--port", "8811"]
+      readiness:
+        port: 8811
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-2
+      args: ["--port", "8812"]
+      readiness:
+        port: 8812
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-3
+      args: ["--port", "8813"]
+      readiness:
+        port: 8813
+        timeout_seconds: 600
+    - *l3-otel
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 75gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        hicache-host-memory-mode: buffer_only
+        hicache-size: 150
+        hicache-write-policy: write_through
+        hicache-storage-backend: mooncake
+        hicache-storage-backend-extra-config: '{"enable_group_semantics":false}'
+
 override_3p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
   roles:
