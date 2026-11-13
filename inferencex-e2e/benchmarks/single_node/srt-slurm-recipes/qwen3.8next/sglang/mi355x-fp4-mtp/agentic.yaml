@@ -19,7 +19,10 @@ base:
   # cp312 build, the one whose prebuilt kernels match the image's torch, which is built for
   # HIP 7.15; the ROCm 10.0 and 10.1 wheels fail on any tensor call; FlyDSL 0.4.2 is what
   # that release requires) and patches SGLang with open upstream PRs (sgl-project/sglang
-  # #48648, #45196, #48649, #45529, #41683, #41879, #44103, #48090).
+  # #48648, #45196, #48649, #45529, #41683, #41879, #44103, #48090, #50024). It also patches
+  # the image's sgl-amd-mono (the monokernel, an editable install at /sgl-workspace/sgl-amd-mono)
+  # with the updated Qwen3.8-Flash-Next monokernel of amd-asalykov/sgl-amd-mono, branch
+  # asalykov/qfn-mono-tp (afbb25a457009d), which serves TP 1, 2 and 4.
   # The patch files are in patches/ next to this recipe.
   setup_script: qwen3.8next-rocm10-patches.sh
   environment:
@@ -91,7 +94,13 @@ base:
 # Admission equals the concurrency. These points also set SGLANG_USE_AITER, which the
 # monokernel requires (the image sets it too), so they form their own GSM8K eval group.
 # Every point uses mem-fraction-static as given instead of the aiter backend's 0.85
-# scaling.
+# scaling. The updated monokernel (patch 10) also runs c1 at TP 2 and TP 4: each rank
+# runs its shard and the all-reduces run inside the kernel (attention TP = MoE TP = TP,
+# no DP attention, EP 1), so the TP variants only change the GPU count and
+# tensor-parallel-size. SGLANG_QWEN35_PACKED_IN_PROJ=0 turns off the packed GDN input
+# projection of sglang#50024 (patch 09) at the monokernel points: the monokernel runs the
+# decode-sized steps it packs, and it builds a second copy of the projections. Every
+# other point keeps it on.
 override_c1:
   roles:
     agg:
@@ -104,6 +113,47 @@ override_c1:
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_USE_AITER: '1'
+        SGLANG_QWEN35_PACKED_IN_PROJ: '0'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp2_c1:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        enable-linear-replayssm-spec: null
+        ple-offload-embedding: null
+        enable-amd-monokernel: true
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_USE_AITER: '1'
+        SGLANG_QWEN35_PACKED_IN_PROJ: '0'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c1:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        enable-linear-replayssm-spec: null
+        ple-offload-embedding: null
+        enable-amd-monokernel: true
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+      env:
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_USE_AITER: '1'
+        SGLANG_QWEN35_PACKED_IN_PROJ: '0'
   benchmark:
     env:
       CONC: '1'
@@ -121,6 +171,7 @@ override_c2:
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_USE_AITER: '1'
+        SGLANG_QWEN35_PACKED_IN_PROJ: '0'
   benchmark:
     env:
       CONC: '2'

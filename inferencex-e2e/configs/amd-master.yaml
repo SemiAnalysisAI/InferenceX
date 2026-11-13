@@ -260,7 +260,8 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
 # FP8 PLE, AgentX on MI355X via SGLang with native NEXTN MTP (3 steps,
 # eagle-topk 1, 4 draft tokens). TP1: the ~116 GiB checkpoint fits on one MI355X.
 # Concurrency 1, 2, 12 and 24 serve from GPU KV (12 and 24 with an FP8 KV cache); 48 and
-# 80 add HiCache host-DRAM offload.
+# 80 add HiCache host-DRAM offload. Concurrency 1 also runs at TP2 and TP4 on the updated
+# monokernel (c1 and c2 are the monokernel points).
 qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261102@sha256:acf1fee05096c6eb757d4642e3b87c36766bce1334277e49b917afc2f06c7b5a
   model: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
@@ -276,6 +277,8 @@ qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
     - dram-utilization: 0.80
       search-space:
       - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 12, 24], srt-recipe: agentic.yaml }
+      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml }
       - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48, 80], srt-recipe: agentic.yaml }
 
 # AgentX Pareto sweep for Qwen3.5 FP8 on MI300X. The fast discovery run peaks

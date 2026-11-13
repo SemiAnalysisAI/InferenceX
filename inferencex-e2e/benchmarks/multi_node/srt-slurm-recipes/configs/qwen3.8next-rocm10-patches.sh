@@ -22,7 +22,13 @@
 #   - 08 sglang#48090  MTP verify target probs on the top-k support instead of a vocabulary-wide
 #                      sort (on with SGLANG_USE_AITER under rejection sampling; the image lacks
 #                      sglang#41916, so the patch carries its top-p rescale helper)
-# The image already has the monokernel (--enable-amd-monokernel), the AITER topk_gating router
+#   - 09 sglang#50024  one FP8 quant + one GEMM for the GDN in_proj_qkvz / in_proj_ba of up to 64 rows
+#                      (on by default; the monokernel points set SGLANG_QWEN35_PACKED_IN_PROJ=0)
+#   sgl-amd-mono (/sgl-workspace/sgl-amd-mono, an editable install of commit b10f3b71c45a)
+#   - 10 amd-asalykov/sgl-amd-mono asalykov/qfn-mono-tp (afbb25a457009d): the updated Qwen3.8-Flash-Next
+#                      monokernel (QSA index chain, stage placement, TP 1 / 2 / 4 launches), the
+#                      qwen38_flash_next package and the common/ops.py and common/sync.py it needs
+# The image already has the original monokernel (--enable-amd-monokernel; patch 10 updates it), the AITER topk_gating router
 # (sglang#40708), ratio-3 GDN packing (sglang#44302) and the 128-row hc_mix (sglang#41880), so
 # none of them is patched. All Python. A wheel that does not install, or a patch that no longer
 # applies, fails the worker.
@@ -97,5 +103,18 @@ apply /sgl-workspace/sglang 05-sglang-41683-gdn-prefill-strided-views.patch
 apply /sgl-workspace/sglang 06-sglang-41879-aiter-gdn-conv-prefill.patch
 apply /sgl-workspace/sglang 07-sglang-44103-aiter-gdn-chunked-prefill.patch
 apply /sgl-workspace/sglang 08-sglang-48090-mtp-sparse-rejection-target-probs.patch
+apply /sgl-workspace/sglang 09-sglang-50024-qwen4-packed-fp8-gdn-in-proj.patch
+apply /sgl-workspace/sgl-amd-mono 10-sgl-amd-mono-qfn-mono-tp-afbb25a.patch
+
+# The monokernel patch must be the code python imports (an editable install of the checkout).
+python3 - <<'PY'
+import importlib.util
+import sys
+
+spec = importlib.util.find_spec("sgl_amd_mono.qwen38_flash_next.gfx950.draft_head")
+if spec is None or not spec.origin.startswith("/sgl-workspace/sgl-amd-mono/"):
+    sys.exit(f"qwen3.8next: sgl_amd_mono imports from {spec and spec.origin}, expected /sgl-workspace/sgl-amd-mono")
+print(f"qwen3.8next sgl-amd-mono patched: {spec.origin}")
+PY
 
 echo "$digest" > "$marker"
