@@ -34,7 +34,7 @@ from .models import (
     stamp,
     utc,
 )
-from .reporting import Prose, latest_next, translated
+from .reporting import Prose, latest_next, reported_repairs, translated
 from .validation import verify_sweep
 
 BOT = "Klaud-Cold"
@@ -473,7 +473,6 @@ class Session:
             if pull and (
                 pull["state"] != "closed"
                 or (not pull["draft"] and not self.closed_by_maintainer(pull))
-                or any(label["name"] in SWEEP_LABELS for label in pull["labels"])
             ):
                 raise VerificationError("Failure/deferral PR cleanup is incomplete")
             if pull and require_branch_deleted and self.branch_exists():
@@ -562,15 +561,6 @@ class Session:
                     "Cancellation requested; wait for terminal jobs then finish again"
                 )
             if pull:
-                current = self.refresh(pull)
-                for label in current["labels"]:
-                    if label["name"] in SWEEP_LABELS:
-                        self.refresh(pull)
-                        github.write(
-                            self.repository,
-                            f"issues/{pull['number']}/labels/{label['name']}",
-                            "DELETE",
-                        )
                 current = self.refresh(pull)
                 if current["state"] == "open" and not current["draft"]:
                     subprocess_ready(self.repository, pull["number"])
@@ -1450,7 +1440,7 @@ def reconcile(session: Session, now: datetime) -> bool:
                 phase="cleanup",
                 pull_request=pull["number"],
                 run_ids=[run["id"] for run in runs],
-                repairs_used=None,
+                repairs_used=reported_repairs(session, pull),
             )
         )
         return True
@@ -1484,7 +1474,7 @@ def reconcile(session: Session, now: datetime) -> bool:
                 phase="final-sweep" if stuck["event"] == "pull_request" else "targeted",
                 pull_request=pull["number"] if pull else None,
                 run_ids=[run["id"] for run in runs],
-                repairs_used=None,
+                repairs_used=reported_repairs(session, pull),
             )
         )
         return True
@@ -1528,7 +1518,7 @@ def reconcile(session: Session, now: datetime) -> bool:
         phase="final-sweep" if validated else "cleanup",
         pull_request=pull["number"] if pull else None,
         run_ids=[r["id"] for r in runs],
-        repairs_used=None,
+        repairs_used=reported_repairs(session, pull),
     )
     session.finish(outcome)
     return True
