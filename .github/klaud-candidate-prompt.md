@@ -16,6 +16,9 @@ current family/image from the checkout, then independently inspect the actual bu
 source, official upstream releases and available images; stop if retired, ambiguous, updated
 or owned by another Klaud Cold PR. Open PRs on other branches never block a candidate.
 Normalize registry `/` versus enroot `#` spelling when comparing the same image.
+Pick the new image from the current image's repository and tag series first (for example,
+`lmsysorg/sglang-rocm:*-rocm720-mi35x-*` stays on that series, not `lmsysorg/sglang`). Switch
+repository or series only when it has no newer eligible image, and state why in the PR.
 When candidate.json also has `sources`, the family's keys start on different images, and
 `sources` maps each key to the curve's newest published observation of that key's image.
 `unbaselined-keys` maps each key whose current image was never published to that image. The
