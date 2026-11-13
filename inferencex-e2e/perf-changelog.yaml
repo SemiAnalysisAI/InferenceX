@@ -12855,3 +12855,16 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep32-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the Kimi-K3.1-Pro GB300 Dynamo+vLLM AgentX dcp8-disagg and agg configs to vllm/vllm-openai:kimi-k31-mc-dbbc9e3 (vLLM 0.1.dev25356+gdbbc9e310) and add the dep32-disagg config on the same image."
+    - "DEP32 2P1D at concurrency 704 and 960: two DEP16 prefill workers and one DEP32 decode, Mooncake scheduler lookups started on arrival, Mooncake store tail pruning (opt-in env in the image), a 97.7 GB decode KV pool per rank, and the benchmark client on its own node."
+    - "TP8/DCP8: 1P5D at concurrency 44 and 56 replaces 1P3D at 20 and 32; 1P3D stays at 56. Hybrid decode: 2P1D moves from concurrency 192 to 256 and 3P1D stays at 384; both run the MegaMoE layers on the DEP EpMoeLayer schedule (VLLM_KIMI_K3_HYBRID_EP_MOE=1, opt-in env in the image) and prune Mooncake store tails."
+    - "Aggregated TP16/DCP16 at concurrency 1 moves to the new image with no other change."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5069
