@@ -12807,4 +12807,5 @@
     - "The new image also routes gfx942 sparse MLA prefill of 512 or more query rows to AITER pa_prefill_sparse (vllm-project/vllm#60102)."
     - "--monokernel stays off: its gfx942 weight copies leave about 2.7 GiB beside the weights on a 192 GB card at TP4 (vllm-project/vllm#62713). Integer quick reduce stays off. All-reduce stays BF16."
     - "Add concurrency 64 and 128 on TP8 and TP4. The sweep stopped at 32, where the GPU KV cache was only 14 to 17% full, so the throughput end of the curve was not measured. Both keep the base max-num-seqs 128 and graph capture up to 1024 tokens. The 12 existing points are re-measured on the new image: 16 points in total."
+    - "Turn on INT4 QuickReduce for the TP all-reduces at every point (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4). In this image it runs AITER's FlyDSL INT4 kernel (vllm-project/vllm#59478), and the server log shows Using AITER FlyDSL INT4 QuickReduce for BF16 payloads. DeepSeek-V4.1-Flash is in the integer all-reduce baseline of MODELS.md. GSM8K covers the change. All 16 points are re-measured with it."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5046
