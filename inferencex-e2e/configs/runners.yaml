@@ -658,7 +658,7 @@ clusters:
       exclusive: false
       # 2026-11-05: c003's local NVMe extracted containers with zero-filled blocks (libcuda stub),
       # and c008 twice read back empty Triton cache files. Remove after ops checks both disks.
-      exclude: [im-gb300-r01-c003, im-gb300-r01-c008]
+      exclude: [im-gb300-r01-c001, im-gb300-r01-c003, im-gb300-r01-c008, im-gb300-r01-c011]
       volumes:
         hf-hub-cache: {path: /data/home/sa-shared/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-shared/gharunners/ai-perf-cache}

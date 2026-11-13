@@ -214,3 +214,72 @@ override_6p_dep2_dep16:
         data-parallel-size: 16
         expert-parallel-size: 16
         max-running-requests: 768
+
+override_6p_dep2_dep16_si20_hc230:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep2-dep16-si20-hc230
+  roles:
+    prefill:
+      nodes: 3
+      workers: 6
+      args:
+        stream-interval: 20
+        mem-fraction-static: 0.88
+        hicache-size: 230
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        max-running-requests: 768
+        stream-interval: 20
+
+override_3p_dep4_dep16_si20:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        max-running-requests: 256
+        stream-interval: 20
+        mem-fraction-static: 0.88
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        max-running-requests: 768
+        stream-interval: 20
+
+override_3p_dep4_dep16_si20_hc230:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-hc230
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        max-running-requests: 256
+        stream-interval: 20
+        mem-fraction-static: 0.88
+        hicache-size: 230
+    decode:
+      nodes: 4
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        max-running-requests: 768
+        stream-interval: 20
