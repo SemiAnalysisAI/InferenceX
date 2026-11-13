@@ -1,0 +1,17 @@
+#!/opt/runtime-venv/bin/python
+import json
+import os
+import resource
+import sys
+
+soft, hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
+print(json.dumps({"event": "worker_memlock_before", "pid": os.getpid(),
+                  "soft_bytes": soft, "hard_bytes": hard}), flush=True)
+if soft != hard:
+    resource.setrlimit(resource.RLIMIT_MEMLOCK, (hard, hard))
+after = resource.getrlimit(resource.RLIMIT_MEMLOCK)
+assert after == (hard, hard), after
+print(json.dumps({"event": "worker_memlock_after", "pid": os.getpid(),
+                  "soft_bytes": after[0], "hard_bytes": after[1]}), flush=True)
+executable = "/opt/runtime-venv/bin/vllm"
+os.execv(executable, [executable, *sys.argv[1:]])
