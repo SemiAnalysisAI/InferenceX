@@ -12855,3 +12855,11 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - minimaxm31flash-fp4-b200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Bump the shared AgentX client from agentx-harness 1.0.13 to 1.0.14 for the high-concurrency memory and scheduling fixes in SemiAnalysisAI/agentx-harness#73."
+    - "Rerun the existing MiniMax-M3.1-Flash B200 vLLM AgentX curve as bounded integration coverage; serving images, recipes, concurrency points and benchmark settings are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
