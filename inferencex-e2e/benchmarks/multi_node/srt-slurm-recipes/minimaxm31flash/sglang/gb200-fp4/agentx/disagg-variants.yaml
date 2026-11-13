@@ -204,6 +204,51 @@ override_1p_dep8_dep8:
         max-running-requests: 512
         mem-fraction-static: 0.88
 
+override_1p_dep8_dep8_hrrn:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-hrrn
+  # Shortest-prefill-first starves mid-size prefills: at the same uncached
+  # length, 8-32K-token turns waited 3x longer than on vLLM. HRRN ages each
+  # waiting request by the prefill tokens processed since it arrived.
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        schedule-policy: hrrn
+
+override_1p_dep8_dep8_soft_affinity:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-soft-affinity
+  # Hard session affinity pins a session to one prefill DP rank, and the
+  # busiest rank queued 3.5x longer than the idlest. Soft affinity keeps the
+  # binding as a preference the router can override.
+  frontend:
+    args:
+      router-session-affinity-mode: soft
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        router-session-affinity-mode: soft
+
 override_1p_dep8_dep8_l3:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-l3
   # Lists replace on merge, so this repeats every base service.
