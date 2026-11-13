@@ -960,7 +960,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
 # TP1 x DP2 with the cross-DP prefill delayer (vllm-project/vllm#65655) behind a
 # consistent-hash router, so multi-turn sessions keep their prefix-cache hits.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark-dp2:
-  image: TBD
+  image: vllm/vllm-openai-rocm:nightly-be47189f37f6162991366ff6b91539f6e9d1f432@sha256:a6263de19d7e68fc12d7ee37da0cc0d2817b8eb9a83c4f22911783befd133ebc
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds

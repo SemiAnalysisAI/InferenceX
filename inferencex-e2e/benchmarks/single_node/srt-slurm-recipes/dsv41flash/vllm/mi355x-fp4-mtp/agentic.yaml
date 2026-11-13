@@ -304,6 +304,8 @@ override_dp2_c64:
         engram-config: '{"cpu_offload":true}'
         max-cudagraph-capture-size: 1024
         max-num-batched-tokens: 16384
+        # Per-tensor-scale FP8 KV cache for sparse MLA (vllm-project/vllm#66036).
+        kv-cache-dtype: fp8_e4m3
         # The DP2 points were tuned without mono decode.
         monokernel: null
         prefill-schedule-policy: delayer
@@ -332,6 +334,8 @@ override_dp2_c128:
         engram-config: '{"cpu_offload":true}'
         max-cudagraph-capture-size: 1024
         max-num-batched-tokens: 16384
+        # Per-tensor-scale FP8 KV cache for sparse MLA (vllm-project/vllm#66036).
+        kv-cache-dtype: fp8_e4m3
         # The DP2 points were tuned without mono decode.
         monokernel: null
         prefill-schedule-policy: delayer
@@ -360,6 +364,8 @@ override_dp2_c256:
         engram-config: '{"cpu_offload":true}'
         max-cudagraph-capture-size: 1024
         max-num-batched-tokens: 16384
+        # Per-tensor-scale FP8 KV cache for sparse MLA (vllm-project/vllm#66036).
+        kv-cache-dtype: fp8_e4m3
         # The DP2 points were tuned without mono decode.
         monokernel: null
         prefill-schedule-policy: delayer
