@@ -262,16 +262,17 @@ AGENTX = {
 CORPUS = "semianalysisai/cc-traces-weka-062126"
 
 
-def agentx_row(conc, output, errors=0, dataset=CORPUS, warmup_errors=0):
+def agentx_row(conc, output, errors=0, dataset=CORPUS, warmup_errors=0, latency=None):
     """An AgentX row at ``conc`` with ``output`` tok/s/GPU and ``errors`` of 1000 profiled requests.
 
-    Its 100 warmup requests include ``warmup_errors`` errored ones.
+    Its 100 warmup requests include ``warmup_errors`` errored ones, and ``latency`` adds
+    collector statistics.
     """
     return {
         "recipe_fingerprint": "f" * 64, "conc": conc, "image": "fixture:new",
         "metrics": {"request_metrics": {
             "throughput": {"per_gpu": {"total_tput_tps": output * 10, "output_tput_tps": output}},
-            "latency": {"ttft": {"mean": 0.1}, "tpot": {"mean": 0.01}},
+            "latency": {"ttft": {"mean": 0.1}, "tpot": {"mean": 0.01}, **(latency or {})},
         }},
         "request_accounting": {
             "records_total": 1100, "records_profiled": 1000 - errors,
@@ -289,14 +290,17 @@ def agentx_eval_row(conc, score, suite="minimax_m3_full"):
     return {**row, "eval_suite": suite, "conc": conc, "score": score, "n_eff": 102}
 
 
-def agentx_baseline(output=100.0, dataset="cc-traces-weka-062126", evals=()):
+def agentx_baseline(output=100.0, dataset="cc-traces-weka-062126", evals=(), dashboard=None):
     """A frozen baseline of the AGENTX c4 and c8 points, each at ``output`` tok/s/GPU."""
     points = [
         reporting.Point(
             key=reporting.point_key({**AGENTX, "conc": conc}),
             label=reporting.point_label({**AGENTX, "conc": conc}), conc=conc,
             scenario="agentic-coding", dataset=dataset,
-            values=reporting.Values(output_tps_gpu=output), result="passed",
+            values=reporting.Values(
+                output_tps_gpu=output, dashboard=dashboard or reporting.Dashboard()
+            ),
+            result="passed",
         )
         for conc in (4, 8)
     ]  # fmt: skip
@@ -305,6 +309,18 @@ def agentx_baseline(output=100.0, dataset="cc-traces-weka-062126", evals=()):
         goal=reporting.Prose(en="Update the image.", zh="更新镜像。"), sources=[], points=points,
         evals=list(evals),
     )  # fmt: skip
+
+
+FROZEN_AXES = reporting.Dashboard(intvty=100.0, e2el_ms=10000.0, ttft_ms=1000.0,
+                                  e2e_norm_intvty=50.0)  # fmt: skip
+
+
+def p90(ttft=1.08, e2el=10.8, full_itl=0.0108, itl=0.02, normalized=46.0):
+    """Collector P90s in seconds, 7-8% worse than FROZEN_AXES. ITL alone would be 50% worse."""
+    return {
+        "ttft": {"mean": 0.1, "p90": ttft}, "e2el": {"p90": e2el}, "itl": {"p90": itl},
+        "full_response_itl": {"p90": full_itl}, "e2e_norm_intvty": {"p90": normalized},
+    }  # fmt: skip
 
 
 def agentx_matrix(suite="minimax_m3_full"):
@@ -341,6 +357,20 @@ OTHER_CORPUS = "semianalysisai/cc-traces-weka-062126-256k"
     pytest.param([agentx_row(4, 100.0), agentx_row(8, 100.0)], agentx_baseline(output=None),
                  "output throughput cannot be compared (missing or zero) at AgentX c4",
                  id="baseline-throughput-missing"),
+    pytest.param([agentx_row(4, 100.0, latency=p90()), agentx_row(8, 100.0, latency=p90())],
+                 agentx_baseline(dashboard=FROZEN_AXES), None,
+                 id="dashboard-within-thresholds"),
+    pytest.param([agentx_row(4, 100.0, latency=p90(ttft=1.15)), agentx_row(8, 100.0)],
+                 agentx_baseline(dashboard=FROZEN_AXES),
+                 "dashboard TTFT rose more than 10% at AgentX c4 TP8 EP1",
+                 id="dashboard-ttft"),
+    pytest.param([agentx_row(4, 100.0, latency=p90(full_itl=0.0115)), agentx_row(8, 100.0)],
+                 agentx_baseline(dashboard=FROZEN_AXES),
+                 "dashboard interactivity fell more than 10% at AgentX c4 TP8 EP1",
+                 id="dashboard-interactivity"),
+    pytest.param([agentx_row(4, 100.0, latency=p90(ttft=9.0, normalized=1.0)),
+                  agentx_row(8, 100.0)], agentx_baseline(), None,
+                 id="baseline-without-dashboard-axes"),
 ])  # fmt: skip
 def test_final_validation_blocks_regressions_against_the_frozen_baseline(rows, baseline, blocked):
     evidence = (AGENTX_MATRIX, rows, [agentx_eval_row(8, 0.95)])
@@ -349,6 +379,18 @@ def test_final_validation_blocks_regressions_against_the_frozen_baseline(rows, b
         return
     with pytest.raises(github.VerificationError, match=re.escape(blocked)):
         reporting.check_regressions(FINAL_RUN, evidence, baseline)
+
+
+def test_normalized_interactivity_regression_only_warns(capsys):
+    rows = [agentx_row(4, 100.0, latency=p90(normalized=5.0)), agentx_row(8, 100.0)]
+    evidence = (AGENTX_MATRIX, rows, [agentx_eval_row(8, 0.95)])
+
+    reporting.check_regressions(FINAL_RUN, evidence, agentx_baseline(dashboard=FROZEN_AXES))
+
+    assert capsys.readouterr().out.startswith(
+        "::warning::Klaud: dashboard E2E normalized interactivity fell more than 10% at AgentX c4"
+    )
+
 
 
 @pytest.mark.parametrize(("suite", "score", "frozen", "blocked"), [
