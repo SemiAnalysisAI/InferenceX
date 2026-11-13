@@ -12856,4 +12856,4 @@
     - "Dynamo KV-aware prefill routing, least-loaded decode routing, conversation affinity and fastokens tokenization; golden-curve synthetic acceptance."
     - "Prefill and decode KV-cache transceivers use a 1024 MB bounce buffer with agent bounce buffering, a 4 MB maximum average descriptor size and a minimum descriptor count of 1."
     - "Every TensorRT-LLM worker sets stream_interval 20, enable_iter_perf_stats with iter_perf_stats_interval 20 and kv_cache_config.iteration_stats_interval 20, and publishes metrics; GPU and host CPU power collection are enabled on all points."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5066
