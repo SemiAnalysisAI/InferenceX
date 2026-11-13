@@ -6,7 +6,7 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: "0.1.dev24218+g78e9a0c28"
+      vllm: "0.1.dev25356+gdbbc9e310"
       dynamo: "3dd0744eb72c707d76d4c520ae4dea9e286a4ab6"
 
   # ai-dynamo/dynamo#18124 head: the first Dynamo that registers the kimi_k31 model type.
@@ -118,12 +118,14 @@ base:
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "1024"
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "1024"
       args:
-        kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+        kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"lookup_timeout_s":60,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
         served-model-name: "moonshotai/Kimi-K3.1-Pro"
         prefix-match-unit: 128
         load-format: "fastsafetensors"
         kv-cache-dtype: "fp8"
-        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        attention-config: &attn_cfg '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
+        # The image's sparse indexer top-k default needs deep_select on the prefill engines.
+        kernel-config: '{"sparse_indexer_topk_backend":"deep_select"}'
         mamba-ssm-cache-dtype: "float32"
         mamba-cache-dtype: "float32"
         gpu-memory-utilization: 0.95
@@ -157,7 +159,7 @@ base:
         prefix-match-unit: 128
         load-format: "fastsafetensors"
         kv-cache-dtype: "fp8"
-        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        attention-config: *attn_cfg
         mamba-ssm-cache-dtype: "float32"
         mamba-cache-dtype: "float32"
         gpu-memory-utilization: 0.95
@@ -266,21 +268,26 @@ override_1p2d_eval:
         dyn-enable-structural-tag: true
 
 override_1p3d:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
   roles:
     prefill: &override_1p3d_prefill
       nodes: 2
       workers: 1
-      args: &override_1p3d_prefill_args
-        numa-bind: true
-        numa-bind-nodes: [0, 0, 1, 1]
+      env: &override_spawn_env
+        VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+      args: &override_1p3d_prefill_args {}
     decode: &override_1p3d_decode
       nodes: 6
       workers: 3
-      args: &override_1p3d_decode_args
-        numa-bind: true
-        numa-bind-nodes: [0, 0, 1, 1]
+      env: *override_spawn_env
+      args: &override_1p3d_decode_args {}
 
 override_1p3d_eval:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
   roles:
     prefill:
       <<: *override_1p3d_prefill
@@ -292,6 +299,42 @@ override_1p3d_eval:
         dyn-enable-structural-tag: true
     decode:
       <<: *override_1p3d_decode
+      args:
+        <<: *override_1p3d_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# One TP8 x DCP8 prefill feeding five TP8 x DCP8 decode engines: the prefill still has headroom at c44-c56,
+# so more decode engines per prefill raise tok/s/GPU at the same interactivity.
+override_1p5d:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill: &override_1p5d_prefill
+      <<: *override_1p3d_prefill
+    decode: &override_1p5d_decode
+      <<: *override_1p3d_decode
+      nodes: 10
+      workers: 5
+
+override_1p5d_eval:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill:
+      <<: *override_1p5d_prefill
+      args:
+        <<: *override_1p3d_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p5d_decode
       args:
         <<: *override_1p3d_decode_args
         reasoning-parser: kimi_k3
@@ -395,14 +438,24 @@ override_hyb4_3p1d:
     prefill: &override_hyb4_3p1d_prefill
       nodes: 6
       workers: 3
-      env: *override_mns256_prefill_env
+      env: &override_hyb_prefill_env
+        VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+        # Mooncake store: keep the tail a hit loaded and drop consumed partial tails, so live prefixes are not evicted.
+        VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
+        VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
       args: &override_hyb4_3p1d_prefill_args
         max-num-batched-tokens: 16384
     decode: &override_hyb4_3p1d_decode
       nodes: 8
       workers: 1
       gpus: 32
-      env: *override_mns256_decode_env
+      env:
+        <<: &override_hyb_decode_env
+          VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+          VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
+          VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
+        # Run the hybrid decode's MegaMoE layers on the DEP EpMoeLayer schedule.
+        VLLM_KIMI_K3_HYBRID_EP_MOE: "1"
       args: &override_hyb4_3p1d_decode_args
         data-parallel-size: 4
         data-parallel-rpc-port: 13345
