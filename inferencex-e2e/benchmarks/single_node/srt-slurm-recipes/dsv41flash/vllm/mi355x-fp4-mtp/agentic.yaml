@@ -284,3 +284,93 @@ override_tp2_c64:
   benchmark:
     env:
       CONC: '64'
+
+override_dp2_c64:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+        # Per-tensor-scale FP8 KV cache for sparse MLA (vllm-project/vllm#66036).
+        kv-cache-dtype: fp8_e4m3
+        # The DP2 points were tuned without mono decode.
+        monokernel: null
+        prefill-schedule-policy: delayer
+        prefill-schedule-interval: 11
+        prefill-max-wait-ms: 5000
+  benchmark:
+    env:
+      CONC: '64'
+
+override_dp2_c128:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+        # Per-tensor-scale FP8 KV cache for sparse MLA (vllm-project/vllm#66036).
+        kv-cache-dtype: fp8_e4m3
+        # The DP2 points were tuned without mono decode.
+        monokernel: null
+        prefill-schedule-policy: delayer
+        prefill-schedule-interval: 11
+        prefill-max-wait-ms: 5000
+  benchmark:
+    env:
+      CONC: '128'
+
+override_dp2_c256:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+        # Per-tensor-scale FP8 KV cache for sparse MLA (vllm-project/vllm#66036).
+        kv-cache-dtype: fp8_e4m3
+        # The DP2 points were tuned without mono decode.
+        monokernel: null
+        prefill-schedule-policy: delayer
+        prefill-schedule-interval: 11
+        prefill-max-wait-ms: 5000
+  benchmark:
+    env:
+      CONC: '256'

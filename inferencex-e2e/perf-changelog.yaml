@@ -12816,3 +12816,10 @@
     - "Use image lmsysorg/sglang:nightly-dev-20261013-7224fce1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5006
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-dp2
+  scenario-type: [agentic-coding]
+  description:
+    - "Add DSv4.1-Flash FP4 AgentX on MI355X at TP1 x DP2 behind a consistent-hash vLLM router, concurrency 64, 128 and 256, with the cross-DP prefill delayer (interval 11, 5 s max wait, 16K token budget). Image nightly-be47189f37f6162991366ff6b91539f6e9d1f432, with the per-tensor-scale FP8 KV cache (--kv-cache-dtype fp8_e4m3, vllm-project/vllm#66036). The delayer flags need vllm-project/vllm#65655, which this image does not carry yet."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4873
