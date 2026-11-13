@@ -185,8 +185,6 @@ override_dram_c32:
         max-num-batched-tokens: 10240
         gpu-memory-utilization: 0.91
         prefill-schedule-interval: 32
-        long-prefill-token-threshold: 10240
-        long-prefill-token-threshold-adaptive: true
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
       env:
