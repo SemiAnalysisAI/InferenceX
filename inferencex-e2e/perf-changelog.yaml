@@ -12741,7 +12741,8 @@
   description:
     - "Update the image from rocm/atom-dev:nightly_202610121516 to nightly_202611111518 (ATOM 3659b9865, ROCm 7.2.4) in the master config, and the AToMesh frontend container_image from sha256:a60811a8467b43e3e50e9e9eb8cec34f68b7bca03f8c6dbd6a0ff813dde49d4c to sha256:167ce262f6ab188cd1a971dc7ae5f3d4e50586293a2d1c53ea1efbc92ab7491d, the same image."
     - "Run a single point: plain TP4 at concurrency 1. The recipe keeps every override from #3965 (TP2, DTP2, DEP2 and the other TP4 points); only the master search space is narrowed to TP4 c1."
-    - "Switch the KV cache from BF16 to MXFP8 (kv_cache_dtype fp8) at every point; the index cache stays FP4."
+    - "Switch the KV cache from BF16 to MXFP8 (kv_cache_dtype fp8) at every point except TP4 c1; the index cache stays FP4."
+    - "TP4 c1 keeps a BF16 KV cache (kv_cache_dtype bf16) so ATOM's V4.1 mono hi decode path, which only serves BF16, is enabled."
     - "Drop max-num-seqs 128, so every point except concurrency 1 runs ATOM's default admission. Concurrency 1 (TP2 and TP4) runs max-num-seqs 2, decode graphs [1, 2] and ATOM_PREFILL_DECODE_INTERVAL=1000000, the C1 recipe of ATOM's recipes/Kimi-K3.md (ROCm/ATOM#2659). The c256 point also captures graph size 256."
     - "Set ATOM_PREFILL_DECODE_INTERVAL per point: 192 at TP2 c2 and TP4 c2, c4 and c8, 96 at TP2 c16, 40 at TP2 c32 and 10 at the DP points (previously unset except 4 at TP2 c64 and 16 at TP4 c32)."
     - "The DP points add dp-load-balance least_tokens, ATOM_DP_SESSION_AFFINITY=1, ATOM_DP_LB_REQ_EQUIV=512 and GPU_MAX_HW_QUEUES=5, and AIPerf sends the correlation ID as the X-Dynamo-Session-Id header for session affinity."
