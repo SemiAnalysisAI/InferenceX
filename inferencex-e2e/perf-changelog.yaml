@@ -12818,6 +12818,17 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
+  scenario-type: [agentic-coding]
+  description:
+    - "Move dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache to nightly-dev-cu13-20261111-314bce7c (Dynamo 1.7.0.dev20261110, SGLang 0.0.0.dev1+g314bce7cf), pinned by digest. The agg key stays on nightly-dev-cu13-20261030-302b78cc: on the 20261111 image the NVIDIA megakernel plugin rejects the bundled FlashInfer low-latency block-scaled GEMM at startup."
+    - "Add a DEP32 decode point: 6 DEP2 prefill workers and one DEP32 decode worker on 8 nodes at c3018 (decode CUDA graph batch 18, max-running-requests 576, extra slots 80, 32 redundant EPLB experts, total_requests DP balancing, block-wise rejection for the sampled DSpark verify)."
+    - "Drop 3 prefill workers at c700 and c1228 (DEP16 decode): the DEP32 c3018 point has both higher interactivity and higher throughput per GPU than each of them. Drop 5 prefill workers at c2884 (DEP16 decode): it lies under the line between DEP32 c3018 and 7P c5540."
+    - "Set stream-interval 32 on the agg role and on the disagg prefill role, which used the SGLang default of 1; disagg decode already used 32. Agg TP4 c1, c4 and c16 change otherwise not at all; disagg 7P c5540 and 9P c7480 change otherwise only by the image. The agg key is listed so the whole Dynamo + SGLang curve, agg points included, comes from this sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4997
+
+- config-keys:
     - glm5.3-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
