@@ -118,6 +118,8 @@ override_gpu_kv_c1:
       env:
         # This point captures only the decode sizes, so breakable graphs buy nothing.
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        # Runs each DSA layer's decode prologue as one launch; needs DCP1.
+        VLLM_KIMI_SD_DSA_PROLOGUE: '1'
   benchmark:
     env:
       CONC: '1'
@@ -137,6 +139,7 @@ override_gpu_kv_c1_nst5:
         kv-transfer-config: null
       env:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        VLLM_KIMI_SD_DSA_PROLOGUE: '1'
   benchmark:
     env:
       CONC: '1'
