@@ -12864,4 +12864,4 @@
     - "Add Kimi-K3.1-Pro B300 Dynamo+vLLM disaggregated AgentX configs on vllm/vllm-openai:kimi-k31-mc-dbbc9e3 (sha256:0507dd0b), with Dynamo 229be5cff1 (v1.7.0-kimi-k3.1-pro-dev.1)."
     - "Every prefill and decode worker is one B300 node, TP8 x DCP8: prefill runs routed experts EP8 on MegaMoE eagerly, decode runs the low-latency decode backend. KV moves over AWS EFA: NIXL (LIBFABRIC) from prefill to decode, and a Mooncake store with a 190 GB host-DRAM segment per rank."
     - "Sweep 1P1D c1 (7 draft tokens), 1P3D c20 and c48, 1P2D c48 and c64, 2P3D c216 and 3P4D c460 (4 draft tokens). The 2P3D and 3P4D points admit up to 128 decode requests."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5068
