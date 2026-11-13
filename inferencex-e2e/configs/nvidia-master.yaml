@@ -6713,7 +6713,7 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
-        conc-list: [4, 8]
+        conc-list: [4]
         num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_mk8
         worker:
@@ -6722,9 +6722,18 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
-        conc-list: [16]
+        conc-list: [8]
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c16
+        srt-recipe: agg-variants.yaml:override_tp4_cap2
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [32]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_cap6
         worker:
           num-worker: 1
           tp: 4

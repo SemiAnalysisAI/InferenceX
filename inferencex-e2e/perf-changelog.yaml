@@ -12849,6 +12849,7 @@
     - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
   scenario-type: [agentic-coding]
   description:
-    - "Replace the agg TP4 c4 point (override_tp4_c4: FlashMLA without the NVIDIA megakernel, prefill-decode-interval 0, batch 128) with override_tp4_mk8 at c4 and a new c8 point: the c1 megakernel configuration with max-running-requests 8, decode CUDA graph batch 8 and prefill-decode-interval 192. The megakernel serves decode batches 1-8; the longer prefill-decode interval keeps prefill chunks from interrupting decode at low batch."
-    - "Agg TP4 c1 and c16 and every disagg point are unchanged. The disagg key is listed so the whole Dynamo + SGLang curve comes from this sweep."
+    - "Move every agg point after c1 onto the NVIDIA megakernel configuration of override_tp4_c1. c4 runs override_tp4_mk8 (max-running-requests 8, decode CUDA graph batch 8, prefill-decode-interval 192), replacing override_tp4_c4 (FlashMLA without the megakernel, batch 128, prefill-decode-interval 0)."
+    - "Add c8 (override_tp4_cap2) and c32 (override_tp4_cap6): max-running-requests and decode CUDA graph batch capped at 2 and 6, prefill-decode-interval 96 and swa-prefix-tails 4096. Drop c16 (override_tp4_c16): the new c32 point has higher throughput per GPU and higher interactivity."
+    - "Agg TP4 c1 and every disagg point are unchanged. The disagg key is listed so the whole Dynamo + SGLang curve comes from this sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5065
