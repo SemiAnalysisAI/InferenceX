@@ -7045,6 +7045,36 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg:
           ep: 4
           dp-attn: false
 
+# Muse Spark Open GB300 on the sgl-muse-mega NVIDIA megakernel
+# (https://github.com/facebookresearch/sgl-muse-mega): SGLang 5884e4fec with the plugin at
+# 0775fc6 (simulated acceptance on the fused path, contexts up to 1M) and ai-dynamo
+# 1.7.0.dev20261026 from the base nightly. One TP8 worker over two nodes at concurrency 1, linear
+# DFlash2 chain of 7 drafts, greedy requests.
+musespark-fp4-gb300-dynamo-sglang-agentic-dflash-mk-agg:
+  image: lmsysorg/sglang:dev-0775fc6-20261112-cu13-arm64@sha256:a200999b436614183cb4805a97ac4a0dc9c082da0c5149e62cf891c325317d83
+  model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+  model-prefix: musespark
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.7.0.dev20261026" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: musespark/sglang/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: draft_model
+        conc-list: [1]
+        kv-offloading: none
+        num-nodes: 2
+        srt-recipe: agg-mk-variants.yaml:base
+        worker:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+
 musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg:
   image: lmsysorg/sglang:nightly-dev-cu13-20261103-797af717@sha256:b4323a896f349d43a267c419c0267538b06c64a73110a0d0fd87496234df5dcd
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4

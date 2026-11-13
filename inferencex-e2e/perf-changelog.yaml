@@ -12843,3 +12843,13 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-mk-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-mk-agg: Muse Spark Open on the sgl-muse-mega NVIDIA megakernel (--enable-nvidia-megakernel) at concurrency 1, one TP8/EP8 worker over two GB300 nodes, on lmsysorg/sglang:dev-0775fc6-20261112-cu13-arm64 (SGLang 5884e4fec, sgl-muse-mega 0775fc6, ai-dynamo 1.7.0.dev20261026)."
+    - "Linear DFlash2 chain of 7 drafts (8 draft tokens, SGLANG_MUSE_MEGA_TREE=0) on the committed golden curve, BF16 KV cache, 128-token pages, trtllm_mha attention and a 1M context length. Requests are greedy: under simulated acceptance the megakernel runs only greedy batch-1 decode steps."
+    - "Existing Muse Spark GB300 configs and points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
