@@ -28,7 +28,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#vllm/vllm-router:sha256:1fbf06701abce8c8cd459414e472d63999c05b201baffc62e00727c10583f5ea
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:745d4f16726e59fb04de0bcd7f598fd574fafeb384103c6f612351678bfee2f4
   args:
     policy: consistent_hash
     prefill-policy: consistent_hash

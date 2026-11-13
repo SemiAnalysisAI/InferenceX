@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 if [[ "${K31_ROUTER_ONLY:-0}" == 1 ]]; then
-    echo '969c62f851950477a2ca1b187013e5ed5aabd08748d2941b96c36e322a8daeec  /usr/local/bin/vllm-router' | sha256sum -c -
+    echo '73aed9d76abb2582082097283d159744471033320fe91d4d60e9099d5acd7e08  /usr/local/bin/vllm-router' | sha256sum -c -
     return 0 2>/dev/null || exit 0
 fi
 export PATH=/opt/runtime-venv/bin:$PATH
