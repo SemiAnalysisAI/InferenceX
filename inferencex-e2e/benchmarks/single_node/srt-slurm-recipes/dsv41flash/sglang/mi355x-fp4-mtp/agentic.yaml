@@ -31,6 +31,9 @@ base:
         cuda-graph-backend-prefill: disabled
         reasoning-parser: auto
         tool-call-parser: auto
+        # AgentX sends text only; PIL skips the V4.1 Rust image processor, whose build
+        # lock on the shared cache hung one DP rank at startup in CI.
+        image-processor-backend: pil
         # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
         enable-metrics: true
