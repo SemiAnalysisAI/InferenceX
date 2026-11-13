@@ -395,9 +395,11 @@ override_1p_dep8_dep8_l3_buffer:
 override_1p_dep8_dep8_l3_buffer150:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-l3-buffer150
   # A 48 GB staging buffer deferred half of the L3 prefetches, so each prefill
-  # rank gets 150 GB of staging (~1.2x its device KV) and a 75 GB segment. L3 =
-  # 8 x 75 GB + 4 x 190 GB on each decode node + 4 x 190 GB on the infra node
-  # = 2880 GB.
+  # rank gets 150 GB of staging (~1.2x its device KV) and a 50 GB segment. The
+  # 150 GB hicache-size already covers the draft and index host pools, and "gb"
+  # here is GiB, so a 75gb segment (80.5 GB) ran the prefill node out of host
+  # memory. L3 = 8 x 50 GB + 4 x 190 GB on each decode node + 4 x 190 GB on the
+  # infra node = 2680 GB.
   services:
     - *l3-etcd
     - *l3-master
@@ -456,7 +458,7 @@ override_1p_dep8_dep8_l3_buffer150:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
         MOONCAKE_PROTOCOL: rdma
         MOONCAKE_DEVICE: "@fabric.rdma-devices"
-        MOONCAKE_GLOBAL_SEGMENT_SIZE: 75gb
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 50gb
         MOONCAKE_STANDALONE_STORAGE: "0"
       args:
         tensor-parallel-size: 8
