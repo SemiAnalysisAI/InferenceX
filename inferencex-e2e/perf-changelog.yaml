@@ -12855,3 +12855,13 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run EAGLE target verify on aiter unified_attention (split-KV) instead of the legacy Triton extend kernel: set page-size 16 and SGLANG_USE_AITER_UNIFIED_ATTN=1, as the MI325X Qwen3.5 FP8 recipe already does on the same gfx942 architecture."
+    - "Store the KV cache in fp8_e4m3, as the MI325X recipe does. With a bf16 KV cache the faster decode filled the MI300X KV pool (about 3.4M tokens) at concurrency 24-32 and requests queued; fp8 doubles the pool."
+    - "Update the image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi30x-20260730 to lmsysorg/sglang-rocm:v0.5.23-rocm10-mi30x-20261109 (sha256:cf4774ef), which no longer sets ROCM_QUICK_REDUCE_QUANTIZATION=INT8 (removed in sgl-project/sglang#47163), so all-reduce stays at full precision. Rename the cuda-graph-max-bs overrides to cuda-graph-max-bs-decode with unchanged values; the old name is ambiguous on this image. Concurrencies, TP/EP, memory fraction and admission limits are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5060
