@@ -262,15 +262,22 @@ AGENTX = {
 CORPUS = "semianalysisai/cc-traces-weka-062126"
 
 
-def agentx_row(conc, output, errors=0, dataset=CORPUS):
-    """An AgentX row at ``conc`` with ``output`` tok/s/GPU and ``errors`` of 1000 requests."""
+def agentx_row(conc, output, errors=0, dataset=CORPUS, warmup_errors=0):
+    """An AgentX row at ``conc`` with ``output`` tok/s/GPU and ``errors`` of 1000 profiled requests.
+
+    Its 100 warmup requests include ``warmup_errors`` errored ones.
+    """
     return {
         "recipe_fingerprint": "f" * 64, "conc": conc, "image": "fixture:new",
         "metrics": {"request_metrics": {
             "throughput": {"per_gpu": {"total_tput_tps": output * 10, "output_tput_tps": output}},
             "latency": {"ttft": {"mean": 0.1}, "tpot": {"mean": 0.01}},
         }},
-        "request_accounting": {"records_error_dropped": errors, "records_total": 1000},
+        "request_accounting": {
+            "records_total": 1100, "records_profiled": 1000 - errors,
+            "records_dropped_total": 100 + errors, "records_warmup_dropped": 100,
+            "records_error_dropped": errors + warmup_errors, "error_categories": {},
+        },
         "dataset": {"source_type": "public_dataset", "hf_dataset_name": dataset},
     }  # fmt: skip
 
@@ -320,6 +327,10 @@ OTHER_CORPUS = "semianalysisai/cc-traces-weka-062126-256k"
                  "output tok/s/GPU fell more than 30% at AgentX c4 TP8 EP1", id="throughput"),
     pytest.param([agentx_row(4, 100.0), agentx_row(8, 100.0, errors=51)], agentx_baseline(),
                  "request errors exceed 5% at AgentX c8 TP8 EP1", id="request-errors"),
+    pytest.param([agentx_row(4, 100.0), agentx_row(8, 100.0, errors=1, warmup_errors=100)],
+                 agentx_baseline(), None, id="warmup-errors"),
+    pytest.param([{**agentx_row(4, 50.0), "disagg": True, "num_gpus": 16, "num_decode_gpu": 8},
+                  agentx_row(8, 100.0)], agentx_baseline(), None, id="disagg-decode-gpu-parity"),
     pytest.param([agentx_row(4, 75.0), agentx_row(8, 75.0)], agentx_baseline(dataset=None), None,
                  id="legacy-baseline-within-thresholds"),
     pytest.param([agentx_row(4, 25.0), agentx_row(8, 100.0)], agentx_baseline(dataset=None),

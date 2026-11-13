@@ -90,18 +90,13 @@ class CandidateReview(Contract):
     decision: Literal["proceed", "duplicate", "uncertain"]
     family: Family | None
     pull_requests: list[Annotated[int, Field(gt=0)]]
-    baseline_model: str | None = Field(default=None, min_length=1)
     reason: str = Field(min_length=1)
 
     @model_validator(mode="after")
     def consistent_decision(self) -> CandidateReview:
         """Return the review, raising ValueError if the decision contradicts its fields."""
-        if self.decision == "proceed" and (
-            not self.family or self.pull_requests or not self.baseline_model
-        ):
-            raise ValueError(
-                "proceed requires a resolved family, baseline model and no overlapping PRs"
-            )
+        if self.decision == "proceed" and (not self.family or self.pull_requests):
+            raise ValueError("proceed requires a resolved family and no overlapping PRs")
         if self.decision == "duplicate" and not self.pull_requests:
             raise ValueError("duplicate requires an overlapping PR number")
         return self
