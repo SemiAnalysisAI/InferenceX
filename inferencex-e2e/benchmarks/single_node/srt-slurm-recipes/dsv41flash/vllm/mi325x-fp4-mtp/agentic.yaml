@@ -53,11 +53,6 @@ base:
       env:
         VLLM_ROCM_USE_AITER: '1'
         VLLM_ROCM_USE_AITER_MOE: '1'
-        # INT4 QuickReduce for the TP all-reduces of BF16 payloads. This image
-        # runs it through AITER's FlyDSL kernel (vllm-project/vllm#59478).
-        # DeepSeek-V4.1-Flash is in the MODELS.md integer all-reduce baseline,
-        # so the policy for new models does not apply to it.
-        VLLM_ROCM_QUICK_REDUCE_QUANTIZATION: INT4
         AITER_TRITON_LOG_LEVEL: ERROR
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         OMP_NUM_THREADS: '1'
