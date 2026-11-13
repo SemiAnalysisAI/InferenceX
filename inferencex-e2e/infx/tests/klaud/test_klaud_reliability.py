@@ -1,7 +1,9 @@
 import functools
+import io
 import json
 import re
 import subprocess
+import zipfile
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -102,6 +104,45 @@ def test_reads_never_retry_client_errors_or_rate_limits(monkeypatch, sleeps, err
 
     with pytest.raises(subprocess.CalledProcessError):
         github.read("example/project", "pulls/7")
+    assert len(calls) == 1
+    assert sleeps == []
+
+
+def artifact_download(monkeypatch, failures):
+    """Make the artifact download fail with each of ``failures`` (gh stderr bytes), then serve
+    a zip holding ``plan.json``; return the recorded gh argv of every attempt."""
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("plan.json", '{"ok": true}')
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if len(calls) <= len(failures):
+            raise subprocess.CalledProcessError(1, argv, stderr=failures[len(calls) - 1])
+        return subprocess.CompletedProcess(argv, 0, archive.getvalue(), b"")
+
+    monkeypatch.setattr(github.subprocess, "run", run)
+    return calls
+
+
+ARTIFACT = {"id": 9, "expired": False, "size_in_bytes": 64}
+
+
+def test_an_artifact_download_retries_a_server_error(monkeypatch, sleeps, tmp_path):
+    calls = artifact_download(monkeypatch, [b"gh: Bad Gateway (HTTP 502)\n"])
+
+    github.download_json("example/project", ARTIFACT, tmp_path)
+    assert json.loads((tmp_path / "plan.json").read_text()) == {"ok": True}
+    assert calls == [["gh", "api", "repos/example/project/actions/artifacts/9/zip"]] * 2
+    assert sleeps == [1]
+
+
+def test_an_artifact_download_does_not_retry_a_missing_artifact(monkeypatch, sleeps, tmp_path):
+    calls = artifact_download(monkeypatch, [b"gh: Not Found (HTTP 404)\n"])
+
+    with pytest.raises(subprocess.CalledProcessError):
+        github.download_json("example/project", ARTIFACT, tmp_path)
     assert len(calls) == 1
     assert sleeps == []
 
@@ -221,15 +262,22 @@ AGENTX = {
 CORPUS = "semianalysisai/cc-traces-weka-062126"
 
 
-def agentx_row(conc, output, errors=0, dataset=CORPUS):
-    """An AgentX row at ``conc`` with ``output`` tok/s/GPU and ``errors`` of 1000 requests."""
+def agentx_row(conc, output, errors=0, dataset=CORPUS, warmup_errors=0):
+    """An AgentX row at ``conc`` with ``output`` tok/s/GPU and ``errors`` of 1000 profiled requests.
+
+    Its 100 warmup requests include ``warmup_errors`` errored ones.
+    """
     return {
         "recipe_fingerprint": "f" * 64, "conc": conc, "image": "fixture:new",
         "metrics": {"request_metrics": {
             "throughput": {"per_gpu": {"total_tput_tps": output * 10, "output_tput_tps": output}},
             "latency": {"ttft": {"mean": 0.1}, "tpot": {"mean": 0.01}},
         }},
-        "request_accounting": {"records_error_dropped": errors, "records_total": 1000},
+        "request_accounting": {
+            "records_total": 1100, "records_profiled": 1000 - errors,
+            "records_dropped_total": 100 + errors, "records_warmup_dropped": 100,
+            "records_error_dropped": errors + warmup_errors, "error_categories": {},
+        },
         "dataset": {"source_type": "public_dataset", "hf_dataset_name": dataset},
     }  # fmt: skip
 
@@ -279,6 +327,10 @@ OTHER_CORPUS = "semianalysisai/cc-traces-weka-062126-256k"
                  "output tok/s/GPU fell more than 30% at AgentX c4 TP8 EP1", id="throughput"),
     pytest.param([agentx_row(4, 100.0), agentx_row(8, 100.0, errors=51)], agentx_baseline(),
                  "request errors exceed 5% at AgentX c8 TP8 EP1", id="request-errors"),
+    pytest.param([agentx_row(4, 100.0), agentx_row(8, 100.0, errors=1, warmup_errors=100)],
+                 agentx_baseline(), None, id="warmup-errors"),
+    pytest.param([{**agentx_row(4, 50.0), "disagg": True, "num_gpus": 16, "num_decode_gpu": 8},
+                  agentx_row(8, 100.0)], agentx_baseline(), None, id="disagg-decode-gpu-parity"),
     pytest.param([agentx_row(4, 75.0), agentx_row(8, 75.0)], agentx_baseline(dataset=None), None,
                  id="legacy-baseline-within-thresholds"),
     pytest.param([agentx_row(4, 25.0), agentx_row(8, 100.0)], agentx_baseline(dataset=None),

@@ -21,6 +21,34 @@ def platforms(runner="cluster:h100-dsxe", gpus=8, architecture="linux/amd64"):
     return {runner: {"gpus_per_node": gpus, "image_platform": architecture}}
 
 
+DIGEST = "sha256:" + "a" * 64
+
+
+def registry(digests, pruned=()):
+    return types.SimpleNamespace(
+        resolve_image_digest=lambda image: digests.get(image, ""),
+        image_tag_missing=lambda image: image in pruned,
+    )
+
+
+def test_a_pruned_recipe_tag_runs_on_the_backends_own_image():
+    cells = [{"image": "recipe:gone", "backends": ["vllm"], "recipe": "r"}]
+    ci.resolve_digests(
+        cells, {"vllm": {"image": "own:1"}}, registry({"own:1": DIGEST}, {"recipe:gone"})
+    )
+    assert cells == [{
+        "image": "own:1", "backends": ["vllm"], "recipe": "r",
+        "recipe_image_unavailable": "recipe:gone", "digest": DIGEST,
+    }]
+
+
+def test_a_registry_that_does_not_answer_fails_planning_without_swapping_the_image():
+    cells = [{"image": "recipe:1", "backends": ["vllm"], "recipe": "r"}]
+    with pytest.raises(RuntimeError, match="cannot resolve image digest: recipe:1"):
+        ci.resolve_digests(cells, {"vllm": {"image": "own:1"}}, registry({"own:1": DIGEST}))
+    assert cells == [{"image": "recipe:1", "backends": ["vllm"], "recipe": "r"}]
+
+
 def test_plan_chunks_by_world_size():
     ordinary = {"type": "gemm", "args": {"m": 2}}
     wide = {"type": "gemm", "args": {"m": 2, "parallel": {"tp": 4}}}
