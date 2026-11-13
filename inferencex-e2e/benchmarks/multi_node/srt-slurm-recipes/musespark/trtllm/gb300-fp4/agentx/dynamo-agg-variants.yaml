@@ -68,6 +68,7 @@ base:
         OMPI_MCA_coll: ^ucc,hcoll
         NCCL_CUMEM_ENABLE: '1'
         NCCL_MNNVL_ENABLE: '1'
+        UCX_TLS: all
         UCX_CUDA_IPC_ENABLE_MNNVL: y
         UCX_RNDV_SCHEME: put_zcopy
         TRTLLM_SKIP_KV_CACHE_ESTIMATION: '1'
