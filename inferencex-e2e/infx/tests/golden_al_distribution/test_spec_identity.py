@@ -178,6 +178,16 @@ def test_tokenspeed_identity_keeps_unread_semantics_unknown(
     assert run.verify == run.draft_sample == run.adaptive == Fact(None, "unknown")
 
 
+def test_tokenspeed_dspark_reads_its_draft_and_explicit_verifier() -> None:
+    run = run_collection("kimik3.1", _role(**{
+        "speculative-algorithm": "DSPARK", "speculative-num-steps": 5,
+        "speculative-draft-model-path": "Inferact/Kimi-K3.1-Pro-DSpark-preview",
+        "enable-speculative-sampling": True, "speculative-rejection-sample-method": "block",
+    }), "tokenspeed")
+    assert run.draft == "Inferact/Kimi-K3.1-Pro-DSpark-preview"
+    assert run.verify == Fact("block", "explicit")
+
+
 def test_adaptive_run_is_reported() -> None:
     spec = {
         "method": "dspark", "num_speculative_tokens": 5, "draft_sample_method": "probabilistic",
