@@ -82,7 +82,9 @@ base:
         kv-cache-dtype: bf16
         # The megakernel requires an explicit context length; 1M is the model's full rope range.
         context-length: 1048576
-        mem-fraction-static: 0.6
+        # The megakernel's ~60 GB per GPU counts against the static budget; 0.7 leaves room for a
+        # KV pool that holds the full 1M context (0.6 sized it to ~541K tokens).
+        mem-fraction-static: 0.7
         max-running-requests: 1
         cuda-graph-max-bs-decode: 1
         enable-tf32-matmul: true
