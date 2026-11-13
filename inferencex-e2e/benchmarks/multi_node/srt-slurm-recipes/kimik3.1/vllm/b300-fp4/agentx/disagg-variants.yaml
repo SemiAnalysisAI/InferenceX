@@ -341,17 +341,25 @@ override_2p3d_mns128_eval:
         dyn-enable-structural-tag: true
 
 # Three prefill and four decode workers. Decode admits up to 128 requests at 0.98 of GPU memory, which
-# leaves more KV cache for the highest concurrency; graphs every 20 rows.
+# leaves more KV cache for the highest concurrency; graphs every 20 rows. At this load the Mooncake store
+# keeps the tail pages a request loaded and drops older tails it consumed, and store lookups start before
+# admission (up to 16 in flight), which cuts store evictions and the prefill work they cause.
 override_3p4d_mns128_kv98:
   roles:
     prefill: &override_3p4d_mns128_kv98_prefill
       nodes: 3
       workers: 3
-      args: &override_3p4d_mns128_kv98_prefill_args {}
+      env: &store_tail_cleanup
+        VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
+        VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
+      args: &override_3p4d_mns128_kv98_prefill_args
+        kv-transfer-config: &kv_transfer_prefetch '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false,"lookup_timeout_s":60,"store_tp_size":1,"store_chunk_size":4096,"lookup_prefetch_limit":16,"lookup_prefetch_ttl_s":30}}]}}'
     decode: &override_3p4d_mns128_kv98_decode
       nodes: 4
       workers: 4
+      env: *store_tail_cleanup
       args: &override_3p4d_mns128_kv98_decode_args
+        kv-transfer-config: *kv_transfer_prefetch
         gpu-memory-utilization: 0.98
         max-num-seqs: 128
         max-cudagraph-capture-size: 640
