@@ -28,6 +28,7 @@ from pydantic import (
 )
 
 from infx.bench.agentic.traces import LOADERS
+from infx.results.published_metrics import X_AXES, x_axes
 
 from . import github
 from .github import VerificationError
@@ -69,6 +70,15 @@ class Prose(Contract):
     zh: Text = Field(description="Natural Simplified Chinese translation; preserve identifiers")
 
 
+class Dashboard(Contract):
+    """A point on each dashboard x axis at its default statistic: P90 for AgentX, else median."""
+
+    intvty: Number | None = None
+    e2el_ms: Number | None = None
+    ttft_ms: Number | None = None
+    e2e_norm_intvty: Number | None = None
+
+
 class Values(Contract):
     total_tps_gpu: Number | None = None
     output_tps_gpu: Number | None = None
@@ -76,6 +86,7 @@ class Values(Contract):
     tpot_ms: Number | None = None
     latency_statistic: Literal["mean", "median"] = "mean"
     request_errors: Annotated[int, Field(ge=0)] | None = None
+    dashboard: Dashboard = Field(default_factory=Dashboard)
 
 
 def dataset_slug(value: str) -> str | None:
@@ -370,8 +381,19 @@ def request_counts(row: dict) -> tuple[int | None, int | None]:
     return outcome.get("failed"), outcome.get("requested")
 
 
+def dashboard_axes(benchmark_type: str | None, metrics: dict) -> Dashboard:
+    """The dashboard x-axis values of public-shaped ``metrics``, latencies converted to ms."""
+    axes = x_axes({"benchmark_type": benchmark_type, "metrics": metrics})
+    return Dashboard(
+        intvty=axes["intvty"],
+        e2el_ms=axes["e2el"] * 1000 if axes["e2el"] is not None else None,
+        ttft_ms=axes["ttft"] * 1000 if axes["ttft"] is not None else None,
+        e2e_norm_intvty=axes["e2e_norm_intvty"],
+    )
+
+
 def values(row: dict) -> Values:
-    """Return the throughput, latency in ms and error count of result ``row``.
+    """Return the throughput, latency in ms, error count and dashboard axes of result ``row``.
 
     Collector and API metrics are seconds, and only this presentation layer converts to ms.
     Disaggregated output throughput is per decode GPU, the basis the public API publishes.
@@ -385,12 +407,18 @@ def values(row: dict) -> Values:
             output *= row["num_gpus"] / row["num_decode_gpu"]
         ttft = request["latency"]["ttft"].get("mean")
         tpot = request["latency"]["tpot"].get("mean")
+        flat = {
+            f"{statistic}_{name}": value
+            for name, stats in request["latency"].items()
+            for statistic, value in stats.items()
+        }
         return Values(
             total_tps_gpu=throughput.get("total_tput_tps"),
             output_tps_gpu=output,
             ttft_ms=ttft * 1000 if ttft is not None else None,
             tpot_ms=tpot * 1000 if tpot is not None else None,
             request_errors=request_counts(row)[0],
+            dashboard=dashboard_axes("agentic_traces", flat),
         )
     return Values(
         total_tps_gpu=metrics.get("tput_per_gpu"),
@@ -398,6 +426,7 @@ def values(row: dict) -> Values:
         ttft_ms=metrics["mean_ttft"] * 1000 if metrics.get("mean_ttft") is not None else None,
         tpot_ms=metrics["mean_tpot"] * 1000 if metrics.get("mean_tpot") is not None else None,
         request_errors=request_counts(row)[0],
+        dashboard=dashboard_axes(row.get("benchmark_type"), metrics),
     )
 
 
@@ -1274,6 +1303,16 @@ def check_baseline_coverage(
 
 
 MAX_THROUGHPUT_DROP = 0.3
+MAX_DASHBOARD_REGRESSION = 0.1
+# The name a regression reports for each Dashboard field
+DASHBOARD_AXES = {
+    "intvty": "interactivity",
+    "e2el_ms": "E2E latency",
+    "ttft_ms": "TTFT",
+    "e2e_norm_intvty": "E2E normalized interactivity",
+}
+# Regressions on these fields only warn, however large
+WARN_ONLY_AXES = ("e2e_norm_intvty",)
 MIN_EVAL_RETENTION = 0.5
 MIN_EVAL_SCORE = 0.5
 # Published scores of these suites sit above 0.9, while BFCL and GPQA legitimately score lower.
@@ -1297,12 +1336,14 @@ def check_regressions(
     """Raise VerificationError if passed final sweep ``run`` regressed against ``baseline``.
 
     Validation is blocked by a matched point whose output throughput fell more than
-    MAX_THROUGHPUT_DROP or cannot be compared (missing or zero), and by any point whose profiled
-    request error rate exceeds the serving client's MAX_FAILURE_RATE. A frozen point without
-    a dataset is assumed to share the new corpus, and only a different known corpus is skipped.
-    An eval is blocked below MIN_EVAL_RETENTION of its baseline score, and FLOORED_EVAL_SUITES
-    below MIN_EVAL_SCORE whatever the baseline. Labels come from the canonical matrix, never
-    artifact text.
+    MAX_THROUGHPUT_DROP or cannot be compared (missing or zero), by one that got more than
+    MAX_DASHBOARD_REGRESSION worse on a dashboard x axis both sides report, except WARN_ONLY_AXES,
+    which only print a workflow warning, and by any point whose
+    profiled request error rate exceeds the serving client's MAX_FAILURE_RATE. A frozen point
+    without a dataset is assumed to share the new corpus, and only a different known corpus is
+    skipped. An eval is blocked below MIN_EVAL_RETENTION of its baseline score, and
+    FLOORED_EVAL_SUITES below MIN_EVAL_SCORE whatever the baseline. Labels come from the
+    canonical matrix, never artifact text.
     """
     from infx.bench_serving.benchmark_outcome import MAX_FAILURE_RATE
 
@@ -1312,6 +1353,7 @@ def check_regressions(
     old = {point.key: point for point in baseline.points}
     unbaselined = unbaselined_reasons(baseline)
     slower, failing, unknown = [], [], []
+    worse: dict[str, list[str]] = {field: [] for field in DASHBOARD_AXES}
     for point, row in zip(final_points(run, matrix, rows), rows, strict=True):
         rate = request_error_rate(row)
         if rate is not None and rate > MAX_FAILURE_RATE:
@@ -1330,6 +1372,16 @@ def check_regressions(
             unknown.append(point.label)
         elif b < (1 - MAX_THROUGHPUT_DROP) * a:
             slower.append(f"{point.label} ({delta(a, b)})")
+        for field in DASHBOARD_AXES:
+            a, b = getattr(previous.values.dashboard, field), getattr(point.values.dashboard, field)
+            if not a or b is None:
+                continue
+            if X_AXES[field.removesuffix("_ms")] == "max":
+                regressed = b < (1 - MAX_DASHBOARD_REGRESSION) * a
+            else:
+                regressed = b > (1 + MAX_DASHBOARD_REGRESSION) * a
+            if regressed:
+                worse[field].append(f"{point.label} ({delta(a, b)})")
     labels = {identity(key): label for key, label in eval_labels(matrix).items()}
     frozen = {
         (row.key, row.suite, row.metric): row.score
@@ -1350,6 +1402,16 @@ def check_regressions(
         + (f" and {len(items) - COVERAGE_LABELS} more" if len(items) > COVERAGE_LABELS else "")
         for reason, items in (
             (f"output tok/s/GPU fell more than {MAX_THROUGHPUT_DROP:.0%}", slower),
+            *(
+                (
+                    f"dashboard {name} "
+                    + ("rose" if field.endswith("_ms") else "fell")
+                    + f" more than {MAX_DASHBOARD_REGRESSION:.0%}",
+                    worse[field],
+                )
+                for field, name in DASHBOARD_AXES.items()
+                if field not in WARN_ONLY_AXES
+            ),
             (f"request errors exceed {MAX_FAILURE_RATE:.0%}", failing),
             ("output throughput cannot be compared (missing or zero)", unknown),
             (f"eval score fell below {MIN_EVAL_RETENTION:.0%} of its baseline", dropped),
@@ -1357,6 +1419,12 @@ def check_regressions(
         )
         if items
     ]
+    for field in WARN_ONLY_AXES:
+        if worse[field]:
+            print(
+                f"::warning::Klaud: dashboard {DASHBOARD_AXES[field]} fell more than "
+                f"{MAX_DASHBOARD_REGRESSION:.0%} at {', '.join(worse[field])}"
+            )
     if problems:
         raise VerificationError(
             "Final sweep cannot be validated against the frozen baseline: " + "; ".join(problems)
@@ -1691,7 +1759,7 @@ def resolve_baseline(
 
     from infx.results.identity import public_config_key
 
-    from .api import fetch
+    from .api import fetch, normalized_interactivity
     from .validation import PRODUCER_UNAVAILABLE
 
     public = publication(repository, context, model)
@@ -1733,6 +1801,7 @@ def resolve_baseline(
     unverified: list[dict] = []
     sources = list(public.sources)
     datasets: dict[tuple[int, int | None], str] = {}
+    result_ids: dict[str, int] = {}
 
     def dataset(row: dict, run_id: int, run_attempt: int | None) -> str | None:
         """The corpus the dashboard linked to the producer run of a published AgentX row."""
@@ -1810,11 +1879,18 @@ def resolve_baseline(
             head=head,
             run_attempt=run_attempt,
         )
+        if row.get("benchmark_type") == "agentic_traces":
+            result_ids[key] = int(row["id"])
     identities = [public_point(entry) for entry in entries.values()]
     if any(any(_matches_public_point(row, point) for point in identities) for row in unverified):
         raise VerificationError("Public baseline producer provenance is unavailable")
     if not published:
         raise VerificationError("No verified public baseline points for the selected family")
+    if result_ids:
+        normalized, urls = normalized_interactivity(list(result_ids.values()))
+        sources += urls
+        for key, result in result_ids.items():
+            published[key].values.dashboard.e2e_norm_intvty = normalized.get(result)
     points = sorted(
         (
             published.get(key)
