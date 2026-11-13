@@ -12843,3 +12843,12 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv41flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-hicache
+  scenario-type: [agentic-coding]
+  description:
+    - "Replace the agg TP4 c4 point (override_tp4_c4: FlashMLA without the NVIDIA megakernel, prefill-decode-interval 0, batch 128) with override_tp4_mk8 at c4 and a new c8 point: the c1 megakernel configuration with max-running-requests 8, decode CUDA graph batch 8 and prefill-decode-interval 192. The megakernel serves decode batches 1-8; the longer prefill-decode interval keeps prefill chunks from interrupting decode at low batch."
+    - "Agg TP4 c1 and c16 and every disagg point are unchanged. The disagg key is listed so the whole Dynamo + SGLang curve comes from this sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD

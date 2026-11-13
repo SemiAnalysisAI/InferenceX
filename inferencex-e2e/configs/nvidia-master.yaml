@@ -6713,9 +6713,9 @@ dsv41flash-fp4-gb300-dynamo-sglang-agentic-agg:
           ep: 1
           dp-attn: false
       - spec-decoding: mtp
-        conc-list: [4]
+        conc-list: [4, 8]
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c4
+        srt-recipe: agg-variants.yaml:override_tp4_mk8
         worker:
           num-worker: 1
           tp: 4
