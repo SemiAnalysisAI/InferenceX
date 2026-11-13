@@ -1,0 +1,896 @@
+schema: 2
+base:
+  environment:
+    DYN_TOKEN_IDS_AS_BYTES: '1'
+    DYN_REQUEST_PLANE_CODEC: msgpack
+    DYN_LIFECYCLE_TRACE_ENABLED: '0'
+    OTEL_EXPORT_ENABLED: '0'
+    PIP_CONFIG_FILE: /dev/null
+    PIP_INDEX_URL: https://pypi.org/simple
+    PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
+  services:
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  engine:
+    type: trtllm
+    served_model_name: MiniMaxAI/MiniMax-M3.1-Flash
+    publish_metrics: true
+    numa_cpu_bind: true
+    numa_memory_bind: preferred
+  roles:
+    prefill:
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        PYTHONNOUSERSITE: '1'
+        TQDM_DISABLE: '1'
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        TRTLLM_KV_LAYERWISE_ONBOARD: '0'
+        TRTLLM_KV_ONBOARD_CTAS: '12'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        PYTHONDONTWRITEBYTECODE: '1'
+        DYN_ROUTER_MODE: kv
+        DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
+        DYN_ENGINE_CONV_AFFINITY: '1'
+        DYN_REASONING_PARSER: minimax_m3
+        DYN_TOOL_CALL_PARSER: minimax_m3
+        DYN_CUSTOM_JINJA_TEMPLATE: /model/chat_template.jinja
+      args:
+        disable_overlap_scheduler: true
+        cuda_graph_config: null
+        trust_remote_code: true
+        max_seq_len: 1048576
+        attn_backend: TRTLLM
+        enable_chunked_prefill: true
+        allreduce_strategy: AUTO
+        moe_config:
+          backend: TRTLLM
+          use_low_precision_moe_combine: false
+        sparse_attention_config:
+          algorithm: minimax_m3
+          implementation: msa
+          sparse_disable_index_value: true
+          fuse_qkv_index_projection: true
+        kv_cache_config:
+          dtype: nvfp4
+          tokens_per_block: 128
+          use_kv_cache_manager_v2: true
+          free_gpu_memory_fraction: 0.94
+          enable_block_reuse: true
+          block_reuse_config:
+            policy: per_conversation
+          iteration_stats_interval: 20
+        speculative_config:
+          decoding_type: DSpark
+          max_draft_len: 7
+          block_size: 7
+          use_rejection_sampling: true
+          advanced_sampling_mode: no_topk
+          attention_backend: TRTLLM
+          speculative_model: /model/dspark
+        cache_transceiver_config:
+          backend: NIXL
+          transceiver_runtime: PYTHON
+          max_tokens_in_buffer: 524288
+          kv_transfer_timeout_ms: 600000
+          kv_cache_bounce_size_mb: 1024
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        enable_autotuner: true
+        enable_tokenization_cache: true
+        stream_interval: 20
+        reasoning_parser: minimax_m3
+        print_iter_log: false
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        return_perf_metrics: true
+        backend: pytorch
+        gpus_per_node: 4
+        env_overrides:
+          TRTLLM_DISAGG_ROLE: context
+    decode:
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        PYTHONNOUSERSITE: '1'
+        TQDM_DISABLE: '1'
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        TRTLLM_KV_LAYERWISE_ONBOARD: '0'
+        TRTLLM_KV_ONBOARD_CTAS: '12'
+        TRTLLM_M31_NO_MIX: '1'
+        TRTLLM_M31_NO_MIX_DECODE_INTERVAL: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        PYTHONDONTWRITEBYTECODE: '1'
+        DYN_ROUTER_MODE: least-loaded
+        DYN_REASONING_PARSER: minimax_m3
+        DYN_TOOL_CALL_PARSER: minimax_m3
+        DYN_CUSTOM_JINJA_TEMPLATE: /model/chat_template.jinja
+      args:
+        max_num_tokens: 16384
+        disable_overlap_scheduler: false
+        cuda_graph_config:
+          enable_padding: true
+        trust_remote_code: true
+        max_seq_len: 1048576
+        attn_backend: TRTLLM
+        enable_chunked_prefill: true
+        allreduce_strategy: AUTO
+        moe_config:
+          backend: TRTLLM
+          use_low_precision_moe_combine: false
+        sparse_attention_config:
+          algorithm: minimax_m3
+          implementation: msa
+          sparse_disable_index_value: true
+          fuse_qkv_index_projection: true
+        kv_cache_config:
+          dtype: nvfp4
+          tokens_per_block: 128
+          use_kv_cache_manager_v2: true
+          free_gpu_memory_fraction: 0.94
+          iteration_stats_interval: 20
+        speculative_config:
+          decoding_type: DSpark
+          max_draft_len: 7
+          block_size: 7
+          use_rejection_sampling: true
+          advanced_sampling_mode: no_topk
+          attention_backend: TRTLLM
+          speculative_model: /model/dspark
+        cache_transceiver_config:
+          backend: NIXL
+          transceiver_runtime: PYTHON
+          max_tokens_in_buffer: 524288
+          kv_transfer_timeout_ms: 600000
+          kv_cache_bounce_size_mb: 1024
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        enable_autotuner: true
+        enable_tokenization_cache: true
+        stream_interval: 20
+        reasoning_parser: minimax_m3
+        print_iter_log: false
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        return_perf_metrics: true
+        backend: pytorch
+        gpus_per_node: 4
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    placement:
+      node: head
+    args:
+      router-mode: kv
+    env:
+      ETCD_LEASE_TTL: '120'
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TOKENIZER: fastokens
+      DYN_TOKENIZER_CACHE_BYTES: '8589934592'
+      DYN_REQUEST_PLANE: tcp
+      DYN_FRONTEND_ENABLE_KV_EVENTS: '0'
+  health_check:
+    interval_seconds: 5
+    extra_fatal_log_patterns:
+    - Hang detected after \d+ seconds
+    - Fatal error detected, initiating shutdown
+  srun_options:
+    container-workdir: /infmax-workspace
+  benchmark:
+    placement:
+      node: head
+    env:
+      SERVED_MODEL_NAME: MiniMaxAI/MiniMax-M3.1-Flash
+      TOKENIZER: /model
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+    colocate_with_frontend: true
+  observability:
+    enabled: false
+    enable_otel: false
+    tachometer:
+      enabled: false
+  sbatch_directives:
+    exclusive: ''
+    mem: '0'
+    no-requeue: ''
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261028
+    request_plane: tcp
+  identity:
+    frameworks:
+      tensorrt_llm: 1.4.0a0.dev202611061956
+      dynamo: 1.7.0.dev20261028
+override_disagg_1p3d_tp4_tp4_mtp7_c36:
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        modeling_v2: require
+        tensor_parallel_size: 4
+        max_batch_size: 8
+        max_num_tokens: 16384
+        moe_expert_parallel_size: 1
+        enable_attention_dp: false
+        sparse_attention_config:
+          indexer_kv_dtype: fp8
+        kv_cache_config:
+          host_cache_size: 170000000000
+    decode:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      args:
+        modeling_v2: require
+        tensor_parallel_size: 4
+        max_batch_size: 1
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+        moe_expert_parallel_size: 1
+        enable_attention_dp: false
+        sparse_attention_config:
+          indexer_kv_dtype: fp8
+        kv_cache_config:
+          enable_block_reuse: true
+          block_reuse_config:
+            policy: per_conversation
+          host_cache_size: 170000000000
+  health_check:
+    max_attempts: 1080
+  name: disagg-1p3d-tp4-tp4-mtp7-c36
+override_disagg_1p3d_tp4_tp4_mtp7_c56:
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
+        TRTLLM_M31_V2_NVFP4_IDXK: '1'
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-prefill
+      args:
+        modeling_v2: require
+        tensor_parallel_size: 4
+        max_batch_size: 8
+        max_num_tokens: 16384
+        moe_expert_parallel_size: 1
+        enable_attention_dp: false
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+        kv_cache_config:
+          host_cache_size: 170000000000
+    decode:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-decode
+        TRTLLM_M31_V2_NVFP4_IDXK: '1'
+        TRTLLM_M31_MSA_INDEXER_V2: '1'
+        TRTLLM_M31_MSA_SELECT_1K: '1'
+        TRTLLM_M31_ENABLE_REJ_V3: '1'
+        TRTLLM_M31_ENABLE_VERIFY_FUSED_PROBS: '1'
+        TRTLLM_M31_ENABLE_VERIFY_PROBS_JIT: '1'
+        TRTLLM_M31_ENABLE_VERIFY_FUSED_PROBS_WIDE: '1'
+        TRTLLM_M31_TP4_WIDE_FUSED_DECODE_MAX_TOKENS: '48'
+        TRTLLM_M31_TP4_NVFP4_SELECT_EARLY_MAX_ROWS: '64'
+        TRTLLM_M31_TP4_ROUTER_TC_ROW_TILES: '1'
+        TRTLLM_M31_SPEC_PADDING_ROWFILL: '1'
+        TRTLLM_M31_ENABLE_REJ_SLOTS: '1'
+        TRTLLM_M31_MOE_ROUTING_SINGLE_CTA: '1'
+        TRTLLM_M31_ENABLE_STEP_PROLOGUE_FOLD_TP4: '1'
+        TRTLLM_M31_ENABLE_CAPTURE_COPY_KERNEL_TP4: '1'
+        TRTLLM_M31_ENABLE_TAIL_NODE_PDL_TP4: '1'
+        TRTLLM_M31_ENABLE_DRAFT_PREP_FUSE_TP4: '1'
+        TRTLLM_M31_TP4_NVFP4_IDXK_PRODUCER: '1'
+        TRTLLM_M31_WIDE_KEEP_ALL_AT_ONE: '1'
+      args:
+        modeling_v2: require
+        tensor_parallel_size: 4
+        max_batch_size: 2
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+        moe_expert_parallel_size: 1
+        enable_attention_dp: false
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+        kv_cache_config:
+          enable_block_reuse: true
+          block_reuse_config:
+            policy: per_conversation
+          host_cache_size: 170000000000
+  health_check:
+    max_attempts: 1080
+  name: disagg-1p3d-tp4-tp4-mtp7-c56
+override_disagg_1p3d_tp4_tp4_mtp7_c76:
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
+        TRTLLM_M31_V2_NVFP4_IDXK: '1'
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-prefill
+      args:
+        modeling_v2: require
+        tensor_parallel_size: 4
+        max_batch_size: 8
+        max_num_tokens: 16384
+        moe_expert_parallel_size: 1
+        enable_attention_dp: false
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+        kv_cache_config:
+          host_cache_size: 170000000000
+    decode:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-decode
+        TRTLLM_M31_V2_NVFP4_IDXK: '1'
+        TRTLLM_M31_MSA_INDEXER_V2: '1'
+        TRTLLM_M31_MSA_SELECT_1K: '1'
+        TRTLLM_M31_ENABLE_REJ_V3: '1'
+        TRTLLM_M31_ENABLE_VERIFY_FUSED_PROBS: '1'
+        TRTLLM_M31_ENABLE_VERIFY_PROBS_JIT: '1'
+        TRTLLM_M31_ENABLE_VERIFY_FUSED_PROBS_WIDE: '1'
+        TRTLLM_M31_TP4_WIDE_FUSED_DECODE_MAX_TOKENS: '48'
+        TRTLLM_M31_TP4_NVFP4_SELECT_EARLY_MAX_ROWS: '64'
+        TRTLLM_M31_TP4_ROUTER_TC_ROW_TILES: '1'
+        TRTLLM_M31_SPEC_PADDING_ROWFILL: '1'
+        TRTLLM_M31_ENABLE_REJ_SLOTS: '1'
+        TRTLLM_M31_MOE_ROUTING_SINGLE_CTA: '1'
+        TRTLLM_M31_ENABLE_STEP_PROLOGUE_FOLD_TP4: '1'
+        TRTLLM_M31_ENABLE_CAPTURE_COPY_KERNEL_TP4: '1'
+        TRTLLM_M31_ENABLE_TAIL_NODE_PDL_TP4: '1'
+        TRTLLM_M31_ENABLE_DRAFT_PREP_FUSE_TP4: '1'
+        TRTLLM_M31_TP4_NVFP4_IDXK_PRODUCER: '1'
+        TRTLLM_M31_WIDE_KEEP_ALL_AT_ONE: '1'
+      args:
+        modeling_v2: require
+        tensor_parallel_size: 4
+        max_batch_size: 4
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+        moe_expert_parallel_size: 1
+        enable_attention_dp: false
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+        kv_cache_config:
+          enable_block_reuse: true
+          block_reuse_config:
+            policy: per_conversation
+          host_cache_size: 170000000000
+  health_check:
+    max_attempts: 1080
+  name: disagg-1p3d-tp4-tp4-mtp7-c76
+override_disagg_1p4d_tp4_tp8_mtp7_c60:
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
+        TRTLLM_M31_V2_NVFP4_IDXK: '1'
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-prefill
+      args:
+        modeling_v2: require
+        tensor_parallel_size: 4
+        max_batch_size: 8
+        max_num_tokens: 16384
+        moe_expert_parallel_size: 1
+        enable_attention_dp: false
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+        kv_cache_config:
+          host_cache_size: 170000000000
+    decode:
+      nodes: 8
+      workers: 4
+      gpus: 8
+      env:
+        TRTLLM_M31_V2_NVFP4_IDXK: '1'
+        TRTLLM_M31_MSA_INDEXER_V2: '1'
+        TRTLLM_M31_MSA_SELECT_1K: '1'
+        TRTLLM_M31_ENABLE_IDXSPLIT: '1'
+        TRTLLM_M31_ENABLE_SHARDED_DRAW: '1'
+        TRTLLM_M31_ENABLE_FC_SHARD: '1'
+        TRTLLM_M31_ENABLE_REJ_SLOTS: '1'
+        TRTLLM_M31_ENABLE_SHARDED_DRAW_QPUSH: '1'
+        TRTLLM_M31_ENABLE_SHARDED_DRAW_SPLIT4: '1'
+        TRTLLM_M31_SPEC_PADDING_ROWFILL: '1'
+        TRTLLM_M31_ENABLE_MSA_INDEXER_QPOLL: '1'
+        TRTLLM_M31_ENABLE_LC8_JIT: '1'
+        TRTLLM_M31_ENABLE_LC8_MBAR_MERGE: '1'
+        TRTLLM_M31_ENABLE_DENSE_ACT_FOLD: '1'
+        TRTLLM_M31_ENABLE_DENSE_FOLD_PATH: '1'
+        TRTLLM_M31_ENABLE_DENSE_PREPUSH_AR: '1'
+        TRTLLM_M31_ENABLE_TAIL_PDL: '1'
+        TRTLLM_M31_ENABLE_STEP_TAIL_FOLD: '1'
+        TRTLLM_M31_ENABLE_VERIFY_FUSED: '1'
+        TRTLLM_M31_ENABLE_AR1_EMIT_B1: '1'
+        TRTLLM_M31_ENABLE_MOE_POLL_TUNE: '1'
+        TRTLLM_M31_ENABLE_VERIFY_FUSED_PROBS: '1'
+        TRTLLM_M31_ENABLE_VERIFY_PROBS_JIT: '1'
+        TRTLLM_M31_ENABLE_REJ_V3: '1'
+        TRTLLM_M31_ENABLE_DRAFT_LSE_FOLD: '1'
+        TRTLLM_M31_ENABLE_MOE_READER_FAST: '1'
+        TRTLLM_M31_ENABLE_MOE_WIDE_PHASE: '1'
+        TRTLLM_M31_MOE_WIDE_PHASE_RESPLIT: '1'
+        TRTLLM_M31_ENABLE_AR2_ORDER_FIX: '1'
+        TRTLLM_M31_ENABLE_DRAFT_FAST: '1'
+        TRTLLM_M31_ENABLE_MOE_EPI_STRAIGHT: '1'
+        TRTLLM_M31_ENABLE_MOE_CLUSTER2: '1'
+        TRTLLM_M31_ENABLE_DRAFT_PREP_FUSE: '1'
+        TRTLLM_M31_ENABLE_AR_LEAN_POLL: '1'
+        TRTLLM_M31_ENABLE_STEP_PROLOGUE_FOLD: '1'
+        TRTLLM_M31_ENABLE_CAPTURE_COPY_KERNEL: '1'
+        TRTLLM_M31_ENABLE_TAIL_NODE_PDL: '1'
+        TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
+        TRTLLM_M31_ENABLE_S1_LOAD_HOIST: '1'
+        TRTLLM_M31_ENABLE_S1_SINGLE_XCHG: '1'
+        TRTLLM_M31_ENABLE_S2_EARLY_Q: '1'
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-decode
+      args:
+        modeling_v2: require
+        tensor_parallel_size: 8
+        max_batch_size: 1
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+        moe_expert_parallel_size: 1
+        enable_attention_dp: false
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+        kv_cache_config:
+          enable_block_reuse: true
+          block_reuse_config:
+            policy: per_conversation
+          host_cache_size: 170000000000
+  health_check:
+    max_attempts: 1080
+  name: disagg-1p4d-tp4-tp8-mtp7-c60
+override_disagg_4p1d_dp2_dp8_mtp7_c320:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 4
+      gpus: 2
+      env:
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
+        TRTLLM_M31_ADP_RESIZE_GUARD: '1'
+        TRTLLM_M31_CTX_SRF: '1'
+        TRTLLM_M31_CTX_SRF_AGE_ITERS: '128'
+        TRTLLM_M31_PREFILL: '1'
+        TRTLLM_M3_MSA_V1_DECODE: '1'
+        MINIMAX_MSA_Q8KV4_V_SCALE_LAYOUT: quad4
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-prefill
+        TRTLLM_M31_PREFILL2: '1'
+        TRTLLM_M31_PREFIX_ROUTE: '1'
+        TRTLLM_M31_ENABLE_DEP2CTX: '1'
+        TRTLLM_M31_DISABLE_DEP2CTX_NORMQ: '1'
+        TRTLLM_M31_MSA_PREWARM_SPLIT_ALL: '1'
+        TRTLLM_M31_ENABLE_DEP2CTX_PROXY_LADDER: '1'
+        TRTLLM_M31_DEQ_I16: '1'
+        TRTLLM_M31_CTX_SRF_PROBE: '1'
+        TRTLLM_M31_ENABLE_DEP2CTX_FUSED_PROLOGUE: '1'
+        TRTLLM_M31_SM103_TP2_TARGET: '1'
+        TRTLLM_M31_DISABLE_TOPP_DET: '1'
+        TRTLLM_M31_DISABLE_SOFTMAX_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_SLOTS: '1'
+        TRTLLM_M31_CTX_SELECT_JIT: '1'
+        TRTLLM_M31_CTX_INSERT_JIT_DIR: /tmp/ctx-insert-jit
+      args:
+        modeling_v2: auto
+        tensor_parallel_size: 2
+        max_batch_size: 40
+        max_num_tokens: 8192
+        moe_expert_parallel_size: 2
+        enable_attention_dp: true
+        attention_dp_config:
+          kv_cache_routing_conversation_affinity: true
+          kv_cache_routing_new_conv_placement: least_tokens
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+          sparse_init_blocks: 0
+          sparse_local_blocks: 1
+        kv_cache_config:
+          host_cache_size: 200000000000
+        perf_metrics_output_dir: /logs/perf_metrics
+        prefill_cuda_graph_backend: breakable
+        prefill_capture_num_tokens:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 16
+        - 32
+        - 64
+        - 128
+        - 256
+        - 512
+        - 768
+        - 1024
+        - 1280
+        - 1536
+        - 1792
+        - 2048
+        - 2304
+        - 2560
+        - 2816
+        - 3072
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
+        TRTLLM_M31_ADP_RESIZE_GUARD: '1'
+        TRTLLM_KV_TRANSFER_IDLE_POLL_SKIP: '0'
+        TRTLLM_M3_MSA_V1_DECODE: '1'
+        MINIMAX_MSA_Q8KV4_V_SCALE_LAYOUT: quad4
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-decode
+        TRTLLM_M31_LOWM_GEMM: '1'
+        TRTLLM_M31_FAST_SAMPLER: '1'
+        TRTLLM_M31_DISABLE_TOPP_DET: '1'
+        TRTLLM_M31_DISABLE_SOFTMAX_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_SLOTS: '1'
+        TRTLLM_M31_ENABLE_DEP: '1'
+        TRTLLM_M31_FMHA_2CTA: '1'
+        TRTLLM_M31_LOGITS_CAST_VEC: '1'
+        TRTLLM_M31_SPEC_PADDING_ROWFILL: '1'
+        TRTLLM_M31_DECODE_KVFULL_GUARD: '1'
+        TRTLLM_M31_RESV_DEBUG: '1'
+        TRTLLM_M31_SHARED_CORUN: tile128+gate
+        TRTLLM_M31_DENSE_TACTIC_PIN: '1'
+        TRTLLM_M31_PADDING_ONEHOT_NOSYNC: '1'
+        TRTLLM_M31_MOE_PIN_TUNER_SPACE: '1'
+        TRTLLM_M31_MOE_TACTIC_PIN: 512:16,22;768:32,4;1024:32,6;1280:64,1;1536:64,1;640:32,4;896:32,4
+        TRTLLM_M31_DENSE_PREFETCH: '0'
+        TRTLLM_M31_A2A_PUSH_REDUCE: '1'
+        TRTLLM_M31_ROUTER_CHAIN: '1'
+        TRTLLM_M31_FMHA_BALANCE: '1'
+      args:
+        modeling_v2: auto
+        tensor_parallel_size: 8
+        max_batch_size: 40
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 4
+          - 8
+          - 10
+          - 12
+          - 14
+          - 16
+          - 20
+          - 24
+          - 28
+          - 32
+          - 40
+        moe_expert_parallel_size: 8
+        enable_attention_dp: true
+        attention_dp_config:
+          kv_cache_routing_conversation_affinity: false
+          kv_cache_routing_new_conv_placement: least_tokens
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+          sparse_init_blocks: 0
+          sparse_local_blocks: 1
+        kv_cache_config:
+          enable_block_reuse: false
+          host_cache_size: 0
+        perf_metrics_output_dir: /logs/perf_metrics
+  health_check:
+    max_attempts: 840
+  name: disagg-4p1d-dp2-dp8-mtp7-c320
+override_disagg_5p1d_dp2_dp16_mtp7_c300:
+  roles:
+    prefill:
+      nodes: 3
+      workers: 5
+      gpus: 2
+      env:
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
+        TRTLLM_M31_ADP_RESIZE_GUARD: '1'
+        TRTLLM_M31_CTX_SRF: '1'
+        TRTLLM_M31_CTX_SRF_AGE_ITERS: '128'
+        TRTLLM_M31_PREFILL: '1'
+        TRTLLM_M3_MSA_V1_DECODE: '1'
+        MINIMAX_MSA_Q8KV4_V_SCALE_LAYOUT: quad4
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-prefill
+        TRTLLM_M31_PREFILL2: '1'
+        TRTLLM_M31_PREFIX_ROUTE: '1'
+        TRTLLM_M31_ENABLE_DEP2CTX: '1'
+        TRTLLM_M31_DISABLE_DEP2CTX_NORMQ: '1'
+        TRTLLM_M31_MSA_PREWARM_SPLIT_ALL: '1'
+        TRTLLM_M31_ENABLE_DEP2CTX_PROXY_LADDER: '1'
+        TRTLLM_M31_DEQ_I16: '1'
+        TRTLLM_M31_CTX_SRF_PROBE: '1'
+        TRTLLM_M31_ENABLE_DEP2CTX_FUSED_PROLOGUE: '1'
+        TRTLLM_M31_SM103_TP2_TARGET: '1'
+        TRTLLM_M31_DISABLE_TOPP_DET: '1'
+        TRTLLM_M31_DISABLE_SOFTMAX_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_SLOTS: '1'
+      args:
+        modeling_v2: auto
+        tensor_parallel_size: 2
+        max_batch_size: 40
+        max_num_tokens: 16384
+        moe_expert_parallel_size: 2
+        enable_attention_dp: true
+        attention_dp_config:
+          kv_cache_routing_conversation_affinity: true
+          kv_cache_routing_new_conv_placement: least_tokens
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+          sparse_init_blocks: 0
+          sparse_local_blocks: 1
+        kv_cache_config:
+          host_cache_size: 200000000000
+        perf_metrics_output_dir: /logs/perf_metrics
+        prefill_cuda_graph_backend: breakable
+        prefill_capture_num_tokens:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 16
+        - 32
+        - 64
+        - 128
+        - 256
+        - 512
+        - 768
+        - 1024
+        - 1280
+        - 1536
+        - 1792
+        - 2048
+        - 2304
+        - 2560
+        - 2816
+        - 3072
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
+        TRTLLM_M31_ADP_RESIZE_GUARD: '1'
+        TRTLLM_KV_TRANSFER_IDLE_POLL_SKIP: '0'
+        TRTLLM_M3_MSA_V1_DECODE: '1'
+        MINIMAX_MSA_Q8KV4_V_SCALE_LAYOUT: quad4
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-decode
+        TRTLLM_M31_LOWM_GEMM: '1'
+        TRTLLM_M31_FAST_SAMPLER: '1'
+        TRTLLM_M31_DISABLE_TOPP_DET: '1'
+        TRTLLM_M31_DISABLE_SOFTMAX_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_SLOTS: '1'
+        TRTLLM_M31_ENABLE_DEP: '1'
+        TRTLLM_M31_FMHA_2CTA: '1'
+        TRTLLM_M31_LOGITS_CAST_VEC: '1'
+        TRTLLM_M31_SPEC_PADDING_ROWFILL: '1'
+        TRTLLM_M31_DECODE_KVFULL_GUARD: '1'
+        TRTLLM_M31_RESV_DEBUG: '1'
+        TRTLLM_M31_SHARED_CORUN: tile128+gate
+        TRTLLM_M31_MOE_PIN_EP16: '1'
+        TRTLLM_M31_CORUN_MIN_ROWS: '72'
+        TRTLLM_M31_CORUN_GATE_MAX_ROWS: '32'
+        TRTLLM_M31_ADP_ROWS_LOG: '20000'
+        TRTLLM_M31_DENSE_TACTIC_PIN: '1'
+        TRTLLM_M31_PADDING_ONEHOT_NOSYNC: '1'
+        TRTLLM_M31_MOE_PIN_TUNER_SPACE: '1'
+        TRTLLM_M31_MOE_TACTIC_PIN: 512:16,22;768:32,4;1024:32,6;1280:64,1;1536:64,1
+        TRTLLM_M31_DENSE_PREFETCH: '1'
+        TRTLLM_M31_A2A_PUSH_REDUCE: '1'
+        TRTLLM_M31_ROUTER_CHAIN: '1'
+        TRTLLM_M31_FMHA_BALANCE: '1'
+      args:
+        modeling_v2: auto
+        tensor_parallel_size: 16
+        max_batch_size: 40
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 8
+          - 12
+          - 16
+        moe_expert_parallel_size: 16
+        enable_attention_dp: true
+        attention_dp_config:
+          kv_cache_routing_conversation_affinity: false
+          kv_cache_routing_new_conv_placement: least_tokens
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+          sparse_init_blocks: 0
+          sparse_local_blocks: 1
+        kv_cache_config:
+          enable_block_reuse: false
+          host_cache_size: 0
+        perf_metrics_output_dir: /logs/perf_metrics
+  health_check:
+    max_attempts: 840
+  name: disagg-5p1d-dp2-dp16-mtp7-c300
+override_disagg_7p1d_dp2_dp8_mtp7_c480:
+  roles:
+    prefill:
+      nodes: 4
+      workers: 7
+      gpus: 2
+      env:
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
+        TRTLLM_M31_ADP_RESIZE_GUARD: '1'
+        TRTLLM_M31_CTX_SRF: '1'
+        TRTLLM_M31_CTX_SRF_AGE_ITERS: '128'
+        TRTLLM_M31_PREFILL: '1'
+        TRTLLM_M3_MSA_V1_DECODE: '1'
+        MINIMAX_MSA_Q8KV4_V_SCALE_LAYOUT: quad4
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-prefill
+        TRTLLM_M31_PREFILL2: '1'
+        TRTLLM_M31_PREFIX_ROUTE: '1'
+        TRTLLM_M31_ENABLE_DEP2CTX: '1'
+        TRTLLM_M31_DISABLE_DEP2CTX_NORMQ: '1'
+        TRTLLM_M31_MSA_PREWARM_SPLIT_ALL: '1'
+        TRTLLM_M31_ENABLE_DEP2CTX_PROXY_LADDER: '1'
+        TRTLLM_M31_DEQ_I16: '1'
+        TRTLLM_M31_CTX_SRF_PROBE: '1'
+        TRTLLM_M31_ENABLE_DEP2CTX_FUSED_PROLOGUE: '1'
+        TRTLLM_M31_SM103_TP2_TARGET: '1'
+        TRTLLM_M31_DISABLE_TOPP_DET: '1'
+        TRTLLM_M31_DISABLE_SOFTMAX_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_SLOTS: '1'
+        TRTLLM_M31_CTX_SELECT_JIT: '1'
+        TRTLLM_M31_CTX_INSERT_JIT_DIR: /tmp/ctx-insert-jit
+      args:
+        modeling_v2: auto
+        tensor_parallel_size: 2
+        max_batch_size: 40
+        max_num_tokens: 16384
+        moe_expert_parallel_size: 2
+        enable_attention_dp: true
+        attention_dp_config:
+          kv_cache_routing_conversation_affinity: true
+          kv_cache_routing_new_conv_placement: least_tokens
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+          sparse_init_blocks: 0
+          sparse_local_blocks: 1
+        kv_cache_config:
+          host_cache_size: 200000000000
+        perf_metrics_output_dir: /logs/perf_metrics
+        prefill_cuda_graph_backend: breakable
+        prefill_capture_num_tokens:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 16
+        - 32
+        - 64
+        - 128
+        - 256
+        - 512
+        - 768
+        - 1024
+        - 1280
+        - 1536
+        - 1792
+        - 2048
+        - 2304
+        - 2560
+        - 2816
+        - 3072
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
+        TRTLLM_M31_ADP_RESIZE_GUARD: '1'
+        TRTLLM_KV_TRANSFER_IDLE_POLL_SKIP: '0'
+        TRTLLM_M3_MSA_V1_DECODE: '1'
+        MINIMAX_MSA_Q8KV4_V_SCALE_LAYOUT: quad4
+        TORCH_EXTENSIONS_DIR: /tmp/torch_ext-decode
+        TRTLLM_M31_LOWM_GEMM: '1'
+        TRTLLM_M31_FAST_SAMPLER: '1'
+        TRTLLM_M31_DISABLE_TOPP_DET: '1'
+        TRTLLM_M31_DISABLE_SOFTMAX_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_MC: '1'
+        TRTLLM_M31_DISABLE_REJ_SLOTS: '1'
+        TRTLLM_M31_ENABLE_DEP: '1'
+        TRTLLM_M31_FMHA_2CTA: '1'
+        TRTLLM_M31_LOGITS_CAST_VEC: '1'
+        TRTLLM_M31_SPEC_PADDING_ROWFILL: '1'
+        TRTLLM_M31_DECODE_KVFULL_GUARD: '1'
+        TRTLLM_M31_RESV_DEBUG: '1'
+        TRTLLM_M31_SHARED_CORUN: tile128+gate
+        TRTLLM_M31_DENSE_TACTIC_PIN: '1'
+        TRTLLM_M31_PADDING_ONEHOT_NOSYNC: '1'
+        TRTLLM_M31_MOE_PIN_TUNER_SPACE: '1'
+        TRTLLM_M31_MOE_TACTIC_PIN: 512:16,22;768:32,4;1024:32,6;1280:64,1;1536:64,1
+        TRTLLM_M31_DENSE_PREFETCH: '0'
+        TRTLLM_M31_A2A_PUSH_REDUCE: '1'
+        TRTLLM_M31_ROUTER_CHAIN: '1'
+        TRTLLM_M31_FMHA_BALANCE: '1'
+      args:
+        modeling_v2: auto
+        tensor_parallel_size: 8
+        max_batch_size: 48
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 4
+          - 8
+          - 16
+          - 20
+          - 24
+          - 28
+          - 32
+          - 40
+          - 48
+        moe_expert_parallel_size: 8
+        enable_attention_dp: true
+        attention_dp_config:
+          kv_cache_routing_conversation_affinity: false
+          kv_cache_routing_new_conv_placement: least_tokens
+        sparse_attention_config:
+          indexer_kv_dtype: nvfp4
+          sparse_init_blocks: 0
+          sparse_local_blocks: 1
+        kv_cache_config:
+          enable_block_reuse: false
+          host_cache_size: 0
+        perf_metrics_output_dir: /logs/perf_metrics
+  health_check:
+    max_attempts: 840
+  name: disagg-7p1d-dp2-dp8-mtp7-c480

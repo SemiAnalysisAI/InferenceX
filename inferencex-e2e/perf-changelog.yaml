@@ -12843,3 +12843,17 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add seven MiniMax-M3.1-Flash NVFP4 GB300 Dynamo TensorRT-LLM AgentX disaggregated points with DSpark draft length 7, native DRAM KV offload and NIXL transfer."
+    - "Use nvcr.io/nvidia/tensorrt-llm/release:feat-m31-flash-perf2-gb-clean-1.4.0a0.dev202611061956 with Dynamo 1.7.0.dev20261028."
+    - "Points: TP4 prefill with TP4 decode in 1P3D at concurrency 36, 56 and 76; TP4 prefill with TP8 decode in 1P4D at 60; DEP2 prefill with DEP16 decode in 5P1D at 300; DEP2 prefill with DEP8 decode in 4P1D at 320 and 7P1D at 480."
+    - "Quantization: NVFP4 KV cache on every prefill and decode worker; indexer KV cache is FP8 at 1P3D concurrency 36 and NVFP4 on the other six points. Low-precision MoE combine stays off and no all-reduce quantization is enabled. DEP2 prefill workers set TRTLLM_M31_SM103_TP2_TARGET=1."
+    - "Dynamo KV-aware prefill routing, least-loaded decode routing, conversation affinity and fastokens tokenization; golden-curve synthetic acceptance."
+    - "Prefill and decode KV-cache transceivers use a 1024 MB bounce buffer with agent bounce buffering, a 4 MB maximum average descriptor size and a minimum descriptor count of 1."
+    - "Every TensorRT-LLM worker sets stream_interval 20, enable_iter_perf_stats with iter_perf_stats_interval 20 and kv_cache_config.iteration_stats_interval 20, and publishes metrics; GPU and host CPU power collection are enabled on all points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -8360,3 +8360,85 @@ qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp:
       - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [56], srt-recipe: agg-variants.yaml:override_tp1_c56 }
       - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [80], srt-recipe: agg-variants.yaml:override_tp1_c80 }
       - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [108], srt-recipe: agg-variants.yaml:override_tp1_c108 }
+
+minimaxm31flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
+  image: nvcr.io/nvidia/tensorrt-llm/release:feat-m31-flash-perf2-gb-clean-1.4.0a0.dev202611061956
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  router: {name: dynamo-router, version: 1.7.0.dev20261028}
+  multinode: true
+  disagg: true
+  srt-recipe-dir: minimaxm31flash/trtllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.704889713
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611061956}
+        conc-list: [36]
+        power: true
+        cpu-power: true
+        srt-recipe: disagg-variants.yaml:override_disagg_1p3d_tp4_tp4_mtp7_c36
+        prefill: {num-worker: 1, tp: 4, ep: 1, dp-attn: false}
+        decode: {num-worker: 3, tp: 4, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611061956}
+        conc-list: [56]
+        power: true
+        cpu-power: true
+        srt-recipe: disagg-variants.yaml:override_disagg_1p3d_tp4_tp4_mtp7_c56
+        prefill: {num-worker: 1, tp: 4, ep: 1, dp-attn: false}
+        decode: {num-worker: 3, tp: 4, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611061956}
+        conc-list: [76]
+        power: true
+        cpu-power: true
+        srt-recipe: disagg-variants.yaml:override_disagg_1p3d_tp4_tp4_mtp7_c76
+        prefill: {num-worker: 1, tp: 4, ep: 1, dp-attn: false}
+        decode: {num-worker: 3, tp: 4, ep: 1, dp-attn: false}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611061956}
+        conc-list: [60]
+        power: true
+        cpu-power: true
+        srt-recipe: disagg-variants.yaml:override_disagg_1p4d_tp4_tp8_mtp7_c60
+        prefill: {num-worker: 1, tp: 4, ep: 1, dp-attn: false}
+        decode: {num-worker: 4, tp: 8, ep: 1, dp-attn: false}
+    - dram-utilization: 0.84
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611061956}
+        conc-list: [320]
+        power: true
+        cpu-power: true
+        srt-recipe: disagg-variants.yaml:override_disagg_4p1d_dp2_dp8_mtp7_c320
+        prefill: {num-worker: 4, tp: 2, ep: 2, dp-attn: true}
+        decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611061956}
+        conc-list: [300]
+        power: true
+        cpu-power: true
+        srt-recipe: disagg-variants.yaml:override_disagg_5p1d_dp2_dp16_mtp7_c300
+        prefill: {num-worker: 5, tp: 2, ep: 2, dp-attn: true}
+        decode: {num-worker: 1, tp: 16, ep: 16, dp-attn: true}
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0.dev202611061956}
+        conc-list: [480]
+        power: true
+        cpu-power: true
+        srt-recipe: disagg-variants.yaml:override_disagg_7p1d_dp2_dp8_mtp7_c480
+        prefill: {num-worker: 7, tp: 2, ep: 2, dp-attn: true}
+        decode: {num-worker: 1, tp: 8, ep: 8, dp-attn: true}
+  kv-p2p-transfer: nixl
