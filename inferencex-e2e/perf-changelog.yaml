@@ -12787,6 +12787,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4871
 
 - config-keys:
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Aggregated: replace the seven TP16 DCP16 points (concurrency 1, 4, 8, 24, 32, 48 and 56) with TP16 DCP8 points at concurrency 1 (EP1, 2 running requests) and 4 (EP4, 8 running requests, mem-fraction-static 0.82), both verifying 8 DFLASH tokens. agg-variants.yaml now holds only the DCP8 design: HiCache 108 GB per rank, Run:ai streamer loading, dist-timeout 3600 and no KV events from the single worker."
+    - "Disaggregated: add a 1P2D TP16 point at concurrency 32 (EP4 DCP16 prefill, two TP16 DCP16 decode workers capped at 32 requests) and PP2 points: 1P2D at concurrency 76 and 150, and 1P1D at concurrency 150 and 200. PP2 prefill runs TP8 x PP2 with DCP8 and EP2 and splits the 93 layers 48/45. Its decode runs TP16 as DCP8 x attention DP2 with EP16 DeepGEMM MegaMoE (MXFP8 dispatch, BF16 combine), shared experts at TP8 and 128 (192 at 1P1D concurrency 150) running requests."
+    - "Disaggregated: remove the 1P1D TP16 points at concurrency 32 and 48 and the 1P1D EP16 MegaMoE points at concurrency 76 and 96. The 1P1D TP16 concurrency 16 and 1P1D EP16 concurrency 64 points keep their recipes."
+    - "Every point keeps the same image, FP32 KDA recurrent state, FP8 KV, DFLASH block verification and the committed golden acceptance curve. The new points size HiCache at 108 GB per rank, load weights with the Run:ai streamer (the PP2 prefill uses the default loader, which supports pipeline parallelism) and publish no KV events from their single prefill or aggregated worker."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5027
+
+- config-keys:
     - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type: [agentic-coding]
   description:
