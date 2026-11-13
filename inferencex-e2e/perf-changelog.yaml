@@ -12855,3 +12855,13 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from rocm/atom-dev:nightly_202611101510 to nightly_202611111518 (ATOM 3659b9865, ROCm 7.2.4) in the master config, and the AToMesh frontend container_image from sha256:160a4ec49379e7f1980a4e783254366b1d5c643b012abca57a21c0bcbbfe83a7 to sha256:167ce262f6ab188cd1a971dc7ae5f3d4e50586293a2d1c53ea1efbc92ab7491d, the same image."
+    - "Run a single point: plain TP4 at concurrency 1. The recipe keeps every other override; only the master search space is narrowed to TP4 c1."
+    - "TP4 c1 runs a BF16 KV cache (kv_cache_dtype bf16) instead of MXFP8 so ATOM's V4.1 mono hi decode path, which only serves BF16, is enabled; every other point keeps MXFP8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5012
