@@ -279,6 +279,7 @@ class UCCLEPBackend(LegacyBufferLL, EPBackend):
         # import checked. The proxies exist either way but start only across nodes.
         proxies = len(getattr(self.buffer, "proxies", ())) if self._internode else 0
         self._library_config = {"deep_ep": "uccl deep_ep_wrapper", **arguments,
+                                "finalize_copy": self.mode != "low-latency",
                                 "is_intranode": not self._internode, "cpu_proxy_threads": proxies}
 
     def implementation_details(self) -> dict:

@@ -4,9 +4,7 @@ CollectiveX is an experimental MoE expert-parallel communication benchmark. It m
 combine and paired roundtrip latency across EP libraries and accelerator systems, and writes one
 result file per case into `results/` on the cluster that ran it. A second suite, the
 [vLLM `swap_blocks` benchmark](docs/swap-blocks.md), measures pinned CPU↔GPU and same-GPU block
-copies through the same matrix and pool launchers. A third, the
-[KV-cache transfer benchmark](docs/kv-transfer.md), times one request's prefill-to-decode KV move
-between two nodes through NIXL and Mooncake.
+copies through the same matrix and pool launchers.
 
 CollectiveX runs through the [CollectiveX Sweep](#running-in-ci) workflow or by hand on each pool
 (see [Running By Hand](#running-by-hand)). Uploading the
@@ -14,7 +12,7 @@ results to the CollectiveX database is the publish step: the dashboard shows the
 Results are not committed to this repository. CollectiveX does not rank, recommend, or select; any
 downstream display or comparison is the consumer's responsibility.
 [docs/methodology.md](docs/methodology.md) states the measurement rules in a summary, including
-each backend's engine contract, and holds the evidence behind them.
+each backend's engine contract, and then defines each published field.
 
 ## Coverage
 
@@ -30,20 +28,23 @@ runs the decode and prefill ladders; `low-latency` runs decode, plus prefill for
 
 | Backend | Engine selector (`maturity`) | `normal` | `low-latency` |
 |---|---|---|---|
-| `deepep-v2` | vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` (`production`) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8, EP16: H100, H200, B200, GB200, GB300 |
+| `deepep-v2` | vLLM `--all2all-backend deepep_v2`, SGLang `--moe-a2a-backend deepep` (`production`) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: H100. EP8, EP16: H200, B200, GB200, GB300 |
 | `mori` | vLLM `--all2all-backend mori_*`, SGLang `--moe-a2a-backend mori` (`production`) | EP8, EP16: MI300X, MI325X, MI355X | EP16: MI300X, MI325X, MI355X |
 | `uccl-ep` | none; engines load it as a drop-in `deep_ep` under vLLM's DeepEP backends (`candidate`) | EP8: H100, H200, B200, MI300X, MI325X, MI355X. EP16: H100, H200, B200, MI300X, MI325X | EP8: B200. EP8, EP16: H100, H200. EP16: MI300X, MI325X |
 | `nccl-ep` | TensorRT-LLM `NcclEP` (`production` for low-latency rank-major BF16 where it matches, `candidate` otherwise) | EP8, EP16: H100, H200, B200, B300, GB200, GB300 | EP8: B300. EP8, EP16: H100, H200, B200, GB200, GB300 |
-| `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8: H100, H200. EP8, EP16: GB200, GB300 | none |
+| `flashinfer-ep` | vLLM `--all2all-backend flashinfer_nvlink_one_sided` (`production`) | EP8: H100, H200, B200, B300. EP8, EP16: GB200, GB300 | none |
 
 Every backend runs a BF16 dispatch control and an FP8 dispatch; nccl-ep's FP8 is its internal
 DS_FP8E3M4 recipe, low-latency prefill and decode. Combine is always BF16. Coverage is uniform routing only.
 
-`results/cases.json` is the committed copy of the full matrix: 284 requested cases, of which 248 are
-runnable EP cases, 18 are swap-blocks cases (two per pool), 12 are kv-transfer cases (one per pool,
-backend and fabric) and 6 are unsupported EP cells (UCCL-EP EP16 on MI355X and FlashInfer EP16 on
-H100 and H200, once per phase; FlashInfer's MNNVL workspace needs every rank inside one NVLink
-domain).
+Eleven of the registered EP cases are unmeasured in the published run: MI355X MoRI EP16, H100 EP16
+prefill for DeepEP V2 and NCCL EP low-latency, and MI325X UCCL-EP low-latency EP16 FP8.
+[docs/methodology.md](docs/methodology.md#unmeasured-cases) gives each reason.
+
+`results/cases.json` is the committed copy of the full matrix: 282 requested cases, of which 254 are
+runnable EP cases, 18 are swap-blocks cases (two per pool) and 10 are unsupported EP cells (UCCL-EP
+EP16 on MI355X and FlashInfer EP16 on H100, H200, B200 and B300, once per phase; FlashInfer's MNNVL
+workspace needs every rank inside one NVLink domain).
 A cell is listed as unsupported only when its backend runs on that SKU at another EP size, and
 low-latency adds only runnable cells, so a missing low-latency cell (DeepEP V2 on B300, for example)
 appears nowhere; [docs/methodology.md](docs/methodology.md#backends) gives each reason. The NCCL EP
@@ -54,7 +55,7 @@ contract, row identity and wheel pin are in [docs/nccl-ep.md](docs/nccl-ep.md).
 Dispatch the `CollectiveX Sweep` workflow, choosing a pool (or `all`) and the same filters `run.sh`
 takes. Each shard becomes one job in the InferenceX CI priority queue, scored through
 `inferencex-e2e/configs/ci-priority.yaml`, where `collectivex` ranks above every engine
-benchmark. The job lands on the pool's runner (`runner_label` and `runner_partition` in
+benchmark except a model that file boosts further (currently `kimik3.1`). The job lands on the pool's runner (`runner_label` and `runner_partition` in
 `configs/platform_config.json`), runs `run.sh --shard` and uploads `results/<sku>/` as an artifact
 to publish as below. Hand runs bypass the queue and wait for whatever CI holds the nodes.
 
@@ -69,14 +70,16 @@ collectivex/run.sh h200-dgxc --shard h200-dgxc-nccl-ep-bf16-n2   # rerun one fai
 ```
 
 `run.sh` resolves the pool's cases with `sweep_matrix.py` (`--suite`, `--backend`, `--ep`,
-`--modes` and `--precisions` narrow it, `--swap-profile` picks the swap-blocks grid, and
-kv-transfer runs only when `--suite` names it), gives
+`--modes` and `--precisions` narrow it, and `--swap-profile` picks the swap-blocks grid), gives
 each shard (one backend, mode, precision and node count) its own allocation through the pool's
 launcher, and copies every result to `results/<sku>/<case_id>.json`, replacing the previous result
 for that case. A failed shard does not stop the others; the closing summary lists each shard's exit
-code and runs `summarize.py` over the pool's results. Interrupting `run.sh` releases its
-allocations. Runtime logs stay under `/tmp/inferencex-collectivex-<uid>/logs/<execution>/` on the
-login node.
+code and runs `summarize.py` over the pool's results. Interrupting `run.sh` (Ctrl-C, SIGTERM or a
+hangup) ends the run and releases its allocation: the shard in flight cancels its own Slurm job,
+queued or granted, and no later shard starts. Runtime logs stay under
+`/tmp/inferencex-collectivex-<uid>/logs/<execution>/` on the login node. A failed step prints the
+tail of its log with IP and MAC addresses and the allocation's host names masked (`<ipv4>`,
+`<host>`); the files keep them.
 
 h200-dgxc, b200-nscale and gb200 run from the registry alone. h100-dgxc, b300, gb300 and the AMD
 pools also need an operator document that names a stage directory (see
@@ -95,8 +98,7 @@ result:
 | `COLLX_NCCL_LL_ZERO_COPY=0` | `1` | stages nccl-ep low-latency dispatch, TensorRT-LLM's graphed path before #20631 (drops `-zc`; a library row) |
 | `COLLX_ALIGN_SPIN_US` | `2000` | the per-sample rank-alignment spin |
 
-`COLLX_TIME` (allocation minutes: 300 per EP shard, 45 per swap-blocks shard and 120 per
-kv-transfer shard unless set),
+`COLLX_TIME` (allocation minutes: 300 per EP shard and 45 per swap-blocks shard unless set),
 `COLLX_RUN_TIMEOUT` (the per-case hang guard, 5400 s), `COLLX_IMAGE_REFRESH=1` (re-import the
 image) and `COLLX_ALLOCATION=sbatch` change only how a shard runs. `COLLX_ALLOCATION=sbatch` holds
 the nodes with a batch job that only sleeps instead of `salloc`. It is for a pool whose controller
@@ -130,7 +132,7 @@ it selects.
 regenerate it whenever they change:
 
 ```bash
-python3 collectivex/sweep_matrix.py --suites ep,swap-blocks,kv-transfer --cases-json collectivex/results/cases.json
+python3 collectivex/sweep_matrix.py --suites ep,swap-blocks --cases-json collectivex/results/cases.json
 ```
 
 ## Runner Configuration
@@ -169,7 +171,7 @@ needs its own `squash_dir` or `storage_roots` as well: each shard creates its ba
 Every non-MNNVL EP16 placement requires `rdma_devices`, the operator-approved scale-out devices.
 The other network fields are `socket_ifname`, `ib_gid_index`, `rdma_service_level`,
 `rdma_traffic_class`, `rail_isolated`, `rdma_fabric`, `rdma_relaxed_ordering`, `rdma_gbs`,
-`uccl_rdma_recv_tokens` and `single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
+`uccl_rdma_recv_tokens`, `host_verbs_provider`, `deepep_efa_fork` and `single_node_rdma_devices`. Without `socket_ifname` each node's default-route interface carries the
 cross-node sockets (h100-dgxc, h200-dgxc, b300). HCAs are never guessed, and every scale-out node must
 show its socket interface up and an active port on each listed device before backend setup; the
 methodology's [Execution Isolation](docs/methodology.md#execution-isolation) says what each field

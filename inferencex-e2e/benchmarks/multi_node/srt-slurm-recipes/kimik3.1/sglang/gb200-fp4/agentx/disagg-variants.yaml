@@ -1,0 +1,241 @@
+schema: 2
+
+base:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      dynamo: "1.6.0"
+      sglang: "0.0.0.dev1+ge79de62d2.d20261104"
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  # The K3.1 image's Dynamo 1.6.0 lets Kimi-K3.1 decode with DCP on its DSA backend.
+  dynamo:
+    install: false
+    request_plane: tcp
+    event_plane: zmq
+  # The DFlash2 draft is read from the shared Hub cache.
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+  # Tachometer's per-node exporters slow decode steps and add host memory;
+  # InferenceX does not read its output.
+  observability:
+    tachometer:
+      enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      DYN_ROUTER_TEMPERATURE: '0'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TCP_CHANNEL_BUFFER: '128'
+      DYN_TCP_REQUEST_TIMEOUT: '60'
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+    args:
+      router-mode: kv
+      # The frontend's own tokenizer cannot load kimi_k31; SGLang's chat processor renders requests.
+      dyn-chat-processor: sglang
+      dyn-preprocess-workers: '4'
+      trust-remote-code: true
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '3600'
+        # Mooncake moves P->D KV over multi-node NVLink from its own registered pool.
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        # SGLang's K3 sharded MoE front has no output tile for TP16's N=1048 (k3_ar_fusion); this selects the engine's replicated fused front.
+        SGLANG_K3_SHARDED_MOE: '0'
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 16
+        dcp-size: 16
+        expert-parallel-size: 1
+        kv-cache-dtype: fp8_e4m3
+        # Week-1 K3.1 precision policy: FP32 KDA recurrent state.
+        mamba-ssm-dtype: float32
+        # K3.1 with DCP rejects every other PD transfer backend.
+        disaggregation-transfer-backend: mooncake
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        max-running-requests: 64
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-draft-attention-backend: cutedsl_mla
+        speculative-use-block-verification: true
+        enable-hierarchical-cache: true
+        hicache-size: 120
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-write-policy: write_back
+        mamba-max-states-per-path: 1
+        # A session's turns stay on one prefill worker.
+        router-mode: kv
+        router-host-cache-hit-weight: 1
+        router-kv-overlap-score-credit: 4
+        router-session-affinity-ttl-secs: '14400'
+        watchdog-timeout: 3600
+        enable-metrics: true
+      kv_events: true
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+        PYTHONUNBUFFERED: '1'
+        PYTHONNOUSERSITE: '1'
+        PIP_BREAK_SYSTEM_PACKAGES: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK: '0'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '3600'
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+        MC_FORCE_MNNVL: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        # SGLang's K3 sharded MoE front has no output tile for TP16's N=1048 (k3_ar_fusion); this selects the engine's replicated fused front.
+        SGLANG_K3_SHARDED_MOE: '0'
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 16
+        dcp-size: 16
+        expert-parallel-size: 1
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: float32
+        disaggregation-transfer-backend: mooncake
+        disaggregation-decode-extra-slots: 16
+        disaggregation-decode-enable-radix-cache: true
+        mem-fraction-static: 0.85
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        dyn-reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-draft-attention-backend: cutedsl_mla
+        speculative-use-block-verification: true
+        # Without ReplaySSM, DFLASH keeps one KDA state per draft token and the KV pool
+        # collapses; prefill never verifies and rejects the flag.
+        enable-linear-replayssm-spec: true
+        watchdog-timeout: 3600
+        enable-metrics: true
+      kv_events: false
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 10
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  sbatch_directives:
+    mem: '0'
+    cpus-per-task: '144'
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+
+override_1p1d_tp16_c16:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c16-dflash7
+  roles:
+    prefill:
+      args:
+        # The cookbook's PD cells launch prefill with the decode role's verification width.
+        speculative-num-draft-tokens: 8
+    decode:
+      args:
+        speculative-num-draft-tokens: 8
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+
+override_1p1d_tp16_c32:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c32-dflash5
+  roles:
+    prefill:
+      args:
+        speculative-num-draft-tokens: 6
+    decode:
+      args:
+        speculative-num-draft-tokens: 6
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+
+override_1p1d_tp16_c48:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-c48-dflash5
+  roles:
+    prefill:
+      args:
+        speculative-num-draft-tokens: 6
+    decode:
+      args:
+        speculative-num-draft-tokens: 6
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+
+# EP16 decode with DeepGEMM MegaMoE (MXFP8 dispatch, BF16 combine) frees about 5 GB of
+# weights per GPU, which raises the decode KV pool from 878k to 1.18M tokens per rank.
+override_1p1d_tp16_ep16:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-disagg-1p1d-tp16-ep16-dflash7
+  roles:
+    prefill:
+      args:
+        page-size: 64
+        speculative-num-draft-tokens: 8
+    decode:
+      env:
+        # MegaMoE replaces the sharded MoE front.
+        SGLANG_K3_SHARDED_MOE: null
+        # SGLang's Kimi MegaMoE check bounds a rank's rows by max-running-requests x draft
+        # tokens per attention-DP rank (96 x 8 without attention DP).
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '1536'
+        NVSHMEM_REMOTE_TRANSPORT: none
+      args:
+        expert-parallel-size: 16
+        moe-a2a-backend: megamoe
+        page-size: 64
+        # DCP16 without the megakernel merges indexer top-k through an fp32 buffer of
+        # verify rows x 1M context (4 MiB per row); 96 x 8 rows is 3 GiB of HBM.
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        speculative-num-draft-tokens: 8

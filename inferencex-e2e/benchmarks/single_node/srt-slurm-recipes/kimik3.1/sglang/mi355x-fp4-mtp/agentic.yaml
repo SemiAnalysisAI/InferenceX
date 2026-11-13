@@ -1,0 +1,312 @@
+base:
+  schema: 2
+  name: kimik3.1-fp4-mi355x-sglang-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  # Loading the 1.56 TB checkpoint plus decode and prefill graph capture.
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 16384
+        schedule-policy: lpm
+        prefill-decode-interval: 16
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-bs-prefill: [256, 512, 768, 1024, 1536, 2048, 3072, 4096]
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        reasoning-parser: kimi_k3
+        tool-call-parser: kimi_k3
+        enable-metrics: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-draft-model-revision: d0d8bc2e3c6d0a195d2e00a49017e71ca8d881f1
+        speculative-draft-attention-backend: triton
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        # The golden AL curve was collected with block verification.
+        speculative-use-block-verification: true
+        # DFlash2 verifies the current token plus 5 drafts.
+        speculative-num-draft-tokens: 6
+        # Without ReplaySSM, DFLASH keeps one KDA state per draft token and the KV pool collapses.
+        enable-linear-replayssm-spec: true
+        random-seed: 42
+      env:
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_USE_AITER: '1'
+        SGLANG_AITER_K3_OPT: '1'
+        AITER_FLYDSL_FORCE: '1'
+        AITER_SITUV2_A8W4: '1'
+        # BF16 MoE combine and all-reduce.
+        AITER_OPUS_STAGE2_FP8: '0'
+        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        PYTORCH_HIP_ALLOC_CONF: garbage_collection_threshold:0.95
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        # Split-K HIP sparse MLA decode and verify for 16 to 512 rows.
+        SGLANG_ROCM_SPARSE_MLA_DECODE_HIP: '1'
+        # Pinned host pools; registered pageable pools stall every GPU queue on page migration.
+        HSA_USERPTR_FOR_PAGED_MEM: '0'
+        # The MI355X nodes report MEC firmware 38, below the 177 that fixes the
+        # RCCL memory reclaim issue.
+        HSA_NO_SCRATCH_RECLAIM: '1'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        enable-amd-monokernel: true
+        # One running request: agent fan-out queues instead of sharing decode steps.
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 4
+        # 150 state slots keep agent sessions' prefixes cached.
+        max-mamba-cache-size: 150
+        # The current token plus 7 drafts.
+        speculative-num-draft-tokens: 8
+      env:
+        SGLANG_AMD_MONO_K31_WIDE: '1'
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '6'
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        enable-amd-monokernel: true
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+        # 150 state slots keep agent sessions' prefixes cached.
+        max-mamba-cache-size: 150
+        # The current token plus 7 drafts.
+        speculative-num-draft-tokens: 8
+      env:
+        SGLANG_AMD_MONO_K31_WIDE: '1'
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '6'
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_dcp8_c8:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-ratio: 2.5
+        # 6 running requests: the rest of the 8 sessions queue, which keeps decode steps short.
+        max-running-requests: 6
+        cuda-graph-max-bs-decode: 6
+        # Prefill every 32 decode steps: fewer stalls in running requests' token streams.
+        prefill-decode-interval: 32
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        # 170-185 GB of pinned host pools per GPU: the 8 ranks share the node's 1511 GiB GTT.
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
+        # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
+        RUSTUP_TOOLCHAIN: stable
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c16:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-ratio: 2.5
+        # 8 running requests: the rest of the 16 sessions queue, which keeps decode steps short.
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        # Prefill every 32 decode steps: fewer stalls in running requests' token streams.
+        prefill-decode-interval: 32
+        # The current token plus 4 drafts.
+        speculative-num-draft-tokens: 5
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
+        RUSTUP_TOOLCHAIN: stable
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c24:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-ratio: 2.5
+        # 13 running requests: the rest of the 24 sessions queue, which keeps decode steps short.
+        max-running-requests: 13
+        cuda-graph-max-bs-decode: 13
+        # Prefill every 32 decode steps: fewer stalls in running requests' token streams.
+        prefill-decode-interval: 32
+        # The current token plus 4 drafts.
+        speculative-num-draft-tokens: 5
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
+        RUSTUP_TOOLCHAIN: stable
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c32:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-ratio: 2.5
+        # 20 running requests: the rest of the 32 sessions queue, which keeps decode steps short.
+        max-running-requests: 20
+        cuda-graph-max-bs-decode: 20
+        # Prefill every 32 decode steps: fewer stalls in running requests' token streams.
+        prefill-decode-interval: 32
+        # The current token plus 4 drafts.
+        speculative-num-draft-tokens: 5
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
+        RUSTUP_TOOLCHAIN: stable
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c48:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-ratio: 2.5
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        chunked-prefill-size: 32768
+        # Prefill every 32 decode steps: fewer stalls in running requests' token streams.
+        prefill-decode-interval: 32
+        # The current token plus 4 drafts: from 48 requests the shorter verify outweighs its lower acceptance.
+        speculative-num-draft-tokens: 5
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
+        RUSTUP_TOOLCHAIN: stable
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c56:
+  roles:
+    agg:
+      args:
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        mamba-full-memory-ratio: 0.65
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-ratio: 2.5
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+        chunked-prefill-size: 32768
+        # Prefill every 32 decode steps: fewer stalls in running requests' token streams.
+        prefill-decode-interval: 32
+        # The current token plus 4 drafts: from 48 requests the shorter verify outweighs its lower acceptance.
+        speculative-num-draft-tokens: 5
+      env:
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '10'
+        RUSTUP_TOOLCHAIN: stable
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+  benchmark:
+    env:
+      CONC: '56'
+      KV_OFFLOADING: dram

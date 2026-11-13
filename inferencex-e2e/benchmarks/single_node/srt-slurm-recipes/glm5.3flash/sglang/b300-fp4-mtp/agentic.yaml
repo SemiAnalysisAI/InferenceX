@@ -1,0 +1,73 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp4-b300-sglang-agentic-mtp
+  identity:
+    model:
+      revision: 1d00738646cbb0c6d0a9eb403dac5f366f1473a7
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      # Serve flags follow the cookbook's B300 Low Latency cell at
+      # https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.3-Flash.
+      args:
+        served-model-name: nvidia/GLM-5.3-Flash-NVFP4
+        quantization: modelopt_fp4
+        tensor-parallel-size: 8
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: flashinfer_trtllm
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 1800
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        # Both default off in the pinned image; explicit so the shipped draft head keeps its stored precision.
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
+        SGLANG_GLM_NEXTN_MOE_PTPC: '0'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        # Keep FlashInfer, Triton and JIT caches allocation-local.
+        SGLANG_CACHE_DIR: /tmp/sglang-cache
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_none:
+  benchmark:
+    env:
+      KV_OFFLOADING: none
+
+override_dram:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        # Auto-sized host pools, not the cookbook's 32 GB/rank tier, which is smaller than the
+        # device pool. 0.76 is the largest fraction whose pools fit the 3 TB node DRAM cap.
+        hicache-host-memory-fraction: 0.76
+        # SGLang resets admission to 48 under EAGLE when unset; 96 is the measured-safe cap.
+        max-running-requests: 96
+  benchmark:
+    env:
+      KV_OFFLOADING: dram

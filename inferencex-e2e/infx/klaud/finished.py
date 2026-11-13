@@ -19,9 +19,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import github
+from .github import VerificationError
 from .lifecycle import BOT, CANDIDATE_ID, COMMITTER, owned_activity
-from .models import REQUEUE_LABEL, Ownership, utc
-from .reporting import translated
+from .models import REQUEUE_LABEL, Ownership, family_keys, normalized_image, utc
+from .reporting import baseline_from_body, translated
 
 CHANGELOG = "inferencex-e2e/perf-changelog.yaml"
 COMMITTER_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
@@ -230,29 +231,57 @@ def owned_candidates(repository: str, claimed: list[Ownership]) -> set[str]:
     return owned
 
 
+def superseded(body: str, images: dict[str, str]) -> tuple[str, str] | None:
+    """Return why main superseded the finished PR with ``body`` in English and Chinese, or None.
+
+    ``images`` maps each single-key family on main to its normalized image. The PR is
+    superseded once main removed a key of its frozen baseline's family or put one on another
+    image than the baseline froze. A body without a readable baseline is never superseded.
+    """
+    try:
+        baseline = baseline_from_body(body)
+    except VerificationError:
+        return None
+    if baseline is None:
+        return None
+    source = baseline.family.split(":", 1)[0]
+    for key in family_keys(baseline.family):
+        current = images.get(f"{source}:{key}")
+        if current is None:
+            return (
+                f"main removed config key `{key}` of this family",
+                f"main 已移除该配置族的配置键 `{key}`",
+            )
+        frozen = baseline.keys[key].image if baseline.keys else baseline.image
+        if current != normalized_image(frozen):
+            return (
+                f"main moved config key `{key}` of this family to another image",
+                f"main 已将该配置族的配置键 `{key}` 更新为其他镜像",
+            )
+    return None
+
+
 def requeue_superseded(
     repository: str,
     pulls: list[dict],
-    offered: dict[str, set[str]],
+    images: dict[str, str],
     claimed: list[Ownership],
     now: datetime,
 ) -> list[int]:
-    """Close finished PRs older than STALE_DAYS whose family the feed offers on a newer image.
+    """Close finished PRs older than STALE_DAYS that main ``superseded``.
 
-    ``offered`` maps each family branch prefix to the image keys the planner would build its
-    candidates from. A finished PR started from an image its family no longer offers is
-    superseded, but still occupies the family. Closing it with REQUEUE_LABEL returns the family
-    to the pool. PRs a session still owns are skipped. Writes use ``$KLAUD_REQUEUE_TOKEN`` and
-    return the closed PR numbers.
+    ``images`` maps each single-key family on main to its normalized image. A superseded PR
+    still occupies its family and the review backlog, and closing it with REQUEUE_LABEL returns
+    the family to the pool. PRs a session still owns are skipped. Writes use
+    ``$KLAUD_REQUEUE_TOKEN`` and return the closed PR numbers.
     """
     stale = []
     for pull in pulls:
         candidate = finished(repository, pull)
         if not candidate or now - utc(pull["created_at"]) < timedelta(days=STALE_DAYS):
             continue
-        prefix, image = candidate.split("-")
-        if offered.get(prefix) and image not in offered[prefix]:
-            stale.append((pull, candidate))
+        if reason := superseded(pull.get("body") or "", images):
+            stale.append((pull, candidate, reason))
     if not stale:
         return []
     try:
@@ -261,18 +290,19 @@ def requeue_superseded(
         print(f"::warning::Klaud requeue skipped: ownership unavailable ({type(error).__name__})")
         return []
     token = os.environ["KLAUD_REQUEUE_TOKEN"]
-    comment = translated(
-        f"**requeued** · Open for over {STALE_DAYS} days while the published baseline of this "
-        "family moved to a newer image. Closed with `klaud-requeue` so a new candidate can "
-        "refresh the family from its current image.",
-        f"**requeued** · 本 PR 已开放超过 {STALE_DAYS} 天，而该配置族已发布的基线已更新为"
-        "更新的镜像。已关闭并标记 `klaud-requeue`，新的候选可以基于当前镜像更新该配置族。",
-    )
     closed = []
-    for pull, candidate in stale:
+    for pull, candidate, (english, chinese) in stale:
         if candidate in owned:
             continue
         number = pull["number"]
+        comment = translated(
+            f"**requeued** · Open for over {STALE_DAYS} days while {english}, so its "
+            "validated sweep no longer matches main. Closed with `klaud-requeue` so a new "
+            "candidate can refresh the family from main.",
+            f"**requeued** · 本 PR 已开放超过 {STALE_DAYS} 天，期间 {chinese}，其已验证的"
+            "测试已不再与 main 一致。已关闭并标记 `klaud-requeue`，新的候选可以基于 main 更新"
+            "该配置族。",
+        )
         try:
             github.write(
                 repository,

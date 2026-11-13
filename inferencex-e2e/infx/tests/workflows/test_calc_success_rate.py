@@ -171,3 +171,18 @@ def test_empty_job_list_still_writes_zero_counts(run_stats_environment, monkeypa
         "sample-b": {"n_success": 0, "total": 0},
         "unused": {"n_success": 0, "total": 0},
     }
+
+
+def test_run_stats_wait_for_every_benchmark_sweep():
+    jobs = yaml.safe_load(
+        (infx.config.git_repository_root() / ".github/workflows/run-sweep.yml").read_text()
+    )["jobs"]
+
+    def upstream(name):
+        needs = jobs[name].get("needs", [])
+        needs = [needs] if isinstance(needs, str) else needs
+        return set(needs).union(*(upstream(need) for need in needs))
+
+    sweeps = {name for name in jobs if name.startswith("sweep-") and "evals" not in name}
+    assert "sweep-video" in sweeps
+    assert sweeps - upstream("calc-success-rate") == set()

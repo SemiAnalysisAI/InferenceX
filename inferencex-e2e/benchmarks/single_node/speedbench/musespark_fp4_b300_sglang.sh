@@ -32,7 +32,7 @@ if [[ "$THINKING_MODES" != "on" ]]; then
 fi
 
 SERVE_MODEL="${MODEL_PATH}"
-DRAFT_MODEL="${DRAFT_MODEL:-RadixArk/Muse-Spark-Open-DFlash2}"
+DRAFT_MODEL="RadixArk/Muse-Spark-Open-DFlash2"
 
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 # AL is a per-draft accept/reject property independent of batch size, so batch the
@@ -59,9 +59,18 @@ if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
 fi
 hf download "$DRAFT_MODEL"
 
+# Some nodes run another service on the default port; serve on a free one instead.
+if ! python3 -c 'import socket, sys; socket.socket().bind(("0.0.0.0", int(sys.argv[1])))' "$PORT" 2>/dev/null; then
+    busy_port="$PORT"
+    PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("0.0.0.0", 0)); print(s.getsockname()[1])')"
+    echo "Port $busy_port is in use on $(hostname); serving on $PORT"
+fi
+
 echo "=== Downloading SPEED-Bench dataset ==="
-pip install -q datasets tiktoken
-curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
+# Pin the image's Hugging Face stack: an unconstrained install can pull huggingface-hub 2.x,
+# which transformers 5.x rejects, and then no server starts.
+pip install -q -c <(pip freeze | grep -iE '^(huggingface[-_]hub|transformers|tokenizers)==') datasets tiktoken
+curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/5ac8609a56ac941540b10c92e68d556e6343cd4c/nemo_skills/dataset/speed-bench/prepare.py \
   | python3 - --config qualitative --output_dir "$SPEEDBENCH_DIR"
 
 if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then

@@ -603,10 +603,15 @@ def _inspect(reference: str) -> dict[str, Any]:
 
 
 def golden_al(
-    model: str, spec: dict[str, Any], thinking: str, framework: str, pinned: float | None
+    model: str,
+    spec: dict[str, Any],
+    thinking: str,
+    framework: str,
+    pinned: float | None,
+    verify: str | None = None,
 ) -> dict[str, Any]:
-    name = curves.curve_name(model, spec)
-    expected = curves.golden_length(model, spec, thinking)
+    name = curves.curve_name(model, spec, verify=verify)
+    expected = curves.golden_length(model, spec, thinking, verify=verify)
     trt = "trt" in framework.lower()
     setting = expected - 1 if trt else expected
     report = {
@@ -814,6 +819,7 @@ def main(argv: list[str] | None = None) -> None:
     al.add_argument("--framework", required=True)
     al.add_argument("--draft-model", default="")
     al.add_argument("--draft-sample-method")
+    al.add_argument("--verify", choices=("standard", "block", "relaxed"))
     al.add_argument("--pinned", type=float, help="value set in the recipe")
 
     args = parser.parse_args(argv)
@@ -849,7 +855,9 @@ def main(argv: list[str] | None = None) -> None:
             "draft_sample_method": args.draft_sample_method,
         }
         try:
-            report = golden_al(args.model, spec, args.thinking, args.framework, args.pinned)
+            report = golden_al(
+                args.model, spec, args.thinking, args.framework, args.pinned, args.verify
+            )
         except ValueError as error:
             parser.exit(1, f"no golden AL: {error}\n")
     json.dump(report, sys.stdout, separators=(",", ":"), default=str)

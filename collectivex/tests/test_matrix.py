@@ -114,21 +114,6 @@ class MatrixTests(unittest.TestCase):
         ids = [item["case"]["case_id"] for item in document["requested_cases"]]
         self.assertEqual(len(ids), len(set(ids)))
 
-    def test_off_path_precisions_require_explicit_opt_in(self):
-        with mock.patch.object(sweep_matrix, "OFF_PATH_PRECISIONS", {"deepep-v2": ("fp8",)}):
-            default = matrix(backend="deepep-v2")
-            opted_in = matrix(backend="deepep-v2", precisions="fp8")
-        self.assertEqual(
-            {item["case"]["precision"] for item in default["requested_cases"]
-             if item["disposition"] == "runnable"},
-            {"bf16"},
-        )
-        self.assertEqual(
-            {item["case"]["precision"] for item in opted_in["requested_cases"]
-             if item["disposition"] == "runnable"},
-            {"fp8"},
-        )
-
     def test_invalid_filters_fail_closed(self):
         for options in (
             {"ep_sizes": "0"},

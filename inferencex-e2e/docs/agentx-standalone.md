@@ -9,10 +9,10 @@ Install the pinned PyPI release in a Python 3.11–3.13 virtual environment:
 ```bash
 python3 -m venv .venv-agentx
 source .venv-agentx/bin/activate
-python -m pip install 'agentx-harness==1.0.12'
+python -m pip install 'agentx-harness==1.0.13'
 ```
 
-The package version matches the `agentx-v1.0.12` GitHub release. The `agentx`
+The package version matches the `agentx-v1.0.13` GitHub release. The `agentx`
 command selects the `agentx` scenario by default.
 
 ## Run
@@ -20,8 +20,8 @@ command selects the `agentx` scenario by default.
 ```bash
 set -eo pipefail
 SERVER_URL="http://127.0.0.1:8000"
-SERVED_MODEL_NAME="moonshotai/Kimi-K3"
-TOKENIZER="moonshotai/Kimi-K3"
+SERVED_MODEL_NAME="deepseek-ai/DeepSeek-V4.1-Flash"
+TOKENIZER="deepseek-ai/DeepSeek-V4.1-Flash"
 DATASET="semianalysis_cc_traces_weka_062126"
 CONC=8
 OUTPUT_DIR="$PWD/results/agentx-c${CONC}-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -73,3 +73,41 @@ export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
 # Also sends X-Session-ID, if a front-end router needs it.
 export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=true
 ```
+
+## Snapshot a published curve's recipes
+
+To find the recipe behind each point of a published curve, run from `inferencex-e2e/`:
+
+```bash
+uv run --locked python -m infx.results.published_curve --model GLM-5.3 \
+  --hf-model nvidia/GLM-5.3-NVFP4 --hardware gb300 --framework dynamo-sglang \
+  --precision fp4 --agentic --output-dir published-glm5.3-gb300
+```
+
+`--model` takes a dashboard model or a raw model key; the dashboard pools `glm5.2` and
+`glm5.3` under GLM-5.2, so the snapshot holds the pooled rows and each keeps its own `model`.
+`--hf-model` names the model key by the checkpoint the matrix runs. `snapshot.json` lists
+every row of the family from `/api/v1/benchmarks` with its curve, Pareto-frontier membership,
+physical GPU count, tok/$ and engine source, plus the model's evaluations. Rows of the
+requested curve also carry their producing commit from `/api/v1/workflow-info` and the
+variant of the matrix point at that commit with the row's recipe fingerprint and concurrency.
+`recipes/` holds each variant as srtctl expands it and `sources/<commit>/` its recipe file as
+committed. A row that cannot be bound keeps its values, commit and run URL, with the reason in
+`unbound` and `hints` of where to look at its commit. The API contract is
+[openapi.json](https://inferencex.semianalysis.com/api/openapi.json).
+
+`on_frontier` marks the dashboard's frontier: P90 interactivity against tok/s/GPU on each line
+the chart draws. To mark a frontier on other axes too, add `--frontier X,Y` once per pair, e.g.
+`--frontier p90_e2el,tok_per_usd`; each row then has `frontiers: {"p90_e2el,tok_per_usd": ...}`,
+null where it lacks either metric. The axes are the median, p75 or p90 `intvty`, `ttft` or
+`e2el`, `tput_per_gpu`, `input_tput_per_gpu`, `output_tput_per_gpu`, `tput_per_physical_gpu`
+and `tok_per_usd`; latencies count lower as better, the rest higher.
+
+The frontier, `physical_gpus`, `tput_per_physical_gpu` and `tok_per_usd` are computed by the
+script from each row's published fields to match the dashboard's charts. They are not read from
+the dashboard, so they can differ from it if its formulas change.
+
+Binding fetches each producing commit and runs that commit's own matrix generator, so it
+executes code from GitHub on your machine. Only runs of `--repository` (default
+`SemiAnalysisAI/InferenceX`) are bound, but a commit fetched through its pull request head may
+come from a fork.

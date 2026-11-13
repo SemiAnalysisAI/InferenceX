@@ -11,18 +11,28 @@ from typing import Any
 
 from infx import yamlio
 
-GOLDEN_DIR = Path(__file__).resolve().parent
+from .identity import IDENTITIES_STEM, IDENTITY_DIR, select_curve
+
+GOLDEN_DIR = IDENTITY_DIR
 THINKING_MODES = ("thinking_on", "thinking_off")
 CURVE_NAME = re.compile(r"[a-z0-9_.-]+")
 
 
 @dataclass(frozen=True)
 class Curve:
-    """One committed curve: ``{thinking_mode: {num_speculative_tokens: AL}}``."""
+    """One committed curve: ``{thinking_mode: {num_speculative_tokens: AL}}``.
+
+    ``collection`` holds the SPEED-Bench client settings that measured the curve (the YAML's
+    reserved ``collection`` key), which the acceptance-length gate replays; None if unrecorded.
+    ``source_run`` is the URL of the Actions run that measured the values (reserved
+    ``source_run`` key).
+    """
 
     name: str
     model: str
     modes: Mapping[str, Mapping[int, Any]]
+    collection: Mapping[str, Any] | None = None
+    source_run: str | None = None
 
     def tokens(self, thinking: str) -> list[int]:
         """Return the sorted draft lengths measured for one thinking mode."""
@@ -41,40 +51,30 @@ class Curve:
         return value
 
 
-def curve_name(model: str, spec: Mapping[str, Any]) -> str:
-    """Map an InferenceX model prefix and speculative config to a curve file stem.
-
-    SGLang names native model MTP EAGLE or NEXTN, so those map to the model's own head curve.
-    Kimi DSpark has one curve per draft sampler and raises ValueError for any other sampler.
-    """
-    method = str(spec.get("method", "")).lower()
-    if method in ("eagle", "nextn"):
-        method = "eagle3" if model == "minimaxm3" else "mtp"
-    curve = f"{model}_{method}"
-    if model in ("dsv4", "dsv4dspark", "dsv4dsparkprob") and method == "dspark":
-        curve = "dsv4-pro-0813-dspark"
-    elif model == "minimaxm3" and method == "eagle3":
-        if "gqa" in str(spec.get("model", "")).lower():
-            curve += "_gqa"
-    elif model == "kimik3" and method == "dspark":
-        sampling = spec.get("draft_sample_method")
-        if sampling == "probabilistic":
-            curve += "_probabilistic_sample_method_block_rejection_sample_method"
-        elif sampling != "greedy":
-            raise ValueError(f"No Kimi DSpark golden curve for draft sampling {sampling!r}")
-    if not CURVE_NAME.fullmatch(curve):
-        raise ValueError(f"Invalid golden curve identity: {curve!r}")
-    return curve
+def curve_name(
+    model: str,
+    spec: Mapping[str, Any],
+    golden_dir: Path = GOLDEN_DIR,
+    verify: str | None = None,
+) -> str:
+    """The curve file stem whose ``identities.yaml`` select block best matches a model prefix,
+    speculative config and verifier (None when unknown), or ValueError."""
+    name = select_curve(model, spec, golden_dir, verify)
+    if not CURVE_NAME.fullmatch(name):
+        raise ValueError(f"Invalid golden curve identity: {name!r}")
+    return name
 
 
 def load_curve(name: str, golden_dir: Path = GOLDEN_DIR) -> Curve:
     """Load ``<name>.yaml`` from ``golden_dir``, or raise ValueError if missing or malformed."""
-    if not CURVE_NAME.fullmatch(name):
+    if not CURVE_NAME.fullmatch(name) or name == IDENTITIES_STEM:
         raise ValueError(f"Invalid golden curve identity: {name!r}")
     path = golden_dir / f"{name}.yaml"
     if not path.is_file():
         raise ValueError(f"No committed golden curve {path.name} in {golden_dir}")
     data = yamlio.safe_load(path.read_text())
+    collection = data.pop("collection", None) if isinstance(data, dict) else None
+    source_run = data.pop("source_run", None) if isinstance(data, dict) else None
     if not isinstance(data, dict) or len(data) != 1:
         raise ValueError(f"Expected one model in golden curve {path.name}")
     [(model, modes)] = data.items()
@@ -83,19 +83,27 @@ def load_curve(name: str, golden_dir: Path = GOLDEN_DIR) -> Curve:
     for mode, cells in modes.items():
         if cells is not None and not isinstance(cells, dict):
             raise ValueError(f"Expected draft lengths in {mode} of golden curve {path.name}")
-    return Curve(name=name, model=str(model), modes=modes)
+    return Curve(
+        name=name, model=str(model), modes=modes, collection=collection, source_run=source_run
+    )
 
 
 def list_curves(golden_dir: Path = GOLDEN_DIR) -> list[Curve]:
     """Return every committed curve in ``golden_dir``, sorted by name."""
-    return [load_curve(path.stem, golden_dir) for path in sorted(golden_dir.glob("*.yaml"))]
+    paths = sorted(golden_dir.glob("*.yaml"))
+    return [load_curve(path.stem, golden_dir) for path in paths if path.stem != IDENTITIES_STEM]
 
 
 def golden_length(
-    model: str, spec: Mapping[str, Any], thinking: str, golden_dir: Path = GOLDEN_DIR
+    model: str,
+    spec: Mapping[str, Any],
+    thinking: str,
+    golden_dir: Path = GOLDEN_DIR,
+    verify: str | None = None,
 ) -> float:
-    """Return the committed AL for a model prefix, speculative config and thinking mode."""
-    name = curve_name(model, spec)
+    """Return the committed AL for a model prefix, speculative config, thinking mode and
+    verifier (None when unknown)."""
+    name = curve_name(model, spec, golden_dir, verify)
     tokens = spec.get("num_speculative_tokens")
     if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens <= 0:
         raise ValueError("Speculative decoding requires a positive integer draft length")

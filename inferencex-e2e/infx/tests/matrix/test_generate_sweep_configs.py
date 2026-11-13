@@ -2646,6 +2646,23 @@ def agentic_config(request, sample_single_node_config):
 
 
 class TestAgenticGeneration:
+    def test_required_power_reaches_benchmarks_but_not_evals(
+        self, agentic_config, sample_runner_config, generate_agentic_sweep,
+    ):
+        from infx.matrix.generate import select_matrix_evals
+        from infx.matrix.validation import AgenticCodingSearchSpaceEntry
+
+        config, benchmark = agentic_config
+        benchmark["conc-list"] = [1, 4, 8]
+        before = generate_agentic_sweep(config, sample_runner_config)
+        benchmark["require-power"] = True
+        AgenticCodingSearchSpaceEntry.model_validate(benchmark)
+        after = generate_agentic_sweep(config, sample_runner_config)
+        assert after == [{**row, "require-power": True} for row in before]
+        evals = select_matrix_evals(copy.deepcopy(after), mode="all")
+        assert evals
+        assert all("require-power" not in row for row in evals)
+
     def test_point_order_and_input_preservation(
         self, agentic_config, sample_runner_config, generate_agentic_sweep,
     ):
@@ -3406,9 +3423,8 @@ class TestExpandConfigKeys:
         ]
 
 
-@pytest.mark.parametrize("power_key", ["require-power", "require_power"])
 def test_require_power_is_scoped_to_one_multinode_fixed_sequence(
-    power_key, sample_multinode_config, sample_runner_config
+    sample_multinode_config, sample_runner_config
 ):
     from infx.matrix.generate import expand_full_sweep, select_matrix_evals
     from infx.matrix.validation import MultiNodeSeqLenConfig
@@ -3420,7 +3436,7 @@ def test_require_power_is_scoped_to_one_multinode_fixed_sequence(
     sequences[-1]["isl"] = 8192
     before = expand_full_sweep(config, sample_runner_config)
     assert all("require-power" not in row for row in before)
-    sequences[-1][power_key] = True
+    sequences[-1]["require-power"] = True
     MultiNodeSeqLenConfig.model_validate(sequences[-1])
     after = expand_full_sweep(config, sample_runner_config)
     assert len(before) == len(after)
@@ -3429,9 +3445,41 @@ def test_require_power_is_scoped_to_one_multinode_fixed_sequence(
     evals = select_matrix_evals(copy.deepcopy(after), mode="subset")
     assert evals
     assert all("require-power" not in row for row in evals)
-    sequences[0][power_key] = True
+    sequences[0]["require-power"] = True
     with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
         expand_full_sweep(config, sample_runner_config)
+
+
+def test_cpu_power_reaches_the_planner_row_beside_power(
+    sample_multinode_config, sample_runner_config
+):
+    from infx.matrix.generate import expand_full_sweep
+
+    config = sample_multinode_config
+    point = next(iter(config.values()))["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+    point["power"] = True
+    rows = expand_full_sweep(config, sample_runner_config)
+    assert rows
+    assert all(row["power"] is True and "cpu-power" not in row for row in rows)
+    point["cpu-power"] = True
+    rows = expand_full_sweep(config, sample_runner_config)
+    assert all(row["cpu-power"] is True for row in rows)
+
+
+def test_single_node_cpu_power_reaches_the_planner_row_without_power(
+    sample_single_node_config, sample_runner_config
+):
+    from infx.matrix.generate import expand_full_sweep
+
+    config = sample_single_node_config
+    point = next(iter(config.values()))["scenarios"]["fixed-seq-len"][-1]["search-space"][0]
+    rows = expand_full_sweep(config, sample_runner_config)
+    assert rows
+    assert all("cpu-power" not in row and "power" not in row for row in rows)
+    point["cpu-power"] = True
+    rows = expand_full_sweep(config, sample_runner_config)
+    assert {row["isl"] for row in rows if row.get("cpu-power") is True} == {8192}
+    assert all("power" not in row for row in rows)
 
 
 def test_single_node_fixed_sequence_rejects_require_power(sample_single_node_config):

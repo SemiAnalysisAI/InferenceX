@@ -7,11 +7,9 @@ import itertools
 import json
 import math
 import sys
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-
-from . import POWER_METRIC_SCHEMA_VERSION, with_power_metrics
 
 
 @dataclass(frozen=True)
@@ -24,11 +22,26 @@ class BenchmarkData:
     completed: int
     total_input_tokens: int
     total_output_tokens: int
+    # "tokens": per-token energy needs positive token counts (the default).
+    # "clips": the result counts generated clips; it carries no tokens to normalize by.
+    energy_normalization: str = "tokens"
 
     @property
     def integration_duration_s(self) -> float:
         """Seconds between the benchmark start and end timestamps."""
         return self.end_unix - self.start_unix
+
+    @property
+    def per_token(self) -> bool:
+        return self.energy_normalization == "tokens"
+
+
+ENERGY_NORMALIZATIONS = ("tokens", "clips")
+
+
+# Widest gap between consecutive samples inside the integration window that
+# still counts as continuous coverage (srt-slurm contract.MAX_SAMPLE_GAP_SECONDS).
+MAX_SAMPLE_GAP_SECONDS = 3.0
 
 
 def _append_reason(reasons: list[str], reason: str) -> None:
@@ -52,6 +65,16 @@ def _interpolate_power(samples: list[tuple[float, float]], timestamp: float) -> 
     right_time, right_power = samples[right_index]
     fraction = (timestamp - left_time) / (right_time - left_time)
     return left_power + fraction * (right_power - left_power)
+
+
+def _bracketing_sequence(times: tuple[float, ...], start: float, end: float) -> list[float] | None:
+    """Samples covering ``[start, end]``: the last at/before, the inside, the first at/after."""
+    before = [value for value in times if value <= start]
+    after = [value for value in times if value >= end]
+    if not before or not after:
+        return None
+    inside = [value for value in times if start < value < end]
+    return [before[-1], *inside, after[0]]
 
 
 def _integrate_device(
@@ -174,12 +197,18 @@ def _load_benchmark_data(
     if abs(duration - integration_duration) > duration_tolerance:
         _append_reason(reasons, "benchmark_duration_mismatch")
 
+    normalization = bench.get("energy_normalization", "tokens")
+    if normalization not in ENERGY_NORMALIZATIONS:
+        return None, ["invalid_energy_normalization"]
     counts: dict[str, int] = {}
     for key, reason in (
         ("completed", "invalid_successful_query_count"),
         ("total_input_tokens", "invalid_input_token_count"),
         ("total_output_tokens", "invalid_output_token_count"),
     ):
+        if normalization == "clips" and key != "completed":
+            counts[key] = 0
+            continue
         value = bench.get(key)
         if (
             not isinstance(value, int)
@@ -195,6 +224,7 @@ def _load_benchmark_data(
             start_unix=start,
             end_unix=end,
             reported_duration_s=duration,
+            energy_normalization=normalization,
             **counts,
         ),
         reasons,
@@ -211,11 +241,15 @@ def _write_json_atomic(path: Path, data: dict) -> None:
 
 def benchmark_window_payload(
     benchmark: BenchmarkData | None,
-) -> dict[str, float | int] | None:
-    """Serialize the common benchmark-window contract for validation sidecars."""
+) -> dict[str, float | int | str] | None:
+    """Serialize the common benchmark-window contract for validation sidecars.
+
+    Token-normalized windows keep the published shape; a window normalized per
+    clip names its normalization so the audit does not read token metrics into it.
+    """
     if benchmark is None:
         return None
-    return {
+    payload: dict[str, float | int | str] = {
         "start_time_unix": benchmark.start_unix,
         "end_time_unix": benchmark.end_unix,
         "reported_duration_s": benchmark.reported_duration_s,
@@ -224,6 +258,9 @@ def benchmark_window_payload(
         "total_input_tokens": benchmark.total_input_tokens,
         "total_output_tokens": benchmark.total_output_tokens,
     }
+    if not benchmark.per_token:
+        payload["energy_normalization"] = benchmark.energy_normalization
+    return payload
 
 
 def invalid_validation_payload(
@@ -254,24 +291,3 @@ def audit_metrics(metrics: Mapping[str, float | None]) -> dict[str, float]:
         for key, value in metrics.items()
         if value is not None and math.isfinite(value)
     }
-
-
-def patch_power_metrics(
-    path: Path,
-    *,
-    metric_keys: Iterable[str],
-    power_valid: bool,
-    metrics: Mapping[str, float],
-) -> None:
-    """Validate replacement metrics before atomically updating an aggregate."""
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"aggregate is not a JSON object: {path}")
-    data = with_power_metrics(
-        data,
-        metric_keys=metric_keys,
-        schema_version=POWER_METRIC_SCHEMA_VERSION,
-        power_valid=power_valid,
-        metrics=metrics,
-    )
-    _write_json_atomic(path, data)

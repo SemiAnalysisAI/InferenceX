@@ -1,2 +1,2 @@
-agentx-harness==1.0.12
+agentx-harness==1.0.13
 datasets>=4.7.0

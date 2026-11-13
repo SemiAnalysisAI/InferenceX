@@ -10,6 +10,11 @@ if [[ $# -ne 2 || -z "$1" || -z "$2" ]]; then
     echo "Usage: $0 endpoint infmax_workspace" >&2
     exit 1
 fi
+# An agentic eval's acceptance gate ran as this job's benchmark stage, which srt-slurm runs only
+# without EVAL_ONLY; the eval itself is still eval-only.
+if [[ "${EVAL_AL_GATE:-}" == true ]]; then
+    export EVAL_ONLY=true RUN_EVAL=false
+fi
 source "$2/benchmarks/check_env.sh"
 # The workflow supplies the topology; srt-slurm supplies MODEL_NAME (served) and EVAL_CONC.
 check_env_vars \

@@ -1,0 +1,484 @@
+schema: 2
+
+base:
+  name: kimik3.1-fp4-gb300-dynamo-vllm-agentx-disagg-dcp8
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      vllm: "0.1.dev24218+g78e9a0c28"
+      dynamo: "3dd0744eb72c707d76d4c520ae4dea9e286a4ab6"
+
+  # ai-dynamo/dynamo#18124 head: the first Dynamo that registers the kimi_k31 model type.
+  dynamo:
+    install: true
+    source:
+      rev: "3dd0744eb72c707d76d4c520ae4dea9e286a4ab6"
+
+  # The DSpark draft is read from the shared Hub cache.
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+
+  slurm:
+    time_limit: "04:00:00"
+
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+
+  resources:
+    gpu_type: "gb300"
+    gpus_per_node: 4
+
+  services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  - name: mooncake-master
+    type: mooncake-master
+    args:
+    - "--default_kv_lease_ttl=60000"
+    - "--eviction_high_watermark_ratio=0.95"
+    - "--eviction_ratio=0.10"
+    options:
+      store_config:
+        metadata_server: "P2PHANDSHAKE"
+        global_segment_size: "160GB"
+        local_buffer_size: "4GB"
+        protocol: "rdma"
+        device_name: "@fabric.rdma-devices"
+        mode: "embedded"
+        enable_offload: false
+
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    args:
+      router-mode: "least-loaded"
+      router-session-affinity-ttl-secs: 1
+    env:
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
+      DYN_TOKENIZER_CACHE_BYTES: "8589934592"
+      DYN_TCP_REQUEST_TIMEOUT: "120"
+      DYN_DISABLE_OPENAI_STRICT_SCHEMA_VALIDATION: "1"
+
+  engine:
+    type: vllm
+    connector:
+    dp_launch_mode: per_node
+
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        <<: &kimi_env
+          DYN_TCP_REQUEST_TIMEOUT: "120"
+          VLLM_USE_DIRECT_DCP_A2A: "1"
+          VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
+          VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
+          VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+          VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: "0"
+          DYN_REQUEST_PLANE: "tcp"
+          ETCD_LEASE_TTL: "600"
+          VLLM_RPC_TIMEOUT: "600000"
+          TILELANG_CLEANUP_TEMP_FILES: "1"
+          VLLM_USE_NCCL_SYMM_MEM: "0"
+          NCCL_CUMEM_ENABLE: "1"
+          NCCL_MNNVL_ENABLE: "1"
+          NCCL_NVLS_ENABLE: "1"
+          VLLM_SERVER_DEV_MODE: "1"
+          VLLM_USE_V2_MODEL_RUNNER: "1"
+          VLLM_USE_RUST_FRONTEND: "1"
+          VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
+          # Lookups lease only the store keys a hit loads.
+          VLLM_MOONCAKE_STORE_SELECTIVE_LEASE: "1"
+          MC_SLICE_SIZE: "1048576"
+          MC_MAX_MR_SIZE: "4294967296"
+          NCCL_P2P_LEVEL: "NVL"
+          MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+          WITH_NVIDIA_PEERMEM: "0"
+          NCCL_NET_PLUGIN: "none"
+          UCX_MEMTYPE_REG_WHOLE: "n"
+          UCX_TCP_AF_PRIO: "inet"
+          VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+          # NIXL transfers the KDA conv state in the DS layout.
+          VLLM_SSM_CONV_STATE_LAYOUT: "DS"
+          TOKENSPEED_MLA_FP16_PARTIALS: "0"
+          VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_ENABLE_GEMM_RS: "1"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "1024"
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "1024"
+      args:
+        kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+        served-model-name: "moonshotai/Kimi-K3.1-Pro"
+        prefix-match-unit: 128
+        load-format: "fastsafetensors"
+        kv-cache-dtype: "fp8"
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        mamba-ssm-cache-dtype: "float32"
+        mamba-cache-dtype: "float32"
+        gpu-memory-utilization: 0.95
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: "a2a"
+        # NIXL P/D would otherwise raise the DCP interleave after the specialized decode reads it.
+        cp-kv-cache-interleave-size: 1
+        no-enable-flashinfer-autotune: true
+        enable-cumem-allocator: true
+        trust-remote-code: true
+        max-cudagraph-capture-size: 8192
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[4,8,12,16,20,24,32,40,48,64,80,96,128,160,256,384,512,640,768,896,1024,1152,1280,1408,1536,1664,1792,1920,2048,2304,2560,2816,3072,3328,3584,3840,4096,4608,5120,5632,6144,6656,7168,7680,8192]}'
+        stream-interval: 10
+        language-model-only: true
+        enable-prefix-caching: true
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        max-num-seqs: 32
+        speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        <<: *kimi_env
+        VLLM_ENABLE_GEMM_RS: "0"
+      args:
+        kv-transfer-config: *kv_transfer
+        served-model-name: "moonshotai/Kimi-K3.1-Pro"
+        prefix-match-unit: 128
+        load-format: "fastsafetensors"
+        kv-cache-dtype: "fp8"
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        mamba-ssm-cache-dtype: "float32"
+        mamba-cache-dtype: "float32"
+        gpu-memory-utilization: 0.95
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: "a2a"
+        cp-kv-cache-interleave-size: 1
+        no-enable-flashinfer-autotune: true
+        enable-cumem-allocator: true
+        trust-remote-code: true
+        stream-interval: 10
+        language-model-only: true
+        enable-prefix-caching: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        use-replayssm: true
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 320
+        compilation-config: '{"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320]}'
+        speculative-config: *spec
+
+  sbatch_directives:
+    mem: "0"
+    # 72 pins every vLLM worker to socket 0.
+    cpus-per-task: "144"
+    comment: >-
+      '{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will
+      take extra loading time."}}'
+
+  srun_options:
+    mem: "0"
+    container-remap-root: ""
+
+  telemetry:
+    collector_join_timeout_seconds: 12
+
+  benchmark:
+    placement:
+      node: head
+    env:
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+
+override_1p1d:
+  roles:
+    prefill: &override_1p1d_prefill
+      nodes: 2
+      workers: 1
+      args: &override_1p1d_prefill_args {}
+    decode: &override_1p1d_decode
+      nodes: 2
+      workers: 1
+      args: &override_1p1d_decode_args {}
+
+override_1p1d_eval:
+  roles:
+    prefill:
+      <<: *override_1p1d_prefill
+      args:
+        <<: *override_1p1d_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p1d_decode
+      args:
+        <<: *override_1p1d_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_1p2d:
+  roles:
+    prefill: &override_1p2d_prefill
+      nodes: 2
+      workers: 1
+      args: &override_1p2d_prefill_args
+        numa-bind: true
+        numa-bind-nodes: [0, 0, 1, 1]
+    decode: &override_1p2d_decode
+      nodes: 4
+      workers: 2
+      args: &override_1p2d_decode_args
+        numa-bind: true
+        numa-bind-nodes: [0, 0, 1, 1]
+
+override_1p2d_eval:
+  roles:
+    prefill:
+      <<: *override_1p2d_prefill
+      args:
+        <<: *override_1p2d_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p2d_decode
+      args:
+        <<: *override_1p2d_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_1p3d:
+  roles:
+    prefill: &override_1p3d_prefill
+      nodes: 2
+      workers: 1
+      args: &override_1p3d_prefill_args
+        numa-bind: true
+        numa-bind-nodes: [0, 0, 1, 1]
+    decode: &override_1p3d_decode
+      nodes: 6
+      workers: 3
+      args: &override_1p3d_decode_args
+        numa-bind: true
+        numa-bind-nodes: [0, 0, 1, 1]
+
+override_1p3d_eval:
+  roles:
+    prefill:
+      <<: *override_1p3d_prefill
+      args:
+        <<: *override_1p3d_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p3d_decode
+      args:
+        <<: *override_1p3d_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# 256 decode slots per TP8 engine for the higher-concurrency points.
+override_1p2d_mns256:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill: &override_1p2d_mns256_prefill
+      nodes: 2
+      workers: 1
+      env: &override_mns256_prefill_env
+        VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+      args: &override_1p2d_mns256_prefill_args {}
+    decode: &override_1p2d_mns256_decode
+      nodes: 4
+      workers: 2
+      env: &override_mns256_decode_env
+        VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+      args: &override_1p2d_mns256_decode_args
+        max-num-seqs: 256
+        max-num-batched-tokens: 1280
+        max-cudagraph-capture-size: 1280
+        compilation-config: &decode_graphs_1280 '{"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320,340,360,380,400,420,440,460,480,500,520,540,560,580,600,620,640,660,680,700,720,740,760,780,800,820,840,860,880,900,920,940,960,980,1000,1020,1040,1060,1080,1100,1120,1140,1160,1180,1200,1220,1240,1260,1280]}'
+
+override_1p2d_mns256_eval:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill:
+      <<: *override_1p2d_mns256_prefill
+      args:
+        <<: *override_1p2d_mns256_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p2d_mns256_decode
+      args:
+        <<: *override_1p2d_mns256_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_1p3d_mns256:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill: &override_1p3d_mns256_prefill
+      nodes: 2
+      workers: 1
+      env: *override_mns256_prefill_env
+      args: &override_1p3d_mns256_prefill_args {}
+    decode: &override_1p3d_mns256_decode
+      nodes: 6
+      workers: 3
+      env: *override_mns256_decode_env
+      args: &override_1p3d_mns256_decode_args
+        max-num-seqs: 256
+        max-num-batched-tokens: 1280
+        max-cudagraph-capture-size: 1280
+        compilation-config: *decode_graphs_1280
+
+override_1p3d_mns256_eval:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill:
+      <<: *override_1p3d_mns256_prefill
+      args:
+        <<: *override_1p3d_mns256_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p3d_mns256_decode
+      args:
+        <<: *override_1p3d_mns256_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# Hybrid decode: four TP8 x DCP8 engines in DP, MegaMoE EP32 across 32 GPUs.
+override_hyb4_3p1d:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill: &override_hyb4_3p1d_prefill
+      nodes: 6
+      workers: 3
+      env: *override_mns256_prefill_env
+      args: &override_hyb4_3p1d_prefill_args
+        max-num-batched-tokens: 16384
+    decode: &override_hyb4_3p1d_decode
+      nodes: 8
+      workers: 1
+      gpus: 32
+      env: *override_mns256_decode_env
+      args: &override_hyb4_3p1d_decode_args
+        data-parallel-size: 4
+        data-parallel-rpc-port: 13345
+        enable-expert-parallel: true
+        moe-backend: deep_gemm_mega_moe
+        gpu-memory-utilization: 0.92
+        max-num-seqs: 256
+        max-num-batched-tokens: 1280
+        max-cudagraph-capture-size: 1280
+        compilation-config: *decode_graphs_1280
+
+override_hyb4_3p1d_eval:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill:
+      <<: *override_hyb4_3p1d_prefill
+      args:
+        <<: *override_hyb4_3p1d_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_hyb4_3p1d_decode
+      args:
+        <<: *override_hyb4_3p1d_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_hyb4_2p1d_lpt4k:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill: &override_hyb4_2p1d_lpt4k_prefill
+      <<: *override_hyb4_3p1d_prefill
+      nodes: 4
+      workers: 2
+      args: &override_hyb4_2p1d_lpt4k_prefill_args
+        <<: *override_hyb4_3p1d_prefill_args
+        long-prefill-token-threshold: 4096
+        long-prefill-token-threshold-adaptive: true
+        # Six draft tokens measured faster than four at c=192 on this decode.
+        speculative-config: &spec_k6 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":6,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode: &override_hyb4_2p1d_lpt4k_decode
+      <<: *override_hyb4_3p1d_decode
+      args: &override_hyb4_2p1d_lpt4k_decode_args
+        <<: *override_hyb4_3p1d_decode_args
+        speculative-config: *spec_k6
+        # Decode graphs in multiples of K+1 = 7, up to max-num-seqs x 7.
+        max-num-batched-tokens: 1792
+        max-cudagraph-capture-size: 1792
+        compilation-config: '{"cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336,343,350,357,364,371,378,385,392,399,406,413,420,427,434,441,448,476,504,532,560,588,616,644,672,700,728,756,784,812,840,868,896,924,952,980,1008,1036,1064,1092,1120,1148,1176,1204,1232,1260,1288,1316,1344,1372,1400,1428,1456,1484,1512,1540,1568,1596,1624,1652,1680,1708,1736,1764,1792]}'
+
+override_hyb4_2p1d_lpt4k_eval:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill:
+      <<: *override_hyb4_2p1d_lpt4k_prefill
+      args:
+        <<: *override_hyb4_2p1d_lpt4k_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_hyb4_2p1d_lpt4k_decode
+      args:
+        <<: *override_hyb4_2p1d_lpt4k_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true

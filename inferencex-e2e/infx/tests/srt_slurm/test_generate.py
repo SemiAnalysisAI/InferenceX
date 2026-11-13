@@ -7,8 +7,16 @@ import pytest
 import yaml
 
 from infx.cli import main
-from infx.launch.drivers.srt import lanes, power
-from infx.launch.policy import LaunchPath, Match
+from infx.launch.drivers.srt import lanes
+from infx.launch.policy import LaunchPath
+from infx.tests.srt_recipes import (
+    VIDEO_MODEL,
+    VIDEO_SPEC,
+    video_entry,
+    video_fragment,
+    write_shared_blocks,
+    write_video_specs,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 FRAGMENT = {
@@ -51,6 +59,7 @@ MASTER = {
             "power": True,
         }]}]},
     },
+    "video": video_entry(),
 }  # fmt: skip
 SHARED = {
     "telemetry-native.yaml": {"telemetry": {"enabled": True, "required": False}},
@@ -64,11 +73,14 @@ SHARED = {
 
 @pytest.fixture
 def project(tmp_path):
+    """The end-to-end project beside the video harness, as the repository lays them out."""
+    project = tmp_path / "inferencex-e2e"
+    write_shared_blocks(project)
+    write_video_specs(tmp_path)
     for name, block in SHARED.items():
-        (tmp_path / "configs/srt-recipes" / name).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / "configs/srt-recipes" / name).write_text(yaml.safe_dump(block))
-    (tmp_path / "configs/master.yaml").write_text(yaml.safe_dump(MASTER))
-    (tmp_path / "configs/runners.yaml").write_text(yaml.safe_dump({
+        (project / "configs/srt-recipes" / name).write_text(yaml.safe_dump(block))
+    (project / "configs/master.yaml").write_text(yaml.safe_dump(MASTER))
+    (project / "configs/runners.yaml").write_text(yaml.safe_dump({
         "labels": {"fixture": ["fixture_0"], "cluster:fixture": ["fixture_0"]},
         "clusters": {"fixture": {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm", "slurm": {
             "partition": "p", "exclusive": True,
@@ -88,6 +100,7 @@ def project(tmp_path):
             **RECIPE, "frontend": {"type": "sglang", "enable_multiple_frontends": False},
             "roles": {"agg": {"nodes": 1, "workers": 1, "gpus": 4, "args": {"tensor-parallel-size": 4}}},
         },
+        "single_node/srt-slurm-recipes/fixture/video.yaml": video_fragment(),
         "multi_node/srt-slurm-recipes/fixture/agentic.yaml": {
             **RECIPE, "frontend": {"type": "sglang-router"}, "roles": {
                 role: {"nodes": 1, "workers": 1, "gpus": 8, "args": {"tensor-parallel-size": 8}}
@@ -96,22 +109,18 @@ def project(tmp_path):
         },
     }  # fmt: skip
     for path, data in recipes.items():
-        (tmp_path / "benchmarks" / path).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / "benchmarks" / path).write_text(yaml.safe_dump(data))
-    (tmp_path / "utils/srt-slurm").mkdir(parents=True)
-    (tmp_path / "utils/srt-slurm/src").symlink_to(ROOT / "utils/srt-slurm/src")
-    return tmp_path
+        (project / "benchmarks" / path).parent.mkdir(parents=True, exist_ok=True)
+        (project / "benchmarks" / path).write_text(yaml.safe_dump(data))
+    (project / "utils/srt-slurm").mkdir(parents=True)
+    (project / "utils/srt-slurm/src").symlink_to(ROOT / "utils/srt-slurm/src")
+    return project
 
 
 @pytest.fixture
 def power_lane(monkeypatch):
-    """The fixture cluster's multi-node lane, measuring AgentX power."""
+    """The fixture cluster's multi-node lane."""
     monkeypatch.setitem(
         lanes.SRT_LANES, ("fixture", LaunchPath.SRT_MULTI), lanes.SrtLane(agentic_result_dir="/results")
-    )
-    rules = (power.PowerRule(Match(agentic=True), agentx=True),)
-    monkeypatch.setitem(
-        power.POWER_LANES, ("fixture", LaunchPath.SRT_MULTI), power.PowerLane(rules, error="no power")
     )
 
 
@@ -145,6 +154,7 @@ def test_each_point_gets_its_bound_variant_and_a_manifest_entry(project, tmp_pat
     assert recipe["benchmark"] == {"type": "custom", "command": "bash client.sh", "env": {
         "CONC": "4", "ISL": "1024", "OSL": "128", "MODEL": "org/model",
         "RANDOM_RANGE_RATIO": "0.8", "USE_CHAT_TEMPLATE": "true", "REQUIRE_POWER": "0",
+        "SPEC_ALGORITHM": "mtp", "SPEC_DRAFT_MODEL": "native",
     }, "concurrencies": [4]}  # fmt: skip
     assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth7"}
 
@@ -188,7 +198,7 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
 
     [(record, recipe)] = written(output)
     assert record["cluster"] == "fixture"
-    assert recipe["telemetry"] == {"enabled": True, "dcgm_exporter": {
+    assert recipe["telemetry"] == {"enabled": True, "required": True, "dcgm_exporter": {
         "container_image": "dcgm-exporter", "command": "dcgm-exporter --address :{port}", "port": 9555,
     }}  # fmt: skip
     assert recipe["benchmark"]["env"] == {
@@ -198,29 +208,112 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
     assert recipe["benchmark"]["concurrencies"] == [8]
 
 
-def test_a_multinode_agentx_point_without_power_turns_its_clients_power_off(
-    project, power_lane, tmp_path
+@pytest.mark.parametrize("declared", [True, False])
+def test_a_cpu_power_point_binds_the_clusters_grace_exporter_or_fails(
+    project, power_lane, tmp_path, capsys, declared
+):
+    master = project / "configs/master.yaml"
+    config = yaml.safe_load(master.read_text())
+    config["agentx-multi"]["scenarios"]["agentic-coding"][0]["search-space"][0]["cpu-power"] = True
+    master.write_text(yaml.safe_dump(config))
+    if declared:
+        runners = project / "configs/runners.yaml"
+        inventory = yaml.safe_load(runners.read_text())
+        srt = inventory["clusters"]["fixture"]["slurm"]["srt-slurm"]
+        srt["cpu-power-exporter"] = {"source": "acpi"}
+        runners.write_text(yaml.safe_dump(inventory))
+    output = tmp_path / "out"
+
+    if not declared:
+        with pytest.raises(SystemExit):
+            generate(project, output, "agentx-multi")
+        assert "declares no srt-slurm.cpu-power-exporter" in capsys.readouterr().err
+        assert not output.exists()
+        return
+    assert generate(project, output, "agentx-multi") == 0
+    [(_, recipe)] = written(output)
+    assert recipe["telemetry"]["cpu_power_exporter"] == {"source": "acpi"}
+    assert recipe["telemetry"]["dcgm_exporter"]["port"] == 9555
+
+
+@pytest.mark.parametrize("declared", [True, False])
+def test_a_single_node_cpu_power_point_binds_the_clusters_rapl_exporter_or_fails(
+    project, tmp_path, capsys, declared
+):
+    master = project / "configs/master.yaml"
+    config = yaml.safe_load(master.read_text())
+    config["fixture-sglang"]["scenarios"]["fixed-seq-len"][0]["search-space"][0]["cpu-power"] = True
+    master.write_text(yaml.safe_dump(config))
+    if declared:
+        runners = project / "configs/runners.yaml"
+        inventory = yaml.safe_load(runners.read_text())
+        inventory["clusters"]["fixture"]["slurm"]["srt-slurm"]["cpu-power-exporter"] = {"source": "rapl"}
+        runners.write_text(yaml.safe_dump(inventory))
+    output = tmp_path / "out"
+
+    if not declared:
+        with pytest.raises(SystemExit):
+            generate(project, output, "fixture-sglang")
+        assert "declares no srt-slurm.cpu-power-exporter" in capsys.readouterr().err
+        assert not output.exists()
+        return
+    assert generate(project, output, "fixture-sglang") == 0
+    recipes = [recipe for _, recipe in written(output)]
+    assert [recipe["telemetry"]["cpu_power_exporter"] for recipe in recipes] == [{"source": "rapl"}] * 2
+
+
+@pytest.mark.parametrize("declared", [True, False])
+def test_a_single_node_point_measures_cpu_power_by_default_where_its_cluster_declares_it(
+    project, tmp_path, declared
+):
+    if declared:
+        runners = project / "configs/runners.yaml"
+        inventory = yaml.safe_load(runners.read_text())
+        inventory["clusters"]["fixture"]["slurm"]["srt-slurm"]["cpu-power-exporter"] = {"source": "rapl"}
+        runners.write_text(yaml.safe_dump(inventory))
+    output = tmp_path / "out"
+
+    assert generate(project, output, "fixture-sglang") == 0
+    recipes = [recipe for _, recipe in written(output)]
+    exporters = [recipe.get("telemetry", {}).get("cpu_power_exporter") for recipe in recipes]
+    assert exporters == [{"source": "rapl"} if declared else None] * 2
+
+
+def _drop_srt_slurm(project: Path, key: str) -> None:
+    runners = project / "configs/runners.yaml"
+    inventory = yaml.safe_load(runners.read_text())
+    del inventory["clusters"]["fixture"]["slurm"]["srt-slurm"][key]
+    runners.write_text(yaml.safe_dump(inventory))
+
+
+@pytest.mark.parametrize("port", [True, False])
+def test_a_multinode_agentx_point_without_power_measures_it_with_its_clusters_exporter(
+    project, power_lane, tmp_path, port
 ):
     master = project / "configs/master.yaml"
     config = yaml.safe_load(master.read_text())
     del config["agentx-multi"]["scenarios"]["agentic-coding"][0]["search-space"][0]["power"]
     master.write_text(yaml.safe_dump(config))
+    if not port:
+        _drop_srt_slurm(project, "power-exporter-port")
     output = tmp_path / "out"
     assert generate(project, output, "agentx-multi") == 0
 
     [(_, recipe)] = written(output)
-    assert recipe["benchmark"]["env"]["ENABLE_AGENTX_POWER"] == "0"
+    env = recipe["benchmark"]["env"]
+    assert (env["ENABLE_AGENTX_POWER"], env["REQUIRE_POWER"]) == ("1", "0")
+    assert (recipe["telemetry"]["enabled"], recipe["telemetry"]["required"]) == (True, False)
+    assert recipe["telemetry"].get("dcgm_exporter", {}).get("port") == (9555 if port else None)
 
 
-def test_a_power_point_its_lane_refuses_fails_without_writing(
-    project, power_lane, monkeypatch, tmp_path, capsys
+def test_a_power_point_its_cluster_cannot_measure_fails_without_writing(
+    project, power_lane, tmp_path, capsys
 ):
-    refusing = power.PowerLane(rules=(), error="this lane measures no AgentX power")
-    monkeypatch.setitem(power.POWER_LANES, ("fixture", LaunchPath.SRT_MULTI), refusing)
+    _drop_srt_slurm(project, "extra")
     output = tmp_path / "out"
     with pytest.raises(SystemExit):
         generate(project, output, "agentx-multi")
-    assert "this lane measures no AgentX power" in capsys.readouterr().err
+    assert "measures no GPU power" in capsys.readouterr().err
     assert not output.exists()
 
 
@@ -232,6 +325,21 @@ def test_output_must_be_new_or_empty(project, tmp_path, capsys):
         generate(project, output)
     assert exit_info.value.code == 2
     assert "Output directory must be empty" in capsys.readouterr().err
+
+
+def test_a_video_point_renders_its_bound_server_recipe(project, tmp_path):
+    output = tmp_path / "out"
+    assert generate(project, output, "video") == 0
+
+    [(record, recipe)] = written(output)
+    assert (record["variant"], record["cluster"]) == (None, "fixture")
+    assert (record["matrix"]["scenario-type"], record["matrix"]["conc-list"]) == ("video-generation", [1])
+    assert recipe["model"] == {"path": f"hf:{VIDEO_MODEL}", "container": "example/video:1", "precision": "bf16"}
+    assert recipe["resources"]["gpus_per_node"] == 2
+    [server] = recipe["services"]
+    assert server["args"][server["args"].index("--num-gpus") + 1] == "2"
+    assert server["env"]["VIDEO_SPEC_PATH"] == f"/video-package/specs/{VIDEO_SPEC}"
+    assert recipe["benchmark"]["env"]["CONC_LIST"] == "1"
 
 
 def test_a_recipe_srtctl_rejects_fails_without_writing(project, tmp_path, capsys):

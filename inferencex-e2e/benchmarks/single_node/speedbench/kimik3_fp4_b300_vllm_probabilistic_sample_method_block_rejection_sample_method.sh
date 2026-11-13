@@ -105,9 +105,18 @@ if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" 
     hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
 fi
 
+# Some nodes run another service on the default port; serve on a free one instead.
+if ! python3 -c 'import socket, sys; socket.socket().bind(("0.0.0.0", int(sys.argv[1])))' "$PORT" 2>/dev/null; then
+    busy_port="$PORT"
+    PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("0.0.0.0", 0)); print(s.getsockname()[1])')"
+    echo "Port $busy_port is in use on $(hostname); serving on $PORT"
+fi
+
 echo "=== Downloading SPEED-Bench dataset ==="
-pip install -q datasets tiktoken
-curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
+# Pin the image's Hugging Face stack: an unconstrained install can pull huggingface-hub 2.x,
+# which transformers 5.x rejects, and then no server starts.
+pip install -q -c <(pip freeze | grep -iE '^(huggingface[-_]hub|transformers|tokenizers)==') datasets tiktoken
+curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/5ac8609a56ac941540b10c92e68d556e6343cd4c/nemo_skills/dataset/speed-bench/prepare.py \
   | python3 - --config qualitative --output_dir "$SPEEDBENCH_DIR"
 
 if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
@@ -255,6 +264,9 @@ run_cell() {
     local bench_rc=$?
     if [[ $bench_rc -ne 0 ]]; then
         echo "  -> benchmark client exited rc=$bench_rc (thinking=$mode dspark=$mtp); cell will be N/A"
+        AL_RESULT["${mode}_${mtp}"]="N/A"
+        cleanup_server
+        return
     fi
 
     acc_after=$(fetch_metric "$PORT" "vllm:spec_decode_num_accepted_tokens_total")

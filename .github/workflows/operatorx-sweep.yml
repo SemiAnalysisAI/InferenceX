@@ -260,16 +260,18 @@ jobs:
     needs: [summarize]
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch ingest to InferenceX-app
+      - name: Dispatch ingest to the app repository
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RUN_ID: ${{ github.run_id }}
+          APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
         with:
           github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
           script: |
+            const [owner, repo] = process.env.APP_REPO.split("/");
             await github.rest.repos.createDispatchEvent({
-              owner: "SemiAnalysisAI",
-              repo: "InferenceX-app",
+              owner,
+              repo,
               event_type: "ingest-operatorx",
               client_payload: { "run-id": process.env.RUN_ID }
             });

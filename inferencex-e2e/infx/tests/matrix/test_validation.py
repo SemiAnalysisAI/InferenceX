@@ -202,6 +202,7 @@ def recipe_root(tmp_path):
             "base": {}, "override_a": {}, "zip_override_z": {"benchmark": {"c": [1, 2], "d": [3]}},
         }))
         (recipes / "broken.yaml").write_text("base: [\n")
+        (recipes / "repeated.yaml").write_text("resources:\n  gpu: 8\n  gpu: 4\n")
     return tmp_path
 
 
@@ -360,6 +361,16 @@ class TestAgenticMatrixEntries:
                 "kv-p2p-transfer": value,
                 "conc-list": [1],
             })
+
+    def test_only_the_kebab_case_key_sets_spec_decoding(self):
+        entry = {
+            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "conc-list": [1],
+        }
+        assert MultiNodeSearchSpaceEntry(**entry, **{"spec-decoding": "mtp"}).spec_decoding == "mtp"
+        with pytest.raises(ValidationError, match="spec_decoding"):
+            MultiNodeSearchSpaceEntry(**entry, spec_decoding="mtp")
 
     def test_kv_offload_backend_accepts_optional_version(self):
         entry = AgenticCodingSearchSpaceEntry(**{
@@ -679,6 +690,13 @@ class TestMultiNodeSearchSpaceEntry:
         assert entry.worker.pp == 2
         assert entry.prefill is None
         assert entry.decode is None
+
+    def test_cpu_power_rides_on_power(self):
+        row = {"worker": {"tp": 8, "ep": 1, "dp-attn": False}, "num-nodes": 2,
+               "conc-list": [1], "cpu-power": True}  # fmt: skip
+        with pytest.raises(ValidationError, match="cpu-power requires power"):
+            MultiNodeSearchSpaceEntry(**row)
+        assert MultiNodeSearchSpaceEntry(**{**row, "power": True}).cpu_power is True
 
     def test_missing_conc_specification(self):
         with pytest.raises(ValidationError):
@@ -1117,6 +1135,7 @@ class TestValidateMasterConfig:
         ("srt-recipe", "bundle.yaml:zip_override_z[2]", r"has no variant zip_override_z\[2\]"),
         ("srt-recipe", "recipe.yaml:base", "only an override bundle"),
         ("srt-recipe", "broken.yaml", "fixture/broken.yaml is not valid YAML"),
+        ("srt-recipe", "repeated.yaml", "fixture/repeated.yaml is not valid YAML"),
     ])
     def test_load_time_validation_resolves_the_selected_variant(
         self, recipe_root, valid_multinode_master_config, field, reference, error,
@@ -1506,6 +1525,12 @@ labels:
             load_runner_file(str(runner_file))
         assert "must be a list" in str(exc_info.value)
 
+    def test_a_repeated_key_is_rejected(self, tmp_path):
+        runner_file = tmp_path / "runners.yaml"
+        runner_file.write_text("labels:\n  h100: [h100-node-0]\n  h100: [h100-node-1]\n")
+        with pytest.raises(yaml.YAMLError, match="found duplicate key 'h100'"):
+            load_runner_file(str(runner_file), validate=False)
+
 
 @pytest.mark.parametrize(("topology", "accepted"), [
     ({"worker": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}}, True),
@@ -1518,3 +1543,11 @@ def test_only_multinode_agentic_rows_measure_power(topology, accepted):
     else:
         with pytest.raises(ValidationError, match="Only multinode entries measure DCGM power"):
             AgenticCodingSearchSpaceEntry(**row)
+
+
+def test_agentic_cpu_power_rides_on_power():
+    worker = {"worker": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}}
+    row = {"srt-recipe": "r.yaml", "conc-list": [4], "cpu-power": True, **worker}
+    with pytest.raises(ValidationError, match="cpu-power requires power"):
+        AgenticCodingSearchSpaceEntry(**row)
+    assert AgenticCodingSearchSpaceEntry(**{**row, "power": True}).cpu_power is True

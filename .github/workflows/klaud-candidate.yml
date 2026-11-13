@@ -102,19 +102,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.AGENT_PAT }}
         run: uv run --project "$INFERENCEX_TOOLING_PROJECT" --locked python -P -m infx.klaud resume-check
-      - name: Install Claude Code 2.1.282
+      - name: Install Claude Code
         id: claude_cli
         if: steps.gate.outputs.run == 'true'
-        run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
-          claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
-          for attempt in 1 2; do
-            rm -rf "$RUNNER_TEMP/claude-code"
-            npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282 &&
-              [ "$("$claude_cli" --version 2>&1)" = "2.1.282 (Claude Code)" ] && break
-            [ "$attempt" = 2 ] && exit 1
-            sleep 15
-          done
-          echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
+        uses: $/.github/actions/setup-claude-code
       - name: Record when this session starts
         if: steps.gate.outputs.run == 'true'
         run: echo "KLAUD_SESSION_STARTED=$(date +%s)" >> "$GITHUB_ENV"

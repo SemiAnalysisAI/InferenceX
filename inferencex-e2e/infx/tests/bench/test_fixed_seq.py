@@ -214,6 +214,7 @@ def test_single_node_does_not_report_success_without_a_completed_window(
     ("framework", "chat_template", "args", "flags"),
     [
         ("sglang", "true", [], {"--backend": "vllm", "--use-chat-template": True}),
+        ("tokenspeed", "true", [], {"--backend": "vllm", "--use-chat-template": True}),
         ("trt", "false", ["--trust-remote-code"], {"--backend": "openai", "--trust-remote-code": True}),
     ],
 )
@@ -260,7 +261,7 @@ def test_single_node_shim_runs_one_point_with_native_power(
 @pytest.mark.parametrize(
     ("overrides", "returncode", "reported"),
     [
-        ({"EVAL_ONLY": "true"}, 0, "EVAL_ONLY mode: skipping throughput benchmark\n"),
+        ({"EVAL_ONLY": "true", "FRAMEWORK": "tokenspeed"}, 0, "EVAL_ONLY mode: skipping throughput benchmark\n"),
         ({"MODEL": None, "CONC": ""}, 1, "not set:\n  - MODEL\n  - CONC\n"),
         ({"FRAMEWORK": "no-such-framework"}, 1, "ERROR: unsupported fixed-sequence FRAMEWORK: no-such-framework\n"),
         ({"USE_CHAT_TEMPLATE": "yes"}, 1, "ERROR: USE_CHAT_TEMPLATE must be true or false, got 'yes'\n"),
