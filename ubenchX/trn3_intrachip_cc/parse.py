@@ -31,10 +31,13 @@ def main():
         info = open(os.path.join(pdir, "placement.txt")).read().split() if os.path.exists(
             os.path.join(pdir, "placement.txt")) else [os.path.basename(pdir)]
         kv = dict(x.split("=") for x in info[1:])
-        for name, (op, buf) in OPS.items():
-            f = os.path.join(pdir, f"{name}.json")
-            if not os.path.exists(f):
+        for f in sorted(glob.glob(os.path.join(pdir, "*.json"))):
+            base = os.path.basename(f)[:-5]
+            # NAME.json or NAME_<suffix>.json (e.g. one file per size: allg_sbuf_6MiB.json)
+            name = next((k for k in sorted(OPS, key=len, reverse=True) if base == k or base.startswith(k + "_")), None)
+            if name is None:
                 continue
+            op, buf = OPS[name]
             for r in json.load(open(f)).get("results", []):
                 if "size(B)" not in r:  # a failed size: {"error_message": ..., "error_log": ...}
                     continue
