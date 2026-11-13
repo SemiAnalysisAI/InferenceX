@@ -12855,3 +12855,14 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run the DeepSeek-V4.1-Flash MI355X SGLang AgentX points on lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261111."
+    - "Add TP2 at c64, DP2 attention at c128, DP2 attention with EP2 at c128, and DP4 attention with EP4 at c128 and c256."
+    - "From c128, DP attention points use shortest-prefill-first with prefill-decode-interval 24 (TP2 DPA), 32 (TP2 DPA EP2, TP4 DPA EP4 c128) or 40 (TP4 DPA EP4 c256), the shared Engram host table layout and, with EP, SGLANG_DP_SHARED_EXPERT_LOCAL=1; TP4 DPA EP4 c256 also uses a 65536-token prefill chunk and a 0.85 prefill-delayer low watermark."
+    - "Every point serves with --image-processor-backend pil: AgentX sends text only, and the V4.1 Rust image processor's build lock on the shared cache hung one DP rank at startup."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5034

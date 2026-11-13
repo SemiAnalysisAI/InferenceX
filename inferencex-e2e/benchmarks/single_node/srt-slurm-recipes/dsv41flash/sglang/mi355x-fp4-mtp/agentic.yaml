@@ -31,6 +31,9 @@ base:
         cuda-graph-backend-prefill: disabled
         reasoning-parser: auto
         tool-call-parser: auto
+        # AgentX sends text only; PIL skips the V4.1 Rust image processor, whose build
+        # lock on the shared cache hung one DP rank at startup in CI.
+        image-processor-backend: pil
         # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
         enable-metrics: true
@@ -62,8 +65,8 @@ base:
 
 # One variant per point; the saturation point gets a longer warmup drain. A longer
 # prefill-decode interval trades TTFT for P90 ITL: 192 with lpm up to c8, 96 at c16
-# and 32 at c32. amd-master.yaml runs TP2 through c32, TP4 through c16; DP2 covers
-# c32 and c64.
+# and 32 at c32. amd-master.yaml runs TP2 through c64, TP4 through c16; DP2 covers
+# c32 to c128, DP2 EP2 c128 and DP4 EP4 c128 and c256.
 override_tp2_c1:
   roles:
     agg:
@@ -265,6 +268,193 @@ override_tp2_c64_dp:
   benchmark:
     env:
       CONC: '64'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+# Under DP attention one rank's prefill stalls every rank's decode: from c128 a longer
+# interval with shortest-prefill-first holds P90 ITL without giving up throughput.
+override_tp2_c128_dp:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: 2
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 2
+        prefill-delayer-token-usage-low-watermark: 0.7
+        load-balance-method: total_requests
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 32768
+        prefill-decode-interval: 24
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+      env:
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_USE_GATHERV: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        SGLANG_AITER_CAPTURE_COPY_IN: '1'
+        GPU_MAX_HW_QUEUES: '5'
+        SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: shared
+  benchmark:
+    env:
+      CONC: '128'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp2_c128_dp_ep:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: 2
+        expert-parallel-size: 2
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 2
+        prefill-delayer-token-usage-low-watermark: 0.7
+        load-balance-method: total_requests
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 32768
+        prefill-decode-interval: 32
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+      env:
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        # The replicated shared expert runs on the local rows before the DP gather.
+        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
+        SGLANG_DP_USE_GATHERV: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        SGLANG_AITER_CAPTURE_COPY_IN: '1'
+        GPU_MAX_HW_QUEUES: '5'
+        SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: shared
+  benchmark:
+    env:
+      CONC: '128'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+override_tp4_c128_dp_ep:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 2
+        prefill-delayer-token-usage-low-watermark: 0.7
+        load-balance-method: total_requests
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 32768
+        prefill-decode-interval: 32
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 4096
+        max-running-requests: 128
+      env:
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
+        SGLANG_DP_USE_GATHERV: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        SGLANG_AITER_CAPTURE_COPY_IN: '1'
+        GPU_MAX_HW_QUEUES: '5'
+        SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: shared
+  benchmark:
+    env:
+      CONC: '128'
+      AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
+      AGENTIC_WARMUP_GRACE_PERIOD: '3600'
+
+# A 64k prefill chunk and a later delayer release trade a little P90 for c256 throughput.
+override_tp4_c256_dp_ep:
+  frontend:
+    type: sglang-router
+    args:
+      policy: cache_aware
+      request-id-headers: x-correlation-id
+      dp-aware: true
+      connect-timeout-secs: 900
+      request-timeout-secs: 14400
+      disable-health-check: true
+      disable-retries: true
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        enable-dp-attention: true
+        enable-dp-lm-head: true
+        enable-prefill-delayer: true
+        enable-dp-attention-local-control-broadcast: true
+        tokenizer-worker-num: 2
+        prefill-delayer-token-usage-low-watermark: 0.85
+        load-balance-method: total_requests
+        mem-fraction-static: 0.85
+        chunked-prefill-size: 65536
+        prefill-decode-interval: 40
+        schedule-policy: shortest-prefill-first
+        swa-prefix-tails: 4096
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 128
+      env:
+        SGLANG_SHARED_EXPERT_TP1: '1'
+        SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
+        SGLANG_DP_USE_GATHERV: '1'
+        SGLANG_DP_USE_REDUCE_SCATTER: '1'
+        SGLANG_AITER_CAPTURE_COPY_IN: '1'
+        GPU_MAX_HW_QUEUES: '5'
+        SGLANG_HIP_DSV41_INDEX_K_PAGE8: '1'
+        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: shared
+  benchmark:
+    env:
+      CONC: '256'
       AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID: 'true'
       AGENTIC_WARMUP_GRACE_PERIOD: '3600'
 
