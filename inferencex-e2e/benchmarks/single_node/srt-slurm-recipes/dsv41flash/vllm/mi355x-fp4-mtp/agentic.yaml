@@ -284,3 +284,90 @@ override_tp2_c64:
   benchmark:
     env:
       CONC: '64'
+
+override_dep8_c256:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+        # Per-tensor-scale FP8 KV cache for sparse MLA (vllm-project/vllm#66036).
+        kv-cache-dtype: fp8_e4m3
+        # Mono decode is off for the data-parallel layout.
+        monokernel: null
+        prefill-schedule-interval: 11
+  benchmark:
+    env:
+      CONC: '256'
+
+override_dep8_c512:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+        # Per-tensor-scale FP8 KV cache for sparse MLA (vllm-project/vllm#66036).
+        kv-cache-dtype: fp8_e4m3
+        # Mono decode is off for the data-parallel layout.
+        monokernel: null
+        prefill-schedule-interval: 11
+  benchmark:
+    env:
+      CONC: '512'
+
+override_dep8_c1024:
+  frontend:
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        enable-expert-parallel: true
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+        # Per-tensor-scale FP8 KV cache for sparse MLA (vllm-project/vllm#66036).
+        kv-cache-dtype: fp8_e4m3
+        # Mono decode is off for the data-parallel layout.
+        monokernel: null
+        prefill-schedule-interval: 11
+  benchmark:
+    env:
+      CONC: '1024'
