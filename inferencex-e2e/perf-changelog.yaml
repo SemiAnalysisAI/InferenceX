@@ -12843,3 +12843,16 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg-mk
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Keep the lmsysorg/sglang:dev-kimi-k31-pro image (same digest) and the RadixArk/Kimi-K3.1-Dflash2-Preview DFLASH draft; only the search space changes."
+    - "Add 3P1D c224: three TP8/DCP8 EP2 prefill workers and one TP32 decode worker (DCP8 x attention DP4, EP32 MegaMoE) on 8 nodes, verifying 8 tokens. It replaces 1P1D c60."
+    - "Run 1P3D (TP8 decode) at c58 instead of c50, with the same recipe."
+    - "Aggregated megakernel c4 sets 11 K31MK_* schedule options instead of 15: drop K31MK_EXPERTS_COOPERATIVE, K31MK_KDA_TOKEN_OWNED, K31MK_OPROJ_NORM_FOLD and K31MK_TAIL_RMS_FOLD."
+    - "4P1D c520, 3P1D c340, 2P1D c180, 1P4D c36 and c16, and megakernel c2 are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

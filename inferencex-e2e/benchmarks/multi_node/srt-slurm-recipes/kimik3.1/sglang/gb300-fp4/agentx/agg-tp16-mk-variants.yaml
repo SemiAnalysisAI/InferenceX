@@ -152,18 +152,14 @@ override_tp16_c4:
         # Megakernel schedule options for the 2-request verify step.
         K31MK_ATTNRES_CARVEOUT: "100"
         K31MK_AUX_SIDE_STREAM: "1"
-        K31MK_EXPERTS_COOPERATIVE: "0"
         K31MK_FUSED_INDEX_Q_VERIFY: "1"
         K31MK_INDEX_SPLIT_COARSE_BITS: "12"
         K31MK_INDEX_SPLIT_MIN: "320000"
         K31MK_KDA_COMMIT: "1"
-        K31MK_KDA_TOKEN_OWNED: "1"
         K31MK_MLAQ_AFTER_SCORING: "1"
         K31MK_MLA_VALUE_EARLY_TRIGGER: "1"
-        K31MK_OPROJ_NORM_FOLD: "1"
         K31MK_RANK0_BCAST: "1"
         K31MK_RANKTOPK_BITONIC: "1"
         K31MK_REARM_FENCE: "3"
-        K31MK_TAIL_RMS_FOLD: "1"
       args:
         max-running-requests: 2

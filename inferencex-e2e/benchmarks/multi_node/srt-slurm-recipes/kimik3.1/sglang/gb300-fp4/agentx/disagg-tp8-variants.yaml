@@ -202,8 +202,8 @@ base:
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
       AGENTIC_WARMUP_GRACE_PERIOD: "1800"
 
-override_1p3d_c50:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp8-1p3d-c50
+override_1p3d_c58:
+  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp8-1p3d-c58
 
 override_1p4d_c36:
   name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp8-1p4d-c36

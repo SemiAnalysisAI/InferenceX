@@ -8171,6 +8171,13 @@ kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg:
         prefill: { num-worker: 3, tp: 8, ep: 2, dp-attn: false, dcp-size: 8 }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false, dcp-size: 8 }
       - spec-decoding: draft_model
+        conc-list: [224]
+        srt-recipe: disagg-tp16-variants.yaml:override_3p1d_tp32_c224
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill: { num-worker: 3, tp: 8, ep: 2, dp-attn: false, dcp-size: 8 }
+        decode: { num-worker: 1, tp: 32, ep: 32, dp-attn: false, dcp-size: 8 }
+      - spec-decoding: draft_model
         conc-list: [180]
         srt-recipe: disagg-tp16-variants.yaml:override_2p1d_c180
         kv-offloading: dram
@@ -8178,15 +8185,8 @@ kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg:
         prefill: { num-worker: 2, tp: 8, ep: 2, dp-attn: false, dcp-size: 8 }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false, dcp-size: 8 }
       - spec-decoding: draft_model
-        conc-list: [60]
-        srt-recipe: disagg-tp16-variants.yaml:override_1p1d_c60
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill: { num-worker: 1, tp: 8, ep: 2, dp-attn: false, dcp-size: 8 }
-        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false, dcp-size: 8 }
-      - spec-decoding: draft_model
-        conc-list: [50]
-        srt-recipe: disagg-tp8-variants.yaml:override_1p3d_c50
+        conc-list: [58]
+        srt-recipe: disagg-tp8-variants.yaml:override_1p3d_c58
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill: { num-worker: 1, tp: 8, ep: 2, dp-attn: false, dcp-size: 8 }

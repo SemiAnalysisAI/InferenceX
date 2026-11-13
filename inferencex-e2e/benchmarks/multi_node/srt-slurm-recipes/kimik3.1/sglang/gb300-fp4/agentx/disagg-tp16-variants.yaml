@@ -249,5 +249,17 @@ override_2p1d_c180:
       args:
         speculative-num-draft-tokens: 6
 
-override_1p1d_c60:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp16-1p1d-c60
+override_3p1d_tp32_c224:
+  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp32-3p1d-c224
+  roles:
+    prefill:
+      nodes: 6
+      workers: 3
+    decode:
+      nodes: 8
+      gpus: 32
+      args:
+        # DCP8 x attention DP4 over the 32 GPUs; MoE runs EP32.
+        tensor-parallel-size: 32
+        attn-dp-size: 4
+        expert-parallel-size: 32
