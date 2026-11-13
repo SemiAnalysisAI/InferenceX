@@ -168,6 +168,8 @@ base:
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      # Fixes the template's "Current date" line so cached prompt prefixes stay valid across 00:00 UTC.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"current_date":"2026-11-12"}}'
     colocate_with_frontend: true
   observability:
     enabled: false
@@ -178,6 +180,25 @@ base:
     exclusive: ''
     mem: '0'
     no-requeue: ''
+
+override_tep4_b24_c48:
+  name: musespark-trt-dynamo-gb300-agg-tep4-b24-c48-dflash7
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TRTLLM_SCHED_PREFILL_DECODE_INTERVAL: '64'
+        TRTLLM_SCHED_SPF_FIRST_CHUNK_MAX_WAIT_PASSES: '64'
+        TRTLLM_SCHED_SPF_MAX_AGE_PASSES: '4000'
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+          max_batch_size: 24
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 24
 
 override_tep4_b80_c80:
   name: musespark-trt-dynamo-gb300-agg-tep4-b80-c80-dflash7

@@ -237,6 +237,8 @@ base:
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      # Fixes the template's "Current date" line so cached prompt prefixes stay valid across 00:00 UTC.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"current_date":"2026-11-12"}}'
     colocate_with_frontend: true
   observability:
     enabled: false
