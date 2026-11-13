@@ -7717,6 +7717,30 @@ h3-bf16-h100-sglang-video:
             srt-recipe: serving-client-tp2-ulysses4.yaml
             conc-list: [1]
 
+h3-bf16-h100-sol-engine-video:
+  image: ghcr.io/lyttttt3333/sol-engine-h100:0.6.0-gd8fee0c4f@sha256:c6d213b473e89634157e67352fd0ebcc9dd59b9d03b56450c3d0665365e735ba
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h100-dsxe
+  precision: bf16
+  framework: sol-engine
+  multinode: false
+  srt-recipe-dir: h3/sol-engine/h100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 2
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
 h3-bf16-h200-sglang-video:
   image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
   model: MiniMaxAI/MiniMax-H3

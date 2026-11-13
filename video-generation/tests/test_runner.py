@@ -246,7 +246,7 @@ def execute(plan, output_dir, endpoint, **kwargs):
     )
 
 
-@pytest.mark.parametrize("runtime", ["sglang", "vllm-omni"])
+@pytest.mark.parametrize("runtime", ["sglang", "vllm-omni", "sol-engine"])
 def test_local_http_fixture_lifecycle_and_identity(
     plan, tmp_path, mocked_media, fixture_server, runtime
 ):
@@ -311,7 +311,7 @@ def test_local_http_fixture_lifecycle_and_identity(
     assert len(calls) == 5
     assert all(expected["timeout_seconds"] > 0 for _, expected in calls)
     first = server["posts"][0]
-    if runtime == "sglang":
+    if runtime in runner.SGLANG_PROTOCOL:
         assert first["target"] == {"duration_seconds": 4, "aspect_ratio": "16:9", "short_edge": 768}
         assert "fps" not in first and "num_frames" not in first
         assert first["audio_flow_shift"] == 3
@@ -321,7 +321,7 @@ def test_local_http_fixture_lifecycle_and_identity(
         assert json.loads(first["extra_params"])["audio_flow_shift"] == 3
 
 
-@pytest.mark.parametrize("runtime", ["sglang", "vllm-omni"])
+@pytest.mark.parametrize("runtime", ["sglang", "vllm-omni", "sol-engine"])
 def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
     tmp_path, mocked_media, fixture_server, runtime
 ):
@@ -366,7 +366,7 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
     )
     assert all(record["expected_media"]["encoding"]["crf"] == 18 for record in run["records"])
     assert all(str(post["num_inference_steps"]) == "49" for post in server["posts"])
-    if runtime == "sglang":
+    if runtime in runner.SGLANG_PROTOCOL:
         assert all(
             post["x264_preset"] == "ultrafast" and post["output_compression"] == 63
             for post in server["posts"]

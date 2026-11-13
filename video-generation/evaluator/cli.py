@@ -190,7 +190,7 @@ def _parser() -> argparse.ArgumentParser:
 
     run = subparsers.add_parser("run", help="preview a video plan; --execute explicitly submits it")
     run.add_argument("plan", type=Path)
-    run.add_argument("--runtime", choices=("sglang", "vllm-omni"), default="sglang")
+    run.add_argument("--runtime", choices=("sglang", "vllm-omni", "sol-engine"), default="sglang")
     run.add_argument(
         "--execute", action="store_true", help="submit real requests to your video server"
     )

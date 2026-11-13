@@ -8,7 +8,8 @@ can exercise that transport, but are not evidence of model inference.
 Protocol implementations were inspected at SGLang 253020450290328e9deb307eece1e402fa17f35e
 and vLLM-Omni eb11446b7f2e30ca582f8aff3afe12e9a2e66f6c. They are deliberately
 separate: SGLang accepts the H3 JSON contract, while vLLM-Omni expects multipart
-form fields. Those source pins do not attest to a supplied server's revision.
+form fields. Sol-Engine serves SGLang's H3 JSON contract and receives the same
+requests as SGLang. Those source pins do not attest to a supplied server's revision.
 """
 
 from __future__ import annotations
@@ -39,7 +40,9 @@ from .serving import settings as serving_settings, summarize as serving_summary
 
 
 MODEL_ID = "MiniMaxAI/MiniMax-H3"
-RUNTIMES = {"sglang", "vllm-omni"}
+RUNTIMES = {"sglang", "vllm-omni", "sol-engine"}
+# Runtimes that take SGLang's H3 JSON request; the others take vLLM-Omni's multipart form.
+SGLANG_PROTOCOL = {"sglang", "sol-engine"}
 MAX_JSON_BYTES = 1024 * 1024
 MAX_MEDIA_BYTES = 512 * 1024 * 1024
 MAX_SLOTS = 10000
@@ -273,7 +276,7 @@ def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[s
         "num_inference_steps": generation["num_inference_steps"],
         "flow_shift": generation["flow_shift"],
     }
-    if runtime == "sglang":
+    if runtime in SGLANG_PROTOCOL:
         # H3's SGLang admission explicitly rejects caller-set fps/num_frames;
         # its target resolves both. Expected dimensions are verified on delivery.
         request = {
@@ -310,7 +313,7 @@ def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[s
 def preview_plan(plan: dict[str, Any], *, runtime: str = "sglang") -> dict[str, Any]:
     """Return exact semantic payloads and counts, with no disk/network effects."""
     if runtime not in RUNTIMES:
-        raise ValueError("runtime must be sglang or vllm-omni")
+        raise ValueError(f"runtime must be one of {sorted(RUNTIMES)}")
     frozen = validate_plan(plan)
     return {
         "evidence_kind": "request_preview_no_generation",
@@ -677,7 +680,7 @@ def run_plan(
     frozen = validate_plan(plan)
     serving = serving_settings(serving_concurrency, delivery_deadline_seconds)
     if runtime not in RUNTIMES:
-        raise ValueError("runtime must be sglang or vllm-omni")
+        raise ValueError(f"runtime must be one of {sorted(RUNTIMES)}")
     for field, value in (
         ("runtime_revision", runtime_revision),
         ("hardware_label", hardware_label),
@@ -864,7 +867,7 @@ def run_plan(
             )
             body, content_type = (
                 (canonical_json_bytes(payload), "application/json")
-                if runtime == "sglang"
+                if runtime in SGLANG_PROTOCOL
                 else _multipart(payload)
             )
             if len(body) > MAX_JSON_BYTES:
