@@ -12821,6 +12821,6 @@
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark-dp2
   scenario-type: [agentic-coding]
   description:
-    - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X at TP1 x DP2 (attention data parallel, experts TP-sharded, no expert parallelism) behind a consistent-hash vLLM router at concurrency 128, 256 and 384, on vllm/vllm-openai-rocm:nightly-083fbac02 (index digest sha256:07ebdd53fe5b6dfb37f99b6cd084df2734faa2fef17c79317e283a68d30b5d2a)."
+    - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X at TP1 x DP2 (attention data parallel, experts TP-sharded, no expert parallelism) behind a consistent-hash vLLM router at concurrency 128, 256 and 384, on vllm/vllm-openai-rocm:nightly-be47189f (index digest sha256:a6263de19d7e68fc12d7ee37da0cc0d2817b8eb9a83c4f22911783befd133ebc), with the per-tensor-scale FP8 KV cache (--kv-cache-dtype fp8_e4m3, vllm-project/vllm#66036)."
     - "Prefill uses the engine's cadence scheduling (prefill-schedule-interval 11, 16384-token budget): prefill is admitted once every 11 steps, so the DP ranks prefill in the same step and decode runs in longer uninterrupted stretches. The cross-DP delayer (vllm-project/vllm#65655) is not used."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4992

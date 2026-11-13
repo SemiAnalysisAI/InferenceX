@@ -958,7 +958,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-mi355x-vllm-agentic-dspark-dp2:
-  image: vllm/vllm-openai-rocm:nightly-083fbac021348c2c7af8a7bc71ba18199d0dd7a4@sha256:07ebdd53fe5b6dfb37f99b6cd084df2734faa2fef17c79317e283a68d30b5d2a
+  image: vllm/vllm-openai-rocm:nightly-be47189f37f6162991366ff6b91539f6e9d1f432@sha256:a6263de19d7e68fc12d7ee37da0cc0d2817b8eb9a83c4f22911783befd133ebc
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
