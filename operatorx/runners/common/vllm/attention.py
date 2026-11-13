@@ -18,7 +18,7 @@ from pathlib import Path
 
 import torch
 
-from operatorx.core import BackendImpl, Op, UnsupportedOpError, parallel
+from operatorx.core import BackendImpl, FreshProcessError, Op, UnsupportedOpError, parallel
 from operatorx.runners.common import ranks
 from operatorx.runners.common.vllm import engine as vllm_engine
 from operatorx.runners.common.vllm import linear as vllm_linear
@@ -324,12 +324,15 @@ class _Engine:
 
     def _output(self, new: list, scheduled: dict, finished: set):
         from vllm.v1.core.sched.output import CachedRequestData, SchedulerOutput
-        return SchedulerOutput(
+        kwargs = dict(
             scheduled_new_reqs=new, scheduled_cached_reqs=CachedRequestData.make_empty(),
             num_scheduled_tokens=scheduled, total_num_scheduled_tokens=sum(scheduled.values()),
             scheduled_spec_decode_tokens={}, scheduled_encoder_inputs={},
+            # no shared prefix (no cascade attention); newer vLLM no longer takes this field
             num_common_prefix_blocks=[0] * len(self.runner.kv_cache_config.kv_cache_groups),
             finished_req_ids=finished, free_encoder_mm_hashes=[])
+        accepted = {f.name for f in fields(SchedulerOutput)}
+        return SchedulerOutput(**{k: v for k, v in kwargs.items() if k in accepted})
 
     def _configured(self):
         from vllm.config import set_current_vllm_config
@@ -437,10 +440,22 @@ def _engine(b: _Build, split: dict | None) -> _Engine:
     if _ENGINE is not None and _ENGINE.key == key:
         return _ENGINE
     if _ENGINE is not None:
+        # a second engine in one process can hang in its process-group setup (seen on dcp and on
+        # ROCm images): under a CI part, build every engine in a fresh process instead
+        if os.environ.get("OPERATORX_PROGRESS"):
+            raise FreshProcessError(f"a {b.family} engine after {_ENGINE.key[:60]}...")
         _ENGINE.close()
         _ENGINE = None
+    # a failed startup leaves its tensors in reference cycles (its exception's frames): collect
+    # them first, or vLLM's free-memory check rejects every later engine in this process
+    gc.collect()
+    torch.cuda.empty_cache()
     _ENGINE = _Engine(key, b, split)
     return _ENGINE
+
+
+def resident() -> bool:
+    return _ENGINE is not None
 
 
 def _backends(runner) -> dict[str, str]:

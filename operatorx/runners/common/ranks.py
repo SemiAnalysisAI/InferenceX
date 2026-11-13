@@ -55,11 +55,21 @@ def together(what: str):
     """Every rank reports once whether it got through; all stop if any did not."""
     try:
         yield
-    except BaseException:
+    except BaseException as e:
+        _stage(e, what)
         agree(False)
         raise
     if not agree(True):
-        raise UnsupportedOpError(f"another rank could not {what}")
+        raise _stage(UnsupportedOpError(f"another rank could not {what}"), what)
+
+
+def _stage(e: BaseException, what: str) -> BaseException:
+    """Tag a failure with the step it failed in (e.g. "build this engine"), on every rank."""
+    try:
+        e.operatorx_stage = what
+    except Exception:  # noqa: BLE001 - an exception type without a __dict__
+        pass
+    return e
 
 
 LAST: dict = {}  # the last timing's reduction, for summary()
