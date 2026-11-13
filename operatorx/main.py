@@ -200,6 +200,15 @@ class _Watchdog:
         os._exit(TIMED_OUT)
 
 
+def _exit_restart() -> None:
+    """End this process for a restart once rank 0 has written the group's progress and results
+    (every rank waits here, so no rank's exit cuts rank 0's writes short)."""
+    _agree_any(False)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(RESTART)  # skip vLLM's exit-time teardown of a broken state
+
+
 def _agree_any(flag: bool) -> bool:
     from operatorx.runners.common import ranks
     try:
@@ -394,9 +403,7 @@ def main() -> int:
                 print(f"[run_smoke] {counts} -> {out_path}", flush=True)
                 print(f"[run_smoke] fresh process for case {index}: {e}", flush=True)
             _write_progress(progress, {"next": index, "failed_layers": failed_layers, "repeats": repeats})
-            sys.stdout.flush()
-            sys.stderr.flush()
-            os._exit(RESTART)
+            _exit_restart()
         except UnsupportedOpError as e:
             stage = getattr(e, "operatorx_stage", "")
             results.append(Result(op=op, metrics={}, status="unsupported",
@@ -462,9 +469,7 @@ def main() -> int:
                     write_run_result(out_path, run, results)
                     print(f"[run_smoke] {counts} -> {out_path}", flush=True)
                     print(f"[run_smoke] restarting after case {index}: {reason}", flush=True)
-                sys.stdout.flush()
-                sys.stderr.flush()
-                os._exit(RESTART)  # skip vLLM's exit-time teardown of a broken state
+                _exit_restart()
 
     run.finished_at = utc_now_iso()
 

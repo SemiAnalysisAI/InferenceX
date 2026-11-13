@@ -886,12 +886,15 @@ def _supervise(bench: list[str], part: str, task: int, ws: int) -> int:
         while (rc := child.poll()) is None:
             if ws > 1 and mark(attempt).exists():  # another rank of the group ended this attempt
                 sibling = mark(attempt).read_text().strip() or "restart"
-                child.send_signal(signal.SIGUSR1)  # its stacks, for the log
-                try:
-                    rc = child.wait(timeout=5)
+                try:  # a rank that is only finishing its writes exits on its own
+                    rc = child.wait(timeout=30)
                 except subprocess.TimeoutExpired:
-                    child.kill()
-                    rc = child.wait()
+                    child.send_signal(signal.SIGUSR1)  # its stacks, for the log
+                    try:
+                        rc = child.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        child.kill()
+                        rc = child.wait()
                 break
             time.sleep(0.5)
         if rc == 0 and sibling is None:
