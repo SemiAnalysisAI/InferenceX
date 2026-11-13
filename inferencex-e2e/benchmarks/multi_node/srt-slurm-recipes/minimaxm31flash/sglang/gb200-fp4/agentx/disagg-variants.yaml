@@ -518,6 +518,160 @@ override_1p_dep8_dep8_l3_buffer150:
         hicache-storage-backend: mooncake
         hicache-storage-backend-extra-config: '{"enable_group_semantics":false}'
 
+override_1p_dep8_dep8_nightly1112:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-nightly1112
+  # The 1P DEP8 HiCache point on the 2026-11-12 nightly, as the control for the
+  # linker points below.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+
+override_1p_dep8_dep8_linker:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker
+  # The unified-cache external linker replaces HiCache: one Mooncake pool that
+  # every prefill and decode rank contributes 190 GB to, read by RDMA straight
+  # into device memory. L3 = 8 x 190 GB (prefill) + 8 x 190 GB (decode) +
+  # 4 x 190 GB (infra) = 3800 GB. Prefetch mode loads before the forward pass;
+  # layer-wise reads stalled the forward on DSV4.1 GB300 (#4595).
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services:
+    - *l3-etcd
+    - *l3-master
+    - *big-infra-store
+    - <<: *big-infra-store
+      name: store-infra-1
+      args: ["--port", "8811"]
+      readiness:
+        port: 8811
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-2
+      args: ["--port", "8812"]
+      readiness:
+        port: 8812
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-3
+      args: ["--port", "8813"]
+      readiness:
+        port: 8813
+        timeout_seconds: 600
+    - *l3-otel
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env: &linker-env
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: &linker-config '{"load_mode":"prefetch","enable_group_semantics":false}'
+    decode:
+      env: *linker-env
+      args:
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: *linker-config
+
+override_1p_dep8_dep8_linker_least_loaded:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-least-loaded
+  # The linker point with vLLM's routing: prefill goes to the least-loaded rank
+  # with no session affinity (the shared pool serves any rank's prefix), and
+  # decode keeps soft affinity.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services:
+    - *l3-etcd
+    - *l3-master
+    - *big-infra-store
+    - <<: *big-infra-store
+      name: store-infra-1
+      args: ["--port", "8811"]
+      readiness:
+        port: 8811
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-2
+      args: ["--port", "8812"]
+      readiness:
+        port: 8812
+        timeout_seconds: 600
+    - <<: *big-infra-store
+      name: store-infra-3
+      args: ["--port", "8813"]
+      readiness:
+        port: 8813
+        timeout_seconds: 600
+    - *l3-otel
+  frontend:
+    env:
+      DYN_ROUTER_SESSION_AFFINITY_MODE: soft
+    worker_selection:
+      prefill: prefill-least-loaded
+      instances:
+        - name: prefill-least-loaded
+          type: dynamo-two-tier-cost-fn
+          parameters:
+            cache_threshold: 1.0
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env: *linker-env
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        router-session-affinity-ttl-secs: null
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: *linker-config
+    decode:
+      env: *linker-env
+      args:
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: *linker-config
+
 override_3p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
   roles:
