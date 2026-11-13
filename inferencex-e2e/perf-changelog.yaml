@@ -12867,4 +12867,4 @@
     - "DEP32 2P1D at concurrency 704 and 960: two DEP16 prefill workers and one DEP32 decode, Mooncake scheduler lookups started on arrival, Mooncake store tail pruning (opt-in env in the image), a 97.7 GB decode KV pool per rank, and the benchmark client on its own node."
     - "TP8/DCP8: 1P5D at concurrency 44 and 56 replaces 1P3D at 20 and 32; 1P3D stays at 56. Hybrid decode: 2P1D moves from concurrency 192 to 256 and 3P1D stays at 384; both run the MegaMoE layers on the DEP EpMoeLayer schedule (VLLM_KIMI_K3_HYBRID_EP_MOE=1, opt-in env in the image) and prune Mooncake store tails."
     - "Aggregated TP16/DCP16 at concurrency 1 moves to the new image with no other change."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5069
