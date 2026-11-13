@@ -12855,4 +12855,4 @@
     - "Run 1P3D (TP8 decode) at c58 instead of c50, with the same recipe."
     - "Aggregated megakernel c4 sets 11 K31MK_* schedule options instead of 15: drop K31MK_EXPERTS_COOPERATIVE, K31MK_KDA_TOKEN_OWNED, K31MK_OPROJ_NORM_FOLD and K31MK_TAIL_RMS_FOLD."
     - "4P1D c520, 3P1D c340, 2P1D c180, 1P4D c36 and c16, and megakernel c2 are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5059
