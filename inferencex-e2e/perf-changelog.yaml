@@ -12855,3 +12855,13 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - kimik3.1-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro B300 Dynamo+vLLM disaggregated AgentX configs on vllm/vllm-openai:kimi-k31-mc-dbbc9e3 (sha256:0507dd0b), with Dynamo 229be5cff1 (v1.7.0-kimi-k3.1-pro-dev.1)."
+    - "Every prefill and decode worker is one B300 node, TP8 x DCP8: prefill runs routed experts EP8 on MegaMoE eagerly, decode runs the low-latency decode backend. KV moves over AWS EFA: NIXL (LIBFABRIC) from prefill to decode, and a Mooncake store with a 190 GB host-DRAM segment per rank."
+    - "Sweep 1P1D c1 (7 draft tokens), 1P3D c20 and c48, 1P2D c48 and c64, 2P3D c216 and 3P4D c460 (4 draft tokens). The 2P3D and 3P4D points admit up to 128 decode requests."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
