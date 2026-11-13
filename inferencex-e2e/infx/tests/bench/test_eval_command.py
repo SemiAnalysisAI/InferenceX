@@ -283,6 +283,20 @@ def test_batched_lm_eval_defers_a_failed_concurrency_to_score_validation(
     assert "batched eval failed for concurrency: 4" in errors
 
 
+@pytest.mark.parametrize(("framework", "sampling"), [
+    ("sglang", "max_tokens=2048,temperature=0,top_p=1"),
+    ("tokenspeed", "max_tokens=2048,temperature=0"),
+])  # fmt: skip
+def test_lm_eval_leaves_top_p_unset_for_tokenspeed(base_env, openai, tmp_path, framework, sampling):
+    env = {**base_env, "IS_MULTINODE": "false", "EVAL_MAX_MODEL_LEN": "4096"}
+    env["FRAMEWORK"] = framework
+
+    assert evaluate(openai.url, "2", tmp_path / "out", environ=env) == 0
+
+    [run] = trace(tmp_path / "lm_eval.jsonl")
+    assert run["argv"][run["argv"].index("--gen_kwargs") + 1] == sampling
+
+
 def recorder(ran: list, *, rc: int = 0, artifacts: tuple[str, ...] = ("results_x.json",)):
     """A framework that records the context it ran with and writes ``artifacts``."""
 
