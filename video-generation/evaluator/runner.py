@@ -34,6 +34,7 @@ from typing import Any
 
 from specs.video_spec import canonical_json_bytes, schema_version
 
+from .media import X264_PRESET_OPTIONS
 from .serving import settings as serving_settings, summarize as serving_summary
 
 
@@ -42,9 +43,11 @@ RUNTIMES = {"sglang", "vllm-omni"}
 MAX_JSON_BYTES = 1024 * 1024
 MAX_MEDIA_BYTES = 512 * 1024 * 1024
 MAX_SLOTS = 10000
-MAX_POLLS = 10000
 SOCKET_TIMEOUT_SECONDS = 30.0
-POLL_INTERVAL_SECONDS = 0.5
+# A job is seen as done only at the next poll, so latency includes up to one interval.
+POLL_INTERVAL_SECONDS = 0.1
+# Keeps the poll budget past the default 3600 s attempt timeout.
+MAX_POLLS = 50000
 _ACTIVE_STATUSES = {"queued", "pending", "in_progress", "processing", "running"}
 _FAILED_STATUSES = {"failed", "cancelled", "canceled"}
 _TERMINAL_STATUSES = _FAILED_STATUSES | {"completed", "succeeded", "success"}
@@ -184,6 +187,10 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             or type(encoding.get("crf")) is not int
         ):
             raise ValueError("schema 2 plans must request fairness.encoding preset and integer crf")
+        if encoding["preset"] not in X264_PRESET_OPTIONS:
+            raise ValueError(
+                f"fairness.encoding preset {encoding['preset']} has no verifiable x264 options"
+            )
     generation = frozen.get("generation")
     if not isinstance(generation, dict):
         raise ValueError("generation must be an object with explicit controls")
@@ -820,6 +827,7 @@ def run_plan(
             **frozen["generation"],
             "requires_motion": slot["requires_motion"],
             "requires_sound": slot["requires_sound"],
+            "requires_picture": True,
             "audio_required": True,
         }
         expected["duration_seconds"] = expected["frame_count"] / expected["fps"]
@@ -1029,15 +1037,6 @@ def run_plan(
                                     record["outcome"] = "interrupted"
                                     interrupted, abort_reason = exc, record["error"]
                                     stop.set()
-                            finally:
-                                record["latency_seconds"] = (
-                                    time.monotonic()
-                                    - record["timing_window"]["start_monotonic_seconds"]
-                                )
-                                record["timing_window"]["end_monotonic_seconds"] = (
-                                    record["timing_window"]["start_monotonic_seconds"]
-                                    + record["latency_seconds"]
-                                )
                         retain(record)
                 except KeyboardInterrupt as exc:
                     interrupted, abort_reason = exc, "interrupted by operator"

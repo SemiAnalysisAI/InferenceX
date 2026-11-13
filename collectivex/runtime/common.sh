@@ -21,13 +21,14 @@ COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 # treats EFA as unsupported (deepseek-ai/DeepEP#369).
 COLLX_DEEPEP_V2_EFA_REPO="https://github.com/amazon-contributing/DeepEP"
 COLLX_DEEPEP_V2_EFA_COMMIT="a227152ac29513b1c702860745a1d1e0111ae0dc"
-# ElasticBuffer needs NCCL 2.30.4 (torch pins 2.28.9). The fork sets GIN signal requirements
-# (ginStrongSignalsRequired, ginVaSignalsRequired) that NCCL first declares in 2.32, which is what
-# AWS tests it with. Part of the venv cache key.
-COLLX_DEEPEP_V2_NCCL_SPEC="nvidia-nccl-cu13==2.30.4"
+# ElasticBuffer needs NCCL >= 2.30.4. "image" uses the image's own (vLLM v0.32.0 carries 2.30.7),
+# as vLLM's installer does. The fork sets GIN signal requirements (ginStrongSignalsRequired,
+# ginVaSignalsRequired) that NCCL first declares in 2.32, so it installs that wheel into its venv.
+# Part of the venv cache key.
+COLLX_DEEPEP_V2_NCCL_SPEC="image"
 COLLX_DEEPEP_V2_EFA_NCCL_SPEC="nvidia-nccl-cu13==2.32.3"
 
-# Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC (the venv cache is keyed
+# Selects this pool's DeepEP V2 source into COLLX_DEEPEP_V2_REPO/COMMIT/NCCL_SPEC/TORCH_SPEC (the venv cache is keyed
 # on the commit, so the two sources never share a build).
 collx_select_deepep_v2_source() {
   # Opt-in per pool, not per fabric: on h100-dgxc (p5, 32 EFA NICs per node) the fork's
@@ -36,6 +37,9 @@ collx_select_deepep_v2_source() {
   COLLX_DEEPEP_V2_REPO="$COLLX_DEEPEP_V2_EFA_REPO"
   COLLX_DEEPEP_V2_COMMIT="$COLLX_DEEPEP_V2_EFA_COMMIT"
   COLLX_DEEPEP_V2_NCCL_SPEC="$COLLX_DEEPEP_V2_EFA_NCCL_SPEC"
+  # 2.10.0+cu130's bundled CUDA userland poisons the CUDA context during nvshmem symmetric-heap
+  # init over MNNVL on sm103/driver 580.159.03 (gb300).
+  COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
 }
 
 # Must match the image's CUDA line: the cu12 wheel's r12 host library on cu130 images survives
@@ -43,14 +47,12 @@ collx_select_deepep_v2_source() {
 # (gb300); every CUDA call after buffer creation fails cudaErrorUnknown. Part of the venv cache key.
 COLLX_DEEPEP_V2_NVSHMEM_SPEC="nvidia-nvshmem-cu13==3.4.5"
 
-# 2.10.0+cu130's bundled CUDA userland poisons the CUDA context during nvshmem symmetric-heap
-# init over MNNVL on sm103/driver 580.159.03 (gb300); 2.11.0 is what the cu130 image itself
-# ships. Part of the venv cache key.
-COLLX_DEEPEP_V2_TORCH_SPEC="torch==2.11.0"
+# "image" builds against the image's torch (vLLM v0.32.0: 2.13.0). Part of the venv cache key.
+COLLX_DEEPEP_V2_TORCH_SPEC="image"
 
 # Build-recipe generation for the DeepEP venv cache key: bump when build flags change without
 # any pin changing, so venvs that already carry .ready are not reused with a stale recipe.
-COLLX_DEEPEP_V2_BUILD_GEN="dlarch2"
+COLLX_DEEPEP_V2_BUILD_GEN="imgstack1"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="df000fd3001da04a397253fd6a2204bde62d32aa"
@@ -83,17 +85,25 @@ COLLX_HWLOC_SHA256="c7fd8a1404a9719c76aadc642864b9f77aed1dc1fc8882d6af861a9260ba
 COLLX_PCIACCESS_VERSION="0.16"
 COLLX_PCIACCESS_SHA256="84413553994aef0070cf420050aa5c0a51b1956b404920e21b81e96db6a61a27"
 
+# A tail lands in the CI job log, which is public, so redact.py masks addresses and host names
+# first. Its own errors are dropped too: a traceback names paths on this host.
 collx_log_tail() {
   local log_path="$1"
   if [ -s "$log_path" ]; then
+    collx_note_allocation_hosts
     collx_log "--- command log tail ---"
-    tail -n 100 -- "$log_path" >&2 || true
+    tail -n 100 -- "$log_path" \
+      | python3 "$COLLX_RUNTIME_DIR/redact.py" "$(hostname 2>/dev/null),${COLLX_TAIL_HOSTS:-}" \
+        >&2 2>/dev/null \
+      || collx_log "log tail withheld: it could not be redacted"
     collx_log "--- end command log tail ---"
   fi
 }
 
 collx_launcher_prologue() {
   JOB_ID=""
+  COLLX_SCHEDULER_LOG=""
+  COLLX_TAIL_HOSTS=""
   # One stable timestamp per launcher invocation: the refresh path discards only
   # squashes staged before this moment, across salloc retries and both nodes.
   : "${COLLX_LAUNCH_EPOCH:=$(date +%s)}"
@@ -113,10 +123,7 @@ collx_set_placement() {
   export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
   export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
   COLLX_TRANSPORT="$4"
-  # A shard that names the rdma fabric on an MNNVL rack (the kv-transfer rdma legs) leaves the
-  # NVL domain, so it takes the same network profile and validation as any other scale-out.
-  { [ "$4" = mnnvl ] && [ "${COLLX_FABRIC:-}" != rdma ]; } || [ "$NODES" -le 1 ] \
-    || COLLX_TRANSPORT="$4-rdma"
+  [ "$4" = mnnvl ] || [ "$NODES" -le 1 ] || COLLX_TRANSPORT="$4-rdma"
   export COLLX_TRANSPORT
 }
 
@@ -284,10 +291,6 @@ collx_add_efa_host_mounts() {
     mounts+=",/usr/include/infiniband:$COLLX_EFA_HOST_ROOT/include/infiniband:ro"
     mounts+=",/usr/include/rdma:$COLLX_EFA_HOST_ROOT/include/rdma:ro"
   fi
-  # NIXL's LIBFABRIC plugin links libhwloc.so.15, which the vLLM image does not ship; the host's
-  # (the same Ubuntu and glibc as the image) is bound alone into the profile's library dir.
-  [ "${COLLX_BENCH:-}" != nixl ] \
-    || mounts+=",$(collx_efa_host_libdir "${COLLX_IMAGE_PLATFORM:-}")/libhwloc.so.15:$COLLX_EFA_HOST_ROOT/lib/libhwloc.so.15:ro"
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$mounts"
 }
 
@@ -362,6 +365,9 @@ collx_apply_network_profile() {
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   unset UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
   unset UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
+  # UCCL reads these at run time too: the proxy thread's sleep policy and transport, and the
+  # configs Buffer.get_dispatch_config / get_combine_config return in place of the recommended ones.
+  unset UCCL_RDMA_ADAPTIVE_SLEEP UCCL_EP_TRANSPORT UCCL_EP_DISPATCH_CONFIG UCCL_EP_COMBINE_CONFIG
   # Single-node and MNNVL runs need only the scrub above. Single-node low-latency kernels run
   # over NVLink/XGMI (DeepEP allow_nvlink_for_low_latency_mode) and must NOT force IBGDA
   # (/dev/gdrdrv is absent on h200). Exception: a SKU may pin a single-node HCA list.
@@ -547,11 +553,25 @@ collx_allocation_nodes_csv() {
   printf '%s' "$output"
 }
 
+# Keeps the allocation's node names for collx_log_tail: Slurm stops listing them once the job is
+# gone, and a tail printed after that still names them. Ranks log the kernel host name, which a
+# pool may set apart from the Slurm node name, so both are kept.
+collx_note_allocation_hosts() {
+  local nodes hostnames
+  [ -n "${JOB_ID:-}" ] && nodes="$(collx_allocation_nodes_csv "$JOB_ID")" || return 0
+  hostnames="$(sinfo -h -n "$nodes" -o %n 2>/dev/null | sort -u | paste -sd, -)" || hostnames=""
+  [ -z "$hostnames" ] || nodes="$nodes,$hostnames"
+  case ",${COLLX_TAIL_HOSTS:-}," in
+    *",$nodes,"*) ;;
+    *) COLLX_TAIL_HOSTS="${COLLX_TAIL_HOSTS:+$COLLX_TAIL_HOSTS,}$nodes" ;;
+  esac
+}
+
 collx_resolve_slurm_rendezvous() {
   local job_id="$1" master_addr master_port socket_ifname="${COLLX_SOCKET_IFNAME:-}"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid rendezvous allocation"
-  # Inside an MNNVL domain the socket interface is never validated (the GB registry names it for
-  # the kv rdma legs only), so rank zero keeps resolving by hostname there.
+  # Inside an MNNVL domain the socket interface is never validated, so rank zero keeps resolving
+  # by hostname there.
   [ "${COLLX_TRANSPORT:-}" != mnnvl ] || socket_ifname=""
   # Relative node zero hosts global rank 0. Prefer the address on the validated socket interface:
   # a short hostname may resolve onto a management network that ranks cannot use.
@@ -609,7 +629,7 @@ export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
 # config.py case-args leads every argv with the suite's entrypoint.
 [ "${1:-}" = --entrypoint ] || exit 67
-case "${2:-}" in run_ep|run_swap_blocks|run_kv) ;; *) exit 67 ;; esac
+case "${2:-}" in run_ep|run_swap_blocks) ;; *) exit 67 ;; esac
 entry="$2"; shift 2
 exec python3 "bench/$entry.py" "$@"
 BASH
@@ -623,7 +643,6 @@ collx_slurm_job_name() {
   printf '%s' "$name"
 }
 
-# The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
 # True only when Slurm says the job is gone: listed as nothing, or purged ("Invalid job id"). A
 # failed query (slurmctld busy or restarting) is not an answer, so it reads as still there.
 collx_job_gone() {
@@ -635,6 +654,7 @@ collx_job_gone() {
   fi
 }
 
+# The job name is prepended so a caller-supplied --job-name wins (salloc takes the last).
 collx_salloc_jobid() {
   local log_label log job_id
   set -- --job-name="$(collx_slurm_job_name)" "$@"
@@ -652,7 +672,9 @@ collx_salloc_jobid() {
   # salloc --no-shell does not notice a job that ends between the grant and its own poll (a node
   # prolog that fails the job ten seconds in leaves it waiting forever), so the job is watched
   # here: once Slurm no longer lists the queued job and no grant was logged, salloc is stopped.
-  (salloc "$@" --no-shell) > "$log" 2>&1 &
+  # No subshell around salloc, so cleanup's TERM reaches it and it withdraws the request.
+  COLLX_SCHEDULER_LOG="$log"
+  salloc "$@" --no-shell > "$log" 2>&1 &
   local salloc_pid=$! queued=""
   while kill -0 "$salloc_pid" 2>/dev/null; do
     sleep 10
@@ -660,6 +682,7 @@ collx_salloc_jobid() {
     [ -n "$queued" ] || queued="$(sed -nE 's/.*Pending job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
     if [ -n "$queued" ] && collx_job_gone "$queued" \
         && ! grep -q "Granted job allocation" "$log"; then
+      COLLX_SCHEDULER_LOG=""
       collx_log "ERROR: scheduled job $queued ended before its allocation was granted"
       kill -TERM "$salloc_pid" 2>/dev/null
       wait "$salloc_pid" 2>/dev/null
@@ -668,6 +691,7 @@ collx_salloc_jobid() {
     fi
   done
   if ! wait "$salloc_pid"; then
+    COLLX_SCHEDULER_LOG=""
     collx_log "ERROR: scheduler allocation failed"
     collx_log_tail "$log"
     return 1
@@ -676,6 +700,8 @@ collx_salloc_jobid() {
       's/.*Granted job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
   JOB_ID="$job_id"
+  COLLX_SCHEDULER_LOG=""
+  collx_note_allocation_hosts
 }
 
 # COLLX_ALLOCATION=sbatch holds the same nodes with a batch job that only sleeps, for pools whose
@@ -711,6 +737,7 @@ collx_sbatch_hold_jobid() {
     sleep 5
   done
   printf 'Granted job allocation %s\n' "$job_id" >> "$log"
+  collx_note_allocation_hosts
 }
 
 # Cancels only this launcher's own allocation, by job id.
@@ -1120,7 +1147,7 @@ collx_stage_repo() {
   fi
 }
 
-# Results are committed from the checkout, so the staged result JSONs are copied back to its
+# Results are uploaded from the checkout, so the staged result JSONs are copied back to its
 # results/<sku>/, replacing older files for the same cases.
 collx_collect_results() {
   local mount_src="$1" repo_root="$2" dst log
@@ -1207,15 +1234,16 @@ collx_run_shard() {
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
     # A hang guard, not a work budget: FP8 prefill and multi-node EP16 prefill on pools with
     # slow GPU-NIC p2p (see docs/methodology.md) legitimately run past 30 minutes. 5400 stays
-    # inside the 300-minute allocation.
-    if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
+    # inside the 300-minute allocation. In the background, so an interrupt's trap runs at once.
+    timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
       --container-name="$container_name" --container-image="$SQUASH_FILE" \
       "${container_args[@]}" \
       --export=ALL \
       bash -c "$wrap" _ "${ep_args[@]}" \
-      </dev/null >"$runtime_log" 2>&1; then
+      </dev/null >"$runtime_log" 2>&1 &
+    if ! wait "$!"; then
       collx_log "ERROR: case $ci failed"
       collx_log_tail "$runtime_log"
       failed_cases=$((failed_cases + 1))
@@ -1241,15 +1269,42 @@ collx_remove_distributed_container() {
     </dev/null >/dev/null 2>&1 || true
 }
 
+# Stops a queued salloc or a running case step. Prints nothing: a failed write would end the
+# launcher under errexit before the allocation is released.
+collx_stop_launch_children() {
+  local pid
+  for pid in $(jobs -pr); do
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+  wait 2>/dev/null
+}
+
+# An interrupt can land while the request is still queued, or after the grant but before JOB_ID
+# records it. Either way the scheduler log names the one job this launch submitted.
+collx_adopt_interrupted_request() {
+  local job_id
+  [ -n "${COLLX_SCHEDULER_LOG:-}" ] || return 0
+  job_id="$(sed -nE 's/.*(Pending|Granted) job allocation ([1-9][0-9]*).*/\2/p' \
+    "$COLLX_SCHEDULER_LOG" 2>/dev/null | tail -n 1)" || return 0
+  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 0
+  JOB_ID="$job_id"
+}
+
 collx_launcher_cleanup() {
   local rc="$1" stage_root="${MOUNT_SRC:-}"
-  trap - EXIT HUP INT TERM
+  # A second signal must not end the cleanup before the allocation is released.
+  trap - EXIT
+  trap '' HUP INT TERM
+  collx_stop_launch_children
   if [ -n "${JOB_ID:-}" ]; then
     collx_remove_distributed_container "$JOB_ID" "${NODES:-1}"
-    if ! collx_cleanup_allocation; then
-      [ "$rc" != 0 ] || rc=1
-      exit "$rc"
-    fi
+  else
+    # No step ever ran in a job taken over here, so it has no container to remove.
+    collx_adopt_interrupted_request
+  fi
+  if [ -n "${JOB_ID:-}" ] && ! collx_cleanup_allocation; then
+    [ "$rc" != 0 ] || rc=1
+    exit "$rc"
   fi
   if [ -n "${REPO_ROOT:-}" ] && [ -n "$stage_root" ] \
       && [ "$stage_root" != "$REPO_ROOT" ]; then
@@ -1268,4 +1323,6 @@ collx_install_launcher_fail_safe() {
   trap 'collx_launcher_cleanup 129' HUP
   trap 'collx_launcher_cleanup 130' INT
   trap 'collx_launcher_cleanup 143' TERM
+  # A handler, not '': children must inherit the default SIGPIPE.
+  trap : PIPE
 }

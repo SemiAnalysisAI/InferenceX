@@ -23,6 +23,7 @@ Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Meta, Mi
 | [`OperatorX/`](operatorx/) | ⚙️ Operator & Kernel Level Benchmarks (Experimental Beta) |
 | [`UBenchX/`](ubenchX/) | Standalone Hardware Microbenchmarks (Experimental Beta) |
 | [`power_model/`](power_model/) | ⚡ OSS System Level Power Modelling |
+| [`video-generation/`](video-generation/) | 🎬 Video Generation Serving Benchmarks |
 | [`shared/`](shared/) | 🧩 Home for shared components |
 | [`experimental/`](experimental/) | 🧪 Remaining experiments |
 
@@ -31,7 +32,6 @@ Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Meta, Mi
 
 - **[2026/11]** 🔥 Kimi K3.1 Pro: continuous benchmarks live since Day 0 on B200, B300, GB200 and MI355X (SGLang + vLLM)
 - **[2026/11]** 🔥 PowerX: measured power is now collected by default on multi-node runs, including NVL72 Grace CPU, per-host GPU and AMD EPYC CPU package power
-- **[2026/11]** GLM-5.3-Flash: added AgentX benchmarks on GB200 (FP8 + NVFP4), MI300X and MI325X with HiCache [dashboard](https://inferencex.semianalysis.com/agentx)
 - **[2026/10]** MiniMax M3.1 Flash: Day 0 AgentX benchmarks with DSpark speculative decoding on B200 and B300 [dashboard](https://inferencex.semianalysis.com/agentx)
 - **[2026/10]** Muse Spark Open: added AgentX benchmarks on B300 and GB300 (SGLang) [dashboard](https://inferencex.semianalysis.com/agentx)
 - **[2026/10]** Open-source power model (beta) for estimating system power from measured GPU, CPU and memory telemetry

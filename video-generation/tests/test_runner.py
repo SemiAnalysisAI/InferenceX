@@ -419,14 +419,15 @@ def test_cli_run_records_the_declared_numerical_identity(
 def test_request_encoding_comes_from_the_plan(tmp_path):
     path = Path(__file__).resolve().parents[1] / "specs/h3-v2.yaml"
     plan = video_spec.plan_for(video_spec.load_spec(path), "release-v1")
-    plan["fairness"]["encoding"]["preset"] = "veryfast"
-    sglang = runner.preview_plan(plan, runtime="sglang")["slots"][0]["request"]
-    vllm = runner.preview_plan(plan, runtime="vllm-omni")["slots"][0]["request"]
-    assert (sglang["x264_preset"], sglang["output_compression"]) == ("veryfast", 63)
-    assert vllm["extra_params"]["video_codec_options"] == {"preset": "veryfast", "crf": "18"}
     plan["fairness"]["encoding"]["crf"] = 23
+    vllm = runner.preview_plan(plan, runtime="vllm-omni")["slots"][0]["request"]
+    assert vllm["extra_params"]["video_codec_options"] == {"preset": "ultrafast", "crf": "23"}
     output = tmp_path / "not-created"
     with pytest.raises(ValueError, match="SGLang cannot request CRF 23"):
+        execute(plan, output, "http://127.0.0.1:1")
+    assert not output.exists()
+    plan["fairness"]["encoding"].update(preset="veryfast", crf=18)
+    with pytest.raises(ValueError, match="veryfast has no verifiable x264 options"):
         execute(plan, output, "http://127.0.0.1:1")
     assert not output.exists()
 
@@ -695,6 +696,7 @@ def test_serving_overlaps_requests_without_waiting_for_local_validation(
 
     def validate_after_submissions(path, expected):
         assert submitted.wait(2), "local validation blocked later submissions"
+        time.sleep(0.2)
         return analyzer(path, expected)
 
     monkeypatch.setattr(sys.modules["evaluator.media"], "analyze_media", validate_after_submissions)
@@ -721,6 +723,8 @@ def test_serving_overlaps_requests_without_waiting_for_local_validation(
             <= record["submit_to_terminal_seconds"]
             <= record["submit_to_media_seconds"]
             <= record["latency_seconds"]
+            < record["submit_to_media_seconds"] + 0.2
+            <= record["submit_to_media_seconds"] + record["media_validation_seconds"]
         )
     assert len(state["posts"]) == 4
 

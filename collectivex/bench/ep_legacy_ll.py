@@ -159,6 +159,15 @@ class LegacyBufferLL:
             })
         return details
 
+    def make_problem(self, T, idx, weights, x):
+        """Adds the MoE layer's output for normal mode, which vLLM's deepep_v2 and deepep_ht
+        finalize copy the combined rows into; allocated once per rung, untimed."""
+        problem = super().make_problem(T, idx, weights, x)
+        if self.mode != "low-latency":
+            problem.combine_output = torch.empty(
+                (T, self.args.hidden), dtype=torch.bfloat16, device=self.device)
+        return problem
+
     # ---- transport contract, routed by mode ----------------------------------------------
 
     def create_buffer(self, spec):
@@ -184,7 +193,11 @@ class LegacyBufferLL:
         if self.mode == "low-latency":
             # The kernel applies topk_weights internally (weighted).
             return self._ll_combine(p, h, h.combine_input)
-        return self._normal_combine(p, h)
+        # vLLM's finalize copies the result into the MoE layer's output (deepep_v2.py,
+        # deepep_ht.py), so the copy is charged here as mori and flashinfer-ep charge theirs.
+        # Low-latency combines straight into the output (`out=`), so it has no copy.
+        p.combine_output.copy_(self._normal_combine(p, h)[:p.T])
+        return p.combine_output
 
     def inspect_dispatch(self, p, h):
         if self.mode == "low-latency":
