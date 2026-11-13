@@ -77,7 +77,7 @@ def test_infera_sglang_fails_when_the_sglang_fixes_do_not_apply(tmp_path):
                            {"ROUTER_VERSION": "9.8.7", "SGLANG_DIR": str(tmp_path / "no-sglang")})
 
     assert result.returncode != 0
-    assert "[infera-sglang-patches] B1" in result.stdout
+    assert "[infera-sglang-patches] B8" in result.stdout
     assert "amd-infera==9.8.7" in installs[0]
 
 

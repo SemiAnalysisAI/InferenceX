@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install Infera, at the master config's router version, into the stock SGLang image for the
-# infera-sglang points, then apply the SGLang fixes the pinned image still lacks
+# infera-sglang points, then apply the SGLang fix the pinned image still lacks
 # (infera-sglang-patches/apply.sh, waiver docs/waiver/4629.md). amd-infera's Linux x86_64
 # wheel on PyPI bundles the infera-router binary next to the infera.engine.sglang worker
 # wrapper, so the master's router version is the Infera version. Only nats-py is missing from
