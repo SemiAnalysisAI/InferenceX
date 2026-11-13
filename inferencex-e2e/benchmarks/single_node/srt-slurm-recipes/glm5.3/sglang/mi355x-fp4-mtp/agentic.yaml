@@ -60,7 +60,9 @@ override_tp4_c4_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        # Pages reach the host tier on eviction, so it adds to device KV
+        # capacity instead of mirroring it.
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '4'
@@ -78,7 +80,7 @@ override_tp4_c8_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '8'
@@ -96,7 +98,7 @@ override_tp4_c10_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '10'
@@ -114,7 +116,7 @@ override_tp4_c12_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '12'
@@ -132,7 +134,7 @@ override_tp4_c14_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '14'
@@ -150,8 +152,26 @@ override_tp4_c16_hicache:
         cuda-graph-backend-prefill: breakable
         enable-hierarchical-cache: true
         hicache-size: 180
-        hicache-write-policy: write_through
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '16'
+      KV_OFFLOADING: dram
+
+override_tp4_c20_hicache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+        cuda-graph-backend-prefill: breakable
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: '20'
       KV_OFFLOADING: dram
