@@ -546,8 +546,6 @@ clusters:
       gres: "gpu:{gpus}"
       cpus-per-gpu: 24
       salloc-args: [--mem=0]
-      # Every task launch on this node fails ("Unspecified error"), so jobs that get it die at the first srun.
-      exclude: [dsxe-sa-b300-prd0-gpu-00]
       volumes:
         hf-home: {path: ~/.cache/huggingface}
         hf-hub-cache: {path: ~/.cache/huggingface/hub}
