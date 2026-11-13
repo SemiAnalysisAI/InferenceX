@@ -142,7 +142,9 @@ TIMED_OUT = 76  # the case watchdog ended a case that did not finish
 # a case (build, timing, profile) that runs longer is stopped: a collective that hangs otherwise
 # waits for NCCL's 10-minute watchdog; a process's first case also compiles and builds
 _CASE_TIMEOUT_S = float(os.environ.get("OPERATORX_CASE_TIMEOUT_S", "300"))
-_FIRST_CASE_TIMEOUT_S = float(os.environ.get("OPERATORX_FIRST_CASE_TIMEOUT_S", "900"))
+# the first case of a layer builds it and compiles its kernels (DeepSeek-V4 attention on B200:
+# over 15 minutes cold, eight ranks at once)
+_FIRST_CASE_TIMEOUT_S = float(os.environ.get("OPERATORX_FIRST_CASE_TIMEOUT_S", "1800"))
 _USED_FLOOR = float(os.environ.get("OPERATORX_RECOVER_USED_GIB", "8")) * 2**30
 _USED_FRACTION = float(os.environ.get("OPERATORX_RECOVER_USED_FRACTION", "0.12"))
 
@@ -171,19 +173,26 @@ class _Watchdog:
         self.progress, self.lock, self.timer = progress, threading.Lock(), None
 
     def arm(self, index: int, seconds: float, state: dict) -> None:
+        import faulthandler
         import threading
         self.cancel()
         self.timer = threading.Timer(seconds, self._fire, (index, seconds, state))
         self.timer.daemon = True
         self.timer.start()
+        # a thread in native code holding the GIL keeps the timer from running: faulthandler's
+        # own thread needs no GIL; it dumps the stacks and exits (a crash for the supervisor)
+        faulthandler.dump_traceback_later(seconds + 60, exit=True)
 
     def cancel(self) -> None:
+        import faulthandler
+        faulthandler.cancel_dump_traceback_later()
         if self.timer is not None:
             self.timer.cancel()
             self.timer = None
 
     def _fire(self, index: int, seconds: float, state: dict) -> None:
         import faulthandler
+        faulthandler.cancel_dump_traceback_later()
         _write_progress(self.progress, {**state, "next": index, "running": index, "timeout_s": int(seconds)})
         print(f"[run_smoke] case {index} did not finish within {seconds:.0f} s; stopping this process",
               file=sys.stderr, flush=True)
@@ -316,6 +325,16 @@ def main() -> int:
             f"operatorx.runners.{platform}.backends.{b}"), "resident", None)] if r]
         crashed = state.get("running")
         restarted = os.environ.get("OPERATORX_CRASH_RC") == str(RESTART)  # not a crash
+        if not restarted and crashed is not None and int(crashed) == start and start < len(entries) \
+                and retried != start:
+            # the first time a case kills or hangs the process, run it once more in this fresh
+            # one (a cold compile or a stale state can be the cause), unless a case of its
+            # layer already did
+            if layer_key(entries[start][0].type, entries[start][0].args) not in repeats:
+                retried = start
+                _write_progress(progress, {**{k: v for k, v in state.items() if k != "running"},
+                                           "retry": start})
+                crashed = None
         if not restarted and crashed is not None and int(crashed) == start and start < len(entries):
             op, tl = entries[start]  # the process died (or hung) during this case
             rc = os.environ.get("OPERATORX_CRASH_RC", "?")
@@ -333,18 +352,20 @@ def main() -> int:
             print(f"[run_smoke] resuming at case {start} of {len(entries)}", flush=True)
         watchdog = _Watchdog(progress)
     first_case = True  # a process's first case run also compiles kernels and builds
+    last_layer = None
     for index, (op, tl) in enumerate(entries):
         if index < start:
             continue
+        layer = layer_key(op.type, op.args)
         if progress is not None:
             running = {"next": index, "running": index, "failed_layers": failed_layers, "repeats": repeats}
             _write_progress(progress, running)
-            watchdog.arm(index, _FIRST_CASE_TIMEOUT_S if first_case else _CASE_TIMEOUT_S, running)
-            first_case = False
+            new_layer = first_case or layer != last_layer  # it builds and compiles
+            watchdog.arm(index, _FIRST_CASE_TIMEOUT_S if new_layer else _CASE_TIMEOUT_S, running)
+            first_case, last_layer = False, layer
         _t0 = _time.perf_counter()
         stage = ""
         oom = False
-        layer = layer_key(op.type, op.args)
         if layer in failed_layers:  # its build failed in a fresh process too: not run again
             status, message = failed_layers[layer]
             results.append(Result(op=op, metrics={}, status=status, testlist=tl,
