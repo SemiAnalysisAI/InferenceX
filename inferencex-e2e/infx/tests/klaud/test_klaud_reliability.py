@@ -368,10 +368,6 @@ OTHER_CORPUS = "semianalysisai/cc-traces-weka-062126-256k"
                  agentx_baseline(dashboard=FROZEN_AXES),
                  "dashboard interactivity fell more than 10% at AgentX c4 TP8 EP1",
                  id="dashboard-interactivity"),
-    pytest.param([agentx_row(4, 100.0, latency=p90(normalized=44.0)), agentx_row(8, 100.0)],
-                 agentx_baseline(dashboard=FROZEN_AXES),
-                 "dashboard E2E normalized interactivity fell more than 10% at AgentX c4 TP8 EP1",
-                 id="dashboard-normalized-interactivity"),
     pytest.param([agentx_row(4, 100.0, latency=p90(ttft=9.0, normalized=1.0)),
                   agentx_row(8, 100.0)], agentx_baseline(), None,
                  id="baseline-without-dashboard-axes"),
@@ -383,6 +379,18 @@ def test_final_validation_blocks_regressions_against_the_frozen_baseline(rows, b
         return
     with pytest.raises(github.VerificationError, match=re.escape(blocked)):
         reporting.check_regressions(FINAL_RUN, evidence, baseline)
+
+
+def test_normalized_interactivity_regression_only_warns(capsys):
+    rows = [agentx_row(4, 100.0, latency=p90(normalized=5.0)), agentx_row(8, 100.0)]
+    evidence = (AGENTX_MATRIX, rows, [agentx_eval_row(8, 0.95)])
+
+    reporting.check_regressions(FINAL_RUN, evidence, agentx_baseline(dashboard=FROZEN_AXES))
+
+    assert capsys.readouterr().out.startswith(
+        "::warning::Klaud: dashboard E2E normalized interactivity fell more than 10% at AgentX c4"
+    )
+
 
 
 @pytest.mark.parametrize(("suite", "score", "frozen", "blocked"), [

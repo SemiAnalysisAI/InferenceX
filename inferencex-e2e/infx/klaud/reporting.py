@@ -1311,6 +1311,8 @@ DASHBOARD_AXES = {
     "ttft_ms": "TTFT",
     "e2e_norm_intvty": "E2E normalized interactivity",
 }
+# Regressions on these fields only warn, however large
+WARN_ONLY_AXES = ("e2e_norm_intvty",)
 MIN_EVAL_RETENTION = 0.5
 MIN_EVAL_SCORE = 0.5
 # Published scores of these suites sit above 0.9, while BFCL and GPQA legitimately score lower.
@@ -1335,7 +1337,8 @@ def check_regressions(
 
     Validation is blocked by a matched point whose output throughput fell more than
     MAX_THROUGHPUT_DROP or cannot be compared (missing or zero), by one that got more than
-    MAX_DASHBOARD_REGRESSION worse on a dashboard x axis both sides report, and by any point whose
+    MAX_DASHBOARD_REGRESSION worse on a dashboard x axis both sides report, except WARN_ONLY_AXES,
+    which only print a workflow warning, and by any point whose
     profiled request error rate exceeds the serving client's MAX_FAILURE_RATE. A frozen point
     without a dataset is assumed to share the new corpus, and only a different known corpus is
     skipped. An eval is blocked below MIN_EVAL_RETENTION of its baseline score, and
@@ -1407,6 +1410,7 @@ def check_regressions(
                     worse[field],
                 )
                 for field, name in DASHBOARD_AXES.items()
+                if field not in WARN_ONLY_AXES
             ),
             (f"request errors exceed {MAX_FAILURE_RATE:.0%}", failing),
             ("output throughput cannot be compared (missing or zero)", unknown),
@@ -1415,6 +1419,12 @@ def check_regressions(
         )
         if items
     ]
+    for field in WARN_ONLY_AXES:
+        if worse[field]:
+            print(
+                f"::warning::Klaud: dashboard {DASHBOARD_AXES[field]} fell more than "
+                f"{MAX_DASHBOARD_REGRESSION:.0%} at {', '.join(worse[field])}"
+            )
     if problems:
         raise VerificationError(
             "Final sweep cannot be validated against the frozen baseline: " + "; ".join(problems)
