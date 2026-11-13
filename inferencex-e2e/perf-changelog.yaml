@@ -12827,3 +12827,12 @@
     - "Drop 3 prefill workers at c700 and c1228 (DEP16 decode): the DEP32 c3018 point has both higher interactivity and higher throughput per GPU than each of them. Drop 5 prefill workers at c2884 (DEP16 decode): it lies under the line between DEP32 c3018 and 7P c5540."
     - "Set stream-interval 32 on the agg role and on the disagg prefill role, which used the SGLang default of 1; disagg decode already used 32. Agg TP4 c1, c4 and c16 change otherwise not at all; disagg 7P c5540 and 9P c7480 change otherwise only by the image. The agg key is listed so the whole Dynamo + SGLang curve, agg points included, comes from this sweep."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4997
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261109 (amd64 digest sha256:e728a52213cce18493a46ac8ac62d5c9eaee66591941871acd213fe989e55957). The recipe is unchanged, so this sweep changes only the image."
+    - "ROCM_QUICK_REDUCE_QUANTIZATION stays INT4, set explicitly in the recipe, so removing the image's INT8 default (sgl-project/sglang#47163) does not change this arm. mem-fraction-static stays 0.8, which SGLang scales by 0.85 above 8192 context with the aiter backend in both the v0.5.20 and v0.5.23 sources, so the effective 0.68 is the same on both images."
+    - "stream-interval 50, the HiCache write_through policy and the TP2 and TP4 concurrency grid are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5061
