@@ -91,27 +91,6 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
   name: minimaxm31flash-gb200-agg
-override_tp4_c1:
-  name: minimaxm31flash-gb200-agg-tp4-c1
-  roles:
-    agg:
-      args:
-        max-num-seqs: 2
-        gpu-memory-utilization: 0.88
-override_tp4_c4:
-  name: minimaxm31flash-gb200-agg-tp4-c4
-  roles:
-    agg:
-      args:
-        max-num-seqs: 8
-        gpu-memory-utilization: 0.88
-override_tp4_c8:
-  name: minimaxm31flash-gb200-agg-tp4-c8
-  roles:
-    agg:
-      args:
-        max-num-seqs: 16
-        gpu-memory-utilization: 0.88
 override_tp4_c16:
   name: minimaxm31flash-gb200-agg-tp4-c16
   roles:
@@ -137,3 +116,104 @@ override_tp4_c40:
         gpu-memory-utilization: 0.82
         kv-cache-metrics: true
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":360000000000,"lazy_offload":true}}'
+
+# Specialized decode (vllm-project/vllm#66324, opt-in with decode_backend
+# latency_specialized): fused CuTe DSL kernels for FULL-graph decode steps of up to
+# 8 requests x (7 + 1) rows; larger steps and prefill run the stock forward. The
+# executor refuses NVFP4 caches, so these points run fp8 KV and fp8 index-K caches,
+# with the FLASHINFER_TS drafter backend the PR validated. The PR is applied to the
+# pinned nightly by setup_script.
+# Client concurrency runs about 1.5x the server batch, so concurrency 12 is roughly
+# where steps outgrow the 8-request cap; 16 to 24 show where it stops paying off.
+# max-num-seqs is 2x concurrency, as for the stock points.
+override_tp4_sd_c1:
+  name: minimaxm31flash-gb200-agg-tp4-sd-c1
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        gpu-memory-utilization: 0.88
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+override_tp4_sd_c4:
+  name: minimaxm31flash-gb200-agg-tp4-sd-c4
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        gpu-memory-utilization: 0.88
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+override_tp4_sd_c8:
+  name: minimaxm31flash-gb200-agg-tp4-sd-c8
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        gpu-memory-utilization: 0.88
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+override_tp4_sd_c12:
+  name: minimaxm31flash-gb200-agg-tp4-sd-c12
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 24
+        gpu-memory-utilization: 0.88
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+override_tp4_sd_c16:
+  name: minimaxm31flash-gb200-agg-tp4-sd-c16
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        gpu-memory-utilization: 0.88
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+override_tp4_sd_c20:
+  name: minimaxm31flash-gb200-agg-tp4-sd-c20
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 40
+        gpu-memory-utilization: 0.88
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+override_tp4_sd_c24:
+  name: minimaxm31flash-gb200-agg-tp4-sd-c24
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 48
+        gpu-memory-utilization: 0.88
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
