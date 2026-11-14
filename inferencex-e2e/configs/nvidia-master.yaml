@@ -4391,6 +4391,29 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp2[2]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp2[3]' }
 
+# GLM-5.2 NVFP4 H200 8k1k on SGLang: the cookbook's H200 "balanced" shape
+# (TP8 + 8-way DP attention, mem-fraction 0.85, chunked prefill 32768, 256
+# running requests) with MTP off. Hopper has no FP4 tensor cores, so experts
+# run on Marlin, TP-sharded (EP1, no DeepEP). DP attention replicates the
+# checkpoint's BF16 attention (~29 GB/GPU) beside ~50 GB of experts, which
+# OOMs 80 GB H100 but fits H200's 141 GB. Image is the CUDA 12 nightly
+# glm5.2-fp8-b200-sglang-agentic-mtp runs.
+glm5.2-fp4-h200-sglang:
+  image: lmsysorg/sglang:nightly-dev-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.2/sglang/h200-fp4
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 1, dp-attn: true, conc-start: 8, conc-end: 256, srt-recipe: 8k1k.yaml }
+
 # MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
 # manifest digest verified 2026-10-24.
