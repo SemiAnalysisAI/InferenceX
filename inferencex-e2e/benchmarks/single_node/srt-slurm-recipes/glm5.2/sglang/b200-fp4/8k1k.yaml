@@ -48,7 +48,7 @@ zip_override_dep8:
   roles:
     agg:
       args:
-        cuda-graph-max-bs: [8, 16, 32, 64, 128, 256]
+        cuda-graph-max-bs-decode: [8, 16, 32, 64, 128, 256]
   benchmark:
     env:
       CONC: ['8', '16', '32', '64', '128', '256']
