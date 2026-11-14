@@ -122,7 +122,7 @@ override_tp4_c32:
 # 8 requests x (7 + 1) rows; larger steps and prefill run the stock forward. The
 # executor refuses NVFP4 caches, so these points run fp8 KV and fp8 index-K caches,
 # with the FLASHINFER_TS drafter backend the PR validated. The PR is applied to the
-# pinned nightly by setup_script; see docs/waiver.
+# pinned nightly by setup_script; see docs/waiver/5075.md.5075.md.
 # Client concurrency runs about 1.5x the server batch, so concurrency 12 is roughly
 # where steps outgrow the 8-request cap; 16 to 24 show where it stops paying off.
 # max-num-seqs is 2x concurrency, as for the stock points.

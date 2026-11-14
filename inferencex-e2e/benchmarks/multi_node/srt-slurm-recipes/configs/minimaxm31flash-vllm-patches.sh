@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # vllm-project/vllm#66324 (MiniMax-M3.1-Flash specialized decode) on the
-# cu134-nightly-f5d93296 image; see docs/waiver. Remove once a nightly contains it.
+# cu134-nightly-f5d93296 image; see docs/waiver/5075.md. Remove once a nightly contains it.
 set -eo pipefail
 
 patch_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/minimaxm31flash-vllm-patches"
