@@ -12882,3 +12882,11 @@
     - "The new vLLM (mum-tracking d73dd529 to 6d74a152f) zeroes the KV null block after CUDA graph capture in the V2 runner (seungrokj/mum#17) and adds the opt-in VLLM_PREFILL_CADENCE_NO_ESCAPE hold (seungrokj/mum#21), the DCP V-up-first combine and multi-stream DSA decode, VLLM_ROCM_MEM_HEADROOM_GIB and the one-launch DSA decode prologue. It also fuses the MXFP4 indexer decode prep, the q_a/kv_a RMSNorm with the sigmoid gate, the KDA f_b_proj GEMM, the AttnRes register tile and the latent-MoE norm, compiles the FlyDSL sparse MLA at load and sizes the packed DSA KV blocks tightly."
     - "No change to the DSpark draft's data types: speculative-config does not pin a revision, so Inferact/Kimi-K3.1-Pro-DSpark-preview resolves to Hugging Face main 6a2ef20a (current since 2026-11-05), whose weights are all BF16 with no quantization_config. vLLM 6d74a152f loads it unquantized with an FP8 KV cache, as d73dd529 did; VLLM_ROCM_DCP_VUP_RS also combines the draft's DCP attention output, in BF16 with an FP32 LSE."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5043
+
+- config-keys:
+    - wan22-bf16-b200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add a B200 Wan2.2-T2V-A14B baseline on vLLM-Omni v0.32.0, pinned by its linux/amd64 digest: wan22.yaml release-v1 (four prompts by five seeds, one warmup; 832x480, 81 frames at 16 fps, 40 UniPC steps, guidance 4.0 high-noise / 3.0 low-noise, boundary 0.875, flow_shift 12.0, empty negative prompt, BF16), C1 on 8 GPUs."
+    - "Deployment: CFG parallel 2 x Ulysses 4, tiled VAE patch parallelism 8, prompt-embedding cache disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD

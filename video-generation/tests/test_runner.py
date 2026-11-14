@@ -90,8 +90,8 @@ def mocked_media(monkeypatch, tmp_path):
                 "fps": expected["fps"],
             },
             "audio": {
-                "sample_rate_hz": expected["audio_sample_rate_hz"],
-                "channels": expected["audio_channels"],
+                "sample_rate_hz": expected.get("audio_sample_rate_hz"),
+                "channels": expected.get("audio_channels"),
             },
             "checks": {"fixture_analysis_only": state["valid"]},
             "valid": state["valid"],
@@ -213,6 +213,8 @@ def fixture_server():
                             "id": self.path.rsplit("/", 1)[-1],
                             "status": status,
                             "error": "do-not-log-this-server-secret",
+                            "peak_memory_mb": 61440.5,
+                            "inference_time_s": 31.25,
                         },
                     )
 
@@ -818,3 +820,115 @@ def test_watchdog_deadline_wins_over_socket_teardown_errors(
     )
     assert run["serving"]["outcomes"]["timed_out"] == 1
     assert run["summary"]["not_started"] == 3
+
+
+WAN22_SPEC = Path(__file__).resolve().parents[1] / "specs" / "wan22.yaml"
+
+
+def wan22_plan(set_id="smoke"):
+    return video_spec.plan_for(video_spec.load_spec(WAN22_SPEC), set_id)
+
+
+def test_wan22_release_set_keeps_the_recorded_workload():
+    plan = runner.validate_plan(wan22_plan("release-v1"))
+    assert plan["model_id"] == "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
+    assert plan["model_revision"] == "5be7df9619b54f4e2667b2755bc6a756675b5cd7"
+    assert plan["generation"] == {
+        "width": 832,
+        "height": 480,
+        "frame_count": 81,
+        "fps": 16,
+        "num_inference_steps": 40,
+        "guidance_scale": 4.0,
+        "guidance_scale_2": 3.0,
+        "boundary_ratio": 0.875,
+        "flow_shift": 12.0,
+        "negative_prompt": "",
+    }
+    assert sorted((case["case_id"].rsplit("-s", 1)[0], case["seed"]) for case in plan["cases"]) == [
+        (prompt, seed)
+        for prompt in ("bicycle-pass", "drum-taps", "footsteps", "pouring-water")
+        for seed in (11, 23, 37, 53, 111)
+    ]
+    assert plan["warmup_runs"] == 1 and plan["repetitions"] == 1
+    assert not any(case["requires_sound"] for case in plan["cases"])
+    smoke = runner.validate_plan(wan22_plan("smoke"))
+    assert smoke["generation"] == plan["generation"]
+    assert smoke["cases"] == plan["cases"][:1]
+    assert smoke["plan_id"] != plan["plan_id"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("width", 1280),
+        ("frame_count", 121),
+        ("fps", 24),
+        ("boundary_ratio", 1.0),
+        ("guidance_scale_2", 0),
+        ("negative_prompt", None),
+    ],
+)
+def test_wan22_rejects_other_cells_and_controls(field, value):
+    plan = wan22_plan()
+    plan["generation"][field] = value
+    with pytest.raises(ValueError):
+        runner.validate_plan(plan)
+
+
+def test_wan22_requires_every_control():
+    plan = wan22_plan()
+    del plan["generation"]["flow_shift"]
+    with pytest.raises(ValueError, match="exactly"):
+        runner.validate_plan(plan)
+    plan = wan22_plan()
+    plan["generation"]["audio_flow_shift"] = 3.0
+    with pytest.raises(ValueError, match="exactly"):
+        runner.validate_plan(plan)
+
+
+def test_wan22_has_no_sglang_request_contract():
+    with pytest.raises(ValueError, match="vllm-omni"):
+        runner.preview_plan(wan22_plan(), runtime="sglang")
+
+
+def test_wan22_vllm_omni_run_sends_every_control_and_keeps_server_metrics(
+    tmp_path, mocked_media, fixture_server
+):
+    plan = wan22_plan()
+    endpoint, server = fixture_server()
+    run = execute(plan, tmp_path / "wan22", endpoint, runtime="vllm-omni")
+    assert run["status"] == "complete"
+    assert run["summary"]["scheduled"] == run["summary"]["valid"] == 1
+    assert len(server["posts"]) == 2
+    assert server["posts"][1] == {
+        "model": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+        "prompt": plan["cases"][0]["prompt"],
+        "seed": "11",
+        "width": "832",
+        "height": "480",
+        "fps": "16",
+        "num_frames": "81",
+        "num_inference_steps": "40",
+        "guidance_scale": "4.0",
+        "guidance_scale_2": "3.0",
+        "boundary_ratio": "0.875",
+        "flow_shift": "12.0",
+        "negative_prompt": "",
+        "num_outputs_per_prompt": "1",
+    }
+    calls, _ = mocked_media
+    for _, expected in calls:
+        assert expected["audio_required"] is False
+        assert expected["requires_sound"] is False
+        assert math.isclose(expected["duration_seconds"], 81 / 16)
+    for record in run["records"]:
+        assert record["provider_metrics"] == {"peak_memory_mb": 61440.5, "inference_time_s": 31.25}
+
+
+def test_provider_metrics_drop_unsampled_and_malformed_values():
+    assert runner._provider_metrics({"peak_memory_mb": 0.0, "inference_time_s": None}) is None
+    assert runner._provider_metrics({"peak_memory_mb": True, "inference_time_s": "30"}) is None
+    assert runner._provider_metrics({"peak_memory_mb": 2048, "status": "completed"}) == {
+        "peak_memory_mb": 2048.0
+    }
