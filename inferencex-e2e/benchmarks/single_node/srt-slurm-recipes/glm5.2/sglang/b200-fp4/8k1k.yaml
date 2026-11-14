@@ -1,7 +1,7 @@
 # GLM-5.2 NVFP4 on B200, 8k1k, SGLang cookbook "balanced" single-node cell
 # (docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2, b200/nvfp4/balanced,
 # verified) with its EAGLE flags removed: TP8 with 8-way DP attention,
-# chunked prefill 32768, mem-fraction 0.92, 256 running requests.
+# chunked prefill 32768, 256 running requests (mem-fraction lowered, see below).
 base:
   schema: 2
   name: glm5.2-fp4-b200-sglang-8k1k
@@ -33,7 +33,9 @@ base:
         quantization: modelopt_fp4
         kv-cache-dtype: fp8_e4m3
         chunked-prefill-size: 32768
-        mem-fraction-static: 0.92
+        # Cookbook 0.92 OOMs at CUDA-graph capture on this nightly; leave room
+        # for graph capture and DSA indexer temporaries like the AgentX sibling.
+        mem-fraction-static: 0.85
         max-running-requests: 256
         watchdog-timeout: 1800
         enable-metrics: false
