@@ -446,6 +446,7 @@ Read "Accuracy-sensitive optimization policy" in `inferencex-e2e/docs/MODELS.md`
 For upstream official InferenceX submissions, apply it to reduced-precision
 all-reduce or reduce-scatter (integer or floating-point),
 online quantization of linear layers, quantization of shared experts,
+reduced-precision Engram weights (including online or offline quantization),
 cross-indexer sharing on models without native
 index sharing, FP4 KV cache on models without native FP4 KV cache, and reductions
 in SSM/KDA/Mamba state-cache dtype below FP32. Existing and
@@ -460,7 +461,7 @@ deployments.
   `VLLM_ROCM_QUICK_REDUCE_QUANTIZATION`, `AITER_QUICK_REDUCE_QUANTIZATION`, and
   equivalent aliases or controls, including unprefixed `QUICK_REDUCE_QUANTIZATION`
   where recognized. Inspect reduce-scatter, online linear quantization,
-  shared-expert quantization, index-sharing,
+  shared-expert quantization, Engram weight precision, index-sharing,
   FP4 KV-cache paths, and SSM/KDA/Mamba state-cache dtype controls too.
   Determine effective behavior, not merely flag presence.
   Do not confuse size thresholds with collective-quantization controls.
@@ -482,6 +483,10 @@ deployments.
   both baselines and the proposed lower-precision state-cache dtype in arm 3.
   Verify the effective state-cache dtype separately from weight and KV-cache
   precision, including inherited and image-default settings.
+- For reduced-precision Engram weights, require unreduced Engram weights in both
+  baselines and the proposed reduction only in arm 3. Verify the Engram weight
+  dtype and any quantization or offline conversion separately from the rest of
+  the model's weights; a model-wide precision label is not sufficient evidence.
 - Verify pinned checkpoints/images and matched evaluation settings across all arms.
   Check per-evaluation scores and stated pass criteria, the arm 2 versus arm 1
   checkpoint effect, arm 3 versus arm 2 optimization effect, and arm 3 versus arm 1
