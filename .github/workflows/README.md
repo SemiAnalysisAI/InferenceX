@@ -360,6 +360,11 @@ Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
 never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
 the Merge Ingest run fails and nothing is benchmarked or ingested.
 
+## Stored Artifact Sanitization
+
+Benchmark, multi-node, SpeedBench AL, and profile jobs run `Redact stored artifacts`
+(`python -m infx.results.redact`) on the files they upload, right before the first upload.
+
 ## Repository Scope
 
 Scheduled and run-completion jobs (Klaud, the runner offline digest,
@@ -372,7 +377,7 @@ configured by these repository variables:
 | Variable          | Default                                                       | Effect                                                                                                                                                                                                                                                         |
 | ----------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `APP_REPO`        | `SemiAnalysisAI/InferenceX-app`                               | App repository that `merge-ingest`, `recover-reused-ingest`, `operatorx-sweep`, and `stage-results` dispatch ingest, video, and staging events to, and the only source the ingest and staging callbacks accept. `FRONTEND_PAT` must be able to dispatch to it. |
-| `STAGING_APP_URL` | `https://inferencemax-app-git-staging-semianalysisai.vercel.app` | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`.                                                   |
+| `STAGING_APP_URL` | Required, no default                                          | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`; the callback fails while it is unset.               |
 
 ## Validation Architecture
 

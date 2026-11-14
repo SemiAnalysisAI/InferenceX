@@ -397,6 +397,15 @@ jobs:
           path: ${{ steps.run.outputs.tp0_extend }}
           if-no-files-found: ignore
 
+      - name: Redact stored artifacts
+        if: ${{ always() && env.MOE_DEBUG == '1' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: |
+          source "$PYTHONPATH/benchmarks/check_env.sh"
+          check_env_vars INFERENCEX_RESULTS_PYTHON INFERENCEX_E2E_ROOT
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.redact "$INFERENCEX_E2E_ROOT/moe_debug.tp0.log"
+
       - name: Upload MoE debug log as artifact
         if: ${{ env.MOE_DEBUG == '1' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

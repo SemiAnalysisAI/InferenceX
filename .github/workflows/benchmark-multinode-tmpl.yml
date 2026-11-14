@@ -374,6 +374,42 @@ jobs:
           fi
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence --all
 
+      - name: Redact stored artifacts
+        if: ${{ always() && env.INFERENCEX_RESULTS_PYTHON != '' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: |
+          source "$PYTHONPATH/benchmarks/check_env.sh"
+          check_env_vars INFERENCEX_RESULTS_PYTHON INFERENCEX_E2E_ROOT RESULT_FILENAME SCENARIO_TYPE EVAL_ONLY RUN_EVAL
+          cd "$INFERENCEX_E2E_ROOT"
+          shopt -s nullglob globstar
+          paths=(multinode_server_logs.tar.gz srt-setup.log srt-bind.log job_event.json)
+          if [[ "$EVAL_ONLY" != true ]]; then
+            paths+=(
+              "$RESULT_FILENAME"_*.json "agg_$RESULT_FILENAME"_*.json
+              "power_validation_$RESULT_FILENAME"_*.json LOGS/power
+              "result_processing_$RESULT_FILENAME.json" LOGS/*/results_*.json
+              LOGS/agentic/**/agentic_power_concurrency_*.json
+              LOGS/agentic/**/agentic_power_timezone_offset.txt
+              LOGS/agentic/**/power_validation.json
+            )
+          fi
+          if [[ "$SCENARIO_TYPE" == agentic-coding ]]; then
+            for path in LOGS/agentic/**; do
+              case "$path" in
+                */aiperf_artifacts/inputs.json | */aiperf_artifacts/profile_export_raw.jsonl) ;;
+                *) if [[ -f "$path" ]]; then paths+=("$path"); fi ;;
+              esac
+            done
+          fi
+          if [[ "$RUN_EVAL" == true || "$EVAL_ONLY" == true ]]; then
+            paths+=(
+              meta_env.json results*.json al_gate_*.json ./*_report.json ./*_results.jsonl
+              sample*.jsonl ./*_artifacts.tar.gz
+            )
+          fi
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.redact "${paths[@]}"
+
       - name: Upload result
         if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         uses: $/.github/actions/upload-artifact-retry

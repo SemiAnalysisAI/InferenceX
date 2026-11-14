@@ -331,14 +331,6 @@ jobs:
             results/aiperf_artifacts \
             --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
 
-      - name: Upload video results
-        if: ${{ always() && inputs.scenario-type == 'video-generation' && env.RESULT_FILENAME != '' }}
-        uses: $/.github/actions/upload-artifact-retry
-        with:
-          name: ${{ env.VIDEO_ARTIFACT_NAME }}
-          path: ${{ env.INFERENCEX_E2E_ROOT }}/h3-results
-          if-no-files-found: error
-
       - name: Process result
         if: ${{ always() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' && inputs.scenario-type != 'video-generation' }}
         env:
@@ -356,6 +348,60 @@ jobs:
             export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
           fi
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
+
+      - name: Redact stored artifacts
+        if: ${{ always() && env.INFERENCEX_RESULTS_PYTHON != '' }}
+        env:
+          RUNNER_LABEL: ${{ inputs.runner }}
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+        run: |
+          if [[ "$RUNNER_LABEL" == cluster:mi355x-amds ]]; then
+            sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+          fi
+          source "$PYTHONPATH/benchmarks/check_env.sh"
+          check_env_vars INFERENCEX_RESULTS_PYTHON INFERENCEX_E2E_ROOT RESULT_FILENAME SCENARIO_TYPE EVAL_ONLY RUN_EVAL
+          cd "$INFERENCEX_E2E_ROOT"
+          shopt -s nullglob globstar
+          paths=(
+            server.log results/*.log results/*_config.json
+            srt-single-node-logs.tar.gz srt-video-logs.tar.gz srt-single-node-submission.json
+            srt-slurm-sha.txt srt-setup.log srt-bind.log job_event.json
+          )
+          if [[ "$EVAL_ONLY" != true ]]; then
+            paths+=(
+              "$RESULT_FILENAME.json" "agg_$RESULT_FILENAME.json"
+              "power_validation_$RESULT_FILENAME.json" "$RESULT_FILENAME"_conc*.json
+              "power_validation_$RESULT_FILENAME"_conc*.json
+              results/agentic_power_timezone_offset.txt LOGS/power
+              LOGS/agentic/**/agentic_power_concurrency_*.json
+              LOGS/video/**/benchmark_concurrency_*.json LOGS/video/server/*.json
+              "LOGS/$RESULT_FILENAME.json" power-producer-sha.txt exporter-image.sha256
+            )
+          fi
+          if [[ "$SCENARIO_TYPE" == agentic-coding ]]; then
+            paths+=("$RESULT_FILENAME.json")
+            for path in results/**; do
+              case "$path" in
+                results/aiperf_artifacts/inputs.json | results/aiperf_artifacts/profile_export_raw.jsonl) ;;
+                *) if [[ -f "$path" ]]; then paths+=("$path"); fi ;;
+              esac
+            done
+          fi
+          if [[ "$RUN_EVAL" == true || "$EVAL_ONLY" == true ]]; then
+            paths+=(
+              meta_env.json results*.json al_gate_*.json ./*_report.json ./*_results.jsonl
+              ./*_artifacts.tar.gz sample*.jsonl
+            )
+          fi
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.redact "${paths[@]}"
+
+      - name: Upload video results
+        if: ${{ always() && inputs.scenario-type == 'video-generation' && env.RESULT_FILENAME != '' }}
+        uses: $/.github/actions/upload-artifact-retry
+        with:
+          name: ${{ env.VIDEO_ARTIFACT_NAME }}
+          path: ${{ env.INFERENCEX_E2E_ROOT }}/h3-results
+          if-no-files-found: error
 
       - name: Upload result
         if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' && inputs.scenario-type != 'video-generation' }}

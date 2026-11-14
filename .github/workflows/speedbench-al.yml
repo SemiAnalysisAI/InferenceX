@@ -351,6 +351,20 @@ jobs:
             --base main \
             --head "$BRANCH"
 
+      - name: Redact stored artifacts
+        if: ${{ always() && env.INFERENCEX_LAUNCH_PYTHON != '' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.launch-tooling/inferencex-e2e
+        run: |
+          source "$PYTHONPATH/benchmarks/check_env.sh"
+          check_env_vars INFERENCEX_LAUNCH_PYTHON INFERENCEX_E2E_ROOT
+          cd "$INFERENCEX_E2E_ROOT"
+          shopt -s nullglob
+          paths=(speedbench_results/server_*.log speedbench_results/speedbench_*)
+          if (( ${#paths[@]} )); then
+            "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.results.redact "${paths[@]}"
+          fi
+
       - name: Upload server logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
