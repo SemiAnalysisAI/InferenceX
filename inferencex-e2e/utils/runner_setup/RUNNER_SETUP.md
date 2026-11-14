@@ -179,8 +179,9 @@ Labels can be edited later on the runners settings page without re-registering.
 
 ### Dynamic Slurm node leases
 
-The optional node-slot scheduler performs weighted admission across every job
-size in one physical Slurm cluster. A job that needs three nodes adds
+When `PRIORITY_SCHEDULER_ENABLED=true`, the priority controller performs
+weighted admission across every job size in one physical Slurm cluster. Every
+priority-scheduled job carries `nodes:N`, so a job that needs three nodes adds
 `nodes:3` to its queued `runs-on` labels. `nodes:N` is request metadata for the
 trusted priority controller, not a permanent runner capability label.
 
@@ -203,10 +204,8 @@ and periodic reconciliation remove orphaned leases. Every managed GPU workflow
 must require its unique `ci-job-*` label; a workflow that targets only a generic
 hardware label bypasses admission accounting.
 
-Set `NODE_SLOT_SCHEDULER_ENABLED=true` only after the deployed priority
-controller supports `nodes:N` and `ci-lease-*`. `PRIORITY_SCHEDULER_ENABLED`
-must also remain enabled. If either variable is disabled, workflows omit
-`nodes:N` and retain the existing unweighted behavior. The priority score also
+If `PRIORITY_SCHEDULER_ENABLED` is disabled, workflows omit `nodes:N`, `ci-job-*`,
+and `ci-attempt-*` and target the plain runner label. The priority score also
 subtracts `0.001` per additional node so otherwise equal work prefers smaller
 allocations without overriding the existing business-priority signals.
 
