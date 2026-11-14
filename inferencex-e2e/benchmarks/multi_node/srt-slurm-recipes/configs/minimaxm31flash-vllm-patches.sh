@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # vllm-project/vllm#66324 (MiniMax-M3.1-Flash specialized decode) on the
 # cu134-nightly-f5d93296 image. Remove once a nightly contains it.
+# The image has neither git nor patch(1), so a stdlib-only Python applier applies it.
 set -eo pipefail
 
 patch_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/minimaxm31flash-vllm-patches"
@@ -17,14 +18,15 @@ echo "vllm $(cd / && python3 -c 'import importlib.metadata as m; print(m.version
 # Workers sharing a node and container must not patch the tree concurrently.
 exec 9<"$site_root/vllm"
 flock 9
-cd /
 for name in "${patches[@]}"; do
-    patch="$patch_dir/$name"
-    if git apply --directory="${site_root#/}" --reverse --check "$patch" 2>/dev/null; then
+    stamp="$site_root/vllm/.applied-${name}"
+    if [[ -f "$stamp" ]]; then
         echo "vLLM patch $name: already applied"
     else
-        git apply --directory="${site_root#/}" --verbose "$patch"
+        python3 -I "$patch_dir/apply_patch.py" "$patch_dir/$name" "$site_root"
+        touch "$stamp"
         echo "vLLM patch $name: applied"
     fi
 done
-(cd / && python3 -c 'import vllm.models.minimax_m3.nvidia.specialized_decode as m; print("specialized decode:", m.__file__)')
+test -f "$site_root/vllm/models/minimax_m3/nvidia/specialized_decode/__init__.py"
+echo "specialized decode: $site_root/vllm/models/minimax_m3/nvidia/specialized_decode"
