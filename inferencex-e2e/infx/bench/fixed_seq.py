@@ -10,7 +10,9 @@ from pathlib import Path
 from infx.bench import env, proc, server
 
 PYTHON = "python3"
-SINGLE_NODE_BACKENDS = {"sglang": "vllm", "atom": "vllm", "trt": "openai", "tokenspeed": "vllm"}
+SINGLE_NODE_BACKENDS = {
+    "sglang": "vllm", "atom": "vllm", "vllm": "vllm", "trt": "openai", "tokenspeed": "vllm",
+}  # fmt: skip
 
 
 @dataclass(frozen=True)
