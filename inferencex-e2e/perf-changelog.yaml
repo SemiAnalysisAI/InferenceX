@@ -12787,6 +12787,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4871
 
 - config-keys:
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg
+    - kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Aggregated: replace the seven TP16 DCP16 points (concurrency 1, 4, 8, 24, 32, 48 and 56) with TP16 DCP8 points at concurrency 1 (EP1, 2 running requests) and 4 (EP4, 8 running requests, mem-fraction-static 0.82), both verifying 8 DFLASH tokens. agg-variants.yaml now holds only the DCP8 design: HiCache 108 GB per rank, Run:ai streamer loading, dist-timeout 3600 and no KV events from the single worker."
+    - "Disaggregated: add a 1P2D TP16 point at concurrency 32 (EP4 DCP16 prefill, two TP16 DCP16 decode workers capped at 32 requests) and PP2 points: 1P2D at concurrency 76 and 150, and 1P1D at concurrency 150 and 200. PP2 prefill runs TP8 x PP2 with DCP8 and EP2 and splits the 93 layers 48/45. Its decode runs TP16 as DCP8 x attention DP2 with EP16 DeepGEMM MegaMoE (MXFP8 dispatch, BF16 combine), shared experts at TP8 and 128 (192 at 1P1D concurrency 150) running requests."
+    - "Disaggregated: remove the 1P1D TP16 points at concurrency 32 and 48 and the 1P1D EP16 MegaMoE points at concurrency 76 and 96. The 1P1D TP16 concurrency 16 and 1P1D EP16 concurrency 64 points keep their recipes."
+    - "Every point keeps the same image, FP32 KDA recurrent state, FP8 KV, DFLASH block verification and the committed golden acceptance curve. The new points size HiCache at 108 GB per rank, load weights with the Run:ai streamer (the PP2 prefill uses the default loader, which supports pipeline parallelism) and publish no KV events from their single prefill or aggregated worker."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5027
+
+- config-keys:
     - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
   scenario-type: [agentic-coding]
   description:
@@ -12843,6 +12855,17 @@
     - "The new ATOM brings DeepSeek-V4.1 DP attention (ROCm/ATOM#2376), the V4.1 MXFP8 KV cache with DSpark on an FP8 cache (ROCm/ATOM#2725), DP-attention prefill balancing and graph replay (ROCm/ATOM#2551, #2696, #2697) and the default HIP Mega-MHC kernel on gfx950 (ROCm/ATOM#2568)."
     - "No change to the DSpark draft's weight precision: ATOM loads the checkpoint's mtp.0-2 layers as shipped (FP8 E4M3 attention, shared experts and main_proj with 32x32 UE8M0 scales, MXFP4 routed experts, BF16 router, norms and heads) at both images. The draft shares the target's KV pool, so its KV cache follows the target from BF16 to MXFP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/3965
+
+- config-keys:
+    - dsv41flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB200 DeepSeek-V4.1-Flash Dynamo + vLLM AgentX curves on vllm/vllm-openai:cu134-nightly-aarch64-01fba62-1111d (vLLM main with the merged vllm#66552; arm64 sha256:9aa51d63c0f9e408a6a38df5aaeac2794da5de766d7398035a380bdf3d41389a) with the Dynamo 1.6.0.dev20261010 vLLM sidecar; the aggregated points and the c3018 and c4096 disaggregated decodes use the fused DSpark Markov draft sampler (dspark_fused_markov)."
+    - "Aggregated TP4 on one node: concurrency 4 (max-num-seqs 8, max-num-active-seqs 1, prefill-schedule-interval 24, deep_select indexer top-k), 10 (max-num-seqs 16, max-num-active-seqs 2) and 16 (max-num-seqs 64, max-num-active-seqs 3), with THP Engram host tables."
+    - "Disaggregated DEP4 prefill / DEP16 or DEP32 decode with push NIXL transfer and 2 to 7 async KV loads started per decode step: 3P1D DEP32 at c3018 (max-num-seqs 18), 3P1D DEP16 at c3018 (max-num-seqs 48, 70 GiB CPU KV per prefill rank), 4P1D DEP16 at c4096 (max-num-seqs 64) and 5P1D DEP16 at c5600 (max-num-seqs 112); the others offload up to 90 GiB of CPU KV per prefill rank."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4618
 
 - config-keys:
     - minimaxm31flash-fp4-gb200-vllm-agentic-dspark
