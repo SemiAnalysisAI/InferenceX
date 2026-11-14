@@ -12881,7 +12881,7 @@
     - fixed-seq-len
   description:
     - "Add GLM-5.2 FP8 H200 single-node 8k1k on SGLang (lmsysorg/sglang:nightly-dev-20261020-ab580b2e, the image glm5.2-fp8-b200-sglang-agentic-mtp runs)."
-    - "Recipe is the SGLang cookbook's verified H200 FP8 balanced cell without MTP: TP8 with 8-way DP attention, DeepEP EP8, FP8 KV with the flashmla_kv DSA decode backend, chunked prefill 32768, mem-fraction 0.85, max 256 running requests; concurrency 8 to 256 with decode CUDA graphs sized to concurrency."
+    - "Recipe is the SGLang cookbook's verified H200 FP8 balanced cell without MTP: TP8 with 8-way DP attention, DeepEP EP8, FP8 KV with the flashmla_kv DSA decode backend (prefill CUDA graphs off; they crash flashmla_kv on mixed-length eval prompts), chunked prefill 32768, mem-fraction 0.85, max 256 running requests; concurrency 8 to 256 with decode CUDA graphs sized to concurrency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5078
 
     - glm5.2-fp4-h100-vllm

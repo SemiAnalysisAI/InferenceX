@@ -35,6 +35,10 @@ base:
         kv-cache-dtype: fp8_e4m3
         # Hopper DSA decode backend used by the GLM-5.2 H200 AgentX recipes.
         dsa-decode-backend: flashmla_kv
+        # Breakable prefill CUDA graphs replay flashmla_kv with a mismatched
+        # split count on mixed-length eval prompts ("num_splits must have shape
+        # (b+1)"); as in glm5.3flash-fp8-h200, only decode graphs stay enabled.
+        cuda-graph-backend-prefill: disabled
         chunked-prefill-size: 32768
         mem-fraction-static: 0.85
         max-running-requests: 256
