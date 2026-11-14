@@ -1,0 +1,57 @@
+# GLM-5.2 FP8 on H200, 8k1k, SGLang cookbook "balanced" single-node cell
+# (docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2, h200/fp8/balanced,
+# verified) with its EAGLE flags removed: TP8 with 8-way DP attention, DeepEP
+# MoE all-to-all, mem-fraction 0.85, chunked prefill 32768, 256 running requests.
+base:
+  schema: 2
+  name: glm5.2-fp8-h200-sglang-8k1k
+  resources:
+    gpu_type: h200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: zai-org/GLM-5.2-FP8
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        # Cookbook --attn-dp-size 8; spelled the pre-#41818 way so the
+        # matrix's DP_ATTENTION check reads it.
+        data-parallel-size: 8
+        enable-dp-attention: true
+        # DeepEP routes experts across all 8 ranks (EP8).
+        moe-a2a-backend: deepep
+        expert-parallel-size: 8
+        kv-cache-dtype: fp8_e4m3
+        # Hopper DSA decode backend used by the GLM-5.2 H200 AgentX recipes.
+        dsa-decode-backend: flashmla_kv
+        chunked-prefill-size: 32768
+        mem-fraction-static: 0.85
+        max-running-requests: 256
+        watchdog-timeout: 1800
+        enable-metrics: false
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_RADIX_FORCE_MISS: '1'
+        # Keep FlashInfer/Triton/JIT caches off the shared home.
+        SGLANG_CACHE_DIR: /tmp/sglang-cache
+
+# Decode graphs sized to the request concurrency (no larger than the 256 cap).
+zip_override_dep8:
+  roles:
+    agg:
+      args:
+        cuda-graph-max-bs-decode: [8, 16, 32, 64, 128, 256]
+  benchmark:
+    env:
+      CONC: ['8', '16', '32', '64', '128', '256']
