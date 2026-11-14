@@ -305,8 +305,6 @@ override_1p3d_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-# One TP8 x DCP8 prefill feeding five TP8 x DCP8 decode engines: the prefill still has headroom at c44-c56,
-# so more decode engines per prefill raise tok/s/GPU at the same interactivity.
 override_1p5d:
   engine:
     # Lets vLLM bind each spawned worker to its GPU's NUMA node.
@@ -316,6 +314,7 @@ override_1p5d:
       <<: *override_1p3d_prefill
     decode: &override_1p5d_decode
       <<: *override_1p3d_decode
+      # One TP8 x DCP8 prefill keeps up with five decode engines at c44-c56.
       nodes: 10
       workers: 5
 
@@ -501,7 +500,7 @@ override_hyb4_2p1d_lpt4k:
         <<: *override_hyb4_3p1d_prefill_args
         long-prefill-token-threshold: 4096
         long-prefill-token-threshold-adaptive: true
-        # Six draft tokens measured faster than four at c=192 on this decode.
+        # Six draft tokens run faster than four on this hybrid decode.
         speculative-config: &spec_k6 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":6,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode: &override_hyb4_2p1d_lpt4k_decode
       <<: *override_hyb4_3p1d_decode

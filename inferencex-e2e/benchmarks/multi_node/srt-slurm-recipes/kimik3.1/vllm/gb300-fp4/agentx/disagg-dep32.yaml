@@ -213,12 +213,9 @@ base:
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
 
-# DEP32 2P1D: two DEP16 prefill workers and one DEP32 decode, Mooncake KV offload with the scheduler
-# lookup started when a request arrives (lookup_prefetch_limit, lookup_prefetch_ttl_s), the Mooncake store
-# tail pruning (opt-in env, both roles) and a larger decode KV pool (c960 is otherwise bound by decode KV
-# capacity). The benchmark client gets a node of its own: its end-of-run post-processing needs about 100 GB
-# of host memory, which the prefill head node does not have next to its Mooncake segments.
 override_2p1d_dep32:
+  # The client's end-of-run post-processing needs about 100 GB of host memory, more than the prefill
+  # head node has beside its Mooncake segments.
   benchmark:
     placement:
       node: dedicated
@@ -244,6 +241,7 @@ override_2p1d_dep32:
         VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
         VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
       args:
+        # c960 is bound by decode KV capacity.
         kv-cache-memory-bytes: 97710505984
         block-size: 16384
         data-parallel-size: 32
