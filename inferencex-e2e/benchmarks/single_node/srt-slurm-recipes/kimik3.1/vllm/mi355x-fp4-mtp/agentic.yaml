@@ -61,12 +61,17 @@ base:
         VLLM_USE_V2_MODEL_RUNNER: '1'
         VLLM_FASTSAFETENSORS_QUEUE_SIZE: '-1'
         # K3.1 has no torch.compile submodule, so only breakable graphs capture the prefill
-        # sizes the throughput points list. The conc-1 override turns this off.
+        # sizes the throughput points list. The conc-1 and conc-4 overrides turn this off.
         VLLM_USE_BREAKABLE_CUDAGRAPH: '1'
         VLLM_ROCM_AITER_MLA_ASM_PADDING: asm
         # Verify the draft tokens with the AITER assembly DCP kernel.
         VLLM_ROCM_AITER_MLA_DCP_VERIFY: asm
         VLLM_ROCM_DCP_AITER_ALLGATHER: '1'
+        # DCP V-up reduce-scatter; needs VLLM_ROCM_DCP_AITER_ALLGATHER.
+        VLLM_ROCM_DCP_VUP_RS: '1'
+        VLLM_ROCM_DSA_MULTISTREAM: '1'
+        # VRAM reserve for unprofiled DCP prefill transients.
+        VLLM_ROCM_MEM_HEADROOM_GIB: '8'
         VLLM_ROCM_USE_AITER_FLYDSL_SPARSE_MLA: '1'
         # AITER reads its own variable for the same kernels.
         AITER_FLYDSL_SPARSE_MLA: '1'
@@ -94,8 +99,9 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# max-num-seqs stays below CONC from c4 to c32, and equals it at c1 and c48. The capture list is
-# the decode sizes, multiples of one plus the draft token count, then the prefill ladder.
+# max-num-seqs stays below CONC from c4 to c32, and equals it at c1 and c48. c1 and c4 capture
+# decode sizes only; the others list decode sizes, multiples of one plus the draft token count,
+# then the prefill ladder.
 # Throughput runs replace block rejection with the golden acceptance length.
 override_gpu_kv_c1:
   roles:
@@ -112,44 +118,43 @@ override_gpu_kv_c1:
       env:
         # This point captures only the decode sizes, so breakable graphs buy nothing.
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        # Runs each DSA layer's decode prologue as one launch; needs DCP1.
+        VLLM_KIMI_SD_DSA_PROLOGUE: '1'
   benchmark:
     env:
       CONC: '1'
       KV_OFFLOADING: 'none'
 
-override_dram_c4:
+override_gpu_kv_c4:
   roles:
     agg:
       args:
         max-num-seqs: 2
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[8,16,24,32,48,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":7,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":12,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12]}'
+        additional-config: '{"decode_backend":"latency_specialized","kda_prefill_backend":"fused"}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        kv-transfer-config: null
+      env:
+        # Decode-only capture sizes, as at conc 1.
+        VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
   benchmark:
     env:
       CONC: '4'
-      KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
-
-override_dram_c10:
-  roles:
-    agg:
-      args:
-        max-num-seqs: 7
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-  benchmark:
-    env:
-      CONC: '10'
-      KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1799'
+      KV_OFFLOADING: 'none'
 
 override_dram_c16:
   roles:
     agg:
       args:
         max-num-seqs: 8
+        # Admit prefill only every 32nd engine step so decode runs in longer uninterrupted stretches.
+        prefill-schedule-interval: 32
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        # max-num-seqs is below CONC, so requests always wait and vLLM would otherwise
+        # drop the prefill hold (capacity escape); keep it.
+        VLLM_PREFILL_CADENCE_NO_ESCAPE: '1'
   benchmark:
     env:
       CONC: '16'
@@ -161,8 +166,11 @@ override_dram_c24:
     agg:
       args:
         max-num-seqs: 13
+        prefill-schedule-interval: 32
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":16384,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240,12288,14336,16384]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_PREFILL_CADENCE_NO_ESCAPE: '1'
   benchmark:
     env:
       CONC: '24'
@@ -176,12 +184,11 @@ override_dram_c32:
         max-num-seqs: 20
         max-num-batched-tokens: 10240
         gpu-memory-utilization: 0.91
-        # Admit prefill only every 8th engine step so decode runs in longer uninterrupted stretches.
-        prefill-schedule-interval: 8
-        long-prefill-token-threshold: 10240
-        long-prefill-token-threshold-adaptive: true
+        prefill-schedule-interval: 32
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,128,160,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
         speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_PREFILL_CADENCE_NO_ESCAPE: '1'
   benchmark:
     env:
       CONC: '32'
@@ -195,15 +202,10 @@ override_dram_c48:
         max-num-seqs: 48
         max-num-batched-tokens: 10240
         gpu-memory-utilization: 0.91
-        # Admit prefill only every 8th engine step so decode runs in longer uninterrupted stretches.
-        prefill-schedule-interval: 8
-        long-prefill-token-threshold: 10240
-        long-prefill-token-threshold-adaptive: true
-        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
-        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":6,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":10240,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,224,256,288,320,352,384,416,448,480,512,640,768,896,1024,1280,1536,1792,2048,2560,3072,3584,4096,4608,5120,6144,6400,7168,8192,8704,10240]}'
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":3,"attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
   benchmark:
     env:
       CONC: '48'
       KV_OFFLOADING: 'dram'
       TOTAL_CPU_DRAM_GB: '1799'
-
