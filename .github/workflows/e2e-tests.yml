@@ -95,6 +95,11 @@ on: # zizmor: ignore[concurrency-limits]
                 required: false
                 type: boolean
                 default: false
+            random-range-ratio:
+                description: "Fixed-sequence random range ratio for single-node throughput points"
+                required: false
+                type: string
+                default: "0.8"
     workflow_call:
         secrets:
           INFERENCEX_OFFICIAL_RO_HF_TOKEN:
@@ -680,6 +685,7 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
+            random-range-ratio: ${{ inputs.random-range-ratio || '0.8' }}
             ref: ${{ needs.get-jobs.outputs.benchmark-ref }}
             test-name: ${{ inputs.test-name }}
 
