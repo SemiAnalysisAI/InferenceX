@@ -4,7 +4,7 @@ Collective bus bandwidth on a Trainium3 UltraServer (4 x trn3.48xlarge, 64 chips
 `nccom-test` in the `trn3-ubench` image (Neuron SDK 2.33). Every run is one replica group over all ranks at LNC=2
 (64 ranks per node), bf16, on the nccl-tests size grid: 8 B .. 4 GiB, x2 per step. `trn3_intrachip_cc` covers the
 single chip on the same grid. `BUF=sbuf` runs all_gather, all_reduce and reduce_scatter SBUF to SBUF (`--sb2sb`,
-256 B .. 8 MiB) on one node only: the runtime rejects SB2SB across nodes (`We do not support a SB2SB for
+512 B .. 4 MiB) on one node only: the runtime rejects SB2SB across nodes (`We do not support a SB2SB for
 multi-node workloads`) and has no SBUF alltoall.
 
 | Topology | UltraServer nodes | Path between nodes |

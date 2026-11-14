@@ -14,13 +14,15 @@ MIN=8
 if [ "$OP" != all_reduce ]; then while [ $MIN -lt $((2 * R)) ]; do MIN=$((MIN * 2)); done; fi
 END=$MAXBYTES; SHAPE=()
 if [ "$BUF" = sbuf ]; then
-  # SBUF: 128 partitions x (size / 256) bf16, 256 B .. 8 MiB; the runtime rejects SB2SB across nodes and alltoall
+  # SBUF: 128 partitions x (size / 256) bf16, the runtime rejects SB2SB across nodes and has no SBUF alltoall.
+  # 512 B (2 bf16 per partition) .. 4 MiB: 256 B cannot split over the 2 cores of an LNC=2 rank, 8 MiB fails, and a
+  # failed SBUF run can leave a core without DMA queues so every later run on that chip fails until the driver reloads
   [ ${#IDX[@]} = 1 ] && [ "$OP" != alltoall ] || { echo "sbuf runs all_gather, all_reduce, reduce_scatter on one node" >&2; exit 1; }
-  MIN=256; END=8388608
+  MIN=512; END=4194304
   case $OP in
-    all_gather) MIN=$((256 * R)); SHAPE=(--output-shape "[1,131072][$R,128]" --cc-dim 0) ;;
-    all_reduce) SHAPE=(--input-shape "[1,131072][1,128]" --cc-dim 0) ;;
-    reduce_scatter) SHAPE=(--input-shape "[1,131072][1,128]" --cc-dim 1) ;;
+    all_gather) MIN=$((512 * R)); SHAPE=(--output-shape "[1,131072][$((2 * R)),128]" --cc-dim 0) ;;
+    all_reduce) SHAPE=(--input-shape "[1,131072][2,128]" --cc-dim 0) ;;
+    reduce_scatter) SHAPE=(--input-shape "[1,131072][2,128]" --cc-dim 1) ;;
   esac
   SHAPE+=(--sb2sb --sweep-dim 0)
 elif [ "$BUF" != hbm ]; then echo "BUF must be hbm or sbuf" >&2; exit 1; fi

@@ -17,10 +17,10 @@ import pandas as pd
 
 
 def first_size(op: str, ranks: int, buf: str) -> int:
-    # run.sh's start: HBM 8 B, raised for ops that split the buffer to one bf16 element per rank; SBUF 256 B,
-    # all_gather one bf16 per partition per rank
+    # run.sh's start: HBM 8 B, raised for ops that split the buffer to one bf16 element per rank; SBUF 512 B,
+    # all_gather two bf16 per partition per rank
     if buf == "sbuf":
-        return 256 * ranks if op == "all_gather" else 256
+        return 512 * ranks if op == "all_gather" else 512
     size = 8
     while op != "all_reduce" and size < 2 * ranks:
         size *= 2
