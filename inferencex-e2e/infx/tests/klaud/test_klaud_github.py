@@ -2371,6 +2371,7 @@ def test_baseline_freezes_published_points_of_every_curve_key(monkeypatch):
         "benchmark-siblings": {
             "sku": {"github_run_id": 42, "dataset_slug": "cc-traces-weka-062126"},
         },
+        "derived-agentic-metrics": {"4": {"id": 4, "p90_e2e_norm_intvty": 30.0}},
         "evaluations": [],
     }
     monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
@@ -2392,11 +2393,14 @@ def test_baseline_freezes_published_points_of_every_curve_key(monkeypatch):
     )  # fmt: skip
 
     assert {
-        point.key: (point.result, point.values.output_tps_gpu) for point in baseline.points
+        point.key: (
+            point.result, point.values.output_tps_gpu, point.values.dashboard.e2e_norm_intvty
+        )
+        for point in baseline.points
     } == {
-        reporting.point_key({**entry("none"), "conc": 4}): ("passed", 8.0),
-        reporting.point_key({**entry("mtp"), "conc": 4}): ("passed", 12.0),
-    }
+        reporting.point_key({**entry("none"), "conc": 4}): ("passed", 8.0, 30.0),
+        reporting.point_key({**entry("mtp"), "conc": 4}): ("passed", 12.0, None),
+    }  # fmt: skip
 
 
 MIXED_FAMILY = "configs/nvidia-master.yaml:agg,mtp"
@@ -2454,7 +2458,8 @@ def serve_mixed_curve(monkeypatch, agg="published"):
             url=f"https://inferencex.semianalysis.com/api/v1/{resource}",
             retrieved_at="2026-09-20T00:00:00Z", sha256="0" * 64,
             payload=[] if resource == "evaluations" else {"sku": sku}
-            if resource == "benchmark-siblings" else feeds[date][resource],
+            if resource == "benchmark-siblings" else {}
+            if resource == "derived-agentic-metrics" else feeds[date][resource],
         )  # fmt: skip
 
     monkeypatch.setattr(api, "fetch", fetch)
@@ -2827,6 +2832,7 @@ def publish(monkeypatch, head, slug="cc-traces-weka-062126"):
         "benchmark-siblings": {
             "sku": {"github_run_id": 42, **({"dataset_slug": slug} if slug else {})},
         },
+        "derived-agentic-metrics": {},
         "evaluations": [],
     }
     monkeypatch.setattr(api, "fetch", lambda resource, **_: Feed(
@@ -4106,6 +4112,27 @@ def test_a_fixed_sequence_result_reports_its_failed_requests(completed, errors, 
     assert values.output_tps_gpu == 50.0
     notes = [line.rstrip() for line in text.splitlines() if "request error" in line]
     assert notes == ([note] if note else [])
+
+
+def test_a_fixed_sequence_result_reads_the_dashboards_median_axes():
+    from infx.results.fixed_sequence import build_result
+
+    raw = {
+        "max_concurrency": 4, "model_id": "m", "num_prompts": 100, "completed": 100,
+        "total_token_throughput": 800.0, "output_throughput": 400.0,
+        "mean_ttft_ms": 300.0, "median_ttft_ms": 200.0, "p90_ttft_ms": 900.0,
+        "mean_tpot_ms": 30.0, "median_tpot_ms": 20.0, "p90_tpot_ms": 50.0,
+        "mean_e2el_ms": 9000.0, "median_e2el_ms": 8000.0, "p90_e2el_ms": 20000.0,
+    }  # fmt: skip
+    env = {
+        "RUNNER_TYPE": "h100", "FRAMEWORK": "sglang", "PRECISION": "fp8", "SPEC_DECODING": "none",
+        "ISL": "1024", "OSL": "1024", "DISAGG": "false", "MODEL_PREFIX": "dsr1", "IMAGE": "i:1",
+        "TP": "8", "EP_SIZE": "1", "DP_ATTENTION": "false",
+    }  # fmt: skip
+
+    axes = reporting.values(build_result(raw, env)).dashboard
+
+    assert axes == reporting.Dashboard(intvty=50.0, e2el_ms=8000.0, ttft_ms=200.0)
 
 
 def test_baseline_notes_name_concurrency_rows_like_their_table():
