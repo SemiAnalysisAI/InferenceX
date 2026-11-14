@@ -28,7 +28,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:745d4f16726e59fb04de0bcd7f598fd574fafeb384103c6f612351678bfee2f4
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:238b758c4cc682243dde5984de0565d9168fb332a2f60aba32cef200231bf943
   args:
     policy: consistent_hash
     prefill-policy: consistent_hash
@@ -57,7 +57,7 @@ roles:
       moe-backend: auto
       tensor-parallel-size: 8
       load-format: fastsafetensors
-      gpu-memory-utilization: 0.89
+      gpu-memory-utilization: 0.87
       language-model-only: true
       max-model-len: 1048576
       enable-prefix-caching: true
@@ -86,7 +86,6 @@ roles:
       scheduling-policy: shortest-prefill-first
     env:
       PATH: /configs/k31-worker-bin:/opt/runtime-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      AMD_LOG_LEVEL: '1'
       HOME: /private-state/k31-clean-home
       HF_HOME: /private-state/huggingface
       HF_HUB_CACHE: /private-state/huggingface/hub
@@ -146,6 +145,9 @@ roles:
       TRITON_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/triton
       TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/inductor
       K31_SIMPLECPU_OBSERVER: '1'
+      K31_RUNTIME_ROLE: P
+      VLLM_K3_SP_PREFILL: '1'
+      VLLM_K3_SP_PREFILL_MIN_TOKENS: '4096'
   decode:
     nodes: 1
     workers: 1
@@ -187,7 +189,6 @@ roles:
       watermark: 0.02
     env:
       PATH: /configs/k31-worker-bin:/opt/runtime-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      AMD_LOG_LEVEL: '1'
       HOME: /private-state/k31-clean-home
       HF_HOME: /private-state/huggingface
       HF_HUB_CACHE: /private-state/huggingface/hub
@@ -247,7 +248,9 @@ roles:
       TRITON_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/triton
       TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/inductor
       VLLM_DCP_Q_REPLICATE: '1'
-      VLLM_K31_CPRR_SPLIT96: '1'
+      VLLM_K31_CPRR_SPLIT96: '0'
+      K31_RUNTIME_ROLE: D
+      VLLM_K3_SP_PREFILL: '0'
 benchmark:
   env:
     AGENTIC_MODEL_READY_TIMEOUT_SECONDS: '300'
@@ -267,7 +270,7 @@ environment:
   TOTAL_CPU_DRAM_GB: '1799'
   DECODE_CPU_DRAM_GB: '0'
   KV_P2P_TRANSFER: moriio
-  K31_CLEAN_RUN_ID: k31-r10-sa-full-1113
+  K31_CLEAN_RUN_ID: k31-sp-sa-1114
 telemetry:
   storage_subdir: power
   startup_timeout_seconds: 300

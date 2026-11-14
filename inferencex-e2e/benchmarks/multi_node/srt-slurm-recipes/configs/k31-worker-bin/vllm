@@ -3,6 +3,9 @@ import json
 import os
 import resource
 import sys
+import subprocess
+
+subprocess.run([sys.executable, "/opt/k31-pr26/prepare_role.py"], check=True)
 
 soft, hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
 print(json.dumps({"event": "worker_memlock_before", "pid": os.getpid(),
