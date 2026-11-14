@@ -179,8 +179,13 @@ override_tp4_sd_c12:
         async-scheduling: true
         additional-config: '{"decode_backend":"latency_specialized"}'
 # Concurrency 16 outgrows the fp8 KV pool (about half NVFP4's tokens): prefixes of
-# waiting sessions get evicted and re-prefilled. Add the CPU tier of the c32/c40
-# points (vLLM #66324 allows SimpleCPUOffloadConnector with the specialized decode).
+# waiting sessions get evicted and re-prefilled. A CPU tier holds them (vLLM #66324
+# allows SimpleCPUOffloadConnector with the specialized decode). cpu_bytes_to_use is
+# server-wide, so the c32/c40 points' 360 GB is 90 GB a rank: about the fp8 GPU
+# pool's 3.2M tokens, and reloaded prefixes stay cached on both tiers, so it held
+# little more than the GPUs. 640 GB (160 GB a rank, about 5.8M fp8 tokens, 71% of
+# the node's 860,160 MiB) covers stock NVFP4's 6.55M-token pool. The GPUs keep the
+# 0.88 memory utilization of the other specialized points.
 override_tp4_sd_dram_c16:
   name: minimaxm31flash-gb200-agg-tp4-sd-dram-c16
   setup_script: minimaxm31flash-vllm-patches.sh
@@ -188,11 +193,11 @@ override_tp4_sd_dram_c16:
     agg:
       args:
         max-num-seqs: 32
-        gpu-memory-utilization: 0.82
+        gpu-memory-utilization: 0.88
         kv-cache-dtype: fp8
         attention-config: '{"indexer_kv_dtype":"fp8"}'
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         async-scheduling: true
         additional-config: '{"decode_backend":"latency_specialized"}'
         kv-cache-metrics: true
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":360000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":640000000000,"lazy_offload":true}}'
