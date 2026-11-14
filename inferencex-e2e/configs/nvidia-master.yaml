@@ -4391,27 +4391,28 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp2[2]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp2[3]' }
 
-# GLM-5.2 8k1k on H100 with SGLang. The 756 GB FP8 checkpoint does not fit
-# 8x80 GB, so this runs the ~433 GB NVFP4 checkpoint with Marlin experts in
-# the cookbook's B200 NVFP4 "balanced" shape (TP8 + 8-way DP attention, no
-# MTP). Same nightly as glm5.2-fp4-b200-sglang-agentic-mtp; CUDA 13 nightlies
-# already serve dsv41flash-fp4-h100-sglang-agentic-dspark. Concurrency stops at
-# 128 for the ~14 GB/GPU KV pool.
-glm5.2-fp4-h100-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261027-5884e4fe@sha256:61b9083bdcb7cf3741366f487cb996c05ea33ad2ddddc820d10cbc1c0cfb0a86
+# GLM-5.2 8k1k on H100 with vLLM. The 756 GB FP8 checkpoint does not fit
+# 8x80 GB, so this serves the ~433 GB NVFP4 checkpoint with Marlin MoE
+# (Hopper has no FP4 tensor cores); SGLang's modelopt_fp4 path OOMed creating
+# the expert weights on H100. Flags follow recipes.vllm.ai's GLM-5.2 NVFP4
+# command (TP8 + expert parallel, FP8 KV) without MTP. v0.33.0 is past the
+# recipe's 0.28 minimum and already serves dsv41flash on Hopper. Concurrency
+# stops at 128 for the ~16 GB/GPU KV pool.
+glm5.2-fp4-h100-vllm:
+  image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:h100-dsxe
   precision: fp4
-  framework: sglang
+  framework: vllm
   multinode: false
-  srt-recipe-dir: glm5.2/sglang/h100-fp4
+  srt-recipe-dir: glm5.2/vllm/h100-fp4
   scenarios:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, dp-attn: true, conc-start: 8, conc-end: 128, srt-recipe: 8k1k.yaml }
+      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128, srt-recipe: 8k1k.yaml }
 
 # MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),

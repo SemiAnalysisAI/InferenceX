@@ -12868,10 +12868,10 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4618
 
 - config-keys:
-    - glm5.2-fp4-h100-sglang
+    - glm5.2-fp4-h100-vllm
   scenario-type:
     - fixed-seq-len
   description:
-    - "Add GLM-5.2 single-node 8k1k on H100 with SGLang (lmsysorg/sglang:nightly-dev-cu13-20261027-5884e4fe). The 756 GB FP8 checkpoint does not fit 8x80 GB, so it serves nvidia/GLM-5.2-NVFP4 with Marlin MoE (BF16 activations) on Hopper."
-    - "Shape follows the SGLang cookbook's B200 NVFP4 balanced cell without MTP: TP8 with 8-way DP attention, FP8 KV, max 256 running requests; chunked prefill 16384 and mem-fraction 0.85 for 80 GB GPUs; concurrency 8 to 128."
+    - "Add GLM-5.2 single-node 8k1k on H100 with vLLM (vllm/vllm-openai:v0.33.0). The 756 GB FP8 checkpoint does not fit 8x80 GB, so it serves nvidia/GLM-5.2-NVFP4 with Marlin MoE on Hopper; SGLang's modelopt_fp4 path OOMed creating the expert weights."
+    - "Flags follow recipes.vllm.ai's GLM-5.2 NVFP4 command without MTP: TP8 with expert parallel, FP8 KV, gpu-memory-utilization 0.90, 16384 batched tokens, prefix caching off; concurrency 4 to 128 with max-num-seqs matched to concurrency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5079

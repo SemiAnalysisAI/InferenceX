@@ -1,0 +1,58 @@
+# GLM-5.2 NVFP4 on H100, 8k1k, vLLM. The 756 GB FP8 checkpoint does not fit
+# 8x80 GB, so this serves the ~433 GB NVFP4 checkpoint (the B200 weights).
+# SGLang's modelopt_fp4 path OOMs on Hopper while creating the expert weights,
+# so this uses vLLM, whose Marlin MoE keeps NVFP4 packed on Hopper (as
+# minimaxm31flash-fp4-h100-vllm does). Flags follow the NVFP4 serve command at
+# recipes.vllm.ai/zai-org/GLM-5.2 (TP8 + expert parallel, FP8 KV), without MTP.
+base:
+  schema: 2
+  name: glm5.2-fp4-h100-vllm-8k1k
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # Cold load of the checkpoint from shared NFS can outlast the default window.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 360
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: nvidia/GLM-5.2-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        enable-expert-parallel: true
+        # Hopper has no FP4 tensor cores; NVFP4 experts run on Marlin.
+        moe-backend: marlin
+        kv-cache-dtype: fp8
+        # ~54 GB/GPU of weights; 0.90 leaves ~16 GB/GPU for KV and activations.
+        gpu-memory-utilization: 0.90
+        max-num-batched-tokens: 16384
+        no-enable-prefix-caching: true
+        disable-uvicorn-access-log: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        VLLM_ENGINE_READY_TIMEOUT_S: '3600'
+
+# Admission and decode graphs sized to the request concurrency.
+zip_override_tep8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: [4, 8, 16, 32, 64, 128]
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64', '128']
