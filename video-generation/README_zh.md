@@ -25,7 +25,7 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 与绑定值一致。
 
 - `serve` 记录封存的服务端 spec 与启动信息，然后在任务的 GPU 上 exec
-  引擎（`sglang` 或 `vllm-omni`）。
+  引擎（`sglang`、`vllm-omni` 或 `sol-engine`）。
 - `client` 对服务端点按 `CONC_LIST` 的每个并发度运行同一计划，每个并发度一个
   `gpu/c<N>/` 单元，并发布各单元的测量窗口。
 

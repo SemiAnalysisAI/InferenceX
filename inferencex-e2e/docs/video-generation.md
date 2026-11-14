@@ -3,7 +3,9 @@
 The `video-generation` scenario schedules one server job per deployment. SGLang
 selects C1 deployments on 1, 2, 4 and 8 B200, H200 or MI355X GPUs (Ulysses
 across all GPUs) and on 2, 4 and 8 H100 GPUs (TP2, since the model does not fit
-one 80 GB GPU), and vLLM-Omni the same four B200 deployments, all using
+one 80 GB GPU), vLLM-Omni the same four B200 deployments, and Sol-Engine
+the same three H100 deployments (per-layer weight sharding and Ulysses across
+all GPUs, dense attention), all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
 124/24 seconds of video. Config presence is not GPU or quality qualification.
@@ -30,8 +32,8 @@ worker settings. The binder substitutes `{model_path}`, `{model_id}`,
 `{model_revision}`, and `{gpus_per_node}` in service args/env, and rejects
 model, revision, port, or GPU-count mismatches before submission. Other native
 srt-slurm service placeholders retain their existing meaning. For a schema version 2
-fairness plan, the binder also requires SGLang's `--disable-conditioning-cache`
-or vLLM-Omni's `OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0` in the selected recipe.
+fairness plan, the binder also requires SGLang's or Sol-Engine's
+`--disable-conditioning-cache` or vLLM-Omni's `OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0` in the selected recipe.
 It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.
 
