@@ -1,10 +1,13 @@
-# GLM-5.2 FP8 on H200, 8k1k, SGLang cookbook "balanced" single-node cell
-# (docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2, h200/fp8/balanced,
-# verified) with its EAGLE flags removed: TP8 with 8-way DP attention, DeepEP
-# MoE all-to-all, mem-fraction 0.85, chunked prefill 32768, 256 running requests.
+# GLM-5.2 NVFP4 on H200, 8k1k, SGLang. Shape follows the cookbook's H200
+# "balanced" cell without MTP (TP8 with 8-way DP attention, mem-fraction 0.85,
+# chunked prefill 32768, 256 running requests) on the ~433 GB NVFP4 checkpoint.
+# Hopper has no FP4 tensor cores, so NVFP4 experts run on Marlin (BF16
+# activations), TP-sharded without DeepEP. The checkpoint leaves attention in
+# BF16, and DP attention replicates it (~29 GB/GPU) beside ~50 GB of experts:
+# that is what OOMed 80 GB H100s in create_weights; 141 GB H200 holds it.
 base:
   schema: 2
-  name: glm5.2-fp8-h200-sglang-8k1k
+  name: glm5.2-fp4-h200-sglang-8k1k
   resources:
     gpu_type: h200
     gpus_per_node: 8
@@ -22,16 +25,16 @@ base:
       workers: 1
       gpus: 8
       args:
-        served-model-name: zai-org/GLM-5.2-FP8
+        served-model-name: nvidia/GLM-5.2-NVFP4
         trust-remote-code: true
         tensor-parallel-size: 8
         # Cookbook --attn-dp-size 8; spelled the pre-#41818 way so the
         # matrix's DP_ATTENTION check reads it.
         data-parallel-size: 8
         enable-dp-attention: true
-        # DeepEP routes experts across all 8 ranks (EP8).
-        moe-a2a-backend: deepep
-        expert-parallel-size: 8
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        moe-runner-backend: marlin
         kv-cache-dtype: fp8_e4m3
         # Hopper DSA decode backend used by the GLM-5.2 H200 AgentX recipes.
         dsa-decode-backend: flashmla_kv
