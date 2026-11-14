@@ -4406,12 +4406,31 @@ glm5.2-fp8-h200-sglang:
   framework: sglang
   multinode: false
   srt-recipe-dir: glm5.2/sglang/h200-fp8
+
+# GLM-5.2 8k1k on H100 with vLLM. The 756 GB FP8 checkpoint does not fit
+# 8x80 GB, so this serves the ~433 GB NVFP4 checkpoint with Marlin MoE
+# (Hopper has no FP4 tensor cores); SGLang's modelopt_fp4 path OOMed creating
+# the expert weights on H100. Flags follow recipes.vllm.ai's GLM-5.2 NVFP4
+# command (TP8 + expert parallel, FP8 KV) without MTP. v0.33.0 is past the
+# recipe's 0.28 minimum and already serves dsv41flash on Hopper. Concurrency
+# stops at 16: ~9 GiB/GPU of KV at 0.88 holds ~19 9.5k-token requests.
+glm5.2-fp4-h100-vllm:
+  image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:h100-dsxe
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: glm5.2/vllm/h100-fp4
   scenarios:
     fixed-seq-len:
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 8, conc-end: 256, srt-recipe: 8k1k.yaml }
+
+      - { tp: 8, ep: 8, conc-list: [4, 8, 16], srt-recipe: 8k1k.yaml }
 
 # MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),

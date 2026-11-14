@@ -12883,3 +12883,11 @@
     - "Add GLM-5.2 FP8 H200 single-node 8k1k on SGLang (lmsysorg/sglang:nightly-dev-20261020-ab580b2e, the image glm5.2-fp8-b200-sglang-agentic-mtp runs)."
     - "Recipe is the SGLang cookbook's verified H200 FP8 balanced cell without MTP: TP8 with 8-way DP attention, DeepEP EP8, FP8 KV with the flashmla_kv DSA decode backend, chunked prefill 32768, mem-fraction 0.85, max 256 running requests; concurrency 8 to 256 with decode CUDA graphs sized to concurrency."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5078
+
+    - glm5.2-fp4-h100-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add GLM-5.2 single-node 8k1k on H100 with vLLM (vllm/vllm-openai:v0.33.0). The 756 GB FP8 checkpoint does not fit 8x80 GB, so it serves nvidia/GLM-5.2-NVFP4 with Marlin MoE on Hopper; SGLang's modelopt_fp4 path OOMed creating the expert weights."
+    - "Flags follow recipes.vllm.ai's GLM-5.2 NVFP4 command without MTP: TP8 with expert parallel, FP8 KV, max-model-len 9472, gpu-memory-utilization 0.88 and 8192 batched tokens (0.95 with 16384 OOMed in FlashInfer warmup), prefix caching off; concurrency 4, 8 and 16 (the ~9 GiB KV pool holds ~19 requests) with max-num-seqs matched to concurrency."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5079
