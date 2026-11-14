@@ -192,21 +192,12 @@ jobs:
     runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; callers gate fork PRs behind maintainer-applied sweep labels
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            toJSON(format('nodes:{0}', inputs.node-count)),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          )
+        format(
+          '["self-hosted",{0},{1},{2},{3}]',
+          toJSON(inputs.runner),
+          toJSON(format('nodes:{0}', inputs.node-count)),
+          toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
