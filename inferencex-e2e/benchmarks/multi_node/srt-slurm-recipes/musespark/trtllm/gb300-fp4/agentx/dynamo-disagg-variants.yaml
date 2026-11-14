@@ -65,6 +65,7 @@ base:
         OMP_NUM_THREADS: '1'
         TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
         MPI_UCX_TLS: rc,ud,sm,self
+        MPI_UCX_NET_DEVICES: mlx5_0:1,mlx5_2:1
         OMPI_MCA_coll: ^ucc,hcoll
         NCCL_CUMEM_ENABLE: '1'
         NCCL_MNNVL_ENABLE: '1'
@@ -157,6 +158,7 @@ base:
         OMP_NUM_THREADS: '1'
         TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
         MPI_UCX_TLS: rc,ud,sm,self
+        MPI_UCX_NET_DEVICES: mlx5_0:1,mlx5_2:1
         OMPI_MCA_coll: ^ucc,hcoll
         NCCL_CUMEM_ENABLE: '1'
         NCCL_MNNVL_ENABLE: '1'
