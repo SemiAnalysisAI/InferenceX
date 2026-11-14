@@ -7828,7 +7828,7 @@ wan22-bf16-b300-vllm-omni-video:
   scenarios:
     video-generation:
       - spec: wan22.yaml
-        set: release-v1
+        set: smoke
         search-space:
           - gpus: 8
             srt-recipe: serving-client.yaml
