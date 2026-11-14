@@ -4391,12 +4391,13 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40], srt-recipe: 'agentic.yaml:zip_override_tp2[2]' }
       - { tp: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48], srt-recipe: 'agentic.yaml:zip_override_tp2[3]' }
 
-# GLM-5.2 FP8 H200 8k1k on SGLang: the cookbook's verified "balanced"
-# single-node cell (TP8 + 8-way DP attention, DeepEP EP8, mem-fraction 0.85,
-# chunked prefill 32768, 256 running requests) with MTP off. Image is the
-# CUDA 12 nightly glm5.2-fp8-b200-sglang-agentic-mtp runs; the H200 AgentX
-# nightly (20260914) is no longer on Docker Hub. The 756 GB checkpoint fills
-# ~94 GB of each H200's 141 GB, so TP8 only.
+# GLM-5.2 NVFP4 H200 8k1k on SGLang: the cookbook's H200 "balanced" shape
+# (TP8 + 8-way DP attention, mem-fraction 0.85, chunked prefill 32768, 256
+# running requests) with MTP off. Hopper has no FP4 tensor cores, so experts
+# run on Marlin, TP-sharded (EP1, no DeepEP). DP attention replicates the
+# checkpoint's BF16 attention (~29 GB/GPU) beside ~50 GB of experts, which
+# OOMs 80 GB H100 but fits H200's 141 GB. Image is the CUDA 12 nightly
+# glm5.2-fp8-b200-sglang-agentic-mtp runs.
 glm5.2-fp4-h200-sglang:
   image: lmsysorg/sglang:nightly-dev-20261020-ab580b2e@sha256:0af411bb320a95bb5e1c58b4c20c9852920a19aa9f12f148f69731b0dca3b576
   model: nvidia/GLM-5.2-NVFP4
