@@ -12816,3 +12816,10 @@
     - "Use image lmsysorg/sglang:nightly-dev-20261013-7224fce1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5006
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type: [agentic-coding]
+  description:
+    - "Update SGLang image to v0.5.23-rocm10-mi35x-20261112 and drop expandable_segments from TP4 points for aiter all-reduce."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5055
