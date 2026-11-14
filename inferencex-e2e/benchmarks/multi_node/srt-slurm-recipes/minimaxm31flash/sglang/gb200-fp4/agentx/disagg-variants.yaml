@@ -204,15 +204,16 @@ override_1p_dep8_dep8:
         max-running-requests: 512
         mem-fraction-static: 0.88
 
-override_1p_dep8_dep8_dynamo1030:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-dynamo1030
-  # The 11-03 nightly bundles a Dynamo whose decode handler imports
-  # MultimodalProcessorOutput, which that SGLang does not have yet; pin the
-  # Dynamo that the 10-30 image ships.
+override_1p_dep8_dep8_dynamo1111:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-dynamo1111
+  # The 11-03 and 11-06 nightlies bundle a Dynamo that imports
+  # MultimodalProcessorOutput from schedule_batch, which SGLang moved to
+  # req_types on 11-02 (sglang#48087); Dynamo reads either location from
+  # 11-06 (ai-dynamo/dynamo#18293). Pin the Dynamo that the 11-12 image ships.
   dynamo:
     install: true
     source:
-      wheel: 1.7.0.dev20261030
+      wheel: 1.7.0.dev20261111
   roles:
     prefill:
       nodes: 2
