@@ -40,10 +40,11 @@ base:
         # The binder sets context only for eval-only runs, and vLLM otherwise
         # defaults to the 1M native context: 8192 + 1024 + 256 slack.
         max-model-len: 9472
-        # ~54 GB/GPU of weights; 0.90 left only 8.9 GiB of KV (~177k tokens).
-        # 0.95 gives ~27 concurrent 9.5k-token requests.
-        gpu-memory-utilization: 0.95
-        max-num-batched-tokens: 16384
+        # 57 GiB/GPU of weights. 0.95 (14.5 GiB KV) OOMed in the FlashInfer
+        # warmup at 16384 tokens when FP8 FlashMLA asked for 4 GiB of scratch;
+        # 0.88 with an 8192-token batch leaves that headroom and ~9 GiB of KV.
+        gpu-memory-utilization: 0.88
+        max-num-batched-tokens: 8192
         no-enable-prefix-caching: true
         disable-uvicorn-access-log: true
       env:
@@ -56,7 +57,7 @@ zip_override_tep8:
   roles:
     agg:
       args:
-        max-num-seqs: [4, 8, 16, 24]
+        max-num-seqs: [4, 8, 16]
   benchmark:
     env:
-      CONC: ['4', '8', '16', '24']
+      CONC: ['4', '8', '16']
