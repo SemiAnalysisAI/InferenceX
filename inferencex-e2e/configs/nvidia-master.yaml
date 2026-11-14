@@ -8199,7 +8199,7 @@ kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: 3dd0744eb72c707d76d4c520ae4dea9e286a4ab6 }
+  router: { name: dynamo-router, version: 229be5cff1156859b0e3e43b598ee800b2f81ccc }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -8278,7 +8278,7 @@ kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep32-disagg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: 3dd0744eb72c707d76d4c520ae4dea9e286a4ab6 }
+  router: { name: dynamo-router, version: 229be5cff1156859b0e3e43b598ee800b2f81ccc }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -8304,7 +8304,7 @@ kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: 3dd0744eb72c707d76d4c520ae4dea9e286a4ab6 }
+  router: { name: dynamo-router, version: 229be5cff1156859b0e3e43b598ee800b2f81ccc }
   multinode: true
   disagg: false
   srt-recipe-dir: kimik3.1/vllm/gb300-fp4/agentx
