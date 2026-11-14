@@ -170,6 +170,10 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
             host_setup["timeout_seconds"] = setup.timeout_s
         if setup.nodes is not None:
             host_setup["nodes"] = setup.nodes
+        # Test only (thshan/glm52-pd-test-c48): a teardown.sh beside the hook runs at teardown.
+        teardown = job.workspace / setup.script.parent / "teardown.sh"
+        if teardown.is_file():
+            host_setup.setdefault("teardown", []).append(f"bash {shlex.quote(str(teardown))}")
         config["default_host_setup"] = host_setup
     if job.cpu_power_source == "rapl":
         host_setup = config.setdefault("default_host_setup", {"commands": []})

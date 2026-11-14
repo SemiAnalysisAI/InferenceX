@@ -63,3 +63,27 @@ if (( after_free > reserved )); then
     echo "Host preparation could not reclaim all unused hugepages" >&2
     exit 1
 fi
+
+# Test only (branch thshan/glm52-pd-test-c48): a recipe whose name contains "_hugetlb"
+# backs its HiCache host pools with 2 MiB hugetlb pages (SGLANG_HUGEPAGE_MODE=required),
+# which memory compaction does not migrate. 710,000 pages (1,387 GiB) cover four PP ranks'
+# KV + DSA indexer pools (~1,370 GiB). Reserved after the reclaim checks above;
+# teardown.sh and every later job's setup release whatever is left free.
+if [[ "${SRT_RECIPE:-}" == *_hugetlb* ]]; then
+    want=$((used + reserved + 710000))
+    sync
+    echo 1 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null
+    for attempt in 1 2 3; do
+        printf '%s\n' "$want" | sudo -n tee "$nr_hugepages" >/dev/null
+        got=$(read_hugepage_value HugePages_Total)
+        echo "hugetlb reservation attempt ${attempt}: ${got} of ${want} 2 MiB pages"
+        (( got >= want )) && break
+        sleep 20
+    done
+    grep -h -E 'HugePages_(Total|Free)' /sys/devices/system/node/node*/meminfo
+    if (( got < want )); then
+        printf '%s\n' "$((used + reserved))" | sudo -n tee "$nr_hugepages" >/dev/null
+        echo "Could not reserve ${want} hugetlb pages (got ${got})" >&2
+        exit 1
+    fi
+fi
