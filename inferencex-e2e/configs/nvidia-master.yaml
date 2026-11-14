@@ -4214,7 +4214,7 @@ qwen3.8next-fp4-b200-sglang-agentic-mtp:
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [8], srt-recipe: agentic.yaml }
       - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 24, 32], srt-recipe: agentic.yaml }
 qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-cu130@sha256:e3a4f06001a29542fc4a8638536d9ffc5eb9c9942b08603c09b19a56eae4a1ae
+  image: lmsysorg/sglang:v0.5.23-cu130@sha256:f832b5c39559c9caa900b22ad37c76fcce66470676855c42052102c537812f1f
   model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: cluster:gb200-nv
