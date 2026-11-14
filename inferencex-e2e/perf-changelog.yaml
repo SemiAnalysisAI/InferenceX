@@ -12869,6 +12869,7 @@
 
 - config-keys:
     - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
   scenario-type:
     - agentic-coding
   description:
@@ -12877,5 +12878,6 @@
     - "Specialized TP4 points at concurrency 1, 4, 8 and 12 (max-num-seqs 2x concurrency, gpu-memory-utilization 0.88) replace stock concurrency 1, 4 and 8. They run fp8 KV and fp8 index-K caches (the executor refuses NVFP4), the FLASHINFER_TS DSpark drafter backend and explicit async scheduling; every other engine setting matches the stock points."
     - "Concurrency 16 runs the specialized decode with the CPU KV tier of the concurrency 32 and 40 points (SimpleCPUOffloadConnector, 360 GB, lazy offload, gpu-memory-utilization 0.82, KV cache metrics), which #66324 now allows. In the first sweep the specialized c16 point without it beat stock c16 at the median (448 vs 413 tok/s/user) but trailed at p90 (264 vs 292): its fp8 KV pool holds 3.66M tokens against stock NVFP4's 6.55M, so cached prefixes of waiting sessions were evicted and it recomputed 32.1M prompt tokens against 11.3M. Stock concurrency 16 stays as the comparison point."
     - "The specialized concurrency 20 and 24 points are dropped: the fp8 KV pool was full there (prefix-cache hit rate 87-90%, TTFT p90 1.8-2.9 s). Concurrency 32 and 40 keep their stock DRAM-offload configs unchanged."
+    - "Rerun the disaggregated key unchanged (same image and recipes) so the sweep publishes the whole GB200 Dynamo vLLM curve, aggregated and disaggregated points together."
     - "Removal plan: once vllm#66324 is in a nightly, move to that nightly and drop the setup_script and patch."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5076
