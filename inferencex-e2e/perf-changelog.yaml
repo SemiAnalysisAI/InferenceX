@@ -12599,3 +12599,9 @@
   description:
     - Use the measured K3 golden AL2.88, PR26 prefill sequence parallelism and decode multi-stream fusion stack; preserve P GMU0.87, D GMU0.92, D padded heads and 3600-second profiling. Normalize unknown peer TP consistently for hybrid WRITE, preserving explicit heterogeneous-TP rejection. Pin model and router artifacts and retain source-role verification.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Run the shared K3 AL2.88 1P1D c128 stack for 3600 seconds with full warmup: generic eager preparation and draft metadata, prefill row-tail and decode MoE front fusion, native96 CPRR with compact AITER scratch. Retain published hybrid WRITE fixes and role-specific graph, memory, and cache settings; disable split96.
+  pr-link: https://github.com/seungrokj/mum/pull/24

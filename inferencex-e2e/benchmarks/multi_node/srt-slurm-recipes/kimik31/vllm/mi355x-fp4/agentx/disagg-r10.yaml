@@ -84,6 +84,7 @@ roles:
       mamba-cache-mode: align
       block-size: 64
       scheduling-policy: shortest-prefill-first
+      enable-prompt-tokens-details: true
     env:
       PATH: /configs/k31-worker-bin:/opt/runtime-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       HOME: /private-state/k31-clean-home
@@ -148,6 +149,12 @@ roles:
       K31_RUNTIME_ROLE: P
       VLLM_K3_SP_PREFILL: '1'
       VLLM_K3_SP_PREFILL_MIN_TOKENS: '4096'
+      VLLM_K31_BEAT_EAGERPREP: '1'
+      VLLM_K31_BEAT_DRAFTMETA: '1'
+      VLLM_K31_CPRR_NATIVE96: '0'
+      VLLM_K31_CPRR_SPLIT96: '0'
+      VLLM_ROCM_K3_MOE_ROW_TAIL: '1'
+      VLLM_ROCM_K3_MOE_ROW_TAIL_MIN_TOKENS: '8192'
   decode:
     nodes: 1
     workers: 1
@@ -174,7 +181,7 @@ roles:
         "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "ROCM_AITER_MLA", "kv_cache_dtype":
         "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method": "synthetic", "synthetic_acceptance_length":
         2.88}'
-      additional-config: '{"kda_prefill_backend":"fused"}'
+      additional-config: '{"kda_prefill_backend": "fused", "k31_moe_front_pair": true}'
       kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
@@ -187,6 +194,7 @@ roles:
       scheduling-policy: fcfs
       use-replayssm: true
       watermark: 0.02
+      enable-prompt-tokens-details: true
     env:
       PATH: /configs/k31-worker-bin:/opt/runtime-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       HOME: /private-state/k31-clean-home
@@ -251,6 +259,9 @@ roles:
       VLLM_K31_CPRR_SPLIT96: '0'
       K31_RUNTIME_ROLE: D
       VLLM_K3_SP_PREFILL: '0'
+      VLLM_K31_BEAT_EAGERPREP: '1'
+      VLLM_K31_BEAT_DRAFTMETA: '1'
+      VLLM_K31_CPRR_NATIVE96: '1'
 benchmark:
   env:
     AGENTIC_MODEL_READY_TIMEOUT_SECONDS: '300'
@@ -270,7 +281,7 @@ environment:
   TOTAL_CPU_DRAM_GB: '1799'
   DECODE_CPU_DRAM_GB: '0'
   KV_P2P_TRANSFER: moriio
-  K31_CLEAN_RUN_ID: k31-ms-1114
+  K31_CLEAN_RUN_ID: k31-pd-1115
 telemetry:
   storage_subdir: power
   startup_timeout_seconds: 300
