@@ -12869,6 +12869,7 @@
 
 - config-keys:
     - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
   scenario-type:
     - agentic-coding
   description:
@@ -12876,5 +12877,6 @@
     - "Apply vllm-project/vllm#66324 (MiniMax-M3.1-Flash specialized decode, CuTe DSL; head a4d6ba43c) to the nightly through setup_script minimaxm31flash-vllm-patches.sh on the specialized points, and enable it with additional-config decode_backend latency_specialized. The executor covers FULL-graph decode steps of up to 8 requests x 8 rows (DSpark K = 7) and falls back to the stock forward above that."
     - "Specialized TP4 points at concurrency 1, 4, 8 and 12 (max-num-seqs 2x concurrency) replace stock concurrency 1, 4 and 8. They run fp8 KV and fp8 index-K caches (the executor refuses NVFP4), the FLASHINFER_TS DSpark drafter backend and explicit async scheduling; every other engine setting matches the stock points."
     - "Concurrency 16 runs the specialized decode with a CPU KV tier (SimpleCPUOffloadConnector, 360 GB, lazy offload, KV cache metrics), which #66324 now allows. On GB200 (#5076) the specialized c16 point without it trailed stock at p90 because its fp8 KV pool, about half NVFP4's tokens, evicted cached prefixes of waiting sessions. Stock concurrency 16 and 32 stay unchanged."
+    - "Rerun the disaggregated key unchanged (same image and recipes) so the sweep publishes the whole GB300 Dynamo vLLM curve, aggregated and disaggregated points together."
     - "Removal plan: once vllm#66324 is in a nightly, move to that nightly and drop the setup_script and patch."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5075
