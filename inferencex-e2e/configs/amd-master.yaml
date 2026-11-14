@@ -1153,7 +1153,7 @@ dsv41flash-fp4-mi355x-sglang-agentic-dspark:
       - { tp: 2, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
 
 musespark-fp4-mi355x-sglang-agentic-dflash:
-  image: lmsysorg/sglang-rocm:muse-spark-open-mi355-1106@sha256:d231181df079a5b271a0459d024492c84a36caf8cb26ee019abad29e17eea4d2
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261112@sha256:d62fd730ec3f962073bd0e303942f207c178a0d953ee7c9ef9760624d5d532f0
   model: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
   model-prefix: musespark
   runner: cluster:mi355x-amds

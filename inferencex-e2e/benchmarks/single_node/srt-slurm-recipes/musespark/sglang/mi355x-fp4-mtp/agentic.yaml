@@ -131,8 +131,6 @@ override_tp4_c28:
         scheduler-recv-interval: 1
         mem-fraction-static: 0.86
       env:
-        PYTORCH_HIP_ALLOC_CONF: expandable_segments:True
-        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
       gpus: 4
@@ -163,8 +161,6 @@ override_tp4_c36:
         stream-interval: 20
         mem-fraction-static: 0.86
       env:
-        PYTORCH_HIP_ALLOC_CONF: expandable_segments:True
-        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
       gpus: 4
   benchmark:
@@ -194,8 +190,6 @@ override_tp4_c40:
         stream-interval: 20
         mem-fraction-static: 0.86
       env:
-        PYTORCH_HIP_ALLOC_CONF: expandable_segments:True
-        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
       gpus: 4
   benchmark:
