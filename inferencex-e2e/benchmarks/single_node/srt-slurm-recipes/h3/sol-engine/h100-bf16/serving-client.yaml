@@ -1,0 +1,56 @@
+schema: 2
+name: h3-sol-engine-serving-client
+
+resources:
+  gpu_type: h100
+
+services:
+  - name: video-server
+    type: generic
+    nodes: 1
+    critical: true
+    start: before_workers
+    command: [python3, -m, infx.bench, video, serve]
+    args:
+      - --model-view
+      - snapshot
+      - --
+      - /opt/sol-engine/venv/bin/python3
+      # the image's single entry point; H3_SERVER=h100 below pins models/minimax_h3/H100/serve_h100.py
+      - /opt/sol-engine/docker/gb200/serve.py
+      - --model-path
+      - "{model_path}"
+      - --served-model-name
+      - "{model_id}"
+      - --num-gpus
+      - "{gpus_per_node}"
+      - --attention
+      - dense
+      - --precision
+      - bf16
+      - --disable-conditioning-cache
+      - --host
+      - 0.0.0.0
+      - --port
+      - "30283"
+    env:
+      # keeps the image's own PYTHONPATH entry
+      PYTHONPATH: /video-package:/infmax-workspace:/opt/sol-engine/techniques/sparse_backends
+      PYTHONUNBUFFERED: "1"
+      VIDEO_SERVER_PORT: "30283"
+      VIDEO_RUNTIME_REVISION: d8fee0c4f636a22f5a1bd96837c26f2084428341
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      H3_SERVER: h100
+      H3_OUTPUT_DIR: /tmp/sol-engine/outputs
+      H3_SCRATCH: /tmp/sol-engine/scratch
+      TRITON_CACHE_DIR: /tmp/sol-engine/triton
+      TORCHINDUCTOR_CACHE_DIR: /tmp/sol-engine/inductor
+      CUTE_DSL_CACHE_DIR: /tmp/sol-engine/cute
+    readiness:
+      http:
+        port: 30283
+        path: /health
+      # every rank loads the full pipeline into host memory before sharding (about 10-15 min on H100)
+      timeout_seconds: 3600
+      interval_seconds: 5

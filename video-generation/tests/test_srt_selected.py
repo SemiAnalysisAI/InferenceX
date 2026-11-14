@@ -246,3 +246,54 @@ def test_rocm_server_names_hip_devices_by_board_serial(tmp_path, monkeypatch):
     launch = json.loads((output / "launch.json").read_text())
     assert spec["gpu_uuids"] == launch["gpu_uuids"] == ["PCB-F5", "PCB-05"]
     assert executed[0][1]["VGBENCH_GPU_UUIDS"] == "PCB-F5,PCB-05"
+
+
+def test_sol_engine_serves_the_snapshot_with_its_recipe_command(tmp_path, monkeypatch):
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v2.yaml"), "release-v1")
+    model = _snapshot(tmp_path / "model")
+    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
+    monkeypatch.setattr(srt_selected, "KFD", tmp_path / "no-kfd")
+    executed = []
+    monkeypatch.setattr(
+        srt_selected.os, "execvpe", lambda file, argv, env: executed.append((file, argv, env))
+    )
+    monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/sol-engine:v1@sha256:" + "c" * 64)
+    command = [
+        "/opt/sol-engine/venv/bin/python3",
+        "/opt/sol-engine/docker/gb200/serve.py",
+        "--model-path",
+        str(model),
+        "--num-gpus",
+        "2",
+        "--attention",
+        "sol",
+        "--disable-conditioning-cache",
+    ]
+    output = tmp_path / "server"
+    srt_selected.serve(
+        plan,
+        runtime="sol-engine",
+        runtime_revision="d" * 40,
+        model_path=model,
+        gpus=2,
+        output=output,
+        command=command,
+        model_view="snapshot",
+    )
+    spec = json.loads((output / "spec.json").read_text())
+    launch = json.loads((output / "launch.json").read_text())
+    assert spec["server"] == {"attention_backend": "sol"}
+    assert spec["baseline"]["name"] == launch["runtime"] == "sol-engine"
+    assert spec["baseline"]["model_path"] == str(model)
+    assert executed[0][1] == launch["argv"] == command
+    with pytest.raises(ValueError, match="for vllm-omni"):
+        srt_selected.serve(
+            plan,
+            runtime="sol-engine",
+            runtime_revision="d" * 40,
+            model_path=model,
+            gpus=2,
+            output=tmp_path / "fl2va-view",
+            command=command,
+            model_view="h3-fl2va",
+        )

@@ -27,7 +27,7 @@ directly. Both actions first load the selected spec and set from `specs/` and
 check its `plan_sha256` against the bound value.
 
 - `serve` records the sealed server spec and launch, then execs the engine
-  (`sglang` or `vllm-omni`) on the job's GPUs.
+  (`sglang`, `vllm-omni` or `sol-engine`) on the job's GPUs.
 - `client` runs the same plan at every `CONC_LIST` concurrency against the
   service endpoint, one cell per concurrency under `gpu/c<N>/`, and publishes
   each cell's measured window.

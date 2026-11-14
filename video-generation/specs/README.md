@@ -18,7 +18,7 @@ Code that needs the version calls `schema_version(plan)` instead of testing whic
 
 - `model` names the checkpoint and its 40-character revision.
 - `generation` holds the request and clip values.
-  SGLang rejects caller-set fps and frame counts and derives them from its `target`; only vLLM-Omni receives fps, frame count, width, and height.
+  SGLang rejects caller-set fps and frame counts and derives them from its `target`; Sol-Engine receives the same request as SGLang; only vLLM-Omni receives fps, frame count, width, and height.
   The runner checks the clip's duration against `frame_count / fps` (107 / 24 = 4.458 s), not `duration_seconds`.
 - `prompts` defines each prompt once with its motion and sound requirements.
   Each entry in `sets` lists cases that pair a prompt with a seed; no two cases repeat both prompt text and seed.

@@ -186,3 +186,32 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     assert "VIDEO_RECIPE_ENV_KEYS" not in launch["environment"]
     assert child["gpu_uuids"].split(",") == launch["gpu_uuids"] == spec["gpu_uuids"]
     assert launch["model_revision"] == spec["baseline"]["model_revision"]
+
+
+def test_sol_engine_binds_its_snapshot_and_disables_conditioning_cache(native_fragment):
+    raw, write = native_fragment
+    raw["services"][0]["args"] = [
+        "--model-view", "snapshot", "--", "/opt/sol-engine/venv/bin/python3",
+        "/opt/sol-engine/docker/gb200/serve.py", "--model-path", "{model_path}",
+        "--served-model-name", "{model_id}", "--port", "30283",
+        "--num-gpus", "{gpus_per_node}", "--host", "0.0.0.0", "--attention", "dense",
+    ]
+    selected = {**ENV, "FRAMEWORK": "sol-engine", "VIDEO_SPEC": "h3-v2.yaml", "GPU_COUNT": "4"}
+    with pytest.raises(ValueError, match="--disable-conditioning-cache"):
+        video.prepare(write(raw), selected, root=ROOT)
+
+    raw["services"][0]["args"].append("--disable-conditioning-cache")
+    recipe = video.prepare(write(raw), selected, root=ROOT)
+    [server] = recipe["services"]
+    model_path = server["env"]["VIDEO_MODEL_PATH"]
+    assert model_path.endswith("/snapshots/42ed227ee7df40d41602854ae760620d6eb651fe")
+    command = server["args"][server["args"].index("--") + 1:]
+    assert command[command.index("--model-path") + 1] == model_path
+    assert command[command.index("--served-model-name") + 1] == "MiniMaxAI/MiniMax-H3"
+    assert command[command.index("--num-gpus") + 1] == "4"
+    assert server["env"]["VIDEO_RUNTIME"] == recipe["benchmark"]["env"]["VIDEO_RUNTIME"] == "sol-engine"
+
+    args = raw["services"][0]["args"]
+    args[args.index("--model-path") + 1] = "/elsewhere/MiniMax-H3"
+    with pytest.raises(ValueError, match="--model-path"):
+        video.prepare(write(raw), selected, root=ROOT)
