@@ -8136,24 +8136,6 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
         kv-offloading: none
         conc-list: [16]
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_sd_c16
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [20]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_sd_c20
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [24]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_sd_c24
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [16]
-        num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c16
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
@@ -8161,6 +8143,15 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
         conc-list: [32]
         num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c32
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+    - dram-utilization: 1.0
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [16]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_sd_dram_c16
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
 
 minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
