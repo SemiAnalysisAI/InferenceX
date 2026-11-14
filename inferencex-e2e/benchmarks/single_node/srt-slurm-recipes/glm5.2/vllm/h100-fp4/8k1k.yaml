@@ -37,8 +37,12 @@ base:
         # Hopper has no FP4 tensor cores; NVFP4 experts run on Marlin.
         moe-backend: marlin
         kv-cache-dtype: fp8
-        # ~54 GB/GPU of weights; 0.90 leaves ~16 GB/GPU for KV and activations.
-        gpu-memory-utilization: 0.90
+        # The binder sets context only for eval-only runs, and vLLM otherwise
+        # defaults to the 1M native context: 8192 + 1024 + 256 slack.
+        max-model-len: 9472
+        # ~54 GB/GPU of weights; 0.90 left only 8.9 GiB of KV (~177k tokens).
+        # 0.95 gives ~27 concurrent 9.5k-token requests.
+        gpu-memory-utilization: 0.95
         max-num-batched-tokens: 16384
         no-enable-prefix-caching: true
         disable-uvicorn-access-log: true
@@ -52,7 +56,7 @@ zip_override_tep8:
   roles:
     agg:
       args:
-        max-num-seqs: [4, 8, 16, 32, 64, 128]
+        max-num-seqs: [4, 8, 16, 24]
   benchmark:
     env:
-      CONC: ['4', '8', '16', '32', '64', '128']
+      CONC: ['4', '8', '16', '24']

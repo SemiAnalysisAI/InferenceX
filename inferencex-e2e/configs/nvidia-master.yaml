@@ -4397,7 +4397,7 @@ minimaxm31flash-fp4-b300-vllm-agentic-dspark:
 # the expert weights on H100. Flags follow recipes.vllm.ai's GLM-5.2 NVFP4
 # command (TP8 + expert parallel, FP8 KV) without MTP. v0.33.0 is past the
 # recipe's 0.28 minimum and already serves dsv41flash on Hopper. Concurrency
-# stops at 128 for the ~16 GB/GPU KV pool.
+# stops at 24: ~11 GiB/GPU of KV at 0.95 holds ~27 9.5k-token requests.
 glm5.2-fp4-h100-vllm:
   image: vllm/vllm-openai:v0.33.0@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
   model: nvidia/GLM-5.2-NVFP4
@@ -4412,7 +4412,7 @@ glm5.2-fp4-h100-vllm:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128, srt-recipe: 8k1k.yaml }
+      - { tp: 8, ep: 8, conc-list: [4, 8, 16, 24], srt-recipe: 8k1k.yaml }
 
 # MiniMax-M3.1-Flash AgentX on GB200 with SGLang: day-zero image from the SGLang
 # cookbook (https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1),
