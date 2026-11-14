@@ -12597,5 +12597,5 @@
 - config-keys:
     - kimik31-r10-1p1d
   description:
-    - Run the validated r10 SimpleCPU and MoRIIO WRITE 1P1D c128 stack for a full 3600-second AgentX profile, with standard warmup, K4 synthetic AL3.25 and the pinned portable image. Preserve prefill SPF/BCG, decode RecoverSSM/Q replication/split96 and native source checks; use the SA cluster model and network paths.
+    - Use the measured K3 golden AL2.88, PR26 prefill sequence parallelism and decode multi-stream fusion stack; preserve P GMU0.87, D GMU0.92, D padded heads and 3600-second profiling. Normalize unknown peer TP consistently for hybrid WRITE, preserving explicit heterogeneous-TP rejection. Pin model and router artifacts and retain source-role verification.
   pr-link: XXX

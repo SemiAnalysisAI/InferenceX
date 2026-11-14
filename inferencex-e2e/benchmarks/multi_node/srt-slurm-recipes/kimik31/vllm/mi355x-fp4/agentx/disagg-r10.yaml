@@ -70,9 +70,9 @@ roles:
       max-num-batched-tokens: 16384
       compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":4096,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[256,512,768,1024,1536,2048,3072,4096]}'
       speculative-config: '{"model": "/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94",
-        "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "ROCM_AITER_MLA",
-        "kv_cache_dtype": "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method":
-        "synthetic", "synthetic_acceptance_length": 2.88}'
+        "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "ROCM_AITER_MLA", "kv_cache_dtype":
+        "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method": "synthetic", "synthetic_acceptance_length":
+        2.88}'
       additional-config: '{"kda_prefill_backend":"fused"}'
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false,"defer_timeout":300}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}]}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
@@ -171,9 +171,9 @@ roles:
       max-num-batched-tokens: 576
       compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":576,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64,72,80,88,96,104,112,120,128,160,176,192,208,224,240,256,288,320,352,384,416,448,480,512,544,576]}'
       speculative-config: '{"model": "/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94",
-        "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "ROCM_AITER_MLA",
-        "kv_cache_dtype": "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method":
-        "synthetic", "synthetic_acceptance_length": 2.88}'
+        "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "ROCM_AITER_MLA", "kv_cache_dtype":
+        "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method": "synthetic", "synthetic_acceptance_length":
+        2.88}'
       additional-config: '{"kda_prefill_backend":"fused"}'
       kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
@@ -270,7 +270,7 @@ environment:
   TOTAL_CPU_DRAM_GB: '1799'
   DECODE_CPU_DRAM_GB: '0'
   KV_P2P_TRANSFER: moriio
-  K31_CLEAN_RUN_ID: k31-sp-sa-1114
+  K31_CLEAN_RUN_ID: k31-ms-1114
 telemetry:
   storage_subdir: power
   startup_timeout_seconds: 300
