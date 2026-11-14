@@ -1,0 +1,60 @@
+# GLM-5.2 NVFP4 on H100, 8k1k. H100 is not in the SGLang cookbook's table and
+# the 756 GB FP8 checkpoint does not fit 8x80 GB, so this runs the ~433 GB NVFP4
+# checkpoint (the B200 weights) in the cookbook's B200 NVFP4 "balanced" shape
+# without MTP: TP8 with 8-way DP attention, 256 running requests. Hopper has no
+# FP4 tensor cores, so the NVFP4 experts run on Marlin with BF16 activations,
+# as dsv41flash-fp4-h100-sglang does for its MXFP4 experts.
+base:
+  schema: 2
+  name: glm5.2-fp4-h100-sglang-8k1k
+  resources:
+    gpu_type: h100
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: nvidia/GLM-5.2-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        # Cookbook --attn-dp-size 8; spelled the pre-#41818 way so the
+        # matrix's DP_ATTENTION check reads it.
+        data-parallel-size: 8
+        enable-dp-attention: true
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        moe-runner-backend: marlin
+        kv-cache-dtype: fp8_e4m3
+        # ~54 GB/GPU of weights leaves ~14 GB of KV at 0.85; the cookbook's
+        # 32768 chunk is halved to keep the prefill working set inside 80 GB.
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.85
+        max-running-requests: 256
+        watchdog-timeout: 1800
+        enable-metrics: false
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_RADIX_FORCE_MISS: '1'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        # Keep FlashInfer/Triton/JIT caches off the shared home.
+        SGLANG_CACHE_DIR: /tmp/sglang-cache
+
+# Decode graphs sized to the request concurrency.
+zip_override_dep8:
+  roles:
+    agg:
+      args:
+        cuda-graph-max-bs-decode: [8, 16, 32, 64, 128]
+  benchmark:
+    env:
+      CONC: ['8', '16', '32', '64', '128']
