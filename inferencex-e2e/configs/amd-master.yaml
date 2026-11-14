@@ -957,6 +957,25 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
       search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
 
+dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp:
+  # Carries vllm-project/vllm#64715 (UMBP standalone for DeepSeek-V4.1-Flash) and #66036
+  # (per-tensor fp8_e4m3 KV for sparse MLA); its MORI v1.2.3.post1 is built with UMBP.
+  image: vllm/vllm-openai-rocm:nightly-be47189f37f6162991366ff6b91539f6e9d1f432@sha256:a6263de19d7e68fc12d7ee37da0cc0d2817b8eb9a83c4f22911783befd133ebc
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: dsv41flash/vllm/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml:override_dp2_c128 }
+      - { tp: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: umbp, version: "1.2.3.post1" }, spec-decoding: mtp, conc-list: [256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml:override_dp2_umbp_c256 }
+      - { tp: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: umbp, version: "1.2.3.post1" }, spec-decoding: mtp, conc-list: [384], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml:override_dp2_umbp_c384 }
+
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:minimax-m31-flash-75bc8cf1@sha256:f8e8ab239e5edb7c3070c5802fc7fc0cbb889513bf81183dfc98ce1c77e1dfe1
   model: amd/MiniMax-M3.1-Flash-Quark-MXFP4
