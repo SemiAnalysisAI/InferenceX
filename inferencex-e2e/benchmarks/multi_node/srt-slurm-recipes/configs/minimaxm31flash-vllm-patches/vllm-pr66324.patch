@@ -170,10 +170,10 @@ index c4af5430a..d7d84245b 100644
      @property
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/AGENTS.md b/vllm/models/minimax_m3/nvidia/specialized_decode/AGENTS.md
 new file mode 100644
-index 000000000..cb39ec346
+index 000000000..debb1a31a
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/AGENTS.md
-@@ -0,0 +1,253 @@
+@@ -0,0 +1,256 @@
 +# MiniMax-M3.1 specialized decode (NVIDIA)
 +
 +A decode executor for small decode batches of MiniMax-M3.1-Flash on GB300
@@ -210,8 +210,11 @@ index 000000000..cb39ec346
 +  on the default TRTLLM-gen MoE backend (not MegaMoE).
 +- CUDA graphs: FULL graphs for decode batches only (`FULL_AND_PIECEWISE` or
 +  `FULL_DECODE_ONLY`) with at least one capture size within the row cap.
-+- No `torch.compile` of the model, no sleep mode, no LoRA, KV transfer or
-+  batch invariance.
++- No `torch.compile` of the model, no sleep mode, no LoRA or batch
++  invariance. No KV transfer except `SimpleCPUOffloadConnector` (CPU KV
++  offload): its per-layer hooks are no-ops and it loads and saves around the
++  forward, so the executor skipping the stock attention layers does not affect
++  it (`STEP_LEVEL_KV_CONNECTORS`).
 +
 +The GPU check is rank-local, so the ranks' results are combined with a MIN
 +all-reduce over the TP group: if any rank misses a requirement, every rank
@@ -429,17 +432,17 @@ index 000000000..cb39ec346
 +- TP 8/16 (`unsupported()` accepts TP 4 only).
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/__init__.py b/vllm/models/minimax_m3/nvidia/specialized_decode/__init__.py
 new file mode 100644
-index 000000000..962a708be
+index 000000000..33e7544a2
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/__init__.py
-@@ -0,0 +1,283 @@
+@@ -0,0 +1,295 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""MiniMax-M3.1 specialized decode on NVIDIA GPUs: a decode executor over the
 +stock backbone, enabled by
-+``additional_config={"decode_backend": "latency_specialized"}``.
++`additional_config={"decode_backend": "latency_specialized"}`.
 +
-+The executor runs FULL-graph decode steps of up to ``MAX_ROWS`` rows; every
++The executor runs FULL-graph decode steps of up to `MAX_ROWS` rows; every
 +other step runs the stock forward. It issues the same cross-rank collectives as
 +the stock layers, so the deployment check below is collective over the TP
 +group and every per-step decision reads host state that all TP ranks share.
@@ -448,7 +451,7 @@ index 000000000..962a708be
 +(E4M3) index-K cache, MXFP8 attention and dense linears, NVFP4 routed experts.
 +NVFP4 (and BF16) KV and index caches are refused. The stock decode it is
 +checked against runs the same setup with the switch off. The resolved cache
-+dtypes are part of ``DecodeConfig``, and each stage implementation declares
++dtypes are part of `DecodeConfig`, and each stage implementation declares
 +the ones it runs, so that more setups can be added stage by stage.
 +"""
 +
@@ -486,6 +489,12 @@ index 000000000..962a708be
 +# "auto", is BF16).
 +INDEXER_KV_DTYPES: dict[str, "CacheDtype"] = {"fp8": "fp8", "fp8_e4m3": "fp8"}
 +
++# KV connectors the executor runs with. A connector's per-layer hooks
++# (`wait_for_layer_load`, `save_kv_layer`) wrap the stock attention layers,
++# which the executor's steps skip; these connectors' per-layer hooks are no-ops
++# and they move KV around the forward instead (`start_load_kv`, `wait_for_save`).
++STEP_LEVEL_KV_CONNECTORS = ("SimpleCPUOffloadConnector",)
++
 +# The dtypes a cache can have in a DecodeConfig. Only fp8 is accepted today; BF16 is
 +# named so that stages can already declare it.
 +CacheDtype = Literal["bf16", "fp8"]
@@ -515,16 +524,16 @@ index 000000000..962a708be
 +
 +def fused_finalize_max_tokens(vllm_config: VllmConfig, stock_cap: int) -> int:
 +    """The most tokens whose MoE top-k finalize the stock model leaves to the
-+    next layer's fused finalize + all-reduce + norm + MXFP8 (``stock_cap``
++    next layer's fused finalize + all-reduce + norm + MXFP8 (`stock_cap`
 +    without the switch).
 +
 +    With the specialized decode requested, every executor step defers, up to
-+    ``MAX_ROWS``: from 33 rows on that replaces the MoE's finalize, the
++    `MAX_ROWS`: from 33 rows on that replaces the MoE's finalize, the
 +    shared-expert add, FlashInfer's all-reduce + norm and the MXFP8 quantize of
 +    the next QKV input (five launches) by the two
 +    PDL-chained launches it already runs up to 32, and the wide front's GEMV
 +    reads their MXFP8 rows. Host state only (every rank decides alike); the
-+    deployment check itself runs in ``specialized_decode_config``.
++    deployment check itself runs in `specialized_decode_config`.
 +    """
 +    extra = vllm_config.additional_config
 +    backend = extra.get("decode_backend", "auto") if isinstance(extra, dict) else "auto"
@@ -560,8 +569,8 @@ index 000000000..962a708be
 +
 +
 +def max_rows(query_len: int) -> int:
-+    """Rows of the largest executor step at ``query_len`` rows a request: whole
-+    requests of up to ``MAX_REQUESTS``, at most ``MAX_ROWS``."""
++    """Rows of the largest executor step at `query_len` rows a request: whole
++    requests of up to `MAX_REQUESTS`, at most `MAX_ROWS`."""
 +    if query_len < 1:
 +        raise ValueError(f"query_len must be positive, got {query_len}")
 +    return min(MAX_ROWS, MAX_REQUESTS * query_len)
@@ -651,9 +660,15 @@ index 000000000..962a708be
 +        ),
 +        # Kernel stages may bind weight addresses at build.
 +        "no sleep mode": not vllm_config.model_config.enable_sleep_mode,
-+        "no LoRA, KV transfer or batch invariance": (
++        "no LoRA or batch invariance, and no KV transfer other than "
++        + " or ".join(STEP_LEVEL_KV_CONNECTORS)
++        + " (CPU KV offload)": (
 +            vllm_config.lora_config is None
-+            and vllm_config.kv_transfer_config is None
++            and (
++                vllm_config.kv_transfer_config is None
++                or vllm_config.kv_transfer_config.kv_connector
++                in STEP_LEVEL_KV_CONNECTORS
++            )
 +            and not envs.VLLM_BATCH_INVARIANT
 +        ),
 +        f"a KV block size of {PAGE_SIZE} (--block-size {PAGE_SIZE})": (
@@ -718,7 +733,7 @@ index 000000000..962a708be
 +    )
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/draft_norm.py b/vllm/models/minimax_m3/nvidia/specialized_decode/draft_norm.py
 new file mode 100644
-index 000000000..bd2169072
+index 000000000..9ab7c1620
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/draft_norm.py
 @@ -0,0 +1,258 @@
@@ -727,19 +742,19 @@ index 000000000..bd2169072
 +"""The DSpark draft layers' Gemma RMSNorms fused with the MXFP8 quantize of
 +the linear after them.
 +
-+Each draft layer all-reduces two row-parallel outputs (``o_proj``,
-+``down_proj``), normalizes the sum right after (with the residual add), and
-+the next linear (``gate_up_proj``, the next layer's ``qkv_proj``) quantizes
++Each draft layer all-reduces two row-parallel outputs (`o_proj`,
++`down_proj`), normalizes the sum right after (with the residual add), and
++the next linear (`gate_up_proj`, the next layer's `qkv_proj`) quantizes
 +it to MXFP8: the row norm and the quantize are two launches, ten times per
 +draft step.
 +
-+Here (``FusedGemmaNormQuant``) the stock all-reduce stays; the residual add,
++Here (`FusedGemmaNormQuant`) the stock all-reduce stays; the residual add,
 +the norm and the quantize run in one launch, and the result is handed to the
-+linear as a ``QuantizedActivation`` (also for the context states' norm before
++linear as a `QuantizedActivation` (also for the context states' norm before
 +the context K/V projection). The norm is exactly that of
-+``drafter.GemmaRMSNormRows`` (the residual add rounded to the residual's
++`drafter.GemmaRMSNormRows` (the residual add rounded to the residual's
 +dtype and stored, the sum of squares over the same 8192-wide block,
-+``x * rstd * (1 + w)``), and the quantize is FlashInfer's MXFP8 quantize bit
++`x * rstd * (1 + w)`), and the quantize is FlashInfer's MXFP8 quantize bit
 +for bit (UE8M0 round-up, RN e4m3, the F8_128x4 scale layout).
 +
 +Fusing the all-reduce as well (a peer-memory Lamport exchange inside the
@@ -940,7 +955,7 @@ index 000000000..bd2169072
 +
 +def attach_fused_norms(model: nn.Module, stock_forward) -> int:
 +    """Fuse each draft norm with the MXFP8 quantize of the linear it feeds.
-+    ``stock_forward(norm)``: the (already patched) forward of a norm. Returns
++    `stock_forward(norm)`: the (already patched) forward of a norm. Returns
 +    the number of fused norms."""
 +    reason = fused_norms_unsupported(model)
 +    if reason:
@@ -982,7 +997,7 @@ index 000000000..bd2169072
 +    return count
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/drafter.py b/vllm/models/minimax_m3/nvidia/specialized_decode/drafter.py
 new file mode 100644
-index 000000000..fb1659ced
+index 000000000..1f1954755
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/drafter.py
 @@ -0,0 +1,695 @@
@@ -990,9 +1005,9 @@ index 000000000..fb1659ced
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""The DSpark drafter's sequential Markov sampling in K + 1 launches.
 +
-+The stock loop (``DSparkSpeculator._sample_markov_chain``) runs, for each of
++The stock loop (`DSparkSpeculator._sample_markov_chain`) runs, for each of
 +the K draft positions, about ten kernels: the Markov embedding lookup, the
-+``[rows, r] x [r, V]`` bias GEMM, the bias add, two index copies, the Gumbel
++`[rows, r] x [r, V]` bias GEMM, the bias add, two index copies, the Gumbel
 +block argmax (which also stores the draft logits cache column), the argmax
 +over the blocks, and two token copies, most of the time in small kernels
 +around one stream of W2 (V x r, BF16).
@@ -1001,10 +1016,10 @@ index 000000000..fb1659ced
 +
 +- its prologue reads the previous position's token from a packed argmax key
 +  per request (position 0 reads the anchor token instead); program 0 also
-+  stores that token into ``draft_tokens`` and re-arms the key buffer the next
++  stores that token into `draft_tokens` and re-arms the key buffer the next
 +  position reduces into;
-+- it gathers the Markov embedding ``W1[prev]`` and, tile by tile over its
-+  vocabulary slice, computes the bias ``W1[prev] @ W2^T`` (fp32 accumulate,
++- it gathers the Markov embedding `W1[prev]` and, tile by tile over its
++  vocabulary slice, computes the bias `W1[prev] @ W2^T` (fp32 accumulate,
 +  rounded to the dtype the stock GEMM returns), adds the base logits (rounded
 +  to the dtype the stock add returns), stores the draft logits cache column,
 +  and runs the Gumbel-max sample (the stock helpers, so the noise is
@@ -1012,20 +1027,20 @@ index 000000000..fb1659ced
 +- it folds its (max, leftmost index) per request into the key with one
 +  atomic max: the key orders (value, -index), so the reduction returns the
 +  leftmost global maximum, which is what the stock block argmax plus
-+  ``torch.argmax`` return.
++  `torch.argmax` return.
 +
 +A last one-program launch stores position K-1's token.
 +
 +Only the bias GEMM's accumulation order differs from the stock path (it is
 +rounded to the same dtype), so the drafts are those of the stock sampler up to
 +that rounding. The base draft logits (draft LM head) stay stock, gathered
-+through peer memory (``peer_logits.py``) instead of NCCL when supported.
++through peer memory (`peer_logits.py`) instead of NCCL when supported.
 +
 +The sampler engages only on configurations it reproduces exactly (otherwise
 +the stock loop runs): probabilistic drafting with a draft logits cache, no
 +reduced draft vocabulary, watermarker, acceptance estimator or confidence
 +head, FP32 Gumbel sampling, an unquantized Markov head, at most
-+``MARKOV_MAX_REQUESTS`` requests.
++`MARKOV_MAX_REQUESTS` requests.
 +"""
 +
 +import weakref
@@ -1342,8 +1357,8 @@ index 000000000..fb1659ced
 +
 +
 +class FusedMarkovSampler:
-+    """``sample_sequential`` of a MiniMax-M3 DSpark draft model under the
-+    specialized decode (see ``DSparkSpeculator._sample_sequential``)."""
++    """`sample_sequential` of a MiniMax-M3 DSpark draft model under the
++    specialized decode (see `DSparkSpeculator._sample_sequential`)."""
 +
 +    def __init__(self, model: nn.Module) -> None:
 +        # A weak handle would do as well; the draft model owns this object.
@@ -1463,7 +1478,7 @@ index 000000000..fb1659ced
 +        return True
 +
 +    def warm_up(self, n_spec: int) -> None:
-+        """Collective, at start-up (``warm_up_drafters``): the draft LM head's
++        """Collective, at start-up (`warm_up_drafters`): the draft LM head's
 +        peer logits, allocated and compiled before memory profiling."""
 +        peer = self._peer_logits(n_spec)
 +        if peer is not None:
@@ -1491,10 +1506,10 @@ index 000000000..fb1659ced
 +
 +
 +class ShardedContextFc:
-+    """``combine_hidden_states`` with the context projection ``fc`` split over
++    """`combine_hidden_states` with the context projection `fc` split over
 +    the TP ranks.
 +
-+    ``fc`` ([hidden, 5 x hidden], BF16, unquantized) is replicated: every rank
++    `fc` ([hidden, 5 x hidden], BF16, unquantized) is replicated: every rank
 +    streams all of it (377 MB) for the 8 rows of a verify step. Here
 +    each rank multiplies its 1/TP slice of the input features (strided views,
 +    no copies) into FP32, the FP32 partials are all-reduced and rounded to the
@@ -1577,8 +1592,8 @@ index 000000000..fb1659ced
 +
 +
 +class GemmaRMSNormRows:
-+    """``forward`` of the draft model's hidden-size Gemma RMSNorms
-+    (``x * rsqrt(mean(x^2) + eps) * (1 + w)``, optionally fused with the
++    """`forward` of the draft model's hidden-size Gemma RMSNorms
++    (`x * rsqrt(mean(x^2) + eps) * (1 + w)`, optionally fused with the
 +    residual add, in place like the FlashInfer path): one program per row.
 +
 +    It replaces the FlashInfer CuTe-DSL fused add + norm for the 28-56 rows of
@@ -1683,68 +1698,68 @@ index 000000000..fb1659ced
 +            sampler.warm_up(n_spec)
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernel_stages.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernel_stages.py
 new file mode 100644
-index 000000000..7687dc434
+index 000000000..2c52a0c26
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernel_stages.py
 @@ -0,0 +1,1535 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-+"""The ``kernels/`` registry entries behind the ``stages.py`` interfaces.
++"""The `kernels/` registry entries behind the `stages.py` interfaces.
 +
 +Each adapter below is the kernel implementation of one stage slot. It keeps the
 +slot's contract towards the stock stages on either side wherever the kernels
 +allow, builds the caller-side layouts the kernels need, and declares the
-+partners it cannot run without (``compatible``):
++partners it cannot run without (`compatible`):
 +
 +==============  ===========================  =================================
 +slot            adapter                      runs beside
 +==============  ===========================  =================================
-+front           ``KernelFront``              anything; fuses the input
++front           `KernelFront`              anything; fuses the input
 +                                             boundary of the sparse layers
 +                                             (AR land + residual + input norm)
-+index_score     ``KernelIndexScore``         anything (stock contract)
-+page_topk       ``KernelPageTopK``           ``KernelSparseDecode`` only
++index_score     `KernelIndexScore`         anything (stock contract)
++page_topk       `KernelPageTopK`           `KernelSparseDecode` only
 +                                             (physical page table)
-+page_topk       ``KernelPageTopKLogical``    anything (stock top-k buffer)
-+sparse_decode   ``KernelSparseDecode``       anything (reads either table)
-+o_proj          ``KernelOProj``              ``KernelAllReduceNorm`` only
-+allreduce_norm  ``KernelAllReduceNorm``      ``KernelOProj`` only (the pair)
-+moe             ``KernelMoE``                ``KernelAllReduceNorm`` only
++page_topk       `KernelPageTopKLogical`    anything (stock top-k buffer)
++sparse_decode   `KernelSparseDecode`       anything (reads either table)
++o_proj          `KernelOProj`              `KernelAllReduceNorm` only
++allreduce_norm  `KernelAllReduceNorm`      `KernelOProj` only (the pair)
++moe             `KernelMoE`                `KernelAllReduceNorm` only
 +                                             (routes + NVFP4 hand-off)
-+front           ``KernelFrontWide``          anything (stock contract)
-+o_proj          ``KernelOProjWide``          anything (BF16 partial)
++front           `KernelFrontWide`          anything (stock contract)
++o_proj          `KernelOProjWide`          anything (BF16 partial)
 +==============  ===========================  =================================
 +
-+The ``*Wide`` adapters serve the steps above the pair's 8 rows (the front's
-+16) up to 64 (``kernels/wide.py``): the MXFP8 GEMV QKV projection and
++The `*Wide` adapters serve the steps above the pair's 8 rows (the front's
++16) up to 64 (`kernels/wide.py`): the MXFP8 GEMV QKV projection and
 +o_proj. Above 8 rows the post-attention boundary and the MoE run stock.
 +
 +The kernels cover the sparse MoE layers (3-59, "covered" layers); on every
-+other layer each adapter runs its stock stage. ``KernelContext`` owns what the
++other layer each adapter runs its stock stage. `KernelContext` owns what the
 +adapters share: the TP peer transport and its exchanges, per-layer activation
 +buffers whose addresses the kernels bind at build, the kernel instances, and
 +the per-step metadata upstream does not produce (physical page rows, sparse
 +lengths).
 +
-+Boundary semantics against the stock chain (per covered layer ``L``):
++Boundary semantics against the stock chain (per covered layer `L`):
 +
-+- input boundary: stock ``forward_input_norm`` all-reduces the previous FFN's
++- input boundary: stock `forward_input_norm` all-reduces the previous FFN's
 +  partial (finalizing a deferred MoE), adds the residual and norms. The kernel
 +  front does the same in its boundary CTAs: from the previous kernel MoE's
-+  push (``PushedFFN``, prepushed mode) or from a BF16 partial it pushes itself
++  push (`PushedFFN`, prepushed mode) or from a BF16 partial it pushes itself
 +  (a stock MoE or dense MLP, never left unfinalized: the executor does not
 +  defer a MoE whose next front fuses the input).
-+- post-attention boundary: stock ``fused_allreduce_gemma_rms_norm`` + the FP32
++- post-attention boundary: stock `fused_allreduce_gemma_rms_norm` + the FP32
 +  router GEMM. The kernel pair is the o_proj GEMV (+ router CTAs on the folded
 +  router weight) pushing into the post kernel, which lands the all-reduce, adds
 +  the residual, norms, quantizes the NVFP4 FC1 input and publishes the top-4
 +  routes. It returns no router logits: a stock MoE behind it computes them
 +  from the normed rows; the kernel MoE reads the routes.
 +- MoE: the kernel MoE never defers its finalize; it pushes into the next
-+  layer's kernel front when that front polls (``polls_push``), else returns
++  layer's kernel front when that front polls (`polls_push`), else returns
 +  its BF16 partial for the stock boundary.
 +
-+Build (``KernelContext.build``, from the first kernel stage's ``warm_up``,
++Build (`KernelContext.build`, from the first kernel stage's `warm_up`,
 +before memory profiling and capture) is collective and fail closed: all peer
 +memory is allocated first in one fixed order, then the CuTe DSL kernel modules load,
 +then the kernel instances build; after each phase the ranks agree (MIN over
@@ -1853,7 +1868,7 @@ index 000000000..7687dc434
 +
 +
 +def rx_slot_key(layer_id: int, rows: int) -> int:
-+    """``RouterExchangeSlot``'s ``layer_idx`` (it only names the buffer): one
++    """`RouterExchangeSlot`'s `layer_idx` (it only names the buffer): one
 +    slot per (layer, row count), so that the o_proj and post call counters of
 +    different row counts never interleave on one slot."""
 +    return layer_id * 16 + rows
@@ -1917,8 +1932,8 @@ index 000000000..7687dc434
 +
 +
 +class OProjPending(NamedTuple):
-+    """``KernelOProj``'s output: the o_proj launch, made by
-+    ``KernelAllReduceNorm.post_attention`` once the residual is known (the
++    """`KernelOProj`'s output: the o_proj launch, made by
++    `KernelAllReduceNorm.post_attention` once the residual is known (the
 +    router CTAs read it), immediately before the post it pairs with."""
 +
 +    lk: LayerKernels
@@ -1927,7 +1942,7 @@ index 000000000..7687dc434
 +
 +class KernelContext:
 +    """What the kernel stages of one executor share (see the module
-+    docstring). Host-only until ``build``."""
++    docstring). Host-only until `build`."""
 +
 +    def __init__(
 +        self,
@@ -2030,7 +2045,7 @@ index 000000000..7687dc434
 +
 +    # -- envelope -------------------------------------------------------------
 +    def _envelope(self, stage: str, rows: int) -> bool:
-+        """Registry envelope (arch, TP, rows) of ``stage`` at ``rows``."""
++        """Registry envelope (arch, TP, rows) of `stage` at `rows`."""
 +        from . import kernels
 +
 +        if self.arch is None or not self.layers:
@@ -2136,7 +2151,7 @@ index 000000000..7687dc434
 +    def row_fallbacks(self) -> dict[int, tuple[str, ...]]:
 +        """{step rows: enabled kernel stages that run stock at those rows
 +        because the rows are outside their kernel's envelope (registry
-+        ``max_rows``, or the pair's powers of two)}; only steps with some."""
++        `max_rows`, or the pair's powers of two)}; only steps with some."""
 +        out: dict[int, tuple[str, ...]] = {}
 +        if self.arch is None or not self.layers:
 +            return out
@@ -2277,7 +2292,7 @@ index 000000000..7687dc434
 +        return tuple(b for b in FRONT_BUCKETS if any(bucket(r) == b for r in rows))
 +
 +    def max_rows_of(self, stage: str) -> int:
-+        """The largest step rows ``stage`` is built for."""
++        """The largest step rows `stage` is built for."""
 +        return max(self.rows_ok.get(stage, ()), default=1)
 +
 +    def _load_extension(self, stage: str) -> None:
@@ -2667,9 +2682,9 @@ index 000000000..7687dc434
 +        attn_out: torch.Tensor,
 +        residual: torch.Tensor,
 +    ):
-+        """The o_proj + post pair of ``lk`` on ``attn_out`` and the residual
++        """The o_proj + post pair of `lk` on `attn_out` and the residual
 +        entering the post-attention boundary; returns the post's
-+        ``MoeHandoff``."""
++        `MoeHandoff`."""
 +        rows = residual.shape[0]
 +        assert lk.r_mid is not None and lk.out is not None
 +        r_mid = lk.r_mid[:rows]
@@ -2704,8 +2719,8 @@ index 000000000..7687dc434
 +
 +
 +def _after_deferring_moe(backbone: MiniMaxM3Model, layer_id: int, rows: int) -> bool:
-+    """Whether the stock layer before ``layer_id`` is a MoE that leaves
-+    ``rows`` rows unfinalized (host state only)."""
++    """Whether the stock layer before `layer_id` is a MoE that leaves
++    `rows` rows unfinalized (host state only)."""
 +    if layer_id <= backbone.start_layer:
 +        return False
 +    prev = backbone.layers[layer_id - 1]
@@ -2716,7 +2731,7 @@ index 000000000..7687dc434
 +
 +
 +class KernelFront(_KernelStage, FrontStage):
-+    """``front``: one launch per sparse layer for the input boundary (AR land
++    """`front`: one launch per sparse layer for the input boundary (AR land
 +    of the previous FFN's partials, residual add, input norm, MXFP8) + QKV /
 +    index GEMV + norms + RoPE + FP8 KV / index-K insert."""
 +
@@ -2839,7 +2854,7 @@ index 000000000..7687dc434
 +
 +
 +class KernelIndexScore(_KernelStage, IndexScoreStage):
-+    """``index_score``: upstream's CuTe DSL decode scorer through the kernel
++    """`index_score`: upstream's CuTe DSL decode scorer through the kernel
 +    package's fp8 wrapper (the same op the stock stage picks at this tile)."""
 +
 +    kernel = "index_score"
@@ -2877,7 +2892,7 @@ index 000000000..7687dc434
 +
 +
 +class KernelPageTopKLogical(_KernelStage, PageTopKStage):
-+    """``page_topk`` into the stock ``topk_indices_buffer`` (logical block
++    """`page_topk` into the stock `topk_indices_buffer` (logical block
 +    ids, identity page rows): composes with any sparse decode."""
 +
 +    kernel = "page_topk"
@@ -2889,8 +2904,8 @@ index 000000000..7687dc434
 +    def select_pages(
 +        self, attn, scores: torch.Tensor, table: torch.Tensor, physical: bool
 +    ) -> None:
-+        """Top-16 pages of ``scores`` into ``table`` [Hidx, rows, >= 16]:
-+        physical page ids (``page_rows``) or logical block ids."""
++        """Top-16 pages of `scores` into `table` [Hidx, rows, >= 16]:
++        physical page ids (`page_rows`) or logical block ids."""
 +        md = _indexer_metadata(attn)
 +        rows = table.shape[1]
 +        assert self.ctx.page_topk is not None
@@ -2919,8 +2934,8 @@ index 000000000..7687dc434
 +
 +
 +class KernelPageTopK(KernelPageTopKLogical):
-+    """``page_topk`` writing physical page ids into the layer's own table,
-+    which only ``KernelSparseDecode`` reads (it skips the logical -> physical
++    """`page_topk` writing physical page ids into the layer's own table,
++    which only `KernelSparseDecode` reads (it skips the logical -> physical
 +    gather)."""
 +
 +    def compatible(self, step: StepStages) -> bool:
@@ -2938,7 +2953,7 @@ index 000000000..7687dc434
 +
 +
 +class KernelSparseDecode(_KernelStage, SparseDecodeStage):
-+    """``sparse_decode``: the 16-CTA cluster FP8 decode over the selected
++    """`sparse_decode`: the 16-CTA cluster FP8 decode over the selected
 +    pages, BF16 output plus the MXFP8 copy the kernel o_proj reads."""
 +
 +    kernel = "sparse_decode"
@@ -2984,8 +2999,8 @@ index 000000000..7687dc434
 +    def tables(
 +        self, attn, lk: LayerKernels, topk: torch.Tensor, rows: int
 +    ) -> torch.Tensor:
-+        """[Hkv, rows, 16] physical pages: ``KernelPageTopK``'s table as is,
-+        or the stock top-k buffer's logical blocks through ``page_rows``."""
++        """[Hkv, rows, 16] physical pages: `KernelPageTopK`'s table as is,
++        or the stock top-k buffer's logical blocks through `page_rows`."""
 +        assert lk.table is not None
 +        if topk.data_ptr() == lk.table.data_ptr():
 +            if topk.shape[1] != rows:
@@ -3006,8 +3021,8 @@ index 000000000..7687dc434
 +
 +
 +class KernelOProj(_KernelStage, OProjStage):
-+    """``o_proj`` (MXFP8 GEMV + router CTAs), launched by its partner
-+    ``KernelAllReduceNorm`` (they pair one call to one call)."""
++    """`o_proj` (MXFP8 GEMV + router CTAs), launched by its partner
++    `KernelAllReduceNorm` (they pair one call to one call)."""
 +
 +    kernel = "o_proj"
 +
@@ -3026,9 +3041,9 @@ index 000000000..7687dc434
 +
 +
 +class KernelAllReduceNorm(_KernelStage, AllReduceNormStage):
-+    """``allreduce_norm.post_attention`` of covered layers: the o_proj + post
++    """`allreduce_norm.post_attention` of covered layers: the o_proj + post
 +    pair (AR land + residual + norm + NVFP4 FC1 input + top-4 routes). The
-+    input boundary is fused into ``KernelFront`` (or runs stock), and the
++    input boundary is fused into `KernelFront` (or runs stock), and the
 +    final norm runs stock."""
 +
 +    kernel = "allreduce_norm"
@@ -3056,7 +3071,7 @@ index 000000000..7687dc434
 +
 +
 +class KernelMoE(_KernelStage, MoEStage):
-+    """``moe``: the fused NVFP4 routed + MXFP8 shared-expert engine on the
++    """`moe`: the fused NVFP4 routed + MXFP8 shared-expert engine on the
 +    post's hand-off; pushes into the next layer's kernel front."""
 +
 +    kernel = "moe"
@@ -3102,7 +3117,7 @@ index 000000000..7687dc434
 +
 +
 +class KernelFrontWide(_KernelStage, FrontStage):
-+    """``front`` above the kernel front's rows: the stock input boundary, then
++    """`front` above the kernel front's rows: the stock input boundary, then
 +    the MXFP8 quantize + GEMV QKV / index projection and the stock q/k norm +
 +    RoPE + cache insert op."""
 +
@@ -3142,7 +3157,7 @@ index 000000000..7687dc434
 +
 +
 +class KernelOProjWide(_KernelStage, OProjStage):
-+    """``o_proj`` above the pair's rows: the MXFP8 GEMV (rows = the MMA's N)
++    """`o_proj` above the pair's rows: the MXFP8 GEMV (rows = the MMA's N)
 +    on the kernel sparse decode's MXFP8 output; a BF16 partial, like stock."""
 +
 +    kernel = "o_proj_wide"
@@ -3172,7 +3187,7 @@ index 000000000..7687dc434
 +    stock: dict[str, Any],
 +) -> dict[str, list]:
 +    """The kernel implementations of every slot (to put ahead of the stock
-+    ones). ``stock``: the stock stage objects by slot (the adapters delegate
++    ones). `stock`: the stock stage objects by slot (the adapters delegate
 +    to them)."""
 +    enabled = frozenset(KERNEL_STAGES)
 +    ctx = KernelContext(backbone, config, enabled)
@@ -3224,7 +3239,7 @@ index 000000000..7687dc434
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/__init__.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/__init__.py
 new file mode 100644
-index 000000000..f4ed1a3ba
+index 000000000..7b4784fcb
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/__init__.py
 @@ -0,0 +1,282 @@
@@ -3232,27 +3247,27 @@ index 000000000..f4ed1a3ba
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""Kernel registry of the MiniMax-M3 specialized decode (NVIDIA, SM100 family).
 +
-+Maps each decode stage of ``specialized_decode/stages.py`` to the
++Maps each decode stage of `specialized_decode/stages.py` to the
 +implementation that serves it and the envelope it is valid for: target arch,
 +TP size and rows per rank (rows = c * (K + 1), c concurrent requests, K draft
-+tokens). ``select`` returns ``None`` for any (stage, arch, tp, rows) outside
++tokens). `select` returns `None` for any (stage, arch, tp, rows) outside
 +every envelope; the caller then runs the stock path for that stage.
 +
-+Nothing is imported or compiled at import time: ``KernelImpl.load()`` imports
++Nothing is imported or compiled at import time: `KernelImpl.load()` imports
 +the implementing module lazily.
 +
 +The kernels cover the sparse MoE layers 3-59; layers 0-2 run stock. The executor runs
-+steps of up to ``MAX_ROWS`` = 64 rows
-+(``min(64, 8 * (K + 1))``); each stage's envelope below is how far its kernel
-+goes, and a step with more rows runs that stage stock (``select`` returns
-+None, ``fallback_stages`` names them for the build log):
++steps of up to `MAX_ROWS` = 64 rows
++(`min(64, 8 * (K + 1))`); each stage's envelope below is how far its kernel
++goes, and a step with more rows runs that stage stock (`select` returns
++None, `fallback_stages` names them for the build log):
 +
 +====================  =======================================================
 +stage                 implementation
 +====================  =======================================================
 +front                 AR land + residual + RMSNorm + MXFP8 + QKV/index GEMV
 +                      (tcgen05) + q/k norm + RoPE + FP8 KV / index-K insert
-+index_score           upstream ``minimax_m3_index_decode_score_cutedsl``
++index_score           upstream `minimax_m3_index_decode_score_cutedsl`
 +page_topk             top-16 pages per (row, index head)
 +sparse_decode         16-CTA cluster FP8 sparse decode with MXFP8 output
 +o_proj                MXFP8 o_proj GEMV + router CTAs, Lamport push
@@ -3261,7 +3276,7 @@ index 000000000..f4ed1a3ba
 +dense_mlp             stock (no entry)
 +====================  =======================================================
 +
-+Rows per stage (``max_rows``) and what serves the rows above it:
++Rows per stage (`max_rows`) and what serves the rows above it:
 +
 +====================  ====  ==================================================
 +stage                 rows  above it
@@ -3275,7 +3290,7 @@ index 000000000..f4ed1a3ba
 +page_topk             64    (grid = rows x heads)
 +sparse_decode         64    (grid = rows x heads clusters; beyond one wave of
 +                            clusters it runs in more than one wave)
-+o_proj                8     the "wide" variant (``wide.py``) to 64: the same
++o_proj                8     the "wide" variant (`wide.py`) to 64: the same
 +                            MXFP8 GEMV with the rows as the MMA's N (16 / 32 /
 +                            48 / 64), each weight tile read once; no router
 +                            CTAs, no push (BF16 partial)
@@ -3288,8 +3303,8 @@ index 000000000..f4ed1a3ba
 +dense_mlp             -     stock at every row count
 +====================  ====  ==================================================
 +
-+A stage's implementations are tried in order; the "wide" ones (``variant``)
-+serve only the rows above the fused pair's (``min_rows``).
++A stage's implementations are tried in order; the "wide" ones (`variant`)
++serve only the rows above the fused pair's (`min_rows`).
 +"""
 +
 +from __future__ import annotations
@@ -3461,8 +3476,8 @@ index 000000000..f4ed1a3ba
 +def select(
 +    stage: str, arch: str, tp: int, rows: int, variant: str | None = None
 +) -> KernelImpl | None:
-+    """The implementation serving ``stage`` for this envelope (of
-+    ``variant``, when given), or None (run the stock path)."""
++    """The implementation serving `stage` for this envelope (of
++    `variant`, when given), or None (run the stock path)."""
 +    if stage not in STAGES:
 +        raise KeyError(f"unknown stage {stage!r}; stages: {STAGES}")
 +    for impl in REGISTRY.get(stage, ()):
@@ -3474,7 +3489,7 @@ index 000000000..f4ed1a3ba
 +
 +
 +def fallback_stages(arch: str, tp: int, rows: int) -> tuple[str, ...]:
-+    """Stages with an implementation that does not cover ``rows`` at
++    """Stages with an implementation that does not cover `rows` at
 +    (arch, tp): they run stock for a step of that many rows."""
 +    return tuple(
 +        stage
@@ -3491,7 +3506,7 @@ index 000000000..f4ed1a3ba
 +
 +
 +def max_rows(stage: str, variant: str = "") -> int:
-+    """The largest rows any ``variant`` implementation of ``stage`` runs."""
++    """The largest rows any `variant` implementation of `stage` runs."""
 +    return max(
 +        (i.max_rows for i in REGISTRY.get(stage, ()) if i.variant == variant), default=0
 +    )
@@ -3512,7 +3527,7 @@ index 000000000..f4ed1a3ba
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_arch.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_arch.py
 new file mode 100644
-index 000000000..975dc969d
+index 000000000..aad47b9e7
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_arch.py
 @@ -0,0 +1,219 @@
@@ -3520,16 +3535,16 @@ index 000000000..975dc969d
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""Target selection and residency checks for the specialized-decode kernels.
 +
-+Every kernel here uses ``tcgen05`` / TMEM / block-scaled MMA,
++Every kernel here uses `tcgen05` / TMEM / block-scaled MMA,
 +i.e. arch-specific ("a") features of the SM100 family. They are therefore
-+compiled per exact compute capability (``sm_100a`` on B200/GB200, ``sm_103a``
-+on B300/GB300), never as portable PTX. ``ARCHS`` is the one table to extend
++compiled per exact compute capability (`sm_100a` on B200/GB200, `sm_103a`
++on B300/GB300), never as portable PTX. `ARCHS` is the one table to extend
 +when another target is validated; nothing else in the package spells an arch.
 +
-+Nothing in this module trusts a hard-coded SM count. ``DeviceSpec`` is read
++Nothing in this module trusts a hard-coded SM count. `DeviceSpec` is read
 +from the live device; grids that spin on peers or predecessors call
-+``check_persistent_grid`` / ``check_co_resident`` at build time and fail closed
-+(``ResidencyError``) rather than risk a deadlock at run time.
++`check_persistent_grid` / `check_co_resident` at build time and fail closed
++(`ResidencyError`) rather than risk a deadlock at run time.
 +"""
 +
 +from __future__ import annotations
@@ -3687,7 +3702,7 @@ index 000000000..975dc969d
 +
 +
 +def check_co_resident(grids: list[GridUse], spec: DeviceSpec) -> None:
-+    """Fail closed unless all ``grids`` fit on the device at the same time.
++    """Fail closed unless all `grids` fit on the device at the same time.
 +
 +    Worst-case model independent of the block scheduler: every SM may have to
 +    host ceil(ctas / sm_count) CTAs of each grid at once, so the per-SM sums
@@ -3737,7 +3752,7 @@ index 000000000..975dc969d
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_comm.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_comm.py
 new file mode 100644
-index 000000000..9f55f05d8
+index 000000000..c624339a6
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_comm.py
 @@ -0,0 +1,490 @@
@@ -3749,29 +3764,29 @@ index 000000000..9f55f05d8
 +kernel stores its partial (Lamport-tagged words) straight into each peer's
 +receive buffer through a device pointer, and the consumer polls its own
 +buffer. The kernels only need, per exchange buffer, the local base pointer
-+and every rank's base pointer (``peer_ptrs[rank] == local``). How those
-+pointers are obtained is this module's job, behind ``PeerTransport``:
++and every rank's base pointer (`peer_ptrs[rank] == local`). How those
++pointers are obtained is this module's job, behind `PeerTransport`:
 +
-+- ``IpcPeerTransport`` (default, TP <= 8 inside one NVLink domain of a single
++- `IpcPeerTransport` (default, TP <= 8 inside one NVLink domain of a single
 +  OS instance, e.g. the 4 GPUs of a GB200/GB300 tray): one plain
-+  ``cudaMalloc`` arena per rank, CUDA IPC handles all-gathered once over the
-+  CPU group, peers opened once. Uses vLLM's ``CudaRTLibrary``.
-+- ``SymmMemPeerTransport`` (TP <= 16, one NVLink domain, any number of OS
++  `cudaMalloc` arena per rank, CUDA IPC handles all-gathered once over the
++  CPU group, peers opened once. Uses vLLM's `CudaRTLibrary`.
++- `SymmMemPeerTransport` (TP <= 16, one NVLink domain, any number of OS
 +  instances, e.g. TP8/16 over the trays of a GB200/GB300 NVL72): torch
-+  symmetric memory, the mechanism vLLM's M3 ``finalize_allreduce_norm`` and
-+  ``SymmMemCommunicator`` already use. Across nodes torch maps the peers
++  symmetric memory, the mechanism vLLM's M3 `finalize_allreduce_norm` and
++  `SymmMemCommunicator` already use. Across nodes torch maps the peers
 +  through fabric (multi-node NVLink) handles; the arena also gets an NVLS
 +  multicast address when the fabric supports it. The kernels do not change,
-+  only the provider of ``peer_ptrs``.
++  only the provider of `peer_ptrs`.
 +
-+``make_transport("auto", ...)`` picks CUDA IPC when every rank of the group is
++`make_transport("auto", ...)` picks CUDA IPC when every rank of the group is
 +on this node and symmetric memory otherwise.
 +
-+``MAX_PEERS`` is the peer table of the device structs (``int* p[16]``): every
++`MAX_PEERS` is the peer table of the device structs (`int* p[16]`): every
 +transport serves up to 16 ranks (CUDA IPC up to 8, one node). A buffer's
-+``mc_ptr`` is its NVLS multicast address (0 without one): one store there lands
++`mc_ptr` is its NVLS multicast address (0 without one): one store there lands
 +at the same offset in every rank's buffer, which is what the push protocol's
-+multicast mode (``_exchange.PushWorkspace.multicast``) uses.
++multicast mode (`_exchange.PushWorkspace.multicast`) uses.
 +
 +Buffers are carved from one arena per transport, in the same order on every
 +rank (the allocation calls are collective by construction: every rank builds
@@ -3821,7 +3836,7 @@ index 000000000..9f55f05d8
 +
 +    def peer_ptrs_padded(self, table: int = MAX_PEERS) -> list[int]:
 +        """Every rank's address, zero padded to a device peer table of
-+        ``table`` entries; raises if the world does not fit."""
++        `table` entries; raises if the world does not fit."""
 +        if len(self.peer_ptrs) > table:
 +            raise ValueError(
 +                f"{self.name}: world {len(self.peer_ptrs)} exceeds the device "
@@ -3836,7 +3851,7 @@ index 000000000..9f55f05d8
 +
 +class PeerMemoryError(RuntimeError):
 +    """Peer memory could not be set up on some rank; raised on every rank
-+    of the group at the same point (``PeerTransport.agree``)."""
++    of the group at the same point (`PeerTransport.agree`)."""
 +
 +
 +class PeerTransport(ABC):
@@ -3857,7 +3872,7 @@ index 000000000..9f55f05d8
 +        """Every rank's arena base (collective on first call)."""
 +
 +    def agree(self, ok: bool, what: str) -> None:
-+        """Collective: raise ``PeerMemoryError`` on every rank if ``ok`` is
++        """Collective: raise `PeerMemoryError` on every rank if `ok` is
 +        false on any rank. Every rank calls it at the same point, so a local
 +        failure never leaves the peers waiting in a later collective."""
 +        if not ok:
@@ -4033,13 +4048,13 @@ index 000000000..9f55f05d8
 +class SymmMemPeerTransport(PeerTransport):
 +    """torch symmetric memory over the TP device group (single or multi node).
 +
-+    One ``symm_mem.empty`` arena per rank, rendezvoused once over ``group``
-+    (a ``ProcessGroup`` or its name). Within one OS instance torch maps the
++    One `symm_mem.empty` arena per rank, rendezvoused once over `group`
++    (a `ProcessGroup` or its name). Within one OS instance torch maps the
 +    peers with CUDA IPC (POSIX fd) handles; across the trays of an NVL72 it
 +    uses fabric handles, which need the IMEX channel in the container
-+    (``/dev/nvidia-caps-imex-channels``). ``multicast_ptr`` is the arena's
++    (`/dev/nvidia-caps-imex-channels`). `multicast_ptr` is the arena's
 +    NVLS multicast address (0 when the fabric does not provide one), at the
-+    same offsets as ``peer_ptrs``."""
++    same offsets as `peer_ptrs`."""
 +
 +    kind = "symm_mem"
 +
@@ -4172,7 +4187,7 @@ index 000000000..9f55f05d8
 +
 +
 +def all_ranks_on_this_node(cpu_group) -> bool:
-+    """Collective over ``cpu_group`` (gloo): every rank shares this host."""
++    """Collective over `cpu_group` (gloo): every rank shares this host."""
 +    import torch.distributed as dist
 +
 +    from vllm.distributed.parallel_state import in_the_same_node_as
@@ -4183,9 +4198,9 @@ index 000000000..9f55f05d8
 +
 +
 +def resolve_transport_kind(kind: str, *, cpu_group=None, world: int = 1) -> str:
-+    """``auto`` -> ``loopback`` (world 1), ``cuda_ipc`` (one node, world <=
-+    ``MAX_IPC_PEERS``) or ``symm_mem``. Collective over ``cpu_group`` for
-+    ``auto`` with world > 1."""
++    """`auto` -> `loopback` (world 1), `cuda_ipc` (one node, world <=
++    `MAX_IPC_PEERS`) or `symm_mem`. Collective over `cpu_group` for
++    `auto` with world > 1."""
 +    if kind not in TRANSPORT_KINDS:
 +        raise ValueError(f"unknown peer transport {kind!r}; one of {TRANSPORT_KINDS}")
 +    if kind != "auto":
@@ -4206,8 +4221,8 @@ index 000000000..9f55f05d8
 +    world: int,
 +    capacity: int,
 +) -> PeerTransport:
-+    """``group``: the device (NCCL) process group, for ``symm_mem``;
-+    ``cpu_group``: its gloo twin, for ``cuda_ipc`` and ``auto``."""
++    """`group`: the device (NCCL) process group, for `symm_mem`;
++    `cpu_group`: its gloo twin, for `cuda_ipc` and `auto`."""
 +    kind = resolve_transport_kind(kind, cpu_group=cpu_group, world=world)
 +    if kind == "cuda_ipc":
 +        return IpcPeerTransport(cpu_group, rank, world, capacity)
@@ -4233,7 +4248,7 @@ index 000000000..9f55f05d8
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_dtypes.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_dtypes.py
 new file mode 100644
-index 000000000..79c22ec13
+index 000000000..3ce6e5232
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_dtypes.py
 @@ -0,0 +1,97 @@
@@ -4242,8 +4257,8 @@ index 000000000..79c22ec13
 +"""Cache-format checks shared by every stage that reads or writes the KV
 +cache or the indexer K cache.
 +
-+The kernels are parametrized by a ``CacheFormat`` (a compile-time
-+parameter of the CuTe DSL kernels). Only ``FP8_E4M3`` has device code today; ``BF16``
++The kernels are parametrized by a `CacheFormat` (a compile-time
++parameter of the CuTe DSL kernels). Only `FP8_E4M3` has device code today; `BF16`
 +is a declared format with no kernel instantiation yet, so selecting it is
 +refused with a clear message instead of silently reinterpreting bytes.
 +
@@ -4302,18 +4317,18 @@ index 000000000..79c22ec13
 +
 +
 +def kv_cache_format(cache_dtype: str) -> CacheFormat:
-+    """From ``CacheConfig.cache_dtype``."""
++    """From `CacheConfig.cache_dtype`."""
 +    return _resolve("KV", cache_dtype, _KV_NAMES)
 +
 +
 +def indexer_cache_format(indexer_kv_dtype: str) -> CacheFormat:
-+    """From ``AttentionConfig.indexer_kv_dtype`` (before 'auto' resolution
++    """From `AttentionConfig.indexer_kv_dtype` (before 'auto' resolution
 +    is fine: 'auto' maps to the model default bf16)."""
 +    return _resolve("indexer K", indexer_kv_dtype, _INDEXER_NAMES)
 +
 +
 +def check_cache_tensor(kind: str, t, fmt: CacheFormat) -> None:
-+    """Runtime tensor check: the view the kernels get must match ``fmt``."""
++    """Runtime tensor check: the view the kernels get must match `fmt`."""
 +    import torch
 +
 +    ok = {
@@ -4336,7 +4351,7 @@ index 000000000..79c22ec13
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_exchange.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_exchange.py
 new file mode 100644
-index 000000000..ed6cf552e
+index 000000000..fb9f45fa7
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_exchange.py
 @@ -0,0 +1,194 @@
@@ -4358,14 +4373,14 @@ index 000000000..ed6cf552e
 +                                                   slice) call parity, flipped by
 +                                                   the consumer
 +
-+``PushParams`` (160 bytes: peers[16], flags, rank, world, maxt, cluster, ndst)
-+is packed here; the post's host (``post/host.py``) unpacks the same bytes.
++`PushParams` (160 bytes: peers[16], flags, rank, world, maxt, cluster, ndst)
++is packed here; the post's host (`post/host.py`) unpacks the same bytes.
 +
 +Multicast mode: when the transport gives the exchange an NVLS multicast
-+address, a producer stores each chunk once, to ``mc_ptr`` + slot (``peers[0]``
-+= the multicast address, ``ndst`` = 1), and the fabric delivers it to the same
-+slot of every rank; the unicast mode stores it ``world`` times. Consumers do
-+not change (they poll and re-arm their local copy). ``multicast_policy``
++address, a producer stores each chunk once, to `mc_ptr` + slot (`peers[0]`
++= the multicast address, `ndst` = 1), and the fabric delivers it to the same
++slot of every rank; the unicast mode stores it `world` times. Consumers do
++not change (they poll and re-arm their local copy). `multicast_policy`
 +picks the mode per exchange: multicast when it is available and the group
 +spans more than 4 ranks or the bucket is above 8 rows (unicast fan-out
 +costs world stores per chunk; NVLS one).
@@ -4399,7 +4414,7 @@ index 000000000..ed6cf552e
 +
 +
 +def multicast_policy(world: int, maxt: int, available: bool) -> bool:
-+    """Whether an exchange of ``world`` ranks and bucket ``maxt`` pushes
++    """Whether an exchange of `world` ranks and bucket `maxt` pushes
 +    through its multicast address (the same answer on every rank)."""
 +    if not available or world == 1:
 +        return False
@@ -4438,7 +4453,7 @@ index 000000000..ed6cf552e
 +        return 1 if self.multicast else self.world
 +
 +    def push_ptrs(self) -> list[int]:
-+        """The ``ndst`` addresses a producer stores each chunk to."""
++        """The `ndst` addresses a producer stores each chunk to."""
 +        if self.multicast:
 +            if not self.exch.mc_ptr:
 +                raise ValueError(
@@ -4483,8 +4498,8 @@ index 000000000..ed6cf552e
 +def push_workspace(
 +    transport: PeerTransport, maxt: int, tag: str = "g3", multicast: bool | None = None
 +) -> PushWorkspace:
-+    """The bucket-``maxt`` exchange (allocated once per transport and tag).
-+    ``multicast``: the push mode (None: ``multicast_policy``); fixed by the
++    """The bucket-`maxt` exchange (allocated once per transport and tag).
++    `multicast`: the push mode (None: `multicast_policy`); fixed by the
 +    first call for a (tag, maxt)."""
 +    import torch
 +
@@ -4536,7 +4551,7 @@ index 000000000..ed6cf552e
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_mxfp8.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_mxfp8.py
 new file mode 100644
-index 000000000..e63ba35a6
+index 000000000..167f4c112
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/_mxfp8.py
 @@ -0,0 +1,89 @@
@@ -4545,14 +4560,14 @@ index 000000000..e63ba35a6
 +"""The MXFP8 operands of a loaded vLLM linear, in the layout the kernels read.
 +
 +Every kernel that reads an MXFP8 weight (front, o_proj, the MoE's shared
-+expert) takes the e4m3 weight row-major ``[N, K]`` (N = output features) and
++expert) takes the e4m3 weight row-major `[N, K]` (N = output features) and
 +its UE8M0 scales (one per 32 K elements) as the flat F8_128x4-swizzled buffer
-+of ``[N, K / 32]`` (rows padded to 128, scale columns to a multiple of 4).
++of `[N, K / 32]` (rows padded to 128, scale columns to a multiple of 4).
 +
-+What the stock MXFP8 linear kernels leave after ``process_weights_after_loading``:
++What the stock MXFP8 linear kernels leave after `process_weights_after_loading`:
 +
 +====================================  ===================  ==================
-+kernel                                ``weight``           ``weight_scale``
++kernel                                `weight`           `weight_scale`
 +====================================  ===================  ==================
 +FlashInferCutlassMxfp8LinearKernel    [N, K] contiguous    F8_128x4, flat
 +FlashInferCutedslMxfp8LinearKernel    [K, N] view (the     F8_128x4, flat
@@ -4561,7 +4576,7 @@ index 000000000..e63ba35a6
 +FlashInferTrtllmMxfp8LinearKernel     [N', K] shuffled     shuffled, flat
 +====================================  ===================  ==================
 +
-+The first two hold the same bytes: the CuTe-DSL view is undone with ``.t()``
++The first two hold the same bytes: the CuTe-DSL view is undone with `.t()`
 +(no copy). The TRT-LLM shuffle is refused. Nothing is requantized: the e4m3
 +and UE8M0 bytes are the stock layer's own.
 +"""
@@ -4579,8 +4594,8 @@ index 000000000..e63ba35a6
 +    lin: torch.nn.Module, what: str, shape: tuple[int, int] | None = None
 +) -> tuple[torch.Tensor, torch.Tensor]:
 +    """(e4m3 weight [N, K] contiguous, flat uint8 F8_128x4 UE8M0 scales) of a
-+    vLLM MXFP8 linear after weight processing. ``shape``: the expected
-+    ``(N, K)``; without it, a contiguous weight is taken as ``[N, K]``."""
++    vLLM MXFP8 linear after weight processing. `shape`: the expected
++    `(N, K)`; without it, a contiguous weight is taken as `[N, K]`."""
 +    w = getattr(lin, "weight", None)
 +    s = getattr(lin, "weight_scale", None)
 +    if w is None or s is None:
@@ -4631,7 +4646,7 @@ index 000000000..e63ba35a6
 +__all__ = ["Mxfp8LayoutError", "mxfp8_linear_nk"]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/allreduce_norm.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/allreduce_norm.py
 new file mode 100644
-index 000000000..5bf86eae3
+index 000000000..a33dde089
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/allreduce_norm.py
 @@ -0,0 +1,399 @@
@@ -4639,23 +4654,23 @@ index 000000000..5bf86eae3
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""allreduce_norm stage: the post-attention boundary of a sparse layer (TP4).
 +
-+One launch (CuTe DSL ``post/kernel.py`` ``post_route_kernel``) after the o_proj stage:
++One launch (CuTe DSL `post/kernel.py` `post_route_kernel`) after the o_proj stage:
 +
 +1. lands the four ranks' bf16 o_proj partials the o_proj GEMV pushed into this
-+   rank's boundary exchange (``_exchange.push_workspace(transport, 8, "g3")``),
++   rank's boundary exchange (`_exchange.push_workspace(transport, 8, "g3")`),
 +   sums them in rank order, adds the residual, Gemma RMSNorm;
 +2. writes the routed experts' NVFP4 activation with the mode-Q per-token scale
 +   (the M3.1 QAT FC1 row quantizer) and, optionally, an MXFP8 copy;
 +3. routes: a dedicated warp polls the o_proj router CTAs' tagged partial logits
-+   (``RouterExchangeSlot``), scales them by the row's 1/rms, runs the
++   (`RouterExchangeSlot`), scales them by the row's 1/rms, runs the
 +   MiniMax2 top-4 (sigmoid + correction bias, scaled-sum normalize x 2) and
 +   publishes tagged route lines the fused MoE engine polls.
 +
-+The hand-off to the MoE stage is ``MoeHandoff`` (exact layout below).
++The hand-off to the MoE stage is `MoeHandoff` (exact layout below).
 +
-+Buffers come from ``_comm.PeerTransport``; every input is an explicit tensor.
++Buffers come from `_comm.PeerTransport`; every input is an explicit tensor.
 +
-+Why not upstream ``finalize_allreduce_norm.FinalizeAllReduceGemmaRMSNormMxfp8``:
++Why not upstream `finalize_allreduce_norm.FinalizeAllReduceGemmaRMSNormMxfp8`:
 +its arithmetic (rank-order fp32 sum, bf16 residual, Gemma RMSNorm, UE8M0
 +MXFP8 in the 128x4 layout) is the same contract, but its device protocol is
 +different and cannot be swapped in without rewriting the producers: upstream's
@@ -4664,7 +4679,7 @@ index 000000000..5bf86eae3
 +fused MoE engine) push unicast into a two-parity exchange whose parity flags the
 +consumer flips, and the same launch also performs routing and the NVFP4 tail.
 +What is reused: the test oracle uses the same UE8M0 / 128x4 math, and
-+``_comm.SymmMemPeerTransport`` (the mechanism upstream uses) can provide the
++`_comm.SymmMemPeerTransport` (the mechanism upstream uses) can provide the
 +peer pointers instead of CUDA IPC.
 +"""
 +
@@ -4716,8 +4731,8 @@ index 000000000..5bf86eae3
 +    """One layer's router exchange between its o_proj router CTAs (writers,
 +    every rank's) and its post routing warp (reader, this rank).
 +
-+    ``rx``: u64 [2][maxt][world][NPART][E] per rank = (tag << 32) | fp32 bits,
-+    zero = no call (tags start at 1); call ``tag`` lives in half ``tag & 1``.
++    `rx`: u64 `[2][maxt][world][NPART][E]` per rank = (tag << 32) | fp32 bits,
++    zero = no call (tags start at 1); call `tag` lives in half `tag & 1`.
 +    Peer-addressable (each rank's o_proj router CTAs store into every rank's
 +    slot).
 +
@@ -4729,11 +4744,11 @@ index 000000000..5bf86eae3
 +    A's post(k + 1), which needs B's o_proj(k + 1) words, stored only after
 +    B's post(k) finished (B's own grid dependency).
 +
-+    ``rxc`` int32 [maxt][32]: word 0
-+    of row t = tag of the last consumed rx call (post side). ``oep`` int32
-+    [NR][32]: word 0 of router CTA r = its call counter (o_proj side). Every
++    `rxc` int32 `[maxt][32]`: word 0
++    of row t = tag of the last consumed rx call (post side). `oep` int32
++    `[NR][32]`: word 0 of router CTA r = its call counter (o_proj side). Every
 +    o_proj call must be followed by the post call of the same layer, or the
-+    counters drift and the post traps at its deadline; ``reset`` re-aligns.
++    counters drift and the post traps at its deadline; `reset` re-aligns.
 +    """
 +
 +    def __init__(self, transport: PeerTransport, layer_idx: int, maxt: int = 8):
@@ -4789,12 +4804,12 @@ index 000000000..5bf86eae3
 +                                           low nibble = even column; rows >= rows
 +                                           untouched
 +    x4_sf_full     uint8 [17, 384]         rows 0..15: e4m3 block-16 scales,
-+                                           row-major [row][col / 16]; row 16: fp32
++                                           row-major `[row][col / 16]`; row 16: fp32
 +                                           s_t[0..95] (bytes 6144 + 4 t)
 +    x4_sf          uint8 [16, 384]         view of x4_sf_full[:16]
 +    x4_pts         fp32 [96]               view of x4_sf_full[16] (s_t per row)
 +    x4_sfsc        fp32 [1]                1.0 (unused by mode Q; struct field)
-+    route          int64 [16, rows, 16]    [replica][row][word]; words 0..3 =
++    route          int64 [16, rows, 16]    `[replica][row][word]`; words 0..3 =
 +                                           (tag << 32) | (id << 16) | bf16(w) of
 +                                           the top-4 in rank order; engine CTA bx
 +                                           polls replica bx % 16 for tag ==
@@ -4867,8 +4882,8 @@ index 000000000..5bf86eae3
 +
 +    Args:
 +        transport: the TP group's peer transport (world 4 or 8).
-+        rx: the layer's ``RouterExchangeSlot`` (shared with ``OProjRouterStage``).
-+        post_norm_weight: bf16 [6144], Gemma weight (``1 + w`` applied in-kernel).
++        rx: the layer's `RouterExchangeSlot` (shared with `OProjRouterStage`).
++        post_norm_weight: bf16 [6144], Gemma weight (`1 + w` applied in-kernel).
 +        router_bias: fp32 [128] e_score_correction_bias.
 +        rows: decode rows per rank (1..8; the o_proj router path needs a power of 2).
 +        cl: CTAs per row (4, 8 or 16).
@@ -4926,8 +4941,8 @@ index 000000000..5bf86eae3
 +
 +    # -- build ---------------------------------------------------------------
 +    def grid_use(self) -> _arch.GridUse:
-+        """The post's footprint for ``_arch.check_co_resident`` with the MoE
-+        engine it launches early (exact after ``build``)."""
++        """The post's footprint for `_arch.check_co_resident` with the MoE
++        engine it launches early (exact after `build`)."""
 +        info = self.kernel_info
 +        smem = POST_SMEM_BOUND if info is None else int(info[0])
 +        threads = {4: 224, 8: 128, 16: 96}[self.cl]
@@ -5005,7 +5020,7 @@ index 000000000..5bf86eae3
 +    def __call__(
 +        self, residual_mid: torch.Tensor, rows: int | None = None
 +    ) -> MoeHandoff:
-+        """Run the post on ``residual_mid`` (bf16 [rows, 6144], final before
++        """Run the post on `residual_mid` (bf16 [rows, 6144], final before
 +        the o_proj launch). Returns the hand-off buffers (owned by the stage)."""
 +        if self._ext is None:
 +            raise RuntimeError("PostRouteStage: build() first")
@@ -5036,43 +5051,43 @@ index 000000000..5bf86eae3
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/front.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/front.py
 new file mode 100644
-index 000000000..de0a97da7
+index 000000000..1fb90e7ea
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/front.py
 @@ -0,0 +1,533 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-+"""Stage ``front``: the attention front of one sparse layer in one launch.
++"""Stage `front`: the attention front of one sparse layer in one launch.
 +
-+The device code is CuTe DSL (``front_kernel.py``, compiled per specialisation
++The device code is CuTe DSL (`front_kernel.py`, compiled per specialisation
 +at build). One cluster-of-4 grid does, per decode row:
 +
 +1. boundary: TP all-reduce of the previous sublayer's bf16 partials (Lamport
-+   push exchange), + residual (-> ``out_residual``), Gemma RMSNorm, MXFP8
++   push exchange), + residual (-> `out_residual`), Gemma RMSNorm, MXFP8
 +   quantization of the normed row;
-+2. QKV + index-Q + index-K MXFP8 GEMV (tcgen05 ``kind::mxf8f6f4``), split-K over
++2. QKV + index-Q + index-K MXFP8 GEMV (tcgen05 `kind::mxf8f6f4`), split-K over
 +   the 4 CTAs of a cluster, DSMEM reduce;
 +3. epilogue: per-head Gemma RMSNorm + NeoX RoPE, bf16/FP8 Q, FP8 index-Q, FP8 K/V
 +   insert into the KV cache, FP8 index-K insert into the indexer cache;
 +4. optionally the step metadata of the layer (one extra cluster).
 +
-+Exchange modes (``prepushed``):
++Exchange modes (`prepushed`):
 +
-+- ``False`` (0): this front pushes its own partial ``x`` into every rank's
-+  exchange, then polls. Uses the ``"front"`` exchange of the transport.
-+- ``True`` (2): the producer of the previous sublayer (the fused MoE engine)
-+  already pushed into the shared boundary exchange (``"g3"``, see
-+  ``_exchange.py``); the front only polls. ``x`` must be None.
++- `False` (0): this front pushes its own partial `x` into every rank's
++  exchange, then polls. Uses the `"front"` exchange of the transport.
++- `True` (2): the producer of the previous sublayer (the fused MoE engine)
++  already pushed into the shared boundary exchange (`"g3"`, see
++  `_exchange.py`); the front only polls. `x` must be None.
 +
 +Every CTA of the grid spins (the GEMV clusters poll the boundary clusters'
 +hand-off; the boundary polls peers), so the whole grid must be co-resident:
 +the constructor checks that against the live device and raises
-+``ResidencyError`` otherwise.
++`ResidencyError` otherwise.
 +
 +The per-rank head geometry (nq, nkv, niq) is a compile-time parameter: TP4 is
 +16 / 1 / 1 (20 head clusters), TP8 8 / 1 / 1 (12 head clusters).
 +
-+Exchange buffers come from ``_comm.PeerTransport``; cache formats are
++Exchange buffers come from `_comm.PeerTransport`; cache formats are
 +checked (FP8 e4m3 only; NVFP4 rejected).
 +"""
 +
@@ -5108,7 +5123,7 @@ index 000000000..de0a97da7
 +
 +def _ext(fmt: _dtypes.CacheFormat = _dtypes.CacheFormat.FP8_E4M3, world: int = 4):
 +    """The kernel module (CuTe DSL). Only the FP8 e4m3 cache format has device code;
-+    ``world`` is a compile-time
++    `world` is a compile-time
 +    parameter of each launch, accepted here for the registry's build phase."""
 +    if fmt is not _dtypes.CacheFormat.FP8_E4M3:
 +        raise _dtypes.CacheDtypeError(
@@ -5145,10 +5160,10 @@ index 000000000..de0a97da7
 +@dataclass
 +class StepMetaIO:
 +    """Step metadata the front writes for the indexer of its layer (one extra
-+    cluster). Inputs: ``query_start_loc`` int32 [reqs + 1], ``seq_lens`` int32
-+    [reqs], ``block_table`` int32 [reqs, max_pages]. Outputs: ``n_valid`` int32
-+    [rows] (pos // 128 + 1, 0 for an unresolved row), ``sparse_len`` int32
-+    [heads, rows] (any strides) or None, ``pt_rows`` int32 [rows, pt_maxp] or
++    cluster). Inputs: `query_start_loc` int32 [reqs + 1], `seq_lens` int32
++    [reqs], `block_table` int32 [reqs, max_pages]. Outputs: `n_valid` int32
++    [rows] (pos // 128 + 1, 0 for an unresolved row), `sparse_len` int32
++    [heads, rows] (any strides) or None, `pt_rows` int32 [rows, pt_maxp] or
 +    None (the first pages of each row's block table)."""
 +
 +    query_start_loc: torch.Tensor
@@ -5172,13 +5187,13 @@ index 000000000..de0a97da7
 +
 +
 +class QkvFrontStage:
-+    """``front`` for one layer (one instance per layer; all layers may share
++    """`front` for one layer (one instance per layer; all layers may share
 +    the transport's exchange of their bucket).
 +
-+    Geometry per rank: ``nq`` query heads, ``nkv`` KV heads, ``niq`` index
-+    query heads, one index-K head; the fused weight ``w`` is e4m3
++    Geometry per rank: `nq` query heads, `nkv` KV heads, `niq` index
++    query heads, one index-K head; the fused weight `w` is e4m3
 +    [(nq + 2 nkv + niq + 1) * 128, 6144] with 128x4-swizzled UE8M0 scales
-+    ``wsf`` (rows: q | k | v | index-q | index-k).
++    `wsf` (rows: q | k | v | index-q | index-k).
 +    """
 +
 +    stage = "front"
@@ -5363,7 +5378,7 @@ index 000000000..de0a97da7
 +
 +    def precompile(self) -> None:
 +        """Compile every specialisation this stage launches (one per distinct
-+        ``_spec_rows`` over its rows), outside CUDA-graph capture: the executor
++        `_spec_rows` over its rows), outside CUDA-graph capture: the executor
 +        first calls the front inside a FULL graph capture, where compiling is
 +        refused. The kernel arguments are scalars (device addresses, sizes,
 +        strides), so zeros of the same types compile the same code; nothing is
@@ -5575,17 +5590,17 @@ index 000000000..de0a97da7
 +__all__ = ["FinalizeIn", "QkvFrontStage", "StepMetaIO"]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/front_kernel.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/front_kernel.py
 new file mode 100644
-index 000000000..3027d83d3
+index 000000000..ca8cf698c
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/front_kernel.py
 @@ -0,0 +1,1893 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +# ruff: noqa: E501, SIM102
-+"""CuTe DSL device code of stage ``front`` (the host side is ``front.py``).
++"""CuTe DSL device code of stage `front` (the host side is `front.py`).
 +
 +A operand in shared memory at bucket 8, early x polling, Lamport sentinel hand-off, one weight phase. Every float
-+operation is spelled with an explicit rounding mode (``add.rn``, ``fma.rn``, ``*.ftz``, and FMA only where intended),
++operation is spelled with an explicit rounding mode (`add.rn`, `fma.rn`, `*.ftz`, and FMA only where intended),
 +so the outputs do not depend on compiler contraction.
 +
 +Grid: 4 * (heads + meta) CTAs, cluster 4, 512 threads, one CTA per SM (~226 KB shared memory). Per head cluster:
@@ -5712,7 +5727,7 @@ index 000000000..3027d83d3
 +# ---- float arithmetic with explicit rounding (no contraction by the compiler)
 +@dsl_user_op
 +def fop(op, a, b, *, loc=None, ip=None):
-+    """``op``.f32 a, b, e.g. op = "add.rn", "mul.rn.ftz", "div.full.ftz", "max", "min"."""
++    """`op`.f32 a, b, e.g. op = "add.rn", "mul.rn.ftz", "div.full.ftz", "max", "min"."""
 +    return F32(
 +        _asm(
 +            _f32t(),
@@ -7474,7 +7489,7 @@ index 000000000..3027d83d3
 +    )
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/geometry.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/geometry.py
 new file mode 100644
-index 000000000..e6f32cd00
+index 000000000..945eb2512
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/geometry.py
 @@ -0,0 +1,199 @@
@@ -7485,8 +7500,8 @@ index 000000000..e6f32cd00
 +
 +Pure Python (no torch, no CUDA), so every choice can be checked on CPU for any
 +SM count. The stages call these functions with the live
-+``_arch.DeviceSpec.sm_count`` and the probed occupancy; nothing here is a
-+substitute for the build-time residency checks in ``_arch``, which still fail
++`_arch.DeviceSpec.sm_count` and the probed occupancy; nothing here is a
++substitute for the build-time residency checks in `_arch`, which still fail
 +closed.
 +
 +Which launch dimensions depend on the SM count:
@@ -7497,7 +7512,7 @@ index 000000000..e6f32cd00
 +front              4 x (heads + 1) CTAs, all spinning                  residency
 +sparse_decode      rows x Hkv clusters of 16 or 8 CTAs                 width, waves
 +o_proj             (6144 / 128) x 2 + 16 CTAs (shape-derived)          no
-+allreduce_norm     rows clusters of ``cl`` CTAs, all spinning          residency
++allreduce_norm     rows clusters of `cl` CTAs, all spinning          residency
 +moe                one CTA per SM: routed = SMs - shared CTAs          split
 +page_topk          rows x column splits CTAs, no cross-CTA wait        no
 +index_score        upstream kernel, (batch, 256) CTAs, no waits        no
@@ -7540,7 +7555,7 @@ index 000000000..e6f32cd00
 +
 +
 +def expected_distinct_experts(rows: int, experts: int = _E, topk: int = _TOPK) -> float:
-+    """E[distinct experts] of ``rows`` tokens choosing ``topk`` of ``experts``
++    """E[distinct experts] of `rows` tokens choosing `topk` of `experts`
 +    uniformly (the routed weight bytes a call streams scale with this)."""
 +    return experts * (1.0 - (1.0 - topk / experts) ** rows)
 +
@@ -7566,7 +7581,7 @@ index 000000000..e6f32cd00
 +    rows: int, sm_count: int, routed_cost: float = MOE_ROUTED_COST
 +) -> int:
 +    """The valid shared-CTA count with the lowest modelled cost (ties: more
-+    shared CTAs) that leaves at least ``MOE_MIN_ROUTED_CTAS`` routed CTAs."""
++    shared CTAs) that leaves at least `MOE_MIN_ROUTED_CTAS` routed CTAs."""
 +    ok = [s for s in MOE_VALID_N_SHARED if sm_count - s >= MOE_MIN_ROUTED_CTAS]
 +    if not ok:
 +        raise ValueError(
@@ -7577,7 +7592,7 @@ index 000000000..e6f32cd00
 +
 +
 +def moe_n_shared(rows: int, sm_count: int) -> int:
-+    """Shared-expert CTAs of the engine for ``rows`` tokens on ``sm_count``
++    """Shared-expert CTAs of the engine for `rows` tokens on `sm_count`
 +    (live) SMs: the model, unless a measured override exists for that count."""
 +    if not 1 <= rows <= MOE_MAX_ROWS:
 +        raise ValueError(f"moe: rows {rows} outside 1..{MOE_MAX_ROWS}")
@@ -7616,7 +7631,7 @@ index 000000000..e6f32cd00
 +def sparse_waves(
 +    rows: int, num_kv_heads: int, cl: int, max_active_clusters: Mapping[int, int]
 +) -> float:
-+    """Waves of ``rows`` x ``num_kv_heads`` clusters of width ``cl`` (inf if
++    """Waves of `rows` x `num_kv_heads` clusters of width `cl` (inf if
 +    that width is not schedulable)."""
 +    n = max_active_clusters.get(cl, 0)
 +    return float("inf") if n < 1 else -(-(rows * num_kv_heads) // n)
@@ -7629,16 +7644,16 @@ index 000000000..e6f32cd00
 +    *,
 +    one_wave: bool = True,
 +) -> int:
-+    """Cluster width of the sparse decode for ``rows`` x ``num_kv_heads``
-+    clusters. The preferred width is 16 below ``SPARSE_WIDE_CLUSTERS``
-+    clusters, else 8. With ``max_active_clusters`` (width -> clusters the
-+    device holds at once, ``cudaOccupancyMaxActiveClusters``):
++    """Cluster width of the sparse decode for `rows` x `num_kv_heads`
++    clusters. The preferred width is 16 below `SPARSE_WIDE_CLUSTERS`
++    clusters, else 8. With `max_active_clusters` (width -> clusters the
++    device holds at once, `cudaOccupancyMaxActiveClusters`):
 +
-+    - ``one_wave``: the first width, from the preferred one down, whose grid
-+      is co-resident; ``ValueError`` if none is (fail closed);
++    - `one_wave`: the first width, from the preferred one down, whose grid
++      is co-resident; `ValueError` if none is (fail closed);
 +    - otherwise the grid only has to be schedulable: the width with the
 +      fewest waves, the wider one on a tie (more CTAs per row, shorter
-+      per-CTA page loop); ``ValueError`` if no width is schedulable."""
++      per-CTA page loop); `ValueError` if no width is schedulable."""
 +    need = rows * num_kv_heads
 +    if need <= 0:
 +        raise ValueError("sparse_decode: rows and KV heads must be positive")
@@ -7679,24 +7694,24 @@ index 000000000..e6f32cd00
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/index_score.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/index_score.py
 new file mode 100644
-index 000000000..f686f66ca
+index 000000000..7ef0f6b6e
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/index_score.py
 @@ -0,0 +1,154 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""index_score stage: decode-time index page scores, served by upstream
-+vLLM's ``minimax_m3_index_decode_score_cutedsl``
-+(``vllm/models/minimax_m3/nvidia/ops/index_decode_score.py``).
++vLLM's `minimax_m3_index_decode_score_cutedsl`
++(`vllm/models/minimax_m3/nvidia/ops/index_decode_score.py`).
 +
 +Upstream reuse, no port: that CuTe DSL kernel accepts an FP8 E4M3 index query
 +and an FP8 E4M3 index-K cache ([pages, 128, D], unscaled e4m3, as written by
-+upstream's ``MiniMaxM3IndexerCache`` for ``indexer_kv_dtype="fp8"``) and
++upstream's `MiniMaxM3IndexerCache` for `indexer_kv_dtype="fp8"`) and
 +writes fp32 page scores by strides, so it serves the fp8 indexer path of the
 +specialized decode as is. Its grid is (batch, split_k = 256) and it does not
 +spin, so it needs no residency check.
 +
-+NVFP4 index caches are rejected (``_dtypes``); the upstream NVFP4 index path
++NVFP4 index caches are rejected (`_dtypes`); the upstream NVFP4 index path
 +is a different kernel and a different cache layout.
 +"""
 +
@@ -7721,20 +7736,20 @@ index 000000000..f686f66ca
 +
 +
 +def split_k_for(rows: int) -> int:
-+    """The scorer split of a step of ``rows`` rows."""
++    """The scorer split of a step of `rows` rows."""
 +    return UPSTREAM_SPLIT_K if rows <= SPLIT_MIN_ROWS else SPLIT_K_MULTI
 +
 +
 +class StockIndexScoreStage:
-+    """``__call__(idx_q, index_cache, block_table, seq_lens, score_out, *,
-+    decode_query_len)``
++    """`__call__(idx_q, index_cache, block_table, seq_lens, score_out, *,
++    decode_query_len)`
 +
 +    idx_q        e4m3 [batch * qlen, H_idx, D]   (H_idx per rank; H_idx * max_qlen <= 32)
 +    index_cache  e4m3 [pages, 128, D]
 +    block_table  int32 [batch, max_pages]
 +    seq_lens     int32 [batch]
 +    score_out    float32 [H_idx, batch * qlen, >= max_pages] (may be a transposed view of
-+                 upstream ``unified_scores[:nd]``)
++                 upstream `unified_scores[:nd]`)
 +    """  # noqa: E501
 +
 +    stage = "index_score"
@@ -7839,17 +7854,17 @@ index 000000000..f686f66ca
 +__all__ = ["StockIndexScoreStage"]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/__init__.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/__init__.py
 new file mode 100644
-index 000000000..e1188041f
+index 000000000..e431d73f8
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/__init__.py
 @@ -0,0 +1,23 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-+"""The ``moe`` stage of the MiniMax-M3 specialized decode: the fused NVFP4 routed +
++"""The `moe` stage of the MiniMax-M3 specialized decode: the fused NVFP4 routed +
 +MXFP8 shared-expert engine
-+(CuTe DSL, ``kernel.py``), its host (``host.py``), the weight views and mode-Q prep
-+(``weights.py``) and the stage
-+wrapper (``stage.py``). Importing this package does not import CuTe DSL; the kernel
++(CuTe DSL, `kernel.py`), its host (`host.py`), the weight views and mode-Q prep
++(`weights.py`) and the stage
++wrapper (`stage.py`). Importing this package does not import CuTe DSL; the kernel
 +module loads on first build."""
 +
 +from .stage import FusedMoeConfig, FusedMoeStage, default_n_shared, engine_config
@@ -7868,7 +7883,7 @@ index 000000000..e1188041f
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/host.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/host.py
 new file mode 100644
-index 000000000..4ba1f40be
+index 000000000..8cad2b072
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/host.py
 @@ -0,0 +1,1031 @@
@@ -7936,7 +7951,7 @@ index 000000000..4ba1f40be
 +
 +
 +def _kernel_module(config: dict, path: str):
-+    """kernel.py executed once per configuration with ``M3_CONFIG`` injected (its
++    """kernel.py executed once per configuration with `M3_CONFIG` injected (its
 +    constants are trace-time)."""
 +    key: tuple = (os.path.basename(path),) + tuple(sorted(config.items()))
 +    mod = _modules.get(key)
@@ -7966,7 +7981,7 @@ index 000000000..4ba1f40be
 +def _maxnreg(n: int):
 +    """.maxnreg n on the kernel compiled inside (CuTe DSL has no launch knob for it).
 +    Patches a private CuTe DSL
-+    hook (``CuTeDSL._generate_kernel_attrs``); verify it still exists in the pinned
++    hook (`CuTeDSL._generate_kernel_attrs`); verify it still exists in the pinned
 +    nvidia-cutlass-dsl."""
 +    if not n:
 +        yield
@@ -8006,13 +8021,13 @@ index 000000000..4ba1f40be
 +
 +
 +def push_arp(ws, device) -> tuple[torch.Tensor, torch.Tensor]:
-+    """The engine's ``arp`` descriptor for a push into a boundary exchange
-+    (``_exchange.PushWorkspace``):
++    """The engine's `arp` descriptor for a push into a boundary exchange
++    (`_exchange.PushWorkspace`):
 +    int64 [1, &peers[0..ndst-1], flags, rank, world, maxt, 0, 0], peers = every rank's
 +    exchange (unicast) or the
-+    exchange's multicast address (``ws.multicast``, ndst 1). Returns (arp, peers); keep
-+    ``peers`` alive as long
-+    as ``arp``."""
++    exchange's multicast address (`ws.multicast`, ndst 1). Returns (arp, peers); keep
++    `peers` alive as long
++    as `arp`."""
 +    peers = torch.tensor(ws.push_ptrs(), dtype=torch.int64, device=device)
 +    arp = torch.tensor(
 +        [
@@ -8172,8 +8187,8 @@ index 000000000..4ba1f40be
 +
 +def _fine_ranges(weights, total: int):
 +    """Contiguous FC1 item ranges [s_c, e_c) over the CTAs, sized as close to
-+    ``weights`` (ideal real-valued item
-+    counts summing to ``total``) as the split-unit protocol allows: every unit (S1
++    `weights` (ideal real-valued item
++    counts summing to `total`) as the split-unit protocol allows: every unit (S1
 +    items) has at most one CTA boundary
 +    strictly inside it (its head and tail parts, summed by the tail's holder), so a
 +    range that starts inside a unit
@@ -8206,7 +8221,7 @@ index 000000000..4ba1f40be
 +    boff: int = 0,
 +    zero_ok: bool = False,
 +):
-+    """The work split of ``m3_moe`` for each distinct-expert count G (4 .. 4 m_max): FC2
++    """The work split of `m3_moe` for each distinct-expert count G (4 .. 4 m_max): FC2
 +    32-row output blocks in
 +    contiguous per-CTA ranges (the same for every group), and per group p (slots 4 p ..)
 +    a range of its unit-major FC1
@@ -8215,9 +8230,9 @@ index 000000000..4ba1f40be
 +    trailing FC2s with the last group). Ranges are empty or >= 6 stages (a unit is split
 +    over at most two CTAs); a
 +    group too small for every CTA gets whole units on the CTAs with the least FC2 work,
-+    or (``fine``) byte-balanced
++    or (`fine`) byte-balanced
 +    ranges of any length with at most one CTA boundary inside a unit
-+    (:func:`_fine_ranges`). Returns int32
++    (`_fine_ranges`). Returns int32
 +    [4 m_max + 1, num_ctas, m_max + 1] (per group i0 | i1 << 16, then b0 | nb << 16) and
 +    the largest block count."""
 +    gcap = TOP_K * m_max
@@ -8308,7 +8323,7 @@ index 000000000..4ba1f40be
 +    extra_cfg: dict,
 +    push_world: int = 0,
 +) -> dict:
-+    """The engine's trace-time config (``M3_CONFIG`` of kernel.py) for one state;
++    """The engine's trace-time config (`M3_CONFIG` of kernel.py) for one state;
 +    pure (no device), so the configurations can be traced and checked without a
 +    GPU."""
 +    if num_ctas < 1:
@@ -8363,13 +8378,13 @@ index 000000000..4ba1f40be
 +
 +
 +class M3MoeState:
-+    """Workspace + compiled kernel of ``m3_moe`` (1..8 tokens per call) on one device,
++    """Workspace + compiled kernel of `m3_moe` (1..8 tokens per call) on one device,
 +    shared by the layers that run
-+    on it in one stream order. ``shared``: the shared expert runs on ``n_shared``
++    on it in one stream order. `shared`: the shared expert runs on `n_shared`
 +    dedicated CTAs beside the
-+    ``num_ctas`` routed ones and the call returns bf16(shared + routed). ``push_ws`` (an
-+    ``_exchange.PushWorkspace``):
-+    build the boundary push in (the call then pushes when given an ``arp``). Build
++    `num_ctas` routed ones and the call returns bf16(shared + routed). `push_ws` (an
++    `_exchange.PushWorkspace`):
++    build the boundary push in (the call then pushes when given an `arp`). Build
 +    before CUDA-graph capture; the
 +    first call compiles."""
 +
@@ -8529,13 +8544,13 @@ index 000000000..4ba1f40be
 +    ) -> M3MoeLayer:
 +        """One MoE layer's operands (the TRT-LLM-layout NVFP4 expert buffers, read in
 +        place, never copied).
-+        ``shared_weights`` (a ``shared`` state): (gate_up e4m3 [2 I, 6144], its swizzled
++        `shared_weights` (a `shared` state): (gate_up e4m3 [2 I, 6144], its swizzled
 +        UE8M0 scales, down e4m3
-+        [6144, I], its swizzled UE8M0 scales). ext_route=1: ``route_lines`` int64
-+        [route_repl][route_maxt][16] and
-+        ``rctr`` int32 [>= M * 32]; ext_route=2: ``rt_tab`` int32 [M][4]. b1_x4=1:
-+        ``x4`` uint8 [>= M][3072] /
-+        ``x4sf`` uint8 [max(M, 16) + 1][384] (fc1_per_token: row max(M, 16) = fp32
++        [6144, I], its swizzled UE8M0 scales). ext_route=1: `route_lines` int64
++        `[route_repl][route_maxt][16]` and
++        `rctr` int32 [>= M * 32]; ext_route=2: `rt_tab` int32 `[M][4]`. b1_x4=1:
++        `x4` uint8 `[>= M][3072]` /
++        `x4sf` uint8 `[max(M, 16) + 1][384]` (fc1_per_token: row max(M, 16) = fp32
 +        s_t)."""
 +        layer = M3MoeLayer(
 +            self,
@@ -8795,7 +8810,7 @@ index 000000000..4ba1f40be
 +
 +
 +class M3MoeLayer:
-+    """One MoE layer on a :class:`M3MoeState`: ``layer(hidden)``. The expert buffers are
++    """One MoE layer on a `M3MoeState`: `layer(hidden)`. The expert buffers are
 +    read in place, never copied;
 +    the per-expert scalars are packed once (layer constants: rebuild the layer after
 +    reloading weights)."""
@@ -8905,7 +8920,7 @@ index 000000000..4ba1f40be
 +        )
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/kernel.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/kernel.py
 new file mode 100644
-index 000000000..b4fc6cda4
+index 000000000..f0c08a845
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/kernel.py
 @@ -0,0 +1,5511 @@
@@ -9519,7 +9534,7 @@ index 000000000..b4fc6cda4
 +def _ar_push(arp, v, low, t, cl):
 +    """Push bf16 channel pair (cl, cl + 1) of token t (v = channel cl's bf16 value on this lane, its neighbour's on
 +    lane ^ 8) into this rank's set-A slot of the exchange; the slot half is the all-reduce CTA (t, cl // 768)'s call
-+    parity. Only lanes with ``low`` store; every lane of the warp must call it (shuffle)."""
++    parity. Only lanes with `low` store; every lane of the warp must call it (shuffle)."""
 +    hi = cute.arch.shuffle_sync_bfly(v, 8)
 +    pred = cutlass.select_(low, cutlass.Int32(1), cutlass.Int32(0))
 +    cs = cutlass.select_(low, cl, cutlass.Int32(0))
@@ -10041,7 +10056,7 @@ index 000000000..b4fc6cda4
 +
 +@cute.jit
 +def _waitd(bar: cutlass.Array, parity, tdbg: cutlass.Array, site: cutlass.Constexpr):
-+    """Wait on ``bar`` at ``parity``, then sync the warp."""
++    """Wait on `bar` at `parity`, then sync the warp."""
 +    while not cute.arch.mbarrier_try_wait(bar.data_ptr(), parity):
 +        pass
 +    cute.arch.sync_warp()
@@ -10477,8 +10492,8 @@ index 000000000..b4fc6cda4
 +    s1w: cutlass.Array,
 +    ab_full: cutlass.Array,
 +):
-+    """(SFA_CP) FC1 stage scale atoms: word [r][q] of atom kb <- raw atom 4 q + kb (raw line sf_line = 4 x atom)
-+    word [r][c % 4] (what the splicer copies out of the raw box), 4-byte cp.async by the warp's 32 lanes; their
++    """(SFA_CP) FC1 stage scale atoms: word `[r][q]` of atom kb <- raw atom 4 q + kb (raw line sf_line = 4 x atom)
++    word `[r][c % 4]` (what the splicer copies out of the raw box), 4-byte cp.async by the warp's 32 lanes; their
 +    arrivals (noinc) complete the stage's full barrier together with the A boxes' bytes."""
 +    src0 = (
 +        (sf_line >> cutlass.Int32(2)) * cutlass.Int32(128)
@@ -10533,8 +10548,8 @@ index 000000000..b4fc6cda4
 +    s2w: cutlass.Array,
 +    ab_full: cutlass.Array,
 +):
-+    """(SFA_CP) FC2 k-tile t2 scale atoms: word [r][jj] of atom kb <- raw atom (rows / 128, K block 4 t2 + kb) of slot
-+    jj's expert, word [r][blk % 4]."""
++    """(SFA_CP) FC2 k-tile t2 scale atoms: word `[r][jj]` of atom kb <- raw atom (rows / 128, K block 4 t2 + kb) of slot
++    jj's expert, word `[r][blk % 4]`."""
 +    dst0 = stage * cutlass.Int32(NUM_WORDS_SFA) + lane * cutlass.Int32(4)
 +    for jj in cutlass.range_constexpr(4):
 +        if cutlass.Int32(jj) < n_here:
@@ -14422,23 +14437,23 @@ index 000000000..b4fc6cda4
 +    )
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/stage.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/stage.py
 new file mode 100644
-index 000000000..04850e383
+index 000000000..c07fb2a3e
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/stage.py
 @@ -0,0 +1,337 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-+"""The ``moe`` stage: the fused MoE engine (TP4, 1..8 rows, mode Q) on the post's
++"""The `moe` stage: the fused MoE engine (TP4, 1..8 rows, mode Q) on the post's
 +hand-off.
 +
-+- one explicit ``FusedMoeConfig``;
++- one explicit `FusedMoeConfig`;
 +- CTA roles are blockIdx; the engine reads the full expert buffers vLLM holds;
 +- grid sizes from the live SM count: routed CTAs = SMs - shared CTAs, shared CTAs per
 +  (rows, SMs) from
-+  ``geometry.moe_n_shared``; host-side residency checks fail closed;
-+- the boundary push goes into ``_exchange.push_workspace(transport, bucket, "g3")``
++  `geometry.moe_n_shared`; host-side residency checks fail closed;
++- the boundary push goes into `_exchange.push_workspace(transport, bucket, "g3")`
 +  (peer pointers from
-+  ``_comm``), never into an extension-private IPC allocation.
++  `_comm`), never into an extension-private IPC allocation.
 +
 +Call contract (all on the current stream, PDL-chained after the post):
 +
@@ -14476,8 +14491,8 @@ index 000000000..04850e383
 +
 +
 +def default_n_shared(rows: int, sm_count: int) -> int:
-+    """Shared-expert CTAs for ``rows`` tokens on the live ``sm_count``
-+    (``geometry.moe_n_shared``: a bytes-per-CTA
++    """Shared-expert CTAs for `rows` tokens on the live `sm_count`
++    (`geometry.moe_n_shared`: a bytes-per-CTA
 +    model, or a measured override)."""
 +    return geometry.moe_n_shared(rows, sm_count)
 +
@@ -14546,9 +14561,9 @@ index 000000000..04850e383
 +        co_resident: Sequence[_arch.GridUse] = (),
 +        device: torch.device | None = None,
 +    ):
-+        """``handoff``: the post's ``allreduce_norm.MoeHandoff`` (routes, x4, normed
++        """`handoff`: the post's `allreduce_norm.MoeHandoff` (routes, x4, normed
 +        rows). Tests without a post pass
-+        ``rt_tab`` (ext_route=2) and ``x4`` / ``x4sf`` (uint8 [16][3072] / [17][384],
++        `rt_tab` (ext_route=2) and `x4` / `x4sf` (uint8 `[16][3072]` / `[17][384]`,
 +        row 16 = fp32 s_t) instead."""
 +        self.cfg = cfg
 +        dev = torch.device(device) if device is not None else torch.device("cuda")
@@ -14743,9 +14758,9 @@ index 000000000..04850e383
 +        push: bool = False,
 +        rt_tab: torch.Tensor | None = None,
 +    ) -> torch.Tensor:
-+        """One engine launch. ``hidden``: bf16 [rows, 6144] (default: the hand-off's
++        """One engine launch. `hidden`: bf16 [rows, 6144] (default: the hand-off's
 +        normed rows, the shared-expert
-+        input). ``push``: also push the output into the boundary exchange (only when the
++        input). `push`: also push the output into the boundary exchange (only when the
 +        next consumer polls it,
 +        e.g. the next layer's kernel front; an unconsumed push would collide with the
 +        next step's)."""
@@ -14765,7 +14780,7 @@ index 000000000..04850e383
 +__all__ = ["FusedMoeConfig", "FusedMoeStage", "default_n_shared", "engine_config"]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/weights.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/weights.py
 new file mode 100644
-index 000000000..ffd0c1e89
+index 000000000..0e9ed9c54
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/moe/weights.py
 @@ -0,0 +1,293 @@
@@ -14776,41 +14791,41 @@ index 000000000..ffd0c1e89
 +
 +Source of every routed-expert operand: vLLM's NVFP4 MoE with the FLASHINFER_TRTLLM
 +backend after
-+``process_weights_after_loading`` (``prepare_nvfp4_moe_layer_for_fi_or_cutlass`` ->
-+``prepare_static_weights_for_trtllm_fp4_moe``). The engine reads these buffers in place,
++`process_weights_after_loading` (`prepare_nvfp4_moe_layer_for_fi_or_cutlass` ->
++`prepare_static_weights_for_trtllm_fp4_moe`). The engine reads these buffers in place,
 +never copies them:
 +
 +==================  ==========================================  ==============================================
 +engine operand      vLLM tensor                                  layout
 +==================  ==========================================  ==============================================
-+w3_w1_weight        ``routed_experts.w13_weight``                uint8 [E, 2 I, H / 2] packed e2m1 (low nibble =
++w3_w1_weight        `routed_experts.w13_weight`                uint8 [E, 2 I, H / 2] packed e2m1 (low nibble =
 +                                                                 even column); rows =
 +                                                                 logical [w3 (up); w1
 +                                                                 (gate)]
-+                                                                 (``reorder_w1w3_to_w3w1``),
++                                                                 (`reorder_w1w3_to_w3w1`),
 +                                                                 then the gated-act
 +                                                                 row interleave and the
 +                                                                 epilogue-tile-128
 +                                                                 32-row
 +                                                                 shuffle
-+                                                                 (``_maybe_get_cached_w3_w1_permute_indices``)
-+w3_w1_weight_scale  ``routed_experts.w13_weight_scale``          e4m3 [E, 2 I, H / 16], one per 16 elements, rows
++                                                                 (`_maybe_get_cached_w3_w1_permute_indices`)
++w3_w1_weight_scale  `routed_experts.w13_weight_scale`          e4m3 [E, 2 I, H / 16], one per 16 elements, rows
 +                                                                 permuted like the
 +                                                                 weight, then
-+                                                                 ``nvfp4_block_scale_interleave``
++                                                                 `nvfp4_block_scale_interleave`
 +                                                                 (128x4 swizzle)
-+w2_weight           ``routed_experts.w2_weight``                 uint8 [E, H, I / 2], 32-row shuffle (epilogue 128)
-+w2_weight_scale     ``routed_experts.w2_weight_scale``           e4m3 [E, H, I / 16], permuted + 128x4 swizzle
-+fc31_alpha          ``quant_config.g1_alphas``                   f32 [E] = a13_scale * w13_weight_scale_2
-+fc31_scale_c        ``fused_experts.g1_scale_c`` (re-derived)    f32 [E] = g1_alphas * fc2_enc
-+act_alpha           ``fused_experts.gemm1_alpha``                f32 [E] (SwiGLU-OAI alpha, raw)
-+act_beta            ``fused_experts.gemm1_beta``                 f32 [E] = beta / g1_alphas (vLLM pre-folds it)
-+act_clamp           ``fused_experts.gemm1_clamp_limit``          f32 [E] = limit / g1_alphas (vLLM pre-folds it)
-+fc2_alpha           ``quant_config.g2_alphas`` (re-derived)      f32 [E] = w2_weight_scale_2 / fc2_enc
-+fc31_input_scale    ``quant_config.a1_gscale``                   f32 [1], the checkpoint's 1.0 placeholder
-+router_weight       ``block_sparse_moe.gate.weight``             f32 [E, H]
-+bias                ``block_sparse_moe.e_score_correction_bias`` f32 [E]
-+shared gate_up/down ``shared_experts.{gate_up,down}_proj``       e4m3 weight [N, K] + UE8M0 scales, 128x4
++w2_weight           `routed_experts.w2_weight`                 uint8 [E, H, I / 2], 32-row shuffle (epilogue 128)
++w2_weight_scale     `routed_experts.w2_weight_scale`           e4m3 [E, H, I / 16], permuted + 128x4 swizzle
++fc31_alpha          `quant_config.g1_alphas`                   f32 [E] = a13_scale * w13_weight_scale_2
++fc31_scale_c        `fused_experts.g1_scale_c` (re-derived)    f32 [E] = g1_alphas * fc2_enc
++act_alpha           `fused_experts.gemm1_alpha`                f32 [E] (SwiGLU-OAI alpha, raw)
++act_beta            `fused_experts.gemm1_beta`                 f32 [E] = beta / g1_alphas (vLLM pre-folds it)
++act_clamp           `fused_experts.gemm1_clamp_limit`          f32 [E] = limit / g1_alphas (vLLM pre-folds it)
++fc2_alpha           `quant_config.g2_alphas` (re-derived)      f32 [E] = w2_weight_scale_2 / fc2_enc
++fc31_input_scale    `quant_config.a1_gscale`                   f32 [1], the checkpoint's 1.0 placeholder
++router_weight       `block_sparse_moe.gate.weight`             f32 [E, H]
++bias                `block_sparse_moe.e_score_correction_bias` f32 [E]
++shared gate_up/down `shared_experts.{gate_up,down}_proj`       e4m3 weight [N, K] + UE8M0 scales, 128x4
 +                                                                 swizzled (one per 32)
 +==================  ==========================================  ==============================================
 +
@@ -14818,10 +14833,10 @@ index 000000000..ffd0c1e89
 +input scale is a 1.0
 +placeholder) and FC2 input under the fixed global encode scale 16. The FC2 encode scale
 +lives in two per-expert
-+scalars (exact powers of two): ``fc31_scale_c = g1_alphas * fc2_enc`` and ``fc2_alpha =
-+w2_scale_2 / fc2_enc``.
-+vLLM folds whatever FC2 input scale the checkpoint carries (``a2_gscale``) into both;
-+``prep_mode_q`` removes that
++scalars (exact powers of two): `fc31_scale_c = g1_alphas * fc2_enc` and `fc2_alpha =
++w2_scale_2 / fc2_enc`.
++vLLM folds whatever FC2 input scale the checkpoint carries (`a2_gscale`) into both;
++`prep_mode_q` removes that
 +fold (it must be one power of two) and applies 16.
 +"""  # noqa: E501
 +
@@ -14867,7 +14882,7 @@ index 000000000..ffd0c1e89
 +    fc2_enc: float  # the FC2 input encode scale folded into g1_scale_c / g2_alphas
 +
 +    def expert_args(self) -> tuple:
-+        """The 11 positional operands of ``M3MoeState.layer``."""
++        """The 11 positional operands of `M3MoeState.layer`."""
 +        return (
 +            self.w13,
 +            self.w13_scale,
@@ -14977,7 +14992,7 @@ index 000000000..ffd0c1e89
 +def _linear_mxfp8(lin, what: str, shape: tuple[int, int]):
 +    """(e4m3 weight [N, K] contiguous, flat UE8M0 128x4-swizzled scales) of a vLLM MXFP8
 +    linear after weight
-+    processing (undoes the CuTe-DSL kernel's [K, N] view; see ``_mxfp8``)."""
++    processing (undoes the CuTe-DSL kernel's [K, N] view; see `_mxfp8`)."""
 +    try:
 +        return mxfp8_linear_nk(lin, what, shape=shape)
 +    except Mxfp8LayoutError as e:
@@ -14985,9 +15000,9 @@ index 000000000..ffd0c1e89
 +
 +
 +def from_vllm_moe(moe) -> MoeWeights:
-+    """MoeWeights from a loaded ``MiniMaxM3MoE`` (``decoder_layer.block_sparse_moe``) on
++    """MoeWeights from a loaded `MiniMaxM3MoE` (`decoder_layer.block_sparse_moe`) on
 +    the FLASHINFER_TRTLLM NVFP4
-+    backend. Raises ``MoeWeightError`` with the reason when the layer is in any other
++    backend. Raises `MoeWeightError` with the reason when the layer is in any other
 +    form."""
 +    ex = getattr(moe.experts, "routed_experts", moe.experts)
 +    qm = getattr(ex, "quant_method", None)
@@ -15064,7 +15079,7 @@ index 000000000..ffd0c1e89
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/__init__.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/__init__.py
 new file mode 100644
-index 000000000..ccd9620d3
+index 000000000..3ab7850f3
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/__init__.py
 @@ -0,0 +1,227 @@
@@ -15076,17 +15091,17 @@ index 000000000..ccd9620d3
 +fixed by the layer shapes, not by the SM count. The GEMV CTAs (2-CTA clusters,
 +tcgen05 block-scaled MMA, A = the o_proj weight, B = the decode's MXFP8 output)
 +push their bf16 rows into every rank's boundary exchange
-+(``_exchange.push_workspace(transport, 8, "g3")``, push mode 4) for the
++(`_exchange.push_workspace(transport, 8, "g3")`, push mode 4) for the
 +allreduce_norm stage. The router CTAs compute this rank's share of the MoE
-+router logits from the folded weights (``weights.py``) and push them, tagged,
-+into every rank's ``RouterExchangeSlot``.
++router logits from the folded weights (`weights.py`) and push them, tagged,
++into every rank's `RouterExchangeSlot`.
 +
 +Nothing in this grid waits on another CTA outside its own cluster, so it has
 +no co-residency precondition; dependents launch after each CTA's push. The
-+allreduce_norm stage (``PostRouteStage``) must run after every call of this
++allreduce_norm stage (`PostRouteStage`) must run after every call of this
 +stage on the same layer (the rx tags pair one o_proj call with one post call).
 +
-+Explicit buffers and transport; compiled at build (``build``), never on a live call;
++Explicit buffers and transport; compiled at build (`build`), never on a live call;
 +rows are powers of two
 +(kernel assertion).
 +"""
@@ -15136,7 +15151,7 @@ index 000000000..ccd9620d3
 +        xq: e4m3 [rows, 2048], xsf: uint8 128x4-swizzled scales (>= 128 * 64 B),
 +            the sparse_decode stage's MXFP8 output.
 +        rows: 1, 2, 4 or 8.
-+        blobs: optional precomputed ``(blob_a, blob_r)`` of ``weights.blobs``
++        blobs: optional precomputed `(blob_a, blob_r)` of `weights.blobs`
 +            for these weights and this rank (shared across row counts).
 +    """
 +
@@ -15297,7 +15312,7 @@ index 000000000..ccd9620d3
 +__all__ = ["OProjRouterStage", "grid_ctas"]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/host.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/host.py
 new file mode 100644
-index 000000000..b37e4d2b4
+index 000000000..abc41304f
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/host.py
 @@ -0,0 +1,707 @@
@@ -15308,7 +15323,7 @@ index 000000000..b37e4d2b4
 +
 +Compiled on the first call per (N, K, split, ring, early trigger, PDL, push, MMA width),
 +which must happen outside
-+CUDA-graph capture, or ahead of any call by ``precompile``; once ``freeze`` closes
++CUDA-graph capture, or ahead of any call by `precompile`; once `freeze` closes
 +compiles, a call whose kernel is not
 +compiled declines instead.
 +"""
@@ -15375,9 +15390,9 @@ index 000000000..b37e4d2b4
 +
 +
 +def check_cute_dsl() -> None:
-+    """The kernel uses ``cutlass.experimental.primitives`` (tcgen05 block-scaled MMA,
++    """The kernel uses `cutlass.experimental.primitives` (tcgen05 block-scaled MMA,
 +    TMEM copies, griddepcontrol)
-+    and ``cutlass.experimental.cuda`` tensor maps. vLLM pins nvidia-cutlass-dsl 4.8.0
++    and `cutlass.experimental.cuda` tensor maps. vLLM pins nvidia-cutlass-dsl 4.8.0
 +    (requirements/cuda.txt);
 +    raise a clear error if this install does not expose them."""
 +    try:
@@ -15545,7 +15560,7 @@ index 000000000..b37e4d2b4
 +    """The compile key of an [M, K] x [N, K]^T call and its runtime push words, or None
 +    when the call is declined.
 +
-+    ``ar`` is the push tuple of ``_run``; only its (world, bucket tokens, mode) enter
++    `ar` is the push tuple of `_run`; only its (world, bucket tokens, mode) enter
 +    the key, the addresses and the
 +    rank are runtime arguments."""
 +    cfg = cfg or get_config(n, k, m)
@@ -15622,7 +15637,7 @@ index 000000000..b37e4d2b4
 +
 +
 +def _compile(key: tuple, args: tuple, m: int, runtime_ar: tuple, stream, extra: tuple):
-+    """cute.compile the kernel of ``key`` (see ``_resolve``) on these argument views;
++    """cute.compile the kernel of `key` (see `_resolve`) on these argument views;
 +    cached."""
 +    import cutlass.cute as cute
 +
@@ -15788,9 +15803,9 @@ index 000000000..b37e4d2b4
 +    use_pdl: bool | None = None,
 +    ar: tuple[int, int, int] | None = None,
 +) -> tuple | None:
-+    """Compile, without launching, the kernel an M-row call against ``weight`` takes;
++    """Compile, without launching, the kernel an M-row call against `weight` takes;
 +    returns its key, or None when
-+    such a call is declined. ``ar`` = (world, bucket tokens, mode) of a pushing call
++    such a call is declined. `ar` = (world, bucket tokens, mode) of a pushing call
 +    (its addresses and rank are
 +    runtime arguments, so none is needed here). Runs outside capture, even while
 +    compiles are frozen."""
@@ -15827,8 +15842,8 @@ index 000000000..b37e4d2b4
 +def freeze(frozen: bool = True) -> None:
 +    """Close (or reopen) compiles: while frozen, a call whose kernel is not compiled yet
 +    declines (returns None and
-+    sets ``last_uncompiled``) instead of compiling. ``precompile`` and
-+    ``ensure_compiled`` still compile."""
++    sets `last_uncompiled`) instead of compiling. `precompile` and
++    `ensure_compiled` still compile."""
 +    _frozen[0] = bool(frozen)
 +
 +
@@ -15873,9 +15888,9 @@ index 000000000..b37e4d2b4
 +    ra_tab: int = 0,
 +    out: torch.Tensor | None = None,
 +) -> torch.Tensor | None:
-+    """``xq`` E4M3 [M <= 64, K] with ``xsf`` its 128x4-swizzled UE8M0 scales; ``weight``
++    """`xq` E4M3 [M <= 64, K] with `xsf` its 128x4-swizzled UE8M0 scales; `weight`
 +    E4M3 [N, K] with
-+    ``weight_scale`` swizzled. Returns bf16 [M, N], or None when the shape is not
++    `weight_scale` swizzled. Returns bf16 [M, N], or None when the shape is not
 +    served."""
 +    return _run(
 +        xq,
@@ -15901,7 +15916,7 @@ index 000000000..b37e4d2b4
 +    use_pdl: bool | None = None,
 +    ar: tuple | None = None,
 +) -> torch.Tensor | None:
-+    """The same GEMV for a bf16 ``x`` [M <= 8, K] (contiguous), quantized to MXFP8
++    """The same GEMV for a bf16 `x` [M <= 8, K] (contiguous), quantized to MXFP8
 +    inside the kernel exactly as
 +    torch.ops.trtllm.mxfp8_quantize(x, True) does."""
 +    if (
@@ -15986,9 +16001,9 @@ index 000000000..b37e4d2b4
 +    out: torch.Tensor,
 +    use_pdl: bool = True,
 +) -> tuple:
-+    """Compile (without launching) exactly the kernel ``m3_mx_gemv(xq, xsf, weight,
++    """Compile (without launching) exactly the kernel `m3_mx_gemv(xq, xsf, weight,
 +    weight_scale, cfg=cfg,
-+    use_pdl=use_pdl, ar=ar, ra_tab=ra_tab, out=out)`` will run, so the first live call
++    use_pdl=use_pdl, ar=ar, ra_tab=ra_tab, out=out)` will run, so the first live call
 +    never compiles: a live
 +    call that compiles lazily while peers already poll its pushes can run past their
 +    deadlines. Returns the key."""
@@ -16010,20 +16025,20 @@ index 000000000..b37e4d2b4
 +    return key
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/kernel.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/kernel.py
 new file mode 100644
-index 000000000..9170caad6
+index 000000000..3cec7763c
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/kernel.py
 @@ -0,0 +1,3088 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +# ruff: noqa: E501, SIM102
-+"""MXFP8 decode GEMV on tcgen05: ``y[M, N] = x[M, K] @ W[N, K]^T`` for M <= 8, block-scaled E4M3 x E4M3.
++"""MXFP8 decode GEMV on tcgen05: `y[M, N] = x[M, K] @ W[N, K]^T` for M <= 8, block-scaled E4M3 x E4M3.
 +
 +The weight is the MMA's A operand (128 output features per CTA), the activation is B (8 token columns),
 +fp32 accumulation in TMEM. Both operands come in their MXFP8 storage: E4M3 values (K contiguous) and UE8M0
 +scales in the 128x4-swizzled layout, whose 512-byte atom per (128 rows, 128 K) is exactly the source of a
-+``tcgen05.cp`` 32x128b.warpx4 scale copy, so both scale tensors are bulk-copied unchanged. For an activation of at
-+most 32 rows the atom of k-tile ``k`` sits at byte ``512 k``.
++`tcgen05.cp` 32x128b.warpx4 scale copy, so both scale tensors are bulk-copied unchanged. For an activation of at
++most 32 rows the atom of k-tile `k` sits at byte `512 k`.
 +
 +A cluster of SPLIT CTAs shares one 128-row weight tile; rank r streams the interleaved k-tiles r, r + SPLIT, ...
 +through a RING-stage ring. Before the grid dependency each CTA issues its first RING weight tiles (and their scale
@@ -16093,7 +16108,7 @@ index 000000000..9170caad6
 +
 +@dsl_user_op
 +def _mapa_u32(smem_ptr, peer, *, loc=None, ip=None):
-+    """The shared::cluster address of this CTA's shared-memory location in cluster CTA ``peer``."""
++    """The shared::cluster address of this CTA's shared-memory location in cluster CTA `peer`."""
 +    from cutlass._mlir.dialects import llvm as _llvm
 +    from cutlass._mlir.extras import types as _T
 +
@@ -16108,7 +16123,7 @@ index 000000000..9170caad6
 +
 +@dsl_user_op
 +def _st_async_v4(dst, w0, w1, w2, w3, mbar, *, loc=None, ip=None):
-+    """st.async of four int32 words to a shared::cluster address, completing ``mbar`` there by 16 bytes."""
++    """st.async of four int32 words to a shared::cluster address, completing `mbar` there by 16 bytes."""
 +    from cutlass._mlir.dialects import llvm as _llvm
 +
 +    _llvm.inline_asm(
@@ -19104,7 +19119,7 @@ index 000000000..9170caad6
 +    )  # fmt: skip
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/weights.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/weights.py
 new file mode 100644
-index 000000000..29d702209
+index 000000000..f0fe19c91
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/o_proj/weights.py
 @@ -0,0 +1,214 @@
@@ -19112,21 +19127,21 @@ index 000000000..29d702209
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""Router-hoist weights of the TP4 o_proj router CTAs.
 +
-+The MoE router runs on the post-attention normed row, ``logits = W_r n`` with
-+``n = h * rstd * (1 + g)`` and ``h = residual + sum_k o_k`` (o_k = rank k's
-+o_proj partial ``W_o,k a_k``). ``rstd`` is a per-row scalar, so
++The MoE router runs on the post-attention normed row, `logits = W_r n` with
++`n = h * rstd * (1 + g)` and `h = residual + sum_k o_k` (o_k = rank k's
++o_proj partial `W_o,k a_k`). `rstd` is a per-row scalar, so
 +
 +    logits = rstd * (W' h),   W' = W_r diag(1 + g)
 +    W' h   = sum_k [ W'' _k a_k  +  W'[:, H_k] residual[H_k] ],   W''_k = W' deq(W_o,k)
 +
-+Each rank's router CTAs compute their bracket (``a`` from the decode's MXFP8
-+output, ``r`` from this rank's quarter of the residual columns) while the
++Each rank's router CTAs compute their bracket (`a` from the decode's MXFP8
++output, `r` from this rank's quarter of the residual columns) while the
 +GEMV runs, push it to every rank's rx slot, and the post multiplies the rank
-+sum by rstd. ``W''`` is folded in fp64 and rounded once to fp32.
++sum by rstd. `W''` is folded in fp64 and rounded once to fp32.
 +
 +Blob layouts (per rank, fp32), as the kernel's router CTAs index them:
-+  blob_a [r][e][m][tid][4] = W''_k[8 r + e, 8 tid + 4 m + j]          (2 MB)
-+  blob_r [r][e][m][tid][4] = W'[8 r + e, c0 + 1024 m + 4 tid + j]      (2 MB,
++  blob_a `[r][e][m][tid][4]` = W''_k[8 r + e, 8 tid + 4 m + j]          (2 MB)
++  blob_r `[r][e][m][tid][4]` = W'[8 r + e, c0 + 1024 m + 4 tid + j]      (2 MB,
 +         columns >= 1536 zero-padded; c0 = rank * 1536)
 +"""
 +
@@ -19247,8 +19262,8 @@ index 000000000..29d702209
 +def emulate(blob_a, blob_r, xq_f, sc, res, rank: int, t: int):
 +    """CPU model of one rank's router CTAs with the kernel's flat indexing (fp64: layout
 +    check, not rounding).
-+    xq_f [t][KO] e4m3 values, sc [t][KO / 32] scale factors, res [t][H]. Returns (z_a,
-+    z_r) [t][E]."""
++    xq_f `[t][KO]` e4m3 values, sc `[t][KO / 32]` scale factors, res `[t][H]`.
++    Returns (z_a, z_r) `[t][E]`."""
 +    ba, br = blob_a.reshape(-1).double(), blob_r.reshape(-1).double()
 +    za = torch.zeros(t, E, dtype=torch.float64)
 +    zr = torch.zeros(t, E, dtype=torch.float64)
@@ -19324,7 +19339,7 @@ index 000000000..29d702209
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/page_topk.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/page_topk.py
 new file mode 100644
-index 000000000..107759e18
+index 000000000..38df9b0f3
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/page_topk.py
 @@ -0,0 +1,258 @@
@@ -19333,18 +19348,18 @@ index 000000000..107759e18
 +"""page_topk stage: per (decode row, index head) the 16 pages the sparse
 +decode attends to, written as physical page ids into the sparse block table.
 +
-+The device code is CuTe DSL (``page_topk_kernel.py``, compiled for the live
++The device code is CuTe DSL (`page_topk_kernel.py`, compiled for the live
 +device at build). Exact selection: forced
-+pages (the first ``init_blocks`` and the last ``local_blocks`` valid pages)
++pages (the first `init_blocks` and the last `local_blocks` valid pages)
 +always kept, the rest by (score desc, page asc) on the fp32 bit order; output
-+in ascending page order, ``-1`` tail when fewer than 16 pages are valid.
++in ascending page order, `-1` tail when fewer than 16 pages are valid.
 +
-+Split rows: a row of at most ``single_max`` valid (4096)
++Split rows: a row of at most `single_max` valid (4096)
 +pages is one CTA of 256 threads (the unsplit select); a longer row is cut
-+into chunks of ``chunk`` pages, one CTA each, that write their exact local
++into chunks of `chunk` pages, one CTA each, that write their exact local
 +top pages to a partial buffer, and the last chunk CTA to arrive (a per-row
-+counter it re-arms) merges them. The union of the per-chunk top-``need``
-+holds the row's top-``need``, so the table is the same, bit for bit. Grid =
++counter it re-arms) merges them. The union of the per-chunk top-`need`
++holds the row's top-`need`, so the table is the same, bit for bit. Grid =
 +(rows x heads, splits), splits from the static column count; no CTA waits for
 +another, so the grid needs no residency check. PDL: waits after its pre-wait
 +loads (n_valid, page rows), then triggers dependents.
@@ -19389,7 +19404,7 @@ index 000000000..107759e18
 +
 +
 +def max_splits(num_cols: int, chunk: int, single_max: int) -> int:
-+    """Chunk CTAs per (row, head) of a launch over ``num_cols`` score columns (1 = the
++    """Chunk CTAs per (row, head) of a launch over `num_cols` score columns (1 = the
 +    one-CTA kernel)."""
 +    cap = min(int(num_cols), MAX_COLS)
 +    return 1 if cap <= single_max else -(-cap // chunk)
@@ -19446,10 +19461,10 @@ index 000000000..107759e18
 +
 +
 +class PageTopkStage:
-+    """``__call__(scores, n_valid, page_rows, table)``
++    """`__call__(scores, n_valid, page_rows, table)`
 +
 +    scores     float32 [nd, H, C]      index page scores (C <= 8192, stride(2) == 1);
-+                                       upstream ``unified_scores[:nd]``
++                                       upstream `unified_scores[:nd]`
 +    n_valid    int32   [>= nd]         valid index pages of each row's token
 +    page_rows  int32   [>= nd, >= C]   logical page -> physical KV page id
 +    table      int32   [H, nd, >= 16]  columns 0..15 written
@@ -19492,11 +19507,11 @@ index 000000000..107759e18
 +        self._cnt = None
 +
 +    def single_max_of(self, rows: int) -> int:
-+        """Pages up to which a launch of ``rows`` rows keeps one CTA per row."""
++        """Pages up to which a launch of `rows` rows keeps one CTA per row."""
 +        return MAX_COLS if rows <= SPLIT_MIN_ROWS else self.single_max
 +
 +    def splits(self, cols: int, rows: int = SPLIT_MIN_ROWS + 1) -> int:
-+        """CTAs per (row, head) of a launch of ``rows`` rows over ``cols`` score
++        """CTAs per (row, head) of a launch of `rows` rows over `cols` score
 +        columns."""
 +        cap = min(int(cols), MAX_COLS)
 +        return 1 if cap <= self.single_max_of(rows) else -(-cap // self.chunk)
@@ -19588,7 +19603,7 @@ index 000000000..107759e18
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/page_topk_kernel.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/page_topk_kernel.py
 new file mode 100644
-index 000000000..c8bd3bc38
+index 000000000..aa3af8628
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/page_topk_kernel.py
 @@ -0,0 +1,943 @@
@@ -19600,21 +19615,21 @@ index 000000000..c8bd3bc38
 +256 threads, 4 witness lanes per warp; the selection is exact, so the table is the same for any launch shape, bit
 +for bit.
 +
-+Per (decode row, index head) one CTA selects, from the row's ``cap = min(n_valid, num_cols, 8192)`` pages, the
-+forced pages (the first ``init`` and the last ``local``) plus the ``need`` best other pages by (fp32 key desc, page
++Per (decode row, index head) one CTA selects, from the row's `cap = min(n_valid, num_cols, 8192)` pages, the
++forced pages (the first `init` and the last `local`) plus the `need` best other pages by (fp32 key desc, page
 +asc): every thread holds KPT order-preserving keys in registers; per warp the R-th largest lane maximum is a witness,
-+and the K-th largest witness (K = ceil(need / R)) bounds a pool that provably holds the top ``need``. A pool of at
++and the K-th largest witness (K = ceil(need / R)) bounds a pool that provably holds the top `need`. A pool of at
 +most 64 entries is ranked by warp 0 (certificate); otherwise an exact block-wide MSD radix select runs on the
-+register keys. Winners are written in ascending page order as physical page ids (``-1`` tail when fewer than 16
++register keys. Winners are written in ascending page order as physical page ids (`-1` tail when fewer than 16
 +pages are valid).
 +
-+``split_mode`` (launches whose rows may exceed ``single_max`` pages): grid (rows x heads, splits). A row of at most
-+``single_max`` pages runs the one-CTA select in split 0 (the other splits exit before the grid wait); a longer row
-+is cut into ``chunk``-page CTAs that write their exact local top-``need`` as ``key << 32 | ~page`` to ``part``; the
-+last chunk CTA to arrive (per-row counter in ``cnt``, threadfence pattern, re-armed for graph replay) ranks the
++`split_mode` (launches whose rows may exceed `single_max` pages): grid (rows x heads, splits). A row of at most
++`single_max` pages runs the one-CTA select in split 0 (the other splits exit before the grid wait); a longer row
++is cut into `chunk`-page CTAs that write their exact local top-`need` as `key << 32 | ~page` to `part`; the
++last chunk CTA to arrive (per-row counter in `cnt`, threadfence pattern, re-armed for graph replay) ranks the
 +union and writes the row. No CTA waits for another.
 +
-+PDL: n_valid and the page rows are read before ``griddepcontrol.wait`` (they are written before the predecessor),
++PDL: n_valid and the page rows are read before `griddepcontrol.wait` (they are written before the predecessor),
 +the scores after it; dependents are released right after the wait.
 +"""
 +
@@ -19659,7 +19674,7 @@ index 000000000..c8bd3bc38
 +
 +@dsl_user_op
 +def ldcg_u32(addr, pred, *, loc=None, ip=None):
-+    """``pred ? ld.global.cg.b32 [addr] : 0`` (a predicated load: no access when pred is 0)."""
++    """`pred ? ld.global.cg.b32 [addr] : 0` (a predicated load: no access when pred is 0)."""
 +    return cutlass.Int32(_asm(_i32(), [cutlass.Int64(addr), cutlass.Int32(pred)],
 +                              "{\n\t.reg .pred p;\n\tsetp.ne.b32 p, $2, 0;\n\tmov.b32 $0, 0;\n\t"
 +                              "@p ld.global.cg.b32 $0, [$1];\n\t}", "=r,l,r", True, loc, ip))  # fmt: skip
@@ -19667,7 +19682,7 @@ index 000000000..c8bd3bc38
 +
 +@dsl_user_op
 +def ldcg_u64(addr, pred, *, loc=None, ip=None):
-+    """``pred ? ld.global.cg.b64 [addr] : 0``."""
++    """`pred ? ld.global.cg.b64 [addr] : 0`."""
 +    return cutlass.Int64(_asm(_i64(), [cutlass.Int64(addr), cutlass.Int32(pred)],
 +                              "{\n\t.reg .pred p;\n\tsetp.ne.b32 p, $2, 0;\n\tmov.b64 $0, 0;\n\t"
 +                              "@p ld.global.cg.b64 $0, [$1];\n\t}", "=l,l,r", True, loc, ip))  # fmt: skip
@@ -19773,7 +19788,7 @@ index 000000000..c8bd3bc38
 +
 +@dsl_user_op
 +def ctz(v, *, loc=None, ip=None):
-+    """Index of the lowest set bit (``__ffs(v) - 1`` for v != 0)."""
++    """Index of the lowest set bit (`__ffs(v) - 1` for v != 0)."""
 +    return cutlass.Int32(_asm(_i32(), [cutlass.Int32(v)], "{\n\t.reg .b32 t;\n\tbrev.b32 t, $1;\n\tclz.b32 $0, t;\n\t}",
 +                              "=r,r", False, loc, ip))  # fmt: skip
 +
@@ -19794,7 +19809,7 @@ index 000000000..c8bd3bc38
 +
 +@dsl_user_op
 +def pack64(hi, lo, *, loc=None, ip=None):
-+    """``hi << 32 | lo`` of two 32-bit words."""
++    """`hi << 32 | lo` of two 32-bit words."""
 +    return cutlass.Int64(_asm(_i64(), [cutlass.Int32(lo), cutlass.Int32(hi)], "mov.b64 $0, {$1, $2};", "=l,r,r",
 +                              False, loc, ip))  # fmt: skip
 +
@@ -19808,7 +19823,7 @@ index 000000000..c8bd3bc38
 +
 +@dsl_user_op
 +def smem_addr(arr, idx, *, loc=None, ip=None):
-+    """shared::cta address of int32 element ``idx`` of ``arr``."""
++    """shared::cta address of int32 element `idx` of `arr`."""
 +    return cutlass.Int32(arr.data_ptr().toint(loc=loc, ip=ip)) + cutlass.Int32(
 +        idx
 +    ) * cutlass.Int32(4)
@@ -19860,7 +19875,7 @@ index 000000000..c8bd3bc38
 +
 +
 +class Smem:
-+    """Shared memory of one CTA (the CUDA ``struct Smem``; the V2 per-warp counts are not used by V4)."""
++    """Shared memory of one CTA (the CUDA `struct Smem`; the V2 per-warp counts are not used by V4)."""
 +
 +    def __init__(self):
 +        sp = cutlass.AddressSpace.smem
@@ -19936,7 +19951,7 @@ index 000000000..c8bd3bc38
 +
 +@cute.jit
 +def _radix_select(k, incm, need, s, tid, kpt: cutlass.Constexpr):
-+    """Exact top-``need`` (key desc, page asc) among the included keys (bit j of incm): block-wide MSD radix select,
++    """Exact top-`need` (key desc, page asc) among the included keys (bit j of incm): block-wide MSD radix select,
 +    8-bit passes until <= 32 candidates, mass-tie path in page order. Winners -> s.wsel[0..need) (warp 0 synced)."""
 +    warp = tid >> 5
 +    lane = tid & 31
@@ -20082,7 +20097,7 @@ index 000000000..c8bd3bc38
 +    part: cutlass.Int64,
 +    c0,
 +):
-+    """Witness-select body for one row (or one chunk when ``part_mode``: srw and pages chunk-local, winners -> ``part``)."""
++    """Witness-select body for one row (or one chunk when `part_mode`: srw and pages chunk-local, winners -> `part`)."""
 +    warp = tid >> 5
 +    lane = tid & 31
 +    # one batch of independent loads (the predicate depends only on pre-wait data)
@@ -20537,36 +20552,36 @@ index 000000000..c8bd3bc38
 +        grid=(rows, splits, 1), block=(NT, 1, 1), stream=stream, use_pdl=use_pdl)  # fmt: skip
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/post/__init__.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/post/__init__.py
 new file mode 100644
-index 000000000..cc6dc16e9
+index 000000000..c735dd66e
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/post/__init__.py
 @@ -0,0 +1,4 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-+"""The post family (attention -> MoE boundary): CuTe DSL kernels (``kernel.py``) and
-+their host ops (``host.py``)."""
++"""The post family (attention -> MoE boundary): CuTe DSL kernels (`kernel.py`) and
++their host ops (`host.py`)."""
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/post/host.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/post/host.py
 new file mode 100644
-index 000000000..90b7c9764
+index 000000000..4ae8f1a76
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/post/host.py
 @@ -0,0 +1,407 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-+"""Host side of the post family's CuTe DSL kernels (``post/kernel.py``).
++"""Host side of the post family's CuTe DSL kernels (`post/kernel.py`).
 +
-+``post_ops(world)`` and ``row_ops()`` return objects with the calls the stage wrappers
-+(``allreduce_norm.py``,
-+``wide.py``) use: ``post_route`` / ``kernel_info`` and ``mxfp8_rows``. They check
++`post_ops(world)` and `row_ops()` return objects with the calls the stage wrappers
++(`allreduce_norm.py`,
++`wide.py`) use: `post_route` / `kernel_info` and `mxfp8_rows`. They check
 +shapes, dtypes and alignment
 +before every launch.
 +
-+Each kernel variant is compiled once per process (``cute.compile``, TVM-FFI calling
++Each kernel variant is compiled once per process (`cute.compile`, TVM-FFI calling
 +convention), always outside
-+CUDA-graph capture: the post stage's build (``kernel_info`` + its idle launch) compiles
++CUDA-graph capture: the post stage's build (`kernel_info` + its idle launch) compiles
 +its post_route variants,
 +both logits_out flavours, and the wide front's build compiles mxfp8_rows
-+(``RowOps.precompile``). A compile
++(`RowOps.precompile`). A compile
 +requested during capture raises.
 +"""
 +
@@ -20605,7 +20620,7 @@ index 000000000..90b7c9764
 +
 +
 +def _compile(key, jit_fn, sample_args, constexprs):
-+    """cute.compile ``jit_fn`` for ``key`` (cached). sample_args: the dynamic args' DSL
++    """cute.compile `jit_fn` for `key` (cached). sample_args: the dynamic args' DSL
 +    types in order."""
 +    fn = _compiled.get(key)
 +    if fn is not None:
@@ -20906,7 +20921,7 @@ index 000000000..90b7c9764
 +# mxfp8_rows
 +# --------------------------------------------------------------------------------------
 +class RowOps:
-+    """The wide front's MXFP8 quantize of BF16 rows (``wide.py``)."""
++    """The wide front's MXFP8 quantize of BF16 rows (`wide.py`)."""
 +
 +    def precompile(self) -> None:
 +        """Compile the kernel now (outside CUDA-graph capture)."""
@@ -20942,7 +20957,7 @@ index 000000000..90b7c9764
 +
 +
 +def post_ops(world: int) -> PostOps:
-+    """The post's ops for ``world`` (imports the CuTe DSL kernel module: raises here if
++    """The post's ops for `world` (imports the CuTe DSL kernel module: raises here if
 +    it is unavailable)."""
 +    _kernel()
 +    if world not in _ops:
@@ -20960,7 +20975,7 @@ index 000000000..90b7c9764
 +__all__ = ["PostOps", "RowOps", "post_ops", "row_ops"]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/post/kernel.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/post/kernel.py
 new file mode 100644
-index 000000000..b1d2b2686
+index 000000000..d4bbcfed7
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/post/kernel.py
 @@ -0,0 +1,1493 @@
@@ -20975,12 +20990,12 @@ index 000000000..b1d2b2686
 +
 +Kernels:
 +
-+- ``post_route_kernel`` (allreduce_norm stage): one cluster of CL CTAs per row. Row warps land the W ranks' bf16
++- `post_route_kernel` (allreduce_norm stage): one cluster of CL CTAs per row. Row warps land the W ranks' bf16
 +  partials from this rank's exchange (poll + re-arm), add the residual, Gemma RMSNorm via a cluster st.async
 +  exchange of the row's sum of squares (and the |normed| argmax candidate), then the mode-Q per-token NVFP4 tail
 +  (and optional MXFP8). One extra routing warp (crank 0) polls the o_proj router CTAs' tagged partial logits,
 +  scales them by 1/rms and publishes the MiniMax2 top-4 as tagged route lines (optionally the fp32 logits).
-+- ``mxfp8_rows_kernel``: MXFP8 (UE8M0, 128x4-swizzled scales) of bf16 rows.
++- `mxfp8_rows_kernel`: MXFP8 (UE8M0, 128x4-swizzled scales) of bf16 rows.
 +
 +All buffers are passed as raw 64-bit device addresses (the host checks shapes, dtypes and alignment).
 +"""
@@ -22459,31 +22474,31 @@ index 000000000..b1d2b2686
 +    )
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/sparse_decode.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/sparse_decode.py
 new file mode 100644
-index 000000000..c6659c041
+index 000000000..9a01be080
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/sparse_decode.py
 @@ -0,0 +1,649 @@
 +# SPDX-License-Identifier: Apache-2.0
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-+"""sparse_decode stage: FP8-KV sparse decode over the 16 pages ``page_topk``
++"""sparse_decode stage: FP8-KV sparse decode over the 16 pages `page_topk`
 +selected, one cluster of CL CTAs per (row, KV head), MXFP8 output for the
 +o_proj GEMV.
 +
-+CuTe DSL kernel (``sparse_decode_kernel.py``, fp16-P online softmax). One kernel is
++CuTe DSL kernel (`sparse_decode_kernel.py`, fp16-P online softmax). One kernel is
 +compiled per (cluster width,
 +Q heads per KV head, pre-wait order, min blocks, PDL) at build.
 +
 +Residency: the kernel only waits inside its own cluster (DSMEM mbarrier), so
-+correctness needs one cluster to be schedulable. ``build()`` probes
-+``cuOccupancyMaxActiveClusters`` of the compiled kernel for every cluster
++correctness needs one cluster to be schedulable. `build()` probes
++`cuOccupancyMaxActiveClusters` of the compiled kernel for every cluster
 +width (16, 8) and picks the width per row count
-+(``geometry.sparse_cluster_size``, recorded in ``cluster_sizes``): up to
-+``one_wave_rows`` rows (the decode chain was tuned for 8) the grid must be
++(`geometry.sparse_cluster_size`, recorded in `cluster_sizes`): up to
++`one_wave_rows` rows (the decode chain was tuned for 8) the grid must be
 +co-resident (one wave), 16 CTAs per (row, KV head) narrowed to 8 when 16 does
-+not fit, else ``build()`` fails closed; larger grids (up to ``max_rows``, 64)
++not fit, else `build()` fails closed; larger grids (up to `max_rows`, 64)
 +only need to be schedulable and take the width with the fewest waves
-+(``multi_wave_rows`` lists those that still need more than one).
-+``strict_one_wave=False`` drops the one-wave requirement.
++(`multi_wave_rows` lists those that still need more than one).
++`strict_one_wave=False` drops the one-wave requirement.
 +The kernel itself takes up to 128 rows (one MXFP8 scale tile).
 +"""
 +
@@ -22540,7 +22555,7 @@ index 000000000..c6659c041
 +
 +def _ext():
 +    """Load-time check (the kernel registry calls it before building): the CuTe
-+    DSL kernel module imports. Kernels compile in ``build()``."""
++    DSL kernel module imports. Kernels compile in `build()`."""
 +    return _kernel()
 +
 +
@@ -22563,9 +22578,9 @@ index 000000000..c6659c041
 +
 +
 +def _compile(cl: int, hq: int, pre: bool, minb: int, pdl: bool, cap: int = 0):
-+    """The compiled kernel of one build (cached per process); outside capture. ``cap`` >
++    """The compiled kernel of one build (cached per process); outside capture. `cap` >
 +    0 pads the shared memory
-+    so that at most ``cap`` CTAs are resident per SM."""
++    so that at most `cap` CTAs are resident per SM."""
 +    key = (int(cl), int(hq), bool(pre), int(minb), bool(pdl), int(cap))
 +    fn = _compiled.get(key)
 +    if fn is not None:
@@ -22654,7 +22669,7 @@ index 000000000..c6659c041
 +
 +
 +def max_clusters(cl: int, minb: int = 1, hq: int = HEADS_PER_KV, cap: int = 0) -> int:
-+    """Clusters of width ``cl`` of the (min blocks ``minb``, pre-wait) build that
++    """Clusters of width `cl` of the (min blocks `minb`, pre-wait) build that
 +    can be resident at once (cuOccupancyMaxActiveClusters); negative = -CUresult."""
 +    import cuda.bindings.driver as drv
 +
@@ -22702,7 +22717,7 @@ index 000000000..c6659c041
 +def cluster_size(rows: int, num_kv_heads: int) -> int:
 +    """The preferred width before the occupancy probe: 16 CTAs per (row, KV
 +    head) unless that makes the grid 32 clusters or wider (then 8). The stage
-+    launches with the width ``build()`` chose (``cluster_sizes``)."""
++    launches with the width `build()` chose (`cluster_sizes`)."""
 +    return geometry.sparse_cluster_size(rows, num_kv_heads)
 +
 +
@@ -22736,12 +22751,12 @@ index 000000000..c6659c041
 +
 +
 +class ClusterSparseDecodeStage:
-+    """``__call__(q_fp8, k, v, tables, lens, out, q8, sf, sfp)``
++    """`__call__(q_fp8, k, v, tables, lens, out, q8, sf, sfp)`
 +
 +    q_fp8   e4m3 [T, Hq, 128]             (Hq = heads_per_kv * Hkv per rank: 16 at TP4, 8 at TP8)
-+    k, v    e4m3/uint8 [P, Hkv, 128, 128] views (``split_kv``)
++    k, v    e4m3/uint8 [P, Hkv, 128, 128] views (`split_kv`)
 +    tables  int32 [Hkv, T, >= 16]         page_topk output (physical pages)
-+    lens    int32 [Hkv, T]                ``sparse_lens`` of each row
++    lens    int32 [Hkv, T]                `sparse_lens` of each row
 +    out     bf16 [T, Hq * 128]
 +    q8      uint8 [T, Hq * 128]           MXFP8 values for the o_proj GEMV
 +    sf      uint8 [128 * Hq * 4]          UE8M0, 128x4 swizzled, rows padded to 128
@@ -22922,12 +22937,12 @@ index 000000000..c6659c041
 +        done_cnt=None,
 +        q_prewait=False,
 +    ):
-+        """``q_prewait``: q was not written by the kernel launched right before
++        """`q_prewait`: q was not written by the kernel launched right before
 +        this one (e.g. the front, with the index scorer and page top-k in
 +        between), so the kernel may read it before its PDL grid wait. From
-+        ``PREWAIT_MIN_ROWS`` rows the lens (written at the start of the step,
-+        ``sparse_lens``) are read before the wait, and q with them when
-+        ``q_prewait``; below, every input is read after it."""
++        `PREWAIT_MIN_ROWS` rows the lens (written at the start of the step,
++        `sparse_lens`) are read before the wait, and q with them when
++        `q_prewait`; below, every input is read after it."""
 +        if not self._built:
 +            self.build()
 +        t = q_fp8.shape[0]
@@ -23114,7 +23129,7 @@ index 000000000..c6659c041
 +]
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/sparse_decode_kernel.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/sparse_decode_kernel.py
 new file mode 100644
-index 000000000..c80964a42
+index 000000000..98bbb91f0
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/sparse_decode_kernel.py
 @@ -0,0 +1,912 @@
@@ -23124,21 +23139,21 @@ index 000000000..c80964a42
 +"""CuTe DSL cluster sparse decode (FP8 e4m3 KV, 16 selected pages of 128 tokens, MXFP8 output).
 +
 +fp16-P online-softmax cluster decode. Every floating-point operation is spelled as an explicit PTX instruction
-+(``fma.rn.f32``, ``mul.f32`` / ``add.f32`` / ``sub.f32``, ``ex2.approx.f32``, ``rcp.rn.f32``, ``div.rn.f32``), so the
++(`fma.rn.f32`, `mul.f32` / `add.f32` / `sub.f32`, `ex2.approx.f32`, `rcp.rn.f32`, `div.rn.f32`), so the
 +outputs do not depend on compiler contraction.
 +
-+One cluster of CL CTAs (CL = 16 or 8) per (token row, KV head): CTA ``rank`` runs the selected pages
++One cluster of CL CTAs (CL = 16 or 8) per (token row, KV head): CTA `rank` runs the selected pages
 +rank, rank + CL, ... (PPC = 16 / CL pages) with an online softmax in base 2 (S = q.k in fp32 from exact
-+fp8 -> fp16 operands on ``mma.sync`` m16n8k16, P rounded to fp16 before P @ V), then pushes its normalized partial of
-+Q head ``row`` and that head's log-sum-exp to CTA ``row / HPC`` over DSMEM (``st.async`` completing an mbarrier);
++fp8 -> fp16 operands on `mma.sync` m16n8k16, P rounded to fp16 before P @ V), then pushes its normalized partial of
++Q head `row` and that head's log-sum-exp to CTA `row / HPC` over DSMEM (`st.async` completing an mbarrier);
 +CTA r merges HPC = HQ / CL heads (at least 1) by their LSE, writes the bf16 output and its MXFP8 quantization
 +(E4M3 values, UE8M0 scales in the 128x4 swizzled layout the o_proj GEMV reads plus a row-major copy).
 +
 +HQ = Q heads per KV head: 16 (TP4) or 8 (TP8). The MMA keeps 16 rows; at 8 heads rows 8..15 of q are zero and their
 +partials are dropped, and at CL 16 only CTAs 0..7 merge (one head each); the others finish after their push.
 +
-+PDL: the CTA arrives on the cluster barrier, then waits on the grid dependency (``griddepcontrol.wait``) and at once
-+lets its dependents launch. ``prewait`` (PRE builds): bit 0 reads the lens before the wait (they are written at the
++PDL: the CTA arrives on the cluster barrier, then waits on the grid dependency (`griddepcontrol.wait`) and at once
++lets its dependents launch. `prewait` (PRE builds): bit 0 reads the lens before the wait (they are written at the
 +step start), bit 1 also q (written before the previous kernel's own grid wait returned); only the page tables are
 +the previous kernel's output. PRE = False reads every input after the wait.
 +
@@ -23197,7 +23212,7 @@ index 000000000..c80964a42
 +
 +
 +def smem_alloc(cap: int) -> int:
-+    """Shared memory a CTA allocates: SMEM_BYTES, or (cap > 0) padded so that at most ``cap`` CTAs fit per SM (the
++    """Shared memory a CTA allocates: SMEM_BYTES, or (cap > 0) padded so that at most `cap` CTAs fit per SM (the
 +    residency that balances two waves of clusters better)."""
 +    if cap <= 0:
 +        return SMEM_BYTES
@@ -23251,7 +23266,7 @@ index 000000000..c80964a42
 +
 +@dsl_user_op
 +def _f2(op, a, b, *, loc=None, ip=None):
-+    """Binary fp32 op as an explicit PTX instruction (``mul.f32``, ``add.f32``, ``sub.f32``, ``max.f32``, ``div.rn.f32``)."""
++    """Binary fp32 op as an explicit PTX instruction (`mul.f32`, `add.f32`, `sub.f32`, `max.f32`, `div.rn.f32`)."""
 +    return F32(
 +        _asm(
 +            _f32t(),
@@ -23267,7 +23282,7 @@ index 000000000..c80964a42
 +
 +@dsl_user_op
 +def _f1(op, a, *, loc=None, ip=None):
-+    """Unary fp32 op (``ex2.approx.f32``, ``lg2.approx.f32``, ``rcp.rn.f32``, ``rcp.approx.ftz.f32``, ``abs.f32``)."""
++    """Unary fp32 op (`ex2.approx.f32`, `lg2.approx.f32`, `rcp.rn.f32`, `rcp.approx.ftz.f32`, `abs.f32`)."""
 +    return F32(
 +        _asm(_f32t(), [F32(a)], f"{op} $0, $1;", "=f,f", side=False, loc=loc, ip=ip)
 +    )
@@ -23329,7 +23344,7 @@ index 000000000..c80964a42
 +
 +@dsl_user_op
 +def _cvt_e4m3x2(w, hi: bool, *, loc=None, ip=None):
-+    """The fp16x2 of the E4M3 pair in the low (or high) 16 bits of ``w`` (exact)."""
++    """The fp16x2 of the E4M3 pair in the low (or high) 16 bits of `w` (exact)."""
 +    sel = "{l, h}" if not hi else "{h, l}"  # mov.b32 {a, b}: a = the low half
 +    return I32(_asm(_i32t(), [I32(w)],
 +                    "{\n\t.reg .b16 l, h;\n\tmov.b32 " + sel + ", $1;\n\tcvt.rn.f16x2.e4m3x2 $0, l;\n\t}", "=r,r",
@@ -23337,7 +23352,7 @@ index 000000000..c80964a42
 +
 +
 +def _cvt16(words):
-+    """16 E4M3 bytes (4 words) -> 16 fp16 (8 words), the CUDA ``cvt16`` order."""
++    """16 E4M3 bytes (4 words) -> 16 fp16 (8 words), the CUDA `cvt16` order."""
 +    out = []
 +    for w in words:
 +        out.append(_cvt_e4m3x2(w, False))
@@ -23347,7 +23362,7 @@ index 000000000..c80964a42
 +
 +@dsl_user_op
 +def _f16x2(lo, hi, *, loc=None, ip=None):
-+    """``__floats2half2_rn(lo, hi)`` as a word."""
++    """`__floats2half2_rn(lo, hi)` as a word."""
 +    return I32(_asm(_i32t(), [F32(hi), F32(lo)], "cvt.rn.f16x2.f32 $0, $1, $2;", "=r,f,f", side=False,
 +                    loc=loc, ip=ip))  # fmt: skip
 +
@@ -23362,7 +23377,7 @@ index 000000000..c80964a42
 +
 +@dsl_user_op
 +def _e4m3_lo(x, *, loc=None, ip=None):
-+    """E4M3 (RN, satfinite) of x in the low byte (``cvt.rn.satfinite.e4m3x2.f32 q2, 0, x``)."""
++    """E4M3 (RN, satfinite) of x in the low byte (`cvt.rn.satfinite.e4m3x2.f32 q2, 0, x`)."""
 +    return I32(_asm(_i32t(), [F32(x)],
 +                    "{\n\t.reg .b16 q;\n\tcvt.rn.satfinite.e4m3x2.f32 q, 0f00000000, $1;\n\tcvt.u32.u16 $0, q;\n\t}",
 +                    "=r,f", side=False, loc=loc, ip=ip))  # fmt: skip
@@ -23498,7 +23513,7 @@ index 000000000..c80964a42
 +# global memory (64-bit addresses)
 +@dsl_user_op
 +def _ld_b32_if(addr, pred, other, *, loc=None, ip=None):
-+    """``pred ? *(int *)addr : other`` (no load when not pred)."""
++    """`pred ? *(int *)addr : other` (no load when not pred)."""
 +    return I32(_asm(_i32t(), [I64(addr), I32(pred), I32(other)],
 +                    "{\n\t.reg .pred p;\n\tsetp.ne.b32 p, $2, 0;\n\tmov.b32 $0, $3;\n\t@p ld.global.b32 $0, [$1];\n\t}",
 +                    "=&r,l,r,r", loc=loc, ip=ip))  # fmt: skip
@@ -23506,7 +23521,7 @@ index 000000000..c80964a42
 +
 +@dsl_user_op
 +def _ld_v4_if(addr, pred, nc: bool, *, loc=None, ip=None):
-+    """16 bytes at addr (``ld.global[.nc].v4``) when pred, else zeros."""
++    """16 bytes at addr (`ld.global[.nc].v4`) when pred, else zeros."""
 +    sp = ".nc" if nc else ""
 +    out = _asm(_struct(_i32t(), 4), [I64(addr), I32(pred)],
 +               "{\n\t.reg .pred p;\n\tsetp.ne.b32 p, $5, 0;\n\tmov.b32 $0, 0;\n\tmov.b32 $1, 0;\n\tmov.b32 $2, 0;\n\t"
@@ -23656,7 +23671,7 @@ index 000000000..c80964a42
 +
 +
 +def _row_reduce(c, op, dst):
-+    """dst[h] = op over the 4 warps' red[w][h] (threads h < 16; the others read row 0 and store nothing)."""
++    """dst[h] = op over the 4 warps' `red[w][h]` (threads h < 16; the others read row 0 and store nothing)."""
 +    lt = I32(c.tid < I32(MMA_ROWS))
 +    red_t = (
 +        c.base
@@ -24032,7 +24047,7 @@ index 000000000..c80964a42
 +    )  # fmt: skip
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/wide.py b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/wide.py
 new file mode 100644
-index 000000000..3ac9f5e3c
+index 000000000..2cc666f6d
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/kernels/wide.py
 @@ -0,0 +1,169 @@
@@ -24047,11 +24062,11 @@ index 000000000..3ac9f5e3c
 +==================  ===========================================================
 +stage               wide implementation
 +==================  ===========================================================
-+front (17..64)      ``WideFront``: after the stock input boundary (FlashInfer
++front (17..64)      `WideFront`: after the stock input boundary (FlashInfer
 +                    AR + norm), one MXFP8 quantize launch and the same GEMV on
 +                    the QKV / index weight, then the stock q/k norm + RoPE +
 +                    FP8 KV / index-K insert op.
-+o_proj              ``WideOProj``: the same MXFP8 GEMV (tcgen05, swapped AB:
++o_proj              `WideOProj`: the same MXFP8 GEMV (tcgen05, swapped AB:
 +                    the weight is the M128 operand, the rows are the MMA's N =
 +                    16 / 32 / 48 / 64 columns), so each o_proj weight tile is
 +                    read once per step at any row count; it reads the kernel
@@ -24112,7 +24127,7 @@ index 000000000..3ac9f5e3c
 +        self.out = out  # bf16 [64, 6144], shared by the layers (stream order)
 +
 +    def build(self, rows: tuple[int, ...]) -> None:
-+        """Compile the MMA widths ``rows`` need (outside capture)."""
++        """Compile the MMA widths `rows` need (outside capture)."""
 +        self.gemv.check_cute_dsl()
 +        for m in rows:
 +            if (
@@ -24136,8 +24151,8 @@ index 000000000..3ac9f5e3c
 +
 +class WideFront:
 +    """The QKV / index projection of a sparse layer at 17..64 rows: MXFP8 of
-+    the normed BF16 rows (``mxfp8_rows``, trtllm ``mxfp8_quantize`` rounding)
-+    and the GEMV on the layer's MXFP8 ``qkv_proj`` weight (rows =
++    the normed BF16 rows (`mxfp8_rows`, trtllm `mxfp8_quantize` rounding)
++    and the GEMV on the layer's MXFP8 `qkv_proj` weight (rows =
 +    q | k | v | index q | index k heads x 128)."""
 +
 +    def __init__(
@@ -24170,7 +24185,7 @@ index 000000000..3ac9f5e3c
 +        self._ext: Any = None
 +
 +    def build(self, rows: tuple[int, ...], compile_gemv: bool = True) -> None:
-+        """Load the quantize extension; compile the GEMV for ``rows`` (once
++        """Load the quantize extension; compile the GEMV for `rows` (once
 +        per process: the compile key does not depend on the weight)."""
 +        self._ext = _rows_ext()
 +        self._ext.precompile()  # its first launch is inside a FULL graph capture
@@ -24185,15 +24200,15 @@ index 000000000..3ac9f5e3c
 +                raise WideError(f"QKV GEMV declines {m} rows")
 +
 +    def __call__(self, hidden: torch.Tensor) -> torch.Tensor:
-+        """Qkv bf16 [rows, N] of the normed rows ``hidden`` (bf16 [rows, 6144])."""
++        """Qkv bf16 [rows, N] of the normed rows `hidden` (bf16 [rows, 6144])."""
 +        rows = hidden.shape[0]
 +        self._ext.mxfp8_rows(hidden, self.xq, self.xsf, rows)
 +        return self.quantized(self.xq[:rows], self.xsf)
 +
 +    def quantized(self, xq: torch.Tensor, xsf: torch.Tensor) -> torch.Tensor:
-+        """Qkv bf16 [rows, N] of rows already in MXFP8: e4m3 ``xq`` [rows,
-+        6144] and UE8M0 ``xsf`` in the 128x4-swizzled layout (at least 128 x
-+        192 bytes), as ``mxfp8_rows`` and the stock fused MoE finalize +
++        """Qkv bf16 [rows, N] of rows already in MXFP8: e4m3 `xq` [rows,
++        6144] and UE8M0 `xsf` in the 128x4-swizzled layout (at least 128 x
++        192 bytes), as `mxfp8_rows` and the stock fused MoE finalize +
 +        all-reduce + norm write them."""
 +        rows = xq.shape[0]
 +        y = self.gemv.m3_mx_gemv(
@@ -24207,7 +24222,7 @@ index 000000000..3ac9f5e3c
 +        return y
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/peer_logits.py b/vllm/models/minimax_m3/nvidia/specialized_decode/peer_logits.py
 new file mode 100644
-index 000000000..10c60b9e3
+index 000000000..865e80e86
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/peer_logits.py
 @@ -0,0 +1,220 @@
@@ -24216,20 +24231,20 @@ index 000000000..10c60b9e3
 +"""LM head outputs in peer-mapped memory: the vocabulary-parallel logits
 +without an NCCL all-gather.
 +
-+The stock LM heads (target and draft) gather their ``[rows, V / TP]`` shards
++The stock LM heads (target and draft) gather their `[rows, V / TP]` shards
 +with an NCCL ring all-gather and a copy that moves the rank dimension into
 +the vocabulary. Here each rank writes its shard with the head's own GEMM into
 +a peer-mapped buffer (the TP group's peer transport), pushes it into every rank's
-+``[rows, V]`` logits buffer over NVLink, and one flag barrier makes every
-+shard visible (``PeerPushedLogits``): for the target sampler
-+(``runtime/model_state.py``) and the DSpark Markov sampling (``drafter.py``).
++`[rows, V]` logits buffer over NVLink, and one flag barrier makes every
++shard visible (`PeerPushedLogits`): for the target sampler
++(`runtime/model_state.py`) and the DSpark Markov sampling (`drafter.py`).
 +
 +Reuse is safe without a second barrier: between two uses of a buffer every
 +rank runs collectives that the other ranks can only join after finishing
 +their reads (the draft step's, the target forward's).
 +
 +The buffers, their peer handshake and the kernels' compiles happen in
-+``warm_up``, which the model state runs on every rank at start-up, before
++`warm_up`, which the model state runs on every rank at start-up, before
 +memory profiling, so serving allocates and compiles nothing here.
 +"""
 +
@@ -24291,8 +24306,8 @@ index 000000000..10c60b9e3
 +
 +
 +class PeerShards:
-+    """``[max_rows, shard]`` of this rank's LM head output in a peer-mapped
-+    buffer, every rank's address (``table``), and the flag barrier."""
++    """`[max_rows, shard]` of this rank's LM head output in a peer-mapped
++    buffer, every rank's address (`table`), and the flag barrier."""
 +
 +    def __init__(
 +        self, weight: torch.Tensor, max_rows: int, name: str, extra_bytes: int = 0
@@ -24362,7 +24377,7 @@ index 000000000..10c60b9e3
 +
 +
 +class PeerPushedLogits:
-+    """``compute_logits`` of a vocabulary-parallel LM head with each rank
++    """`compute_logits` of a vocabulary-parallel LM head with each rank
 +    pushing its shard into every rank's full logits buffer (remote writes)
 +    instead of every rank reading the others' shards after the barrier:
 +    the head's GEMM into the local shard buffer, one push, the barrier; the
@@ -24441,7 +24456,7 @@ index 000000000..208f01a7c
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/runtime/decode.py b/vllm/models/minimax_m3/nvidia/specialized_decode/runtime/decode.py
 new file mode 100644
-index 000000000..e1177ae1a
+index 000000000..962d99296
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/runtime/decode.py
 @@ -0,0 +1,286 @@
@@ -24449,17 +24464,17 @@ index 000000000..e1177ae1a
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""The specialized decode executor.
 +
-+``SpecializedDecode`` runs the decoder layers of ``MiniMaxM3Model`` for the
++`SpecializedDecode` runs the decoder layers of `MiniMaxM3Model` for the
 +steps captured into FULL CUDA graphs of pure decode batches of up to
-+``max_rows`` rows. Its model state builds it once the weights are loaded.
-+``plan`` decides per forward whether it runs; the model's forward then passes
-+the returned ``DecodeStep`` to the backbone, which embeds the input as usual
-+and hands the layers to ``DecodeStep.run``. Every other forward (prefill,
++`max_rows` rows. Its model state builds it once the weights are loaded.
++`plan` decides per forward whether it runs; the model's forward then passes
++the returned `DecodeStep` to the backbone, which embeds the input as usual
++and hands the layers to `DecodeStep.run`. Every other forward (prefill,
 +mixed, eager, PIECEWISE, larger batches) runs the stock layers, which the
 +executor leaves unchanged.
 +
 +Per layer the executor runs the stock modules' weights through the stages of
-+``stages.py``:
++`stages.py`:
 +
 +- dense-attention layers (0-2): allreduce_norm.input -> front -> dense_decode
 +  -> o_proj -> allreduce_norm.post_attention -> dense_mlp;
@@ -24468,12 +24483,12 @@ index 000000000..e1177ae1a
 +  (+ router) -> moe (finalize deferred to the next input boundary when the
 +  stock MoE defers it and the next front does not fuse that boundary);
 +
-+then allreduce_norm.final. A front that ``fuses_input`` replaces
-+allreduce_norm.input + front with ``run_fused``; a MoE whose next front
-+``polls_push`` pushes its output into that front's exchange. Each stage takes
++then allreduce_norm.final. A front that `fuses_input` replaces
++allreduce_norm.input + front with `run_fused`; a MoE whose next front
++`polls_push` pushes its output into that front's exchange. Each stage takes
 +the first of its implementations that runs over the deployment's cache dtypes,
-+supports the step's rows and is ``compatible`` with the other selected stages
-+(``Stages.select``); the last is always the stock one (``stock.py``).
++supports the step's rows and is `compatible` with the other selected stages
++(`Stages.select`); the last is always the stock one (`stock.py`).
 +
 +The stages issue TP collectives, so every decision reads host state that all
 +TP ranks share: the step's rows and the attention metadata's host fields.
@@ -24523,7 +24538,7 @@ index 000000000..e1177ae1a
 +    config: DecodeConfig, backbone: "MiniMaxM3Model | None" = None
 +) -> Stages:
 +    """The stage implementations of a deployment: the kernel stages
-+    (``kernel_stages.py``) that run over its cache dtypes, each ahead of the
++    (`kernel_stages.py`) that run over its cache dtypes, each ahead of the
 +    stock stage. Without a backbone, the stock chain."""
 +    stock = stock_stages()
 +    # The stock stage object of every slot (the kernel stages delegate to it).
@@ -24545,7 +24560,7 @@ index 000000000..e1177ae1a
 +    a pure decode step: not a PIECEWISE capture (Model Runner V2 captures FULL
 +    graphs with the forward context's mode NONE, and PIECEWISE ones, which
 +    report capturing too, with PIECEWISE), and attention metadata without
-+    prefills for every attention layer and index cache in ``prefixes``."""
++    prefills for every attention layer and index cache in `prefixes`."""
 +    context = get_forward_context()
 +    attn_metadata = context.attn_metadata
 +    if context.cudagraph_runtime_mode == CUDAGraphMode.PIECEWISE or not isinstance(
@@ -24638,7 +24653,7 @@ index 000000000..e1177ae1a
 +        intermediate_tensors: IntermediateTensors | None,
 +    ) -> DecodeStep | None:
 +        """The step this forward runs, or None to run the stock layers: only
-+        FULL CUDA graph captures of pure decode steps of up to ``max_rows``
++        FULL CUDA graph captures of pure decode steps of up to `max_rows`
 +        rows run the executor."""
 +        rows = positions.shape[0]
 +        if (
@@ -24659,7 +24674,7 @@ index 000000000..e1177ae1a
 +        self, step: DecodeStep, x: torch.Tensor, positions: torch.Tensor
 +    ) -> DecodeOutput:
 +        """The decoder layers and the final norm of the step, on the embedding
-+        ``x``; returns what ``MiniMaxM3Model.forward`` returns."""
++        `x`; returns what `MiniMaxM3Model.forward` returns."""
 +        backbone = self.backbone
 +        aux_layers = backbone.aux_hidden_state_layers
 +        aux_hidden_states: list[torch.Tensor] = []
@@ -24733,7 +24748,7 @@ index 000000000..e1177ae1a
 +        return hidden_states
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/runtime/model_state.py b/vllm/models/minimax_m3/nvidia/specialized_decode/runtime/model_state.py
 new file mode 100644
-index 000000000..68a83c0e3
+index 000000000..cd1458ee5
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/runtime/model_state.py
 @@ -0,0 +1,79 @@
@@ -24741,7 +24756,7 @@ index 000000000..68a83c0e3
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""The model state of the specialized decode.
 +
-+``MiniMaxM3SpecializedDecodeModelState`` is the default model state (which
++`MiniMaxM3SpecializedDecodeModelState` is the default model state (which
 +MiniMax-M3 runs on without the specialized decode) plus the decode executor,
 +built and warmed up once the weights are loaded: the model runner creates the
 +model state after loading the target and draft models, and before memory
@@ -24749,7 +24764,7 @@ index 000000000..68a83c0e3
 +
 +The attention metadata builds still run eagerly before every step, as in the
 +stock decode. Recording them into CUDA graphs (as DeepSeek-V4.1's
-+``metadata_graphs`` does) needs the MiniMax-M3 sparse and indexer builders
++`metadata_graphs` does) needs the MiniMax-M3 sparse and indexer builders
 +audited for host reads first, e.g. the CUTLASS sparse decode's plan cache.
 +"""
 +
@@ -24818,7 +24833,7 @@ index 000000000..68a83c0e3
 +        return super().compute_sample_logits(hidden_states)
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/runtime/warmup.py b/vllm/models/minimax_m3/nvidia/specialized_decode/runtime/warmup.py
 new file mode 100644
-index 000000000..b00a8d585
+index 000000000..52f84f39f
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/runtime/warmup.py
 @@ -0,0 +1,35 @@
@@ -24826,7 +24841,7 @@ index 000000000..b00a8d585
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""Tuning and compiling the specialized decode's stages.
 +
-+The model state calls ``warm_up`` once the executor is built, before memory
++The model state calls `warm_up` once the executor is built, before memory
 +profiling and CUDA graph capture, so no kernel compiles or tunes inside a
 +capture. Each stage implementation warms up for the row counts it runs; the
 +stock stages need nothing (the eager stock forward before each capture
@@ -24844,7 +24859,7 @@ index 000000000..b00a8d585
 +
 +def step_rows(decode: SpecializedDecode, vllm_config: VllmConfig) -> list[int]:
 +    """Every row count an executor step can have: the FULL decode CUDA graph
-+    capture sizes up to the executor's ``max_rows``."""
++    capture sizes up to the executor's `max_rows`."""
 +    sizes = vllm_config.compilation_config.cudagraph_capture_sizes or []
 +    return sorted({size for size in sizes if 0 < size <= decode.max_rows})
 +
@@ -24859,7 +24874,7 @@ index 000000000..b00a8d585
 +                stage.warm_up(supported)
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/stages.py b/vllm/models/minimax_m3/nvidia/specialized_decode/stages.py
 new file mode 100644
-index 000000000..7609f2ffa
+index 000000000..7c473d514
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/stages.py
 @@ -0,0 +1,486 @@
@@ -24868,50 +24883,50 @@ index 000000000..7609f2ffa
 +"""The per-layer stages of the specialized decode.
 +
 +A decoder layer of the executor is a chain of stages; each stage has one
-+interface below and any number of implementations. ``stock.py`` implements
++interface below and any number of implementations. `stock.py` implements
 +every stage with the ops the stock layers run; a kernel replaces one stage at a
-+time by implementing its interface (see ``AGENTS.md``).
++time by implementing its interface (see `AGENTS.md`).
 +
-+Shapes are per TP rank. ``rows`` is the step's token count,
-+``c * (K + 1)`` for ``c`` requests and ``K`` DSpark draft tokens (padded rows
-+included), at most ``MAX_ROWS``. At TP4 for MiniMax-M3.1-Flash:
++Shapes are per TP rank. `rows` is the step's token count,
++`c * (K + 1)` for `c` requests and `K` DSpark draft tokens (padded rows
++included), at most `MAX_ROWS`. At TP4 for MiniMax-M3.1-Flash:
 +
 +======================  =====================================================
-+``hidden``              6144
-+``q_heads``             16 (64 / TP), ``head_dim`` 128, ``q_size`` 2048
-+``kv_heads``            1 (4 / TP), ``kv_size`` 128
-+``index_heads``         1 (= ``kv_heads``), ``index_dim`` 128
-+``topk_blocks``         16 blocks of 128 tokens (= KV block size)
-+``max_k_tiles``         8192 (the indexer's unified score buffer)
-+``experts``             128 routed, top 4; expert intermediate 768 (3072 / TP)
-+``dense_intermediate``  3072 (12288 / TP), layers 0-2
++`hidden`              6144
++`q_heads`             16 (64 / TP), `head_dim` 128, `q_size` 2048
++`kv_heads`            1 (4 / TP), `kv_size` 128
++`index_heads`         1 (= `kv_heads`), `index_dim` 128
++`topk_blocks`         16 blocks of 128 tokens (= KV block size)
++`max_k_tiles`         8192 (the indexer's unified score buffer)
++`experts`             128 routed, top 4; expert intermediate 768 (3072 / TP)
++`dense_intermediate`  3072 (12288 / TP), layers 0-2
 +======================  =====================================================
 +
 +Every stage runs inside a FULL CUDA graph capture: it may not synchronize with
 +the host or read GPU values back, and every decision it makes must depend only
-+on host state shared by all TP ranks (``rows``, module attributes, attention
-+metadata host fields). Stages that communicate (``AllReduceNormStage``) must
++on host state shared by all TP ranks (`rows`, module attributes, attention
++metadata host fields). Stages that communicate (`AllReduceNormStage`) must
 +issue the same collectives on every rank.
 +
 +Fused kernel stages. Some kernel implementations cover more than their own
 +slot, or hand a private layout to a partner stage instead of the tensor the
 +interface below names:
 +
-+- a ``FrontStage`` may fuse the input boundary (``fuses_input``): the executor
-+  then calls ``run_fused`` with the previous FFN's pending output and residual
-+  instead of ``AllReduceNormStage.input`` + ``run``;
-+- an ``OProjStage`` may return a pending object only its partner
-+  ``AllReduceNormStage.post_attention`` consumes (the o_proj + boundary pair);
-+- a ``PageTopKStage`` may return a private block table only its partner
-+  ``SparseDecodeStage`` reads;
-+- a ``MoEStage`` may push its output straight into the next front's exchange
-+  (``can_push``) and return a ``PushedFFN``.
++- a `FrontStage` may fuse the input boundary (`fuses_input`): the executor
++  then calls `run_fused` with the previous FFN's pending output and residual
++  instead of `AllReduceNormStage.input` + `run`;
++- an `OProjStage` may return a pending object only its partner
++  `AllReduceNormStage.post_attention` consumes (the o_proj + boundary pair);
++- a `PageTopKStage` may return a private block table only its partner
++  `SparseDecodeStage` reads;
++- a `MoEStage` may push its output straight into the next front's exchange
++  (`can_push`) and return a `PushedFFN`.
 +
-+``Stage.compatible`` states which partners an implementation needs; ``select``
++`Stage.compatible` states which partners an implementation needs; `select`
 +demotes every implementation whose partners are not selected (down to the
 +stock one, which composes with everything), so every mix it returns is one
-+that is correct. The executor asks ``fuses_input`` / ``polls_push`` /
-+``can_push`` before each boundary, so a push is only ever made to a front that
++that is correct. The executor asks `fuses_input` / `polls_push` /
++`can_push` before each boundary, so a push is only ever made to a front that
 +consumes it.
 +"""
 +
@@ -24945,8 +24960,8 @@ index 000000000..7609f2ffa
 +
 +class PushedFFN(NamedTuple):
 +    """An FFN output its stage already pushed into the exchange the next
-+    layer's (input-fusing) front polls. Only a ``FrontStage`` whose
-+    ``polls_push`` holds for that layer may receive it."""
++    layer's (input-fusing) front polls. Only a `FrontStage` whose
++    `polls_push` holds for that layer may receive it."""
 +
 +    # [rows, hidden] BF16: the same un-reduced partial (reading it does not consume the
 +    # push).
@@ -24995,55 +25010,55 @@ index 000000000..7609f2ffa
 +    cache_dtypes: frozenset[CacheDtypes] | None = None
 +
 +    def runs_with(self, dtypes: CacheDtypes) -> bool:
-+        """Whether this implementation runs over caches of ``dtypes``; decided
++        """Whether this implementation runs over caches of `dtypes`; decided
 +        once, when the executor is built."""
 +        return self.cache_dtypes is None or dtypes in self.cache_dtypes
 +
 +    def supports(self, rows: int) -> bool:
-+        """Whether this implementation runs a step of ``rows`` rows. Host-only
++        """Whether this implementation runs a step of `rows` rows. Host-only
 +        and alike on every TP rank."""
 +        return self.max_rows is None or rows <= self.max_rows
 +
 +    def warm_up(self, rows: Sequence[int]) -> None:  # noqa: B027
-+        """Compile and tune for every row count in ``rows`` (each one this
-+        stage ``supports``), before memory profiling and CUDA graph capture.
++        """Compile and tune for every row count in `rows` (each one this
++        stage `supports`), before memory profiling and CUDA graph capture.
 +        Collective when the stage is; the stock stages need nothing."""
 +
 +    def compatible(self, step: "StepStages") -> bool:
 +        """Whether this implementation can run beside the other stages of
-+        ``step`` (host-only, alike on every rank). Implementations that hand a
++        `step` (host-only, alike on every rank). Implementations that hand a
 +        private layout to a partner stage return False unless that partner is
 +        selected; the stock stages compose with every implementation."""
 +        return True
 +
 +    def begin_step(self, step: "DecodeStep", positions: torch.Tensor) -> None:  # noqa: B027
-+        """Called once per step (``step.rows`` rows, ``positions`` [rows]
++        """Called once per step (`step.rows` rows, `positions` [rows]
 +        int64), before the first layer, on every selected implementation
 +        (e.g. to build step metadata the kernels share). Runs inside the
 +        capture: graph-safe ops only."""
 +
 +
 +class FrontStage(Stage):
-+    """``qkv_proj`` + per-head QK norm + partial RoPE (+ the index branch's
++    """`qkv_proj` + per-head QK norm + partial RoPE (+ the index branch's
 +    norm and RoPE) + the KV and index-K cache insert of sparse layers."""
 +
 +    name = "front"
 +
 +    def fuses_input(self, layer: "MiniMaxM3DecoderLayer") -> bool:
-+        """Whether this implementation also runs ``layer``'s input boundary
++        """Whether this implementation also runs `layer`'s input boundary
 +        (the previous FFN's all-reduce, residual add, input norm): then the
-+        executor calls ``run_fused`` instead of ``AllReduceNormStage.input`` +
-+        ``run``, and leaves the previous MoE's finalize deferred only when
-+        ``fuses_finalize``."""
++        executor calls `run_fused` instead of `AllReduceNormStage.input` +
++        `run`, and leaves the previous MoE's finalize deferred only when
++        `fuses_finalize`."""
 +        return False
 +
 +    def polls_push(self, layer: "MiniMaxM3DecoderLayer") -> bool:
-+        """Whether ``run_fused`` on ``layer`` takes a ``PushedFFN`` (the
++        """Whether `run_fused` on `layer` takes a `PushedFFN` (the
 +        previous MoE pushed its output into this front's exchange)."""
 +        return False
 +
 +    def fuses_finalize(self, layer: "MiniMaxM3DecoderLayer") -> bool:
-+        """Whether ``run_fused`` on ``layer`` also takes a ``MoEOutput`` whose
++        """Whether `run_fused` on `layer` also takes a `MoEOutput` whose
 +        routed output is unfinalized (it runs the previous MoE's top-k
 +        reduction and shared add itself), so that MoE may defer."""
 +        return False
@@ -25055,12 +25070,12 @@ index 000000000..7609f2ffa
 +        residual: torch.Tensor,
 +        positions: torch.Tensor,
 +    ) -> tuple[FrontOutput, torch.Tensor]:
-+        """The input boundary and ``run`` in one: ``pending`` is the previous
-+        FFN's un-reduced [rows, hidden] BF16 output, a ``MoEOutput`` when
-+        ``fuses_finalize``, or a ``PushedFFN`` when ``polls_push``; ``residual``
++        """The input boundary and `run` in one: `pending` is the previous
++        FFN's un-reduced [rows, hidden] BF16 output, a `MoEOutput` when
++        `fuses_finalize`, or a `PushedFFN` when `polls_push`; `residual`
 +        [rows, hidden] BF16. Returns the front's output and the residual stream
-+        after the boundary (what ``AllReduceNormStage.input`` returns as
-+        ``residual``)."""
++        after the boundary (what `AllReduceNormStage.input` returns as
++        `residual`)."""
 +        raise NotImplementedError(f"{type(self).__name__} does not fuse the input")
 +
 +    @abstractmethod
@@ -25070,14 +25085,14 @@ index 000000000..7609f2ffa
 +        hidden: "LayerInput",
 +        positions: torch.Tensor,
 +    ) -> FrontOutput:
-+        """``hidden``: [rows, hidden] BF16 or MXFP8 (the input norm's output).
-+        ``positions``: [rows] int64.
++        """`hidden`: [rows, hidden] BF16 or MXFP8 (the input norm's output).
++        `positions`: [rows] int64.
 +
-+        Sparse layers write the step's K/V into ``attn.kv_cache`` (BF16 or fp8
++        Sparse layers write the step's K/V into `attn.kv_cache` (BF16 or fp8
 +        E4M3, 128-token blocks, in the MiniMax-M3 sparse backend's layout) and its
-+        index K into ``attn.indexer.index_cache.kv_cache`` (BF16 or fp8 E4M3)
++        index K into `attn.indexer.index_cache.kv_cache` (BF16 or fp8 E4M3)
 +        at the
-+        forward context's slot mappings for ``attn.layer_name`` and the index
++        forward context's slot mappings for `attn.layer_name` and the index
 +        cache prefix."""
 +
 +
@@ -25091,17 +25106,17 @@ index 000000000..7609f2ffa
 +    def run(
 +        self, attn: "MiniMaxM3SparseAttention", index_q: torch.Tensor
 +    ) -> torch.Tensor:
-+        """``index_q``: [rows, index_heads * index_dim], E4M3 or BF16 as the
++        """`index_q`: [rows, index_heads * index_dim], E4M3 or BF16 as the
 +        index cache.
 +
 +        Returns the scores [rows, index_heads, max_k_tiles] FP32: the indexer
-+        metadata's ``unified_scores`` (pre-filled with -inf by the metadata
++        metadata's `unified_scores` (pre-filled with -inf by the metadata
 +        build), with every causally valid block's tile written. The page top-k
 +        reads it next."""
 +
 +
 +class PageTopKStage(Stage):
-+    """The top ``topk_blocks`` KV blocks per query row and index head, always
++    """The top `topk_blocks` KV blocks per query row and index head, always
 +    including the init and local blocks."""
 +
 +    name = "page_topk"
@@ -25110,13 +25125,13 @@ index 000000000..7609f2ffa
 +    def run(
 +        self, attn: "MiniMaxM3SparseAttention", scores: torch.Tensor
 +    ) -> torch.Tensor:
-+        """``scores``: [rows, index_heads, max_k_tiles] FP32.
++        """`scores`: [rows, index_heads, max_k_tiles] FP32.
 +
 +        Returns the selected block ids [rows, index_heads, topk_blocks] int32,
 +        -1 past the context: a view of the model's shared
-+        ``topk_indices_buffer`` (the sparse decode of the same layer reads it).
-+        An implementation whose ``compatible`` requires a specific
-+        ``SparseDecodeStage`` may instead return its own table for it."""
++        `topk_indices_buffer` (the sparse decode of the same layer reads it).
++        An implementation whose `compatible` requires a specific
++        `SparseDecodeStage` may instead return its own table for it."""
 +
 +
 +class SparseDecodeStage(Stage):
@@ -25131,8 +25146,8 @@ index 000000000..7609f2ffa
 +        q: torch.Tensor,
 +        topk: torch.Tensor,
 +    ) -> torch.Tensor:
-+        """``q``: [rows, q_size] E4M3 or BF16 (``FrontOutput.q``).
-+        ``topk``: [rows, index_heads, topk_blocks] int32.
++        """`q`: [rows, q_size] E4M3 or BF16 (`FrontOutput.q`).
++        `topk`: [rows, index_heads, topk_blocks] int32.
 +
 +        Returns the attention output [rows, q_size] BF16."""
 +
@@ -25145,13 +25160,13 @@ index 000000000..7609f2ffa
 +
 +    @abstractmethod
 +    def run(self, attn: "MiniMaxM3Attention", front: FrontOutput) -> torch.Tensor:
-+        """``front``: q [rows, q_size], k and v [rows, kv_size], BF16.
++        """`front`: q [rows, q_size], k and v [rows, kv_size], BF16.
 +
 +        Returns the attention output [rows, q_size] BF16."""
 +
 +
 +class OProjStage(Stage):
-+    """``o_proj``: the row-parallel MXFP8 output projection, un-reduced."""
++    """`o_proj`: the row-parallel MXFP8 output projection, un-reduced."""
 +
 +    name = "o_proj"
 +
@@ -25161,11 +25176,11 @@ index 000000000..7609f2ffa
 +        attn: "MiniMaxM3SparseAttention | MiniMaxM3Attention",
 +        attn_out: torch.Tensor,
 +    ) -> torch.Tensor:
-+        """``attn_out``: [rows, q_size] BF16.
++        """`attn_out`: [rows, q_size] BF16.
 +
 +        Returns this rank's partial sum [rows, hidden] BF16; the next
-+        ``AllReduceNormStage.post_attention`` reduces it. An implementation
-+        whose ``compatible`` requires its partner ``AllReduceNormStage`` may
++        `AllReduceNormStage.post_attention` reduces it. An implementation
++        whose `compatible` requires its partner `AllReduceNormStage` may
 +        return a pending object instead, which that partner launches with
 +        the residual (the fused o_proj + boundary pair)."""
 +
@@ -25184,10 +25199,10 @@ index 000000000..7609f2ffa
 +        pending: "PendingFFN",
 +        residual: torch.Tensor | None,
 +    ) -> BoundaryOutput:
-+        """Into ``layer``'s attention. ``pending``: the embedding [rows, hidden]
-+        BF16 when ``residual`` is None (layer 0); otherwise the previous FFN's
-+        un-reduced output [rows, hidden] BF16, or its ``MoEOutput`` whose top-k
-+        finalize was deferred to this boundary. ``residual``: [rows, hidden]
++        """Into `layer`'s attention. `pending`: the embedding [rows, hidden]
++        BF16 when `residual` is None (layer 0); otherwise the previous FFN's
++        un-reduced output [rows, hidden] BF16, or its `MoEOutput` whose top-k
++        finalize was deferred to this boundary. `residual`: [rows, hidden]
 +        BF16."""
 +
 +    @abstractmethod
@@ -25197,9 +25212,9 @@ index 000000000..7609f2ffa
 +        partial: torch.Tensor,
 +        residual: torch.Tensor,
 +    ) -> BoundaryOutput:
-+        """Into ``layer``'s FFN. ``partial``: ``o_proj``'s [rows, hidden] BF16
-+        (or its partner o_proj's pending object). Returns BF16 ``hidden``;
-+        ``router_logits`` [rows, experts] FP32 on MoE layers if this stage
++        """Into `layer`'s FFN. `partial`: `o_proj`'s [rows, hidden] BF16
++        (or its partner o_proj's pending object). Returns BF16 `hidden`;
++        `router_logits` [rows, experts] FP32 on MoE layers if this stage
 +        computes them (else the MoE stage does)."""
 +
 +    @abstractmethod
@@ -25209,8 +25224,8 @@ index 000000000..7609f2ffa
 +        pending: "PendingFFN",
 +        residual: torch.Tensor,
 +    ) -> BoundaryOutput:
-+        """The final norm after the last layer: ``hidden`` [rows, hidden] BF16
-+        for the LM head, ``residual`` the residual stream after the last
++        """The final norm after the last layer: `hidden` [rows, hidden] BF16
++        for the LM head, `residual` the residual stream after the last
 +        layer."""
 +
 +
@@ -25221,8 +25236,8 @@ index 000000000..7609f2ffa
 +    name = "moe"
 +
 +    def can_push(self, moe: "MiniMaxM3MoE", rows: int) -> bool:
-+        """Whether ``run(..., push=True)`` is possible for ``moe`` at
-+        ``rows``: the output can be pushed into the next front's exchange."""
++        """Whether `run(..., push=True)` is possible for `moe` at
++        `rows`: the output can be pushed into the next front's exchange."""
 +        return False
 +
 +    @abstractmethod
@@ -25234,32 +25249,32 @@ index 000000000..7609f2ffa
 +        defer_finalize: bool,
 +        push: bool = False,
 +    ) -> "PendingFFN":
-+        """``hidden``: [rows, hidden] BF16. ``router_logits``: [rows, experts]
++        """`hidden`: [rows, hidden] BF16. `router_logits`: [rows, experts]
 +        FP32, or None to compute them here (or route from the boundary's own
 +        hand-off, for a kernel MoE behind its kernel boundary).
 +
 +        Returns the un-reduced FFN output [rows, hidden] BF16, or with
-+        ``defer_finalize`` a ``MoEOutput`` whose top-k finalize the next
++        `defer_finalize` a `MoEOutput` whose top-k finalize the next
 +        boundary fuses with its all-reduce (an implementation may ignore the
-+        hint and return the tensor), or with ``push`` (only passed when
-+        ``can_push`` and the next front ``polls_push``) a ``PushedFFN``."""
++        hint and return the tensor), or with `push` (only passed when
++        `can_push` and the next front `polls_push`) a `PushedFFN`."""
 +
 +
 +class DenseMLPStage(Stage):
-+    """The dense SwiGLU-OAI MLP of layers 0-2 (MXFP8 ``gate_up_proj`` and
-+    ``down_proj``)."""
++    """The dense SwiGLU-OAI MLP of layers 0-2 (MXFP8 `gate_up_proj` and
++    `down_proj`)."""
 +
 +    name = "dense_mlp"
 +
 +    @abstractmethod
 +    def run(self, mlp: "MiniMaxM3MLP", hidden: torch.Tensor) -> torch.Tensor:
-+        """``hidden``: [rows, hidden] BF16. Returns the un-reduced output
++        """`hidden`: [rows, hidden] BF16. Returns the un-reduced output
 +        [rows, hidden] BF16."""
 +
 +
 +class Stages(NamedTuple):
 +    """The implementations of every stage the executor runs, each a list
-+    tried in order: the first that ``supports`` a step's rows runs it. The
++    tried in order: the first that `supports` a step's rows runs it. The
 +    last of each list is the stock stage, which supports every step."""
 +
 +    front: Sequence[FrontStage]
@@ -25273,15 +25288,15 @@ index 000000000..7609f2ffa
 +    dense_mlp: Sequence[DenseMLPStage]
 +
 +    def for_cache_dtypes(self, dtypes: CacheDtypes) -> "Stages":
-+        """The implementations that run over caches of ``dtypes``."""
++        """The implementations that run over caches of `dtypes`."""
 +        return Stages(
 +            *([stage for stage in impls if stage.runs_with(dtypes)] for impls in self)  # type: ignore[arg-type]
 +        )
 +
 +    def select(self, rows: int) -> "StepStages":
-+        """The implementation of every stage for a step of ``rows`` rows: per
-+        stage the first that ``supports`` the rows, then, while any selected
-+        implementation is not ``compatible`` with the others, the first such
++        """The implementation of every stage for a step of `rows` rows: per
++        stage the first that `supports` the rows, then, while any selected
++        implementation is not `compatible` with the others, the first such
 +        one (in stage order) is replaced by the next supporting implementation
 +        of its stage. Implementations only move down their lists and the
 +        stock ones are compatible with everything, so this ends, and the
@@ -25351,7 +25366,7 @@ index 000000000..7609f2ffa
 +assert StepStages._fields == Stages._fields == STAGE_NAMES
 diff --git a/vllm/models/minimax_m3/nvidia/specialized_decode/stock.py b/vllm/models/minimax_m3/nvidia/specialized_decode/stock.py
 new file mode 100644
-index 000000000..7f56e5f20
+index 000000000..0f97c4b5d
 --- /dev/null
 +++ b/vllm/models/minimax_m3/nvidia/specialized_decode/stock.py
 @@ -0,0 +1,401 @@
@@ -25359,19 +25374,19 @@ index 000000000..7f56e5f20
 +# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 +"""Every stage on the ops the stock layers run: the stock-op chain.
 +
-+Each stage below runs exactly the ops ``MiniMaxM3DecoderLayer`` runs for a pure
-+decode step of up to ``MAX_ROWS`` rows, in the same order and with the same
-+arguments, split at the stage boundaries of ``stages.py``. Run alone, the chain
++Each stage below runs exactly the ops `MiniMaxM3DecoderLayer` runs for a pure
++decode step of up to `MAX_ROWS` rows, in the same order and with the same
++arguments, split at the stage boundaries of `stages.py`. Run alone, the chain
 +reproduces the stock decode; it is also the last implementation of every
 +stage, which a kernel stage falls back to for the steps it does not support.
 +
 +Two places split one stock call in two:
 +
-+- ``MiniMaxM3IndexerMSAImpl.forward`` is ``StockIndexScore`` (its decode
-+  branch) followed by ``StockPageTopK`` (its unified top-k); executor steps
++- `MiniMaxM3IndexerMSAImpl.forward` is `StockIndexScore` (its decode
++  branch) followed by `StockPageTopK` (its unified top-k); executor steps
 +  have no prefill rows, so its prefill branch never runs.
-+- ``MiniMaxM3MoE.forward`` computes the router logits, then runs the experts;
-+  ``StockAllReduceNorm.post_attention`` computes the logits and ``StockMoE``
++- `MiniMaxM3MoE.forward` computes the router logits, then runs the experts;
++  `StockAllReduceNorm.post_attention` computes the logits and `StockMoE`
 +  the experts.
 +"""
 +
@@ -25420,9 +25435,9 @@ index 000000000..7f56e5f20
 +
 +
 +class StockFront(FrontStage):
-+    """``MiniMaxM3SparseAttention.forward`` / ``MiniMaxM3Attention.forward``
-+    up to the attention: ``qkv_proj`` and
-+    ``fused_minimax_m3_qknorm_rope_kv_insert``. Executor steps stay below the
++    """`MiniMaxM3SparseAttention.forward` / `MiniMaxM3Attention.forward`
++    up to the attention: `qkv_proj` and
++    `fused_minimax_m3_qknorm_rope_kv_insert`. Executor steps stay below the
 +    fused qkv epilogue's 512 rows, so it never runs."""
 +
 +    def run(
@@ -25452,8 +25467,8 @@ index 000000000..7f56e5f20
 +        dtype: torch.dtype,
 +        positions: torch.Tensor,
 +    ) -> FrontOutput:
-+        """The sparse front after ``qkv_proj``: q/k norms, RoPE and the KV /
-+        index-K cache insert of ``qkv`` (a kernel QKV projection reuses it)."""
++        """The sparse front after `qkv_proj`: q/k norms, RoPE and the KV /
++        index-K cache insert of `qkv` (a kernel QKV projection reuses it)."""
 +        slot_mappings = get_forward_context().slot_mapping
 +        assert isinstance(slot_mappings, dict)
 +        main_slot_mapping = slot_mappings[attn.layer_name]
@@ -25516,7 +25531,7 @@ index 000000000..7f56e5f20
 +
 +
 +class StockIndexScore(IndexScoreStage):
-+    """The decode branch of ``MiniMaxM3IndexerMSAImpl.forward``: the CuTe DSL
++    """The decode branch of `MiniMaxM3IndexerMSAImpl.forward`: the CuTe DSL
 +    (or Triton, for wide query tiles) decode score into the unified score
 +    buffer."""
 +
@@ -25561,8 +25576,8 @@ index 000000000..7f56e5f20
 +
 +
 +class StockPageTopK(PageTopKStage):
-+    """The unified top-k of ``MiniMaxM3IndexerMSAImpl.forward``:
-+    ``fmha_sm100.sparse_topk_select`` into the shared top-k buffer."""
++    """The unified top-k of `MiniMaxM3IndexerMSAImpl.forward`:
++    `fmha_sm100.sparse_topk_select` into the shared top-k buffer."""
 +
 +    def run(
 +        self, attn: "MiniMaxM3SparseAttention", scores: torch.Tensor
@@ -25587,7 +25602,7 @@ index 000000000..7f56e5f20
 +
 +
 +class StockSparseDecode(SparseDecodeStage):
-+    """``attn.impl.forward``: the MSA sparse decode (CUTLASS, or Triton where
++    """`attn.impl.forward`: the MSA sparse decode (CUTLASS, or Triton where
 +    CUTLASS has no plan) over the shared top-k buffer."""
 +
 +    def run(
@@ -25607,7 +25622,7 @@ index 000000000..7f56e5f20
 +
 +
 +class StockDenseDecode(DenseDecodeStage):
-+    """``MiniMaxM3Attention.attn``: the platform's attention backend."""
++    """`MiniMaxM3Attention.attn`: the platform's attention backend."""
 +
 +    def run(self, attn: "MiniMaxM3Attention", front: FrontOutput) -> torch.Tensor:
 +        return attn.attn(front.q, front.k, front.v)
@@ -25624,9 +25639,9 @@ index 000000000..7f56e5f20
 +
 +
 +class StockAllReduceNorm(AllReduceNormStage):
-+    """``forward_input_norm``, the post-attention
-+    ``fused_allreduce_gemma_rms_norm`` (+ the MoE router) and the final norm
-+    of ``MiniMaxM3Model.forward``."""
++    """`forward_input_norm`, the post-attention
++    `fused_allreduce_gemma_rms_norm` (+ the MoE router) and the final norm
++    of `MiniMaxM3Model.forward`."""
 +
 +    def input(
 +        self,
@@ -25672,7 +25687,7 @@ index 000000000..7f56e5f20
 +
 +
 +class StockMoE(MoEStage):
-+    """``MiniMaxM3MoE.forward`` (or ``forward_unfinalized``) after the router:
++    """`MiniMaxM3MoE.forward` (or `forward_unfinalized`) after the router:
 +    the shared expert and the routed experts on the configured NVFP4 MoE
 +    backend."""
 +

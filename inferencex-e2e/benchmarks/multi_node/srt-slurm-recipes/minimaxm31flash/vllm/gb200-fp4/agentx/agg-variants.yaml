@@ -124,7 +124,7 @@ override_tp4_c40:
 # with the FLASHINFER_TS drafter backend the PR validated. The PR is applied to the
 # pinned nightly by setup_script.
 # Client concurrency runs about 1.5x the server batch, so concurrency 12 is roughly
-# where steps outgrow the 8-request cap; 16 to 24 show where it stops paying off.
+# where steps outgrow the 8-request cap. Above 16 the stock points run as before.
 # max-num-seqs is 2x concurrency, as for the stock points.
 override_tp4_sd_c1:
   name: minimaxm31flash-gb200-agg-tp4-sd-c1
@@ -178,42 +178,21 @@ override_tp4_sd_c12:
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         async-scheduling: true
         additional-config: '{"decode_backend":"latency_specialized"}'
-override_tp4_sd_c16:
-  name: minimaxm31flash-gb200-agg-tp4-sd-c16
+# Concurrency 16 outgrows the fp8 KV pool (about half NVFP4's tokens): prefixes of
+# waiting sessions get evicted and re-prefilled. Add the CPU tier of the c32/c40
+# points (vLLM #66324 allows SimpleCPUOffloadConnector with the specialized decode).
+override_tp4_sd_dram_c16:
+  name: minimaxm31flash-gb200-agg-tp4-sd-dram-c16
   setup_script: minimaxm31flash-vllm-patches.sh
   roles:
     agg:
       args:
         max-num-seqs: 32
-        gpu-memory-utilization: 0.88
+        gpu-memory-utilization: 0.82
         kv-cache-dtype: fp8
         attention-config: '{"indexer_kv_dtype":"fp8"}'
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         async-scheduling: true
         additional-config: '{"decode_backend":"latency_specialized"}'
-override_tp4_sd_c20:
-  name: minimaxm31flash-gb200-agg-tp4-sd-c20
-  setup_script: minimaxm31flash-vllm-patches.sh
-  roles:
-    agg:
-      args:
-        max-num-seqs: 40
-        gpu-memory-utilization: 0.88
-        kv-cache-dtype: fp8
-        attention-config: '{"indexer_kv_dtype":"fp8"}'
-        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        async-scheduling: true
-        additional-config: '{"decode_backend":"latency_specialized"}'
-override_tp4_sd_c24:
-  name: minimaxm31flash-gb200-agg-tp4-sd-c24
-  setup_script: minimaxm31flash-vllm-patches.sh
-  roles:
-    agg:
-      args:
-        max-num-seqs: 48
-        gpu-memory-utilization: 0.88
-        kv-cache-dtype: fp8
-        attention-config: '{"indexer_kv_dtype":"fp8"}'
-        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        async-scheduling: true
-        additional-config: '{"decode_backend":"latency_specialized"}'
+        kv-cache-metrics: true
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":360000000000,"lazy_offload":true}}'
