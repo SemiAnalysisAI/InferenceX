@@ -262,7 +262,7 @@ qwen3.5-fp4-mi355x-sglang-agentic-mtp:
 # Concurrency 1-16 serve from GPU KV; 24, 48 and 80 add an FP8 KV cache and HiCache
 # host-DRAM offload.
 qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261031@sha256:3867dc07ba2530f914e1f210ed829f7a572a75286c8c362dbc22cbecf9b5a7e6
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261110@sha256:fc800d4329d49631b0e7228d79cd02274a831eab12eb9ec00e5cbdafc8edfd0a
   model: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
   model-prefix: qwen3.8next
   runner: cluster:mi355x-amds
