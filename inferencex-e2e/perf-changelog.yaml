@@ -12877,4 +12877,4 @@
     - "The specialized points run fp8 KV and fp8 index-K caches (the executor refuses NVFP4), the FLASHINFER_TS DSpark drafter backend and explicit async scheduling; every other engine setting matches the stock points."
     - "Replace stock TP4 concurrency 1, 4 and 8 with the specialized points. Keep stock TP4 concurrency 16 and the DRAM-offload concurrency 32 and 40 points, so concurrency 16 runs both arms."
     - "Removal plan: once vllm#66324 is in a nightly, move to that nightly and drop the setup_script and patch."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5076
