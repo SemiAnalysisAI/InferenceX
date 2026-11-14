@@ -249,6 +249,9 @@ def _bind_command(
         if command[:3] != ["vllm", "serve", model_path]:
             raise ValueError("vLLM video command must serve the bound model snapshot")
         expected["--served-model-name"] = model
+    elif runtime == "sol-engine":
+        # The snapshot path names the revision, so binding it binds the model revision.
+        expected.update({"--model-path": model_path, "--served-model-name": model})
     else:
         raise ValueError(f"unsupported video runtime: {runtime!r}")
     for flag, value in expected.items():
@@ -326,7 +329,7 @@ def bind_video(
         gpus=gpus,
     )
     if spec["schema_version"] == 2:
-        if runtime == "sglang":
+        if runtime in ("sglang", "sol-engine"):
             if service["args"].count("--disable-conditioning-cache") != 1:
                 raise ValueError("fairness workload requires --disable-conditioning-cache")
         elif {**(bound.get("environment") or {}), **service["env"]}.get(

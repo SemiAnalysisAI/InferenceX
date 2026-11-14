@@ -40,6 +40,9 @@ SERVER_FLAGS = {
         "--tensor-parallel-size": ("tp_size", int),
         "--usp": ("ulysses_degree", int),
     },
+    "sol-engine": {
+        "--attention": ("attention_backend", str),
+    },
 }
 
 
