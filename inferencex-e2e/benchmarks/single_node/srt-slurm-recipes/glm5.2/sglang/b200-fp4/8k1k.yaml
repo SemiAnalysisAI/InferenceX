@@ -1,0 +1,54 @@
+# GLM-5.2 NVFP4 on B200, 8k1k, SGLang cookbook "balanced" single-node cell
+# (docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2, b200/nvfp4/balanced,
+# verified) with its EAGLE flags removed: TP8 with 8-way DP attention,
+# chunked prefill 32768, mem-fraction 0.92, 256 running requests.
+base:
+  schema: 2
+  name: glm5.2-fp4-b200-sglang-8k1k
+  resources:
+    gpu_type: b200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: nvidia/GLM-5.2-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        # Cookbook --attn-dp-size 8; spelled the pre-#41818 way so the
+        # matrix's DP_ATTENTION check reads it.
+        data-parallel-size: 8
+        enable-dp-attention: true
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        kv-cache-dtype: fp8_e4m3
+        chunked-prefill-size: 32768
+        mem-fraction-static: 0.92
+        max-running-requests: 256
+        watchdog-timeout: 1800
+        enable-metrics: false
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_RADIX_FORCE_MISS: '1'
+        # Keep FlashInfer/Triton/JIT caches off the shared home.
+        SGLANG_CACHE_DIR: /tmp/sglang-cache
+
+# Decode graphs sized to the request concurrency (no larger than the 256 cap).
+zip_override_dep8:
+  roles:
+    agg:
+      args:
+        cuda-graph-max-bs: [8, 16, 32, 64, 128, 256]
+  benchmark:
+    env:
+      CONC: ['8', '16', '32', '64', '128', '256']
