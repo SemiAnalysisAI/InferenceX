@@ -2,15 +2,16 @@
 """Plot the CU-to-CU latency-difference matrix produced by l2_pointer_chase.
 
 Rows/columns are grouped by IOD, then by XCD and, inside each XCD, ordered by
-shader engine and CU id. By default XCDs are assigned to IODs by id (the first
-half of the XCD ids form IOD A, the second half IOD B, which matches the
-XCD 0-3 / 4-7 numbering on MI355X); ``--iod-groups`` takes an explicit
-assignment such as ``0,1;2,3;4,5;6,7`` or ``cluster`` to derive two groups by
-Ward clustering of the XCD-level distances.
+shader engine and CU id. By default XCDs are assigned to IODs by id in
+``--iods`` consecutive groups: ``--iods 2`` (the default) gives XCDs 0-3 / 4-7
+as on MI355X, ``--iods 4`` gives XCD pairs {0,1}, {2,3}, {4,5}, {6,7} as on
+MI300X. ``--iod-groups`` takes an explicit assignment such as
+``0,1;2,3;4,5;6,7`` or ``cluster`` to derive ``--iods`` groups by Ward
+clustering of the XCD-level distances.
 
 Usage:
     python plot_distance.py results/mi355x_infinity_cache_64mb.csv --title "CU-CU Infinity Cache Latency Difference"
-    python plot_distance.py results/mi355x_l2_4mb.csv
+    python plot_distance.py results/mi300x_infinity_cache_64mb.csv --iods 4
 """
 
 import argparse
@@ -41,17 +42,16 @@ def order_xcds(xcd_ids, xcd_dist):
     return [xcd_ids[i] for i in leaves_list(Z)]
 
 
-def assign_groups(spec, xcd_ids, xcd_dist):
+def assign_groups(spec, xcd_ids, xcd_dist, num_iods):
     """Return an ordered list of XCD-id lists, one per IOD group."""
     if spec == "auto":
-        half = (len(xcd_ids) + 1) // 2
-        groups = [xcd_ids[:half], xcd_ids[half:]]
+        per = max(1, (len(xcd_ids) + num_iods - 1) // num_iods)
+        groups = [xcd_ids[i:i + per] for i in range(0, len(xcd_ids), per)]
     elif spec == "cluster":
         dvec = squareform((xcd_dist + xcd_dist.T) / 2, checks=False)
-        labels = fcluster(linkage(dvec, method="ward"), t=2, criterion="maxclust")
-        groups = [[g for g, l in zip(xcd_ids, labels) if l == k] for k in (1, 2)]
-        if xcd_ids[0] not in groups[0]:
-            groups.reverse()
+        labels = fcluster(linkage(dvec, method="ward"), t=num_iods, criterion="maxclust")
+        groups = [[g for g, l in zip(xcd_ids, labels) if l == k] for k in sorted(set(labels))]
+        groups.sort(key=min)
     else:
         groups = [[int(x) for x in part.split(",") if x.strip()] for part in spec.split(";")]
         seen = [g for grp in groups for g in grp]
@@ -65,10 +65,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("csv", nargs="?", default="results/distance.csv")
     ap.add_argument("--title", default="CU-CU L2 Latency Difference")
+    ap.add_argument("--iods", type=int, default=2,
+                    help="Number of IODs: XCD ids are split into this many consecutive "
+                         "groups (2 on MI355X, 4 on MI300X; default 2)")
     ap.add_argument("--iod-groups", default="auto",
-                    help="'auto' (first half of the XCD ids = IOD A, second half = IOD B), "
-                         "'cluster' (two groups by Ward clustering), or an explicit "
-                         "assignment such as '0,1,2,3;4,5,6,7' (default: auto)")
+                    help="'auto' (consecutive XCD ids per IOD, see --iods), 'cluster' "
+                         "(--iods groups by Ward clustering), or an explicit assignment "
+                         "such as '0,1;2,3;4,5;6,7' (default: auto)")
     ap.add_argument("--order", choices=["id", "cluster"], default="id",
                     help="XCD order inside an IOD: by id (default) or by distance clustering")
     ap.add_argument("--out", help="Output PNG (default: <csv>_cu_distance.png)")
@@ -97,7 +100,7 @@ def main():
             vals = [dist[a, b] for a in xcds[gi] for b in xcds[gj] if a != b]
             xcd_dist[i, j] = np.mean(vals) if vals else 0
 
-    groups = assign_groups(args.iod_groups, xcd_ids, xcd_dist)
+    groups = assign_groups(args.iod_groups, xcd_ids, xcd_dist, args.iods)
     group_of = {g: k for k, grp in enumerate(groups) for g in grp}
     group_name = {k: f"IOD {string.ascii_uppercase[k]}" for k in range(len(groups))}
 
@@ -183,6 +186,15 @@ def main():
         for k, members in enumerate(groups):
             print(f"{group_name[k]}: {', '.join(f'XCD{g}' for g in sorted(members))} "
                   f"({sum(len(xcds[g]) for g in members)} CUs)")
+        if len(groups) > 2:
+            print("\nIOD-level mean distance (cycles):")
+            print("       " + " ".join(f"{group_name[k]:>7s}" for k in range(len(groups))))
+            for a in range(len(groups)):
+                row = []
+                for b in range(len(groups)):
+                    vals = [xcd_dist[xcd_pos[ga], xcd_pos[gb]] for ga in groups[a] for gb in groups[b] if ga != gb]
+                    row.append(np.mean(vals) if vals else 0.0)
+                print(f"{group_name[a]:>6s} " + " ".join(f"{v:7.1f}" for v in row))
 
     print("\nXCD-level mean distance (cycles):")
     print("      " + " ".join(f"XCD{g:<3d}" for g in xcd_ids))
