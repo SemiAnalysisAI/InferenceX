@@ -45,10 +45,9 @@ base:
     placement:
       node: head
     args:
-      router-mode: kv
+      router-mode: round-robin
     env:
       ETCD_LEASE_TTL: '120'
-      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
       DYN_TOKENIZER: fastokens
       DYN_TOKENIZER_CACHE_BYTES: '8589934592'
       DYN_REQUEST_PLANE: tcp
