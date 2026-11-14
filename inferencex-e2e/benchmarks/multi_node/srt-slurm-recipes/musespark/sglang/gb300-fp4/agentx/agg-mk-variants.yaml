@@ -1,0 +1,125 @@
+schema: 2
+
+# Muse Spark Open on the sgl-muse-mega NVIDIA megakernel (--enable-nvidia-megakernel): one TP8
+# worker over two GB300 nodes. The plugin fuses each batch-1 decode step (DFlash2 draft, target
+# verify and accept) into one CUDA graph; prefill and larger batches run SGLang's own path.
+base:
+  name: "musespark-fp4-gb300-dynamo-sglang-agentx-agg-mk"
+  identity:
+    model: {}
+    container: {}
+  dynamo:
+    install: false
+  environment:
+    HF_HUB_OFFLINE: "1"
+    HF_HUB_CACHE: /hf_hub_cache
+  slurm:
+    time_limit: "4:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  resources:
+    gpu_type: "gb300"
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 32
+  frontend:
+    type: dynamo
+    nginx_session_affinity: true
+    nginx_session_affinity_header: X-Dynamo-Session-ID
+    enable_multiple_frontends: false
+    env:
+      DYN_NATS_REQUEST_TIMEOUT_SECS: "1800"
+    args:
+      router-mode: "kv"
+      router-session-affinity-ttl-secs: "3600"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        HF_HUB_OFFLINE: "1"
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        # Linear DFlash2 chain. The plugin refuses the token tree with SGLANG_SIMULATE_ACC_LEN,
+        # which AgentX synthetic acceptance always sets.
+        SGLANG_MUSE_MEGA_TREE: "0"
+        # The megakernel JIT-builds its kernels at startup; keep the build cache on node-local
+        # disk rather than the shared home.
+        SGLANG_CACHE_DIR: /tmp/sglang-cache
+      args:
+        served-model-name: "meta-models/Muse-Spark-Open-816B-A42B-NVFP4"
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        enable-nvidia-megakernel: true
+        quantization: modelopt_fp4
+        moe-runner-backend: flashinfer_trtllm
+        attention-backend: trtllm_mha
+        page-size: 128
+        # The megakernel attends over and writes a bf16 KV pool.
+        kv-cache-dtype: bf16
+        # The megakernel requires an explicit context length; 1M is the model's full rope range.
+        context-length: 1048576
+        # The megakernel's ~60 GB per GPU counts against the static budget; 0.7 leaves room for a
+        # KV pool that holds the full 1M context (0.6 sized it to ~541K tokens).
+        mem-fraction-static: 0.7
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        enable-tf32-matmul: true
+        speculative-algorithm: DFLASH
+        # RadixArk/Muse-Spark-Open-DFlash2 at revision 46c90f41, by its local snapshot: the
+        # megakernel's draft build reads config.json and model.safetensors from a local
+        # directory and refuses a Hub id.
+        speculative-draft-model-path: "/hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0"
+        speculative-draft-attention-backend: fa4
+        # DFlash2 verifies the current token plus 7 drafts, the largest block the golden curve covers.
+        speculative-num-draft-tokens: 8
+        # Under simulated acceptance the megakernel runs only greedy decode steps; sampled
+        # requests fall back to SGLang's step.
+        preferred-sampling-params: '{"temperature":0.0}'
+        reasoning-parser: muse
+        dyn-reasoning-parser: muse
+        dyn-tool-call-parser: muse
+        kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
+        watchdog-timeout: 3600
+        enable-metrics: true
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        stream-interval: 20
+  sbatch_directives:
+    mem: "0"
+  srun_options:
+    mem: "0"
+  benchmark:
+    env:
+      HF_HUB_OFFLINE: "0"
+      TOKENIZER: /model
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      # Greedy requests, so every batch-1 decode step stays on the megakernel.
+      AIPERF_EXTRA_INPUTS: '{"temperature":0}'
+      AGENTIC_WARMUP_GRACE_PERIOD: "3600"

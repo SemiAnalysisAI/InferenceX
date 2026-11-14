@@ -12866,3 +12866,15 @@
     - "Aggregated TP4 on one node: concurrency 4 (max-num-seqs 8, max-num-active-seqs 1, prefill-schedule-interval 24, deep_select indexer top-k), 10 (max-num-seqs 16, max-num-active-seqs 2) and 16 (max-num-seqs 64, max-num-active-seqs 3), with THP Engram host tables."
     - "Disaggregated DEP4 prefill / DEP16 or DEP32 decode with push NIXL transfer and 2 to 7 async KV loads started per decode step: 3P1D DEP32 at c3018 (max-num-seqs 18), 3P1D DEP16 at c3018 (max-num-seqs 48, 70 GiB CPU KV per prefill rank), 4P1D DEP16 at c4096 (max-num-seqs 64) and 5P1D DEP16 at c5600 (max-num-seqs 112); the others offload up to 90 GiB of CPU KV per prefill rank."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4618
+
+- config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-mk-agg
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add musespark-fp4-gb300-dynamo-sglang-agentic-dflash-mk-agg: Muse Spark Open on the sgl-muse-mega NVIDIA megakernel (--enable-nvidia-megakernel) at concurrency 1, one TP8/EP8 worker over two GB300 nodes, on lmsysorg/sglang:dev-0775fc6-20261112-cu13-arm64 (SGLang 5884e4fec, sgl-muse-mega 0775fc6, ai-dynamo 1.7.0.dev20261026)."
+    - "Linear DFlash2 chain of 7 drafts (8 draft tokens, SGLANG_MUSE_MEGA_TREE=0) on the committed golden curve, BF16 KV cache, 128-token pages, trtllm_mha attention and a 1M context length. Requests are greedy: under simulated acceptance the megakernel runs only greedy batch-1 decode steps. The draft is read from its pinned local snapshot, which the megakernel's draft build requires."
+    - "The agg and disagg keys are listed so the whole Muse Spark GB300 Dynamo + SGLang curve comes from this sweep: the new key shares its model, hardware, framework and precision, and the newest run replaces that curve. Their image, recipes and points are unchanged: agg TP4 c46, c50 and c56 and two-node TP8 c1 and c36; disagg 1P2D c160 and c224, 1P3D c224, 1P4D c32, c56 and c112, 1P5D c120, 2P3D c352 and 3P4D c672."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5063
