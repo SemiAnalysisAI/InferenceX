@@ -3,9 +3,9 @@
   python ubenchX/trn3_intrachip_cc/plot.py cc.csv [more.csv ...] out.png
 
 nccom-test on one Trainium3 chip at LNC=2, 4 ranks = all 4 logical cores. One panel per op, busbw (GB/s) vs size.
-Color: HBM buffers vs SBUF buffers (--sb2sb; up to the mesh-algorithm limit, 4 MiB all_gather, 8 MiB all_reduce /
-reduce_scatter; all_to_all is HBM-only). Marker: the algorithm the library picked (nccom-test --show-algorithm).
-HBM runs to 4 GiB; where the library switches to its Ring algorithm (1-2 GiB) busbw drops ~3x, drawn as a dashed
+Color: HBM buffers vs SBUF buffers (--sb2sb, up to 8 MiB, above which SBUF collectives do not run; all_to_all is
+HBM-only). Labels: each line's peak and the first point after the drop. Marker: the algorithm the library picked (nccom-test --show-algorithm).
+HBM runs to 4 GiB; where the library switches to its Ring algorithm (512 MiB to 2 GiB) busbw drops ~3x, drawn as a dashed
 segment into down-triangles. Later CSVs replace earlier ones per (placement, op, buffer, size). Size convention
 (nccom-test): all_gather = output bytes, reduce_scatter = input bytes, all_reduce / all_to_all = buffer bytes per rank.
 """
@@ -25,8 +25,7 @@ COLORS = {"HBM": ("#2a78d6", "#1f5fae"), "SBUF": ("#eb6834", "#c4501f")}
 MARKERS = {"Mesh": "o", "RDH": "s", "Ring": "v"}  # anything else (a future algorithm name) falls back to a diamond
 PL = "lnc2_r4"  # 4 ranks: all 4 logical cores of the chip
 OPS = ["all_gather", "all_reduce", "reduce_scatter", "all_to_all"]
-LABEL_SIZES = [1 << 20, 4 << 20, 16 << 20]
-TICKS = [4 << 10, 64 << 10, 1 << 20, 16 << 20, 256 << 20, 4 << 30]
+TICKS = [8, 1 << 10, 64 << 10, 1 << 20, 16 << 20, 256 << 20, 4 << 30]
 
 
 def fmt_bytes(b):
@@ -58,24 +57,15 @@ for ax, op in zip(axes, OPS):
         for alg, g in d.groupby("algorithm"):
             ax.plot(g.bytes, g.busbw_GBps, ls="none", marker=MARKERS.get(alg, "D"), ms=7 if alg == "Ring" else 5.5,
                     color=color, markeredgecolor=SURFACE, markeredgewidth=1, zorder=4)
-        # labels from 20 GB/s (smaller values sit on the x axis); where both buffers have a point, the higher is
-        # labeled above and the lower below-right
-        keys = set(LABEL_SIZES) | ({pre.index[-1]} if len(pre) else set())  # ... plus the plateau end
-        first_ring = s[ring].index[0] if ring.any() else None
-        keys |= {first_ring} if ring.any() else set()  # the drop: label only its first point
-        other = shown[(shown.op == op) & (shown.buffer != buf)].set_index("bytes").busbw_GBps
-        for n in [n for n in s.index if n in keys and s[n] >= 20]:
-            up = n not in other.index or s[n] >= other[n]
-            if n == first_ring:
-                off, ha, va = (0, -8), "center", "top"  # below the marker, clear of the dashed drop
-            elif up and n == s.index[-1] and buf == "HBM":
-                off, ha, va = (-2, 7), "right", "bottom"  # last point: keep inside the axes
-            elif up:
-                off, ha, va = (0, 7), "center", "bottom"
-            else:
-                off, ha, va = (6, -6), "left", "top"
-            ax.annotate(f"{s[n]:,.0f}", (n, s[n]), xytext=off, textcoords="offset points", ha=ha, va=va,
-                        color=tcolor, fontsize=8, fontweight="bold")
+        # label the peak, and the first Ring point (the drop) below its marker
+        top = s.idxmax()
+        ax.annotate(f"{s[top]:,.0f}", (top, s[top]), xytext=(0, 7), textcoords="offset points",
+                    ha="right" if top >= 256 << 20 else "center", va="bottom", color=tcolor, fontsize=8.5,
+                    fontweight="bold")
+        if ring.any():
+            n = s[ring].index[0]
+            ax.annotate(f"{s[n]:,.0f}", (n, s[n]), xytext=(0, -9), textcoords="offset points", ha="center",
+                        va="top", color=tcolor, fontsize=8.5, fontweight="bold")
     ax.set_title(op, loc="left", color=INK, fontsize=12)
     ax.set_xscale("log", base=2)
     ax.xaxis.set_major_locator(FixedLocator(TICKS))
