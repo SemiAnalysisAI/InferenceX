@@ -12866,3 +12866,16 @@
     - "Aggregated TP4 on one node: concurrency 4 (max-num-seqs 8, max-num-active-seqs 1, prefill-schedule-interval 24, deep_select indexer top-k), 10 (max-num-seqs 16, max-num-active-seqs 2) and 16 (max-num-seqs 64, max-num-active-seqs 3), with THP Engram host tables."
     - "Disaggregated DEP4 prefill / DEP16 or DEP32 decode with push NIXL transfer and 2 to 7 async KV loads started per decode step: 3P1D DEP32 at c3018 (max-num-seqs 18), 3P1D DEP16 at c3018 (max-num-seqs 48, 70 GiB CPU KV per prefill rank), 4P1D DEP16 at c4096 (max-num-seqs 64) and 5P1D DEP16 at c5600 (max-num-seqs 112); the others offload up to 90 GiB of CPU KV per prefill rank."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4618
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "GB200 mirror of #5075. Move the aggregated GB200 MiniMax-M3.1-Flash Dynamo vLLM key from vllm/vllm-openai:minimax-m31-flash-arm64-cu134 to the latest public nightly, cu134-nightly-f5d93296c8ec82b7e7dabdb308d24d43cb1907bf (vLLM main f5d93296c, 2026-11-11; index digest sha256:ad65ca93274c2f017a8753e05ed66dbf0a801787c09850602a7bbf5423557baa). The disaggregated key keeps its image."
+    - "Apply vllm-project/vllm#66324 (MiniMax-M3.1-Flash specialized decode, CuTe DSL; head a4d6ba43c) to the nightly through setup_script minimaxm31flash-vllm-patches.sh on the specialized points, and enable it with additional-config decode_backend latency_specialized. The executor covers FULL-graph decode steps of up to 8 requests x 8 rows (DSpark K = 7) and falls back to the stock forward above that."
+    - "Specialized TP4 points at concurrency 1, 4, 8 and 12 (max-num-seqs 2x concurrency, gpu-memory-utilization 0.88) replace stock concurrency 1, 4 and 8. They run fp8 KV and fp8 index-K caches (the executor refuses NVFP4), the FLASHINFER_TS DSpark drafter backend and explicit async scheduling; every other engine setting matches the stock points."
+    - "Concurrency 16 runs the specialized decode with the CPU KV tier of the concurrency 32 and 40 points (SimpleCPUOffloadConnector, 360 GB, lazy offload, gpu-memory-utilization 0.82, KV cache metrics), which #66324 now allows. In the first sweep the specialized c16 point without it beat stock c16 at the median (448 vs 413 tok/s/user) but trailed at p90 (264 vs 292): its fp8 KV pool holds 3.66M tokens against stock NVFP4's 6.55M, so cached prefixes of waiting sessions were evicted and it recomputed 32.1M prompt tokens against 11.3M. Stock concurrency 16 stays as the comparison point."
+    - "The specialized concurrency 20 and 24 points are dropped: the fp8 KV pool was full there (prefix-cache hit rate 87-90%, TTFT p90 1.8-2.9 s). Concurrency 32 and 40 keep their stock DRAM-offload configs unchanged."
+    - "Removal plan: once vllm#66324 is in a nightly, move to that nightly and drop the setup_script and patch."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5076
