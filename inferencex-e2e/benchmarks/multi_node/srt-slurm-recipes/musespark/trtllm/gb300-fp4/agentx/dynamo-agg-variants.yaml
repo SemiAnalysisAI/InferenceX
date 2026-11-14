@@ -1,0 +1,301 @@
+schema: 2
+base:
+  name: musespark-fp4-gb300-dynamo-trt-agentx-agg
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261102
+    request_plane: tcp
+  identity:
+    frameworks:
+      tensorrt_llm: 1.4.0a0.dev202611120346 (release:musespark-open-1.4.0a0.dev202611120346)
+      dynamo: 1.7.0.dev20261102
+  environment:
+    HF_HUB_OFFLINE: '1'
+    HF_HUB_CACHE: /hf_hub_cache
+    DYN_TOKEN_IDS_AS_BYTES: '1'
+    DYN_REQUEST_PLANE_CODEC: msgpack
+    DYN_LIFECYCLE_TRACE_ENABLED: '0'
+    OTEL_EXPORT_ENABLED: '0'
+    PIP_CONFIG_FILE: /dev/null
+    PIP_INDEX_URL: https://pypi.org/simple
+    PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
+  services:
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+    extra_fatal_log_patterns: [Hang detected after \d+ seconds, 'Fatal error detected, initiating shutdown']
+  srun_options:
+    container-workdir: /infmax-workspace
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  engine:
+    type: trtllm
+    served_model_name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+    publish_metrics: true
+    numa_cpu_bind: true
+    numa_memory_bind: preferred
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    placement:
+      node: head
+    args:
+      router-mode: round-robin
+    env:
+      ETCD_LEASE_TTL: '120'
+      DYN_TOKENIZER: fastokens
+      DYN_TOKENIZER_CACHE_BYTES: '8589934592'
+      DYN_REQUEST_PLANE: tcp
+      DYN_FRONTEND_ENABLE_KV_EVENTS: '0'
+  roles:
+    agg:
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        ENROOT_ALLOW_DEV: 'yes'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_ARENA_RESERVE: '0'
+        OMP_NUM_THREADS: '1'
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        MPI_UCX_TLS: rc,ud,sm,self
+        MPI_UCX_NET_DEVICES: mlx5_0:1,mlx5_2:1
+        OMPI_MCA_coll: ^ucc,hcoll
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        UCX_TLS: all
+        UCX_CUDA_IPC_ENABLE_MNNVL: y
+        UCX_RNDV_SCHEME: put_zcopy
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRTLLM_GPU_KEEPALIVE: '1'
+        MUSESPARK_OPEN_ALLREDUCE: MNNVL
+        # auto turns it off; without it batch 80 runs out of GPU memory in CUDA-graph capture.
+        MUSESPARK_OPEN_LEVER_CONTEXT_SEQUENCE_PARALLEL: 'on'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        MUSESPARK_OPEN_FUSED_FINALIZE_AR_MNNVL: '1'
+        MUSESPARK_OPEN_SHARDED_PROJECTIONS: '1'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        MUSESPARK_OPEN_FUSED_FINALIZE_AR_CHUNKED: '1'
+        MUSESPARK_OPEN_FULL_ROUTING_ALL_BATCHES: '1'
+        MUSESPARK_OPEN_FULL_ROUTING_TORCH_ORDER: '1'
+        MUSESPARK_OPEN_LARGE_NORM_GATE: '1'
+        MUSESPARK_OPEN_LARGE_PREPARE_OVERLAP: '1'
+        MUSESPARK_OPEN_LARGE_FINALIZE_SPARSE: '1'
+        TRTLLM_SCHED_SPF_AGED_LEAD_EVERY: '1'
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
+        TRTLLM_KV_HOST_TIER_DROP_PAGE_CACHE: '1'
+        TRTLLM_KV_HOST_TIER_COLLAPSE: '1'
+        TRTLLM_SCHED_CTX_PAGE_BACKOFF_PASSES: '4'
+        TRTLLM_KV_DEFER_CLOSE: '1'
+        TLLM_PREFIX_TOKEN_CACHE_MAX_CHARS: '268435456'
+        TRTLLM_MULTI_INSTANCE_CONTEXT_FMHA: '1'
+        TRTLLM_TORCH_MEM_SAFETY_MARGIN_MB: '256'
+        TRTLLM_KV_SWA_ENDPOINT_RETIRE: '1'
+        PYTHONNOUSERSITE: '1'
+        TQDM_DISABLE: '1'
+        HF_HUB_OFFLINE: '1'
+        DYN_CUSTOM_JINJA_TEMPLATE: /model/chat_template.jinja
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cuda_graph_config:
+          enable_padding: true
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        disable_overlap_scheduler: false
+        enable_attention_dp: false
+        enable_chunked_prefill: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        enable_iter_req_stats: false
+        iter_stats_max_iterations: 10000
+        kv_cache_config:
+          use_kv_cache_manager_v2: true
+          block_reuse_config:
+            policy: all_reusable
+            swa_endpoint_rewind_tokens: 1024
+          dtype: fp8
+          enable_block_reuse: true
+          enable_partial_reuse: true
+          host_cache_size: 171798691840
+          tokens_per_block: 32
+          pool_ratio: [0.25, 0.75]
+          iteration_stats_interval: 20
+        max_num_tokens: 16384
+        max_seq_len: 1048576
+        max_stats_len: 10000
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 4
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/agg
+        pipeline_parallel_size: 1
+        prefill_cuda_graph_backend: breakable
+        print_iter_log: false
+        request_stats_max_iterations: 10000
+        return_perf_metrics: true
+        tensor_parallel_size: 4
+        trust_remote_code: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        stream_interval: 20
+        backend: pytorch
+        modeling_v2: require
+        speculative_config:
+          attention_backend: TRTLLM
+          decoding_type: DFlash
+          use_rejection_sampling: true
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+        prefill_capture_num_tokens: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560,
+          2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192, 8704, 9216, 9728, 10240, 10752, 11264, 11776,
+          12288, 12800, 13312, 13824, 14336, 14848, 15360, 15872, 16384]
+        enable_tokenization_cache: true
+  benchmark:
+    placement:
+      node: head
+    env:
+      SERVED_MODEL_NAME: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+      TOKENIZER: /model
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+      # Fixes the template's "Current date" line so cached prompt prefixes stay valid across 00:00 UTC.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"current_date":"2026-11-12"}}'
+    colocate_with_frontend: true
+  observability:
+    enabled: false
+    enable_otel: false
+    tachometer:
+      enabled: false
+  sbatch_directives:
+    exclusive: ''
+    mem: '0'
+    no-requeue: ''
+
+override_tep4_b24_c48:
+  name: musespark-trt-dynamo-gb300-agg-tep4-b24-c48-dflash7
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TRTLLM_SCHED_PREFILL_DECODE_INTERVAL: '64'
+        TRTLLM_SCHED_SPF_FIRST_CHUNK_MAX_WAIT_PASSES: '64'
+        TRTLLM_SCHED_SPF_MAX_AGE_PASSES: '4000'
+      args:
+        cuda_graph_config:
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+          max_batch_size: 24
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 24
+
+override_tep4_b80_c80:
+  name: musespark-trt-dynamo-gb300-agg-tep4-b80-c80-dflash7
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TRTLLM_SCHED_PREFILL_DECODE_INTERVAL: '12'
+        TRTLLM_SCHED_SPF_FIRST_CHUNK_MAX_WAIT_PASSES: '12'
+        TRTLLM_SCHED_SPF_MAX_AGE_PASSES: '3000'
+      args:
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
+          - 21
+          - 22
+          - 23
+          - 24
+          - 25
+          - 26
+          - 27
+          - 28
+          - 29
+          - 30
+          - 31
+          - 32
+          - 33
+          - 34
+          - 35
+          - 36
+          - 37
+          - 38
+          - 39
+          - 40
+          - 41
+          - 42
+          - 43
+          - 44
+          - 45
+          - 46
+          - 47
+          - 48
+          - 49
+          - 50
+          - 51
+          - 52
+          - 53
+          - 54
+          - 55
+          - 56
+          - 57
+          - 58
+          - 59
+          - 60
+          - 61
+          - 62
+          - 63
+          - 64
+          - 65
+          - 66
+          - 67
+          - 68
+          - 69
+          - 70
+          - 71
+          - 72
+          - 73
+          - 74
+          - 75
+          - 76
+          - 77
+          - 78
+          - 79
+          - 80
+          max_batch_size: 80
+        kv_cache_config:
+          free_gpu_memory_fraction: 0.78
+        max_batch_size: 80
