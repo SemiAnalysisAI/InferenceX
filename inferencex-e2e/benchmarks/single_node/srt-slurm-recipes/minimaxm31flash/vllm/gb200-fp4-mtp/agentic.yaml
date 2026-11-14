@@ -26,7 +26,9 @@ base:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
         trust-remote-code: true
-        reasoning-parser: minimax_m3
+        # No reasoning parser: since vLLM PR 64111 minimax_m3 swallows a lone
+        # <mm:think> opener, so max_tokens=1 warmup replies stream no content.
+        # The previous image streamed reasoning as content for these prompts.
         tool-call-parser: minimax_m3
         enable-auto-tool-choice: true
         # MSA sparse/index cache needs 128-token blocks.

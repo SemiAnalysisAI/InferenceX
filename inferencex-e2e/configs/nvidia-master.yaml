@@ -4343,10 +4343,9 @@ minimaxm31flash-fp4-b200-sglang-agentic-dspark:
       - { tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [72, 80], srt-recipe: agentic.yaml }
 
 # MiniMax-M3.1-Flash AgentX on GB200: the B200 recipe and search space on the
-# GB200 NVL4 tray, with the day-zero arm64 CUDA 13.4 build of the same image
-# (manifest sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c).
+# GB200 NVL4 tray.
 minimaxm31flash-fp4-gb200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:minimax-m31-flash-arm64-cu134@sha256:5d76347628973fb80519a919a2f2740b6645b62cba3fe2bd87b25f111bd0e948
+  image: vllm/vllm-openai:cu134-nightly-1648fefab91204f3b15bf8062217316f07f2c4bb@sha256:bec82f0f8415716ccee67dc06d7d0064a9834682a5dc1c972bb422a79f7d535d
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:gb200-nv
