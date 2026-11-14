@@ -215,33 +215,113 @@ def gen(name, tp, conc, fingerprint):
     }
 
 
-def measured(fingerprint, conc, tput, intvty, date="2026-10-20"):
+def measured(fingerprint, conc, tput, intvty, date="2026-10-20", **metrics):
+    agentic = any(name.startswith("p90_") for name in metrics)
     return {
         "recipe_fingerprint": fingerprint,
         "conc": conc,
         "date": date,
-        "metrics": {"tput_per_gpu": tput, "mean_intvty": intvty},
+        "benchmark_type": "agentic_traces" if agentic else "fixed_seq",
+        "metrics": {"tput_per_gpu": tput, "mean_intvty": intvty, **metrics},
     }
 
 
 def test_points_diff_flags_undominated_removals_and_reports_retuned_deltas():
-    base = matrix([gen("x", 4, 8, "f4"), gen("x", 4, 64, "f4"), gen("y", 2, 32, "old")])
-    head = matrix([gen("y", 2, 32, "new"), gen("x", 4, 1, "f4")])
+    base = matrix(
+        [
+            gen("x", 4, 8, "f4"),
+            gen("x", 4, 64, "f4"),
+            gen("y", 2, 32, "old"),
+            gen("z", 8, 16, "z-old"),
+        ]
+    )
+    head = matrix([gen("y", 2, 32, "new"), gen("x", 4, 1, "f4"), gen("z", 8, 16, "z-new")])
+    fixed = {"median_intvty": 50, "median_e2el": 10, "median_ttft": 0.5}
+    agentx = {"p90_itl": 0.02, "p90_e2el": 30, "p90_ttft": 2.0, "p90_e2e_norm_intvty": 20}
     ingested = [
         measured("f4", 8, 100, 500),
         measured("f4", 64, 900, 100),
-        measured("old", 32, 1000, 150),
+        measured("old", 32, 1000, 150, **fixed),
+        measured("z-old", 16, 500, 40, **agentx),
     ]
-    new_run = [measured("new", 32, 1100, 150, "2026-10-22")]
+    # y is faster but its TTFT is 20% worse, z's normalized interactivity 15% worse.
+    new_run = [
+        measured(
+            "new", 32, 1100, 150, "2026-10-22", median_intvty=48, median_e2el=10.5, median_ttft=0.6
+        ),
+        measured(
+            "z-new",
+            16,
+            475,
+            40,
+            "2026-10-22",
+            p90_itl=0.021,
+            p90_e2el=32,
+            p90_ttft=1.8,
+            p90_e2e_norm_intvty=17,
+        ),
+    ]
     [change] = signoff_facts.points_diff(base, head, ingested, new_run)
     assert change["undominated_removed"] == ["x tp4 ep1 dpaFalse conc 8"]
     assert [item["dominated_by"] for item in change["removed"] if item["conc"] == 64] == [
         "y tp2 ep1 dpaFalse conc 32"
     ]
     assert change["unmeasured_removed"] == []
-    assert change["retuned_deltas"] == [
-        {"label": "y tp2 ep1 dpaFalse conc 32", "tput_per_gpu_pct": 10.0, "mean_intvty_pct": 0.0}
+    assert {delta.pop("label"): delta for delta in change["retuned_deltas"]} == {
+        "y tp2 ep1 dpaFalse conc 32": {
+            "tput_per_gpu_pct": 10.0,
+            "mean_intvty_pct": 0.0,
+            "intvty_pct": -4.0,
+            "e2el_pct": 5.0,
+            "ttft_pct": 20.0,
+            "e2e_norm_intvty_pct": None,
+        },
+        "z tp8 ep1 dpaFalse conc 16": {
+            "tput_per_gpu_pct": -5.0,
+            "mean_intvty_pct": 0.0,
+            "intvty_pct": -4.76,
+            "e2el_pct": 6.67,
+            "ttft_pct": -10.0,
+            "e2e_norm_intvty_pct": -15.0,
+        },
+    }
+    assert sorted(change["regressions"], key=lambda item: item["label"]) == [
+        {"label": "y tp2 ep1 dpaFalse conc 32", "metric": "ttft", "old": 0.5, "new": 0.6, "pct": 20.0},
+        {
+            "label": "z tp8 ep1 dpaFalse conc 16",
+            "metric": "e2e_norm_intvty",
+            "old": 20,
+            "new": 17,
+            "pct": -15.0,
+        },
     ]
+
+
+def test_ingested_agentx_rows_take_normalized_interactivity_from_derived_metrics(monkeypatch):
+    requested = []
+
+    def derived(ids):
+        requested.extend(ids)
+        return {7: 12.5}, ["url"]
+
+    monkeypatch.setattr(signoff_facts.api, "normalized_interactivity", derived)
+    agentx = {"p90_itl": 0.02}
+    latest = measured("a", 4, 100, 50, "2026-10-21", **agentx) | {"id": "7"}
+    stale = measured("a", 4, 100, 50, "2026-10-01", **agentx) | {"id": "6"}
+    fixed = measured("b", 4, 100, 50) | {"id": "8"}
+    assert signoff_facts.add_normalized_interactivity([stale, latest, fixed]) is None
+    assert requested == [7]
+    assert signoff_facts.published_metrics.x_axes(latest)["e2e_norm_intvty"] == 12.5
+
+
+def test_unreadable_derived_metrics_are_reported_not_raised(monkeypatch):
+    def unreadable(ids):
+        raise signoff_facts.api.ReadError("invalid-derived-payload")
+
+    monkeypatch.setattr(signoff_facts.api, "normalized_interactivity", unreadable)
+    row = measured("a", 4, 100, 50, p90_itl=0.02) | {"id": "7"}
+    assert signoff_facts.add_normalized_interactivity([row]) == "invalid-derived-payload"
+    assert "p90_e2e_norm_intvty" not in row["metrics"]
 
 
 def test_image_refs_normalize_registry_separator():
