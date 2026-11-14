@@ -8093,7 +8093,7 @@ kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg:
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false }
 
 minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
-  image: vllm/vllm-openai:cu134-arm64-1107-mdev@sha256:1b4a9b46c217ae3665b5e793341892d555b9bd5ca81230eed26e1b94a42b5801
+  image: vllm/vllm-openai:cu134-nightly-f5d93296c8ec82b7e7dabdb308d24d43cb1907bf@sha256:ad65ca93274c2f017a8753e05ed66dbf0a801787c09850602a7bbf5423557baa
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:gb300-nv
@@ -8112,7 +8112,25 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
         kv-offloading: none
         conc-list: [1]
         num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c1
+        srt-recipe: agg-variants.yaml:override_tp4_sd_c1
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_sd_c4
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_sd_c8
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [12]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_sd_c12
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
@@ -8122,21 +8140,18 @@ minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: none
-        conc-list: [4]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c4
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [8]
-        num-nodes: 1
-        srt-recipe: agg-variants.yaml:override_tp4_c8
-        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: none
         conc-list: [32]
         num-nodes: 1
         srt-recipe: agg-variants.yaml:override_tp4_c32
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+    - dram-utilization: 1.0
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [16]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_sd_dram_c16
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
 
 minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:

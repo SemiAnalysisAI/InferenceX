@@ -103,13 +103,6 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-override_tp4_c1:
-  name: minimaxm31flash-gb300-dynamo-agg-tp4-c1
-  roles:
-    agg:
-      args:
-        max-num-seqs: 2
-
 override_tp4_c16:
   name: minimaxm31flash-gb300-dynamo-agg-tp4-c16
   roles:
@@ -117,23 +110,89 @@ override_tp4_c16:
       args:
         max-num-seqs: 32
 
-override_tp4_c4:
-  name: minimaxm31flash-gb300-dynamo-agg-tp4-c4
-  roles:
-    agg:
-      args:
-        max-num-seqs: 8
-
-override_tp4_c8:
-  name: minimaxm31flash-gb300-dynamo-agg-tp4-c8
-  roles:
-    agg:
-      args:
-        max-num-seqs: 16
-
 override_tp4_c32:
   name: minimaxm31flash-gb300-dynamo-agg-tp4-c32
   roles:
     agg:
       args:
         max-num-seqs: 64
+
+# Specialized decode (vllm-project/vllm#66324, opt-in with decode_backend
+# latency_specialized): fused CuTe DSL kernels for FULL-graph decode steps of up to
+# 8 requests x (7 + 1) rows; larger steps and prefill run the stock forward. The
+# executor refuses NVFP4 caches, so these points run fp8 KV and fp8 index-K caches,
+# with the FLASHINFER_TS drafter backend the PR validated. The PR is applied to the
+# pinned nightly by setup_script.5075.md.
+# Client concurrency runs about 1.5x the server batch, so concurrency 12 is roughly
+# where steps outgrow the 8-request cap. Above 16 the stock points run as before.
+# max-num-seqs is 2x concurrency, as for the stock points.
+
+override_tp4_sd_c1:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-sd-c1
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+
+override_tp4_sd_c4:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-sd-c4
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+
+override_tp4_sd_c8:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-sd-c8
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+
+override_tp4_sd_c12:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-sd-c12
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 24
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+
+# Concurrency 16 outgrew the fp8 KV pool on GB200 (cached prefixes of waiting
+# sessions evicted and re-prefilled), so it adds a CPU KV tier
+# (SimpleCPUOffloadConnector, which vLLM #66324 allows with the specialized decode).
+override_tp4_sd_dram_c16:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-sd-dram-c16
+  setup_script: minimaxm31flash-vllm-patches.sh
+  roles:
+    agg:
+      args:
+        max-num-seqs: 32
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"fp8"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        async-scheduling: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        kv-cache-metrics: true
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":360000000000,"lazy_offload":true}}'
