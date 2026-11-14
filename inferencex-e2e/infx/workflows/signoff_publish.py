@@ -63,7 +63,7 @@ def parse_verdict(verdict: str) -> tuple[dict[int, str], list[str]]:
         emoji, check_number, status = match.groups()
         check = int(check_number)
         allowed = {"PASS", "N/A", "WARN"} if check in {4, 14, 15, 16} else {"PASS", "N/A", "FAIL"}
-        if check == 13:
+        if check in {13, 18}:
             allowed.add("WARN")
         if check not in CHECKS:
             errors.append(f"Line {number}: Check {check} does not exist; use Checks 0-18.")
