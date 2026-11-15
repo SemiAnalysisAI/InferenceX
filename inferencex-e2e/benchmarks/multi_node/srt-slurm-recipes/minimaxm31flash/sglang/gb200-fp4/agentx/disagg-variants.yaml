@@ -697,13 +697,15 @@ override_2p_dep4_dep8_linker:
         unified-cache-external-linker-backend: mooncake
         unified-cache-external-linker-config: *linker-config
 
-override_4p_tp2ep2_dep8_linker:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-4p-tp2ep2-dep8-linker
+override_4p_tp2ep2_dp4tp2_linker:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-4p-tp2ep2-dp4tp2-linker
   # The linker point with the prefill shape EndpointX runs in production:
   # four TP2 attention + MegaMoE EP2 instances, no attention DP. The model has
   # 4 KV heads, so TP2 splits the main KV across the pair. The router places a
   # session on an instance, and a long uncached prompt holds one pair instead
   # of all eight DP-coupled ranks. Same eight 190 GB linker segments.
+  # MiniMax sparse PD needs the same attention TP on both sides, so decode
+  # runs DP4 x TP2 attention with MegaMoE EP8, as EndpointX does.
   identity:
     frameworks:
       sglang: "0.0.0.dev1+g36027fd15"
@@ -731,6 +733,14 @@ override_4p_tp2ep2_dep8_linker:
         enable-unified-cache-external-linker: true
         unified-cache-external-linker-backend: mooncake
         unified-cache-external-linker-config: *linker-config
+    decode:
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 4
+        expert-parallel-size: 8
+        # 96 per DP rank; c224 puts about 56 on each.
+        max-running-requests: 384
+        cuda-graph-max-bs-decode: 64
 
 override_1p_dep8_dep8_linker_least_loaded:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-least-loaded
