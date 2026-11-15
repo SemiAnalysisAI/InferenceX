@@ -248,9 +248,7 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
         for point in benchmark_points([entry])
     }
     for entry in benchmark_entries(matrix):
-        measured = {
-            key: value for key, value in entry.items() if key not in ("priority", "queue-token")
-        }
+        measured = {key: value for key, value in entry.items() if key != "queue-token"}
         normalized = schema.validate_python(measured).model_dump(by_alias=True, exclude_none=True)
         if any(generated.get(point) != normalized for point in benchmark_points([entry])):
             raise VerificationError("Matrix settings do not match the canonical recipe")

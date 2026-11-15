@@ -338,7 +338,6 @@ def point_key(entry: dict) -> str:
                 "image",
                 "exp-name",
                 "recipe-fingerprint",
-                "priority",
                 "queue-token",
             )
         }
