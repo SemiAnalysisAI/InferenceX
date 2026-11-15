@@ -1,5 +1,5 @@
 kimik31-r10-1p1d:
-  image: yukiozzz/vllm-openai-rocm:k31-pd-1115@sha256:d48e9c20970fbf5c6f7f264f4760d0e79e68c7b5efdef8596e7facf0a7a9b365
+  image: yukiozzz/vllm-openai-rocm:k31-pd-1115r2@sha256:aef3690568b253cecb2791e95f8ca68da9c11577d2501a394ac7e556af7f9909
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds

@@ -12605,3 +12605,9 @@
   description:
     - Run the shared K3 AL2.88 1P1D c128 stack for 3600 seconds with full warmup: generic eager preparation and draft metadata, prefill row-tail and decode MoE front fusion, native96 CPRR with compact AITER scratch. Retain published hybrid WRITE fixes and role-specific graph, memory, and cache settings; disable split96.
   pr-link: https://github.com/seungrokj/mum/pull/24
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Run the tested 1P1D c128 stack with prefill query compaction and decode packed-Q, RecoverSSM BV64, and bounded BF16 AttnRes tiling. Preserve K3 golden AL2.88, role-specific memory and graph settings, full warmup, 3600-second profiling, and published hybrid WRITE fixes.
+  pr-link: XXX

@@ -149,6 +149,7 @@ roles:
       K31_RUNTIME_ROLE: P
       VLLM_K3_SP_PREFILL: '1'
       VLLM_K3_SP_PREFILL_MIN_TOKENS: '4096'
+      K31_DCP_PREFILL_PACK_QUERY: '1'
       VLLM_K31_BEAT_EAGERPREP: '1'
       VLLM_K31_BEAT_DRAFTMETA: '1'
       VLLM_K31_CPRR_NATIVE96: '0'
@@ -281,7 +282,7 @@ environment:
   TOTAL_CPU_DRAM_GB: '1799'
   DECODE_CPU_DRAM_GB: '0'
   KV_P2P_TRANSFER: moriio
-  K31_CLEAN_RUN_ID: k31-pd-1115
+  K31_CLEAN_RUN_ID: k31-pd-1115r2
 telemetry:
   storage_subdir: power
   startup_timeout_seconds: 300
