@@ -33,11 +33,12 @@ def env_changes_request(api_url: str) -> bool:
     if parts.scheme in urllib.request.getproxies() and not urllib.request.proxy_bypass(host):
         return True
     path = os.environ.get("NETRC")
-    if path is None:
-        path = Path.home() / ("_netrc" if os.name == "nt" else ".netrc")
     try:
+        if path is None:
+            path = Path.home() / ("_netrc" if os.name == "nt" else ".netrc")
         return netrc.netrc(path).authenticators(host) is not None
-    except (OSError, netrc.NetrcParseError):
+    except (OSError, RuntimeError, netrc.NetrcParseError):
+        # Path.home() raises RuntimeError without a home directory; aiohttp then reads no netrc.
         return False
 
 

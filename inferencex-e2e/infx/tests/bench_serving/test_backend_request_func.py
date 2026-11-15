@@ -3,6 +3,7 @@
 import asyncio
 import json
 import urllib.request
+from pathlib import Path
 
 import pytest
 from aiohttp import web
@@ -99,7 +100,8 @@ def netrc_path(monkeypatch, tmp_path):
     for name in ("http_proxy", "https_proxy", "all_proxy", "no_proxy"):
         monkeypatch.delenv(name, raising=False)
         monkeypatch.delenv(name.upper(), raising=False)
-    # On macOS and Windows, getproxies() also reads the system proxy settings.
+    # env_changes_request calls urllib.request.getproxies(), which also reads the system proxy
+    # settings on macOS and Windows.
     monkeypatch.setattr(urllib.request, "getproxies", urllib.request.getproxies_environment)
     monkeypatch.setattr(urllib.request, "proxy_bypass", urllib.request.proxy_bypass_environment)
     path = tmp_path / "netrc"
@@ -127,6 +129,15 @@ def test_a_netrc_entry_for_the_host_is_trusted(netrc_path):
     netrc_path.write_text("machine bench.internal login user password secret\n")
     assert req.env_changes_request("http://bench.internal:8000/v1/generate_stream")
     assert not req.env_changes_request("http://127.0.0.1:8000/v1/generate_stream")
+
+
+def test_no_home_directory_leaves_the_environment_untrusted(netrc_path, monkeypatch):
+    def no_home(cls: type[Path]) -> Path:
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.delenv("NETRC")
+    monkeypatch.setattr(Path, "home", classmethod(no_home))
+    assert not req.env_changes_request("http://127.0.0.1:8000/v1/completions")
 
 
 def test_a_proxy_from_the_environment_still_carries_the_request(netrc_path, monkeypatch):
