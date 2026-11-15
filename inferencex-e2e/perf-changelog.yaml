@@ -12905,4 +12905,5 @@
   description:
     - "Add a B300 Wan2.2-T2V-A14B baseline with the B200 row's workload: vLLM-Omni v0.32.0 by the same digest, wan22.yaml release-v1, C1 on 1, 2, 4 and 8 GPUs, prompt-embedding cache disabled."
     - "Deployment per count: 1 GPU runs both CFG branches with Ulysses 1 and no VAE patch parallelism; 2 GPUs CFG parallel 2 x Ulysses 1; 4 GPUs CFG parallel 2 x Ulysses 2; 8 GPUs CFG parallel 2 x Ulysses 4. Tiled VAE patch parallelism spans every GPU from 2 GPUs up."
+    - "Each server streams the Wan snapshot once before vLLM-Omni loads it (VIDEO_PREFETCH_MODEL=1): b300-dsxe serves the model from a network-filesystem HF cache, where the engine's multi-thread shard loader alone missed the one-hour readiness window."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5082
