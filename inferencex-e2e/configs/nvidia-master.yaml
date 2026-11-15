@@ -6283,14 +6283,14 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-linker:
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         conc-list: [500]
-        srt-recipe: disagg-variants.yaml:override_6p_tp2ep2_dep16_si20_nightly1112
+        srt-recipe: disagg-variants.yaml:override_6p_tp2ep2_dp8tp2_si20_nightly1112
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: false }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: linker }
         conc-list: [500]
-        srt-recipe: disagg-variants.yaml:override_6p_tp2ep2_dep16_si20_linker
+        srt-recipe: disagg-variants.yaml:override_6p_tp2ep2_dp8tp2_si20_linker
         prefill: { num-worker: 6, tp: 2, ep: 2, dp-attn: false }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
 

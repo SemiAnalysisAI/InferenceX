@@ -461,8 +461,8 @@ override_3p_dep4_dep16_si20_linker:
         max-running-requests: 768
         stream-interval: 20
 
-override_6p_tp2ep2_dep16_si20_nightly1112:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-tp2ep2-dep16-si20-nightly1112
+override_6p_tp2ep2_dp8tp2_si20_nightly1112:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-tp2ep2-dp8tp2-si20-nightly1112
   # Prefill as TP2 attention with MegaMoE EP2 and no attention DP, against the
   # 3 x DEP4 control on the same 12 GPUs and image. The model has 4 KV heads,
   # so TP2 splits the main KV across the pair and replicates only the index.
@@ -483,18 +483,21 @@ override_6p_tp2ep2_dep16_si20_nightly1112:
         max-running-requests: 128
         stream-interval: 20
         mem-fraction-static: 0.88
-    decode:
+    decode: &gb300-dp8tp2-decode
       nodes: 4
       gpus: 16
       args:
+        # MiniMax sparse PD needs the same attention TP on both sides, so the
+        # TP2 prefill pairs with DP8 x TP2 attention (EP16 MoE) on decode.
         tensor-parallel-size: 16
-        data-parallel-size: 16
+        data-parallel-size: 8
         expert-parallel-size: 16
         max-running-requests: 768
+        cuda-graph-max-bs-decode: 96
         stream-interval: 20
 
-override_6p_tp2ep2_dep16_si20_linker:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-tp2ep2-dep16-si20-linker
+override_6p_tp2ep2_dp8tp2_si20_linker:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-tp2ep2-dp8tp2-si20-linker
   # The TP2 prefill above with the linker setup of the 3 x DEP4 linker point:
   # still 12 prefill ranks x 190 GB, so the same 6080 GB pool.
   identity:
@@ -519,12 +522,4 @@ override_6p_tp2ep2_dep16_si20_linker:
         enable-unified-cache-external-linker: true
         unified-cache-external-linker-backend: mooncake
         unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
-    decode:
-      nodes: 4
-      gpus: 16
-      args:
-        tensor-parallel-size: 16
-        data-parallel-size: 16
-        expert-parallel-size: 16
-        max-running-requests: 768
-        stream-interval: 20
+    decode: *gb300-dp8tp2-decode
