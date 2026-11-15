@@ -12611,3 +12611,9 @@
   description:
     - Run the tested 1P1D c128 stack with prefill query compaction and decode packed-Q, RecoverSSM BV64, and bounded BF16 AttnRes tiling. Preserve K3 golden AL2.88, role-specific memory and graph settings, full warmup, 3600-second profiling, and published hybrid WRITE fixes.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-pd-sweep
+  description:
+    - Sweep the verified k31-pd-1115r2 image at 1P1D c144, c96, c48 and 1P2D global c128 with full warmup and 3600-second profiling. Preserve K3 golden acceptance, prefill SimpleCPU/SPF/BCG and WRITE TC104; size each decode max-sequences and full-graph budget for its concurrency share plus headroom. No experimental prefill overlap code is included.
+  pr-link: XXX
