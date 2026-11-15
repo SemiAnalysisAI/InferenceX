@@ -664,7 +664,8 @@ override_1p_dep8_dep8_linker_chunk128k:
         expert-parallel-size: 8
         chunked-prefill-size: 131072
         max-running-requests: 512
-        mem-fraction-static: 0.88
+        # 16384 tokens per rank need more activation headroom than 0.88 leaves.
+        mem-fraction-static: 0.82
         enable-hierarchical-cache: null
         hicache-size: null
         hicache-write-policy: null
@@ -688,6 +689,7 @@ override_2p_dep4_dep8_linker:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "32768"
       args:
         chunked-prefill-size: 65536
+        mem-fraction-static: 0.82
         enable-hierarchical-cache: null
         hicache-size: null
         hicache-write-policy: null
