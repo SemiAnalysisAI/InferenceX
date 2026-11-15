@@ -8358,7 +8358,7 @@ kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
-        conc-list: [384]
+        conc-list: [448]
         srt-recipe: disagg-variants.yaml:override_hyb4_3p1d
         eval-srt-recipe: disagg-variants.yaml:override_hyb4_3p1d_eval
         power: true
@@ -8419,7 +8419,7 @@ kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep32-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
-        conc-list: [704, 960]
+        conc-list: [960]
         srt-recipe: disagg-dep32.yaml:override_2p1d_dep32
         eval-srt-recipe: disagg-dep32.yaml:override_2p1d_dep32_eval
         power: true

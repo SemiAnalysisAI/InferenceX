@@ -117,7 +117,7 @@ base:
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "1024"
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "1024"
       args:
-        kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"lookup_timeout_s":60,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+        kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"lookup_timeout_s":60,"lookup_prefetch_limit":16,"lookup_prefetch_ttl_s":30,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
         served-model-name: "moonshotai/Kimi-K3.1-Pro"
         prefix-match-unit: 128
         load-format: "fastsafetensors"
