@@ -193,6 +193,38 @@ def test_recomputed_summary_pairs_only_measurements_and_retains_explicit_limits(
     json.dumps(result, allow_nan=False)
 
 
+def silent_plan_bundle(tmp_path, name, model_id):
+    directory, document = bundle(tmp_path, name)
+    plan = document["plan"]
+    plan["model_id"] = model_id
+    for field in ("duration_seconds", "audio_sample_rate_hz", "audio_channels"):
+        del plan["generation"][field]
+    for case in plan["cases"]:
+        case["requires_sound"] = False
+    document["configuration"]["model_id"] = model_id
+    document["plan_sha256"] = digest(plan)
+    document["configuration_sha256"] = digest(document["configuration"])
+    write_bundle(directory, document)
+    return directory
+
+
+def test_wan22_bundles_without_duration_or_audio_compare(tmp_path, media_stub):
+    analysis, comparison = media_stub
+    analysis["audio"] = {"present": False}
+    baseline = silent_plan_bundle(tmp_path, "baseline", compare.WAN22_MODEL_ID)
+    candidate = silent_plan_bundle(tmp_path, "candidate", compare.WAN22_MODEL_ID)
+    result = compare_runs(baseline, candidate, policy=POLICY)
+    assert result["summary"]["measurement_slots"] == 2
+    assert result["candidate"]["summary"]["valid"] == 2
+
+
+def test_other_plans_still_require_duration_and_audio(tmp_path, media_stub):
+    baseline = silent_plan_bundle(tmp_path, "baseline", "MiniMaxAI/MiniMax-H3")
+    candidate = silent_plan_bundle(tmp_path, "candidate", "MiniMaxAI/MiniMax-H3")
+    with pytest.raises(ValueError, match="duration_seconds"):
+        compare_runs(baseline, candidate, policy=POLICY)
+
+
 def test_latency_regression_uses_declared_threshold(tmp_path, media_stub):
     baseline, _ = bundle(tmp_path, "baseline")
     candidate, document = bundle(tmp_path, "candidate")

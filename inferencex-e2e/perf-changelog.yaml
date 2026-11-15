@@ -12868,6 +12868,38 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4618
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:kimi-k31-d73dd529 (sha256:5b54f223) to vllm/vllm-openai-rocm:kimi-k31-6d74a15 (sha256:c470d0de), vLLM mum-tracking 6d74a152f."
+    - "Split concurrency 4 out of the DRAM-offload row into its own TP8 x DCP8 row with kv-offloading none (recipe override override_dram_c4 renamed override_gpu_kv_c4). Concurrency 1 (TP8 x DCP1, GPU KV) and 16, 24, 32 and 48 (TP8 x DCP8, Simple CPU DRAM offload) keep their layouts. Remove override_dram_c10, unused since concurrency 10 left the sweep."
+    - "Every point sets VLLM_ROCM_DCP_VUP_RS=1 (DCP V-up reduce-scatter, on top of the existing VLLM_ROCM_DCP_AITER_ALLGATHER=1), VLLM_ROCM_DSA_MULTISTREAM=1 and VLLM_ROCM_MEM_HEADROOM_GIB=8."
+    - "Concurrency 1 (latency_specialized decode backend) sets VLLM_KIMI_SD_DSA_PROLOGUE=1, which runs each DSA layer's decode prologue in one launch."
+    - "Concurrency 4 keeps max-num-seqs 2 and switches to the latency_specialized decode backend, 5 draft tokens (golden AL 3.41, from 7), decode-only capture sizes 6 and 12 and breakable CUDA graphs off."
+    - "Concurrency 16, 24 and 32 set prefill-schedule-interval 32 (from 1, 1 and 8) and VLLM_PREFILL_CADENCE_NO_ESCAPE=1. Their max-num-seqs is below the concurrency, so requests always wait; without the flag vLLM drops the prefill hold (capacity escape). Concurrency 32 drops long-prefill-token-threshold 10240 and long-prefill-token-threshold-adaptive."
+    - "Concurrency 48 uses 3 draft tokens (golden AL 2.88, from 6) with decode capture sizes 4-192, and drops prefill-schedule-interval 8, long-prefill-token-threshold 10240 and long-prefill-token-threshold-adaptive (back to vLLM defaults)."
+    - "The new vLLM (mum-tracking d73dd529 to 6d74a152f) zeroes the KV null block after CUDA graph capture in the V2 runner (seungrokj/mum#17) and adds the opt-in VLLM_PREFILL_CADENCE_NO_ESCAPE hold (seungrokj/mum#21), the DCP V-up-first combine and multi-stream DSA decode, VLLM_ROCM_MEM_HEADROOM_GIB and the one-launch DSA decode prologue. It also fuses the MXFP4 indexer decode prep, the q_a/kv_a RMSNorm with the sigmoid gate, the KDA f_b_proj GEMM, the AttnRes register tile and the latent-MoE norm, compiles the FlyDSL sparse MLA at load and sizes the packed DSA KV blocks tightly."
+    - "No change to the DSpark draft's data types: speculative-config does not pin a revision, so Inferact/Kimi-K3.1-Pro-DSpark-preview resolves to Hugging Face main 6a2ef20a (current since 2026-11-05), whose weights are all BF16 with no quantization_config. vLLM 6d74a152f loads it unquantized with an FP8 KV cache, as d73dd529 did; VLLM_ROCM_DCP_VUP_RS also combines the draft's DCP attention output, in BF16 with an FP32 LSE."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5043
+
+- config-keys:
+    - wan22-bf16-b200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add a B200 Wan2.2-T2V-A14B baseline on vLLM-Omni v0.32.0, pinned by its linux/amd64 digest: wan22.yaml release-v1 (four prompts by five seeds, one warmup; 832x480, 81 frames at 16 fps, 40 UniPC steps, guidance 4.0 high-noise / 3.0 low-noise, boundary 0.875, flow_shift 12.0, empty negative prompt, BF16), C1 on 8 GPUs."
+    - "Deployment: CFG parallel 2 x Ulysses 4, tiled VAE patch parallelism 8, prompt-embedding cache disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5081
+
+- config-keys:
+    - wan22-bf16-b200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Sweep the B200 Wan2.2-T2V-A14B vLLM-Omni baseline on 1, 2, 4 and 8 GPUs at C1 on the same wan22.yaml release-v1 workload, so the dashboard shows a GPU-count curve."
+    - "Deployment per count: 1 GPU runs both CFG branches with Ulysses 1 and no VAE patch parallelism; 2 GPUs CFG parallel 2 x Ulysses 1; 4 GPUs CFG parallel 2 x Ulysses 2; 8 GPUs keeps CFG parallel 2 x Ulysses 4. Tiled VAE patch parallelism spans every GPU from 2 GPUs up."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5084
+
+- config-keys:
     - dsv41flash-fp4-mi355x-sglang-agentic-dspark
   scenario-type:
     - agentic-coding
