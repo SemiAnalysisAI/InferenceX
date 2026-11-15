@@ -4638,6 +4638,13 @@ minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-linker:
         srt-recipe: disagg-variants.yaml:override_2p_dep4_dep8_linker
         prefill: { num-worker: 2, tp: 4, ep: 4, dp-attn: true }
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: linker }
+        conc-list: [224]
+        srt-recipe: disagg-variants.yaml:override_4p_tp2ep2_dep8_linker
+        prefill: { num-worker: 4, tp: 2, ep: 2, dp-attn: false }
+        decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
 
 # The 1P DEP8 HiCache point on nightlies between 2026-10-30 and 2026-11-12, to
 # find where decode got 4-6% slower per step.

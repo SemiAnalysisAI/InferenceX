@@ -697,6 +697,41 @@ override_2p_dep4_dep8_linker:
         unified-cache-external-linker-backend: mooncake
         unified-cache-external-linker-config: *linker-config
 
+override_4p_tp2ep2_dep8_linker:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-4p-tp2ep2-dep8-linker
+  # The linker point with the prefill shape EndpointX runs in production:
+  # four TP2 attention + MegaMoE EP2 instances, no attention DP. The model has
+  # 4 KV heads, so TP2 splits the main KV across the pair. The router places a
+  # session on an instance, and a long uncached prompt holds one pair instead
+  # of all eight DP-coupled ranks. Same eight 190 GB linker segments.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services: *linker-services
+  roles:
+    prefill:
+      nodes: 2
+      workers: 4
+      gpus: 2
+      env:
+        <<: *linker-env
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "32768"
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: null
+        expert-parallel-size: 2
+        enable-dp-attention: null
+        enable-dp-lm-head: null
+        chunked-prefill-size: 16384
+        max-running-requests: 128
+        mem-fraction-static: 0.85
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: *linker-config
+
 override_1p_dep8_dep8_linker_least_loaded:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-least-loaded
   # The linker point with vLLM's routing: prefill goes to the least-loaded rank
