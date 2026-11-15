@@ -958,9 +958,10 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp:
-  # Carries vllm-project/vllm#64715 (UMBP standalone for DeepSeek-V4.1-Flash) and #66036
-  # (per-tensor fp8_e4m3 KV for sparse MLA); its MORI v1.2.3.post1 is built with UMBP.
-  image: vllm/vllm-openai-rocm:nightly-be47189f37f6162991366ff6b91539f6e9d1f432@sha256:a6263de19d7e68fc12d7ee37da0cc0d2817b8eb9a83c4f22911783befd133ebc
+  # Carries vllm-project/vllm#64715 (UMBP standalone for DeepSeek-V4.1-Flash), #66036
+  # (per-tensor fp8_e4m3 KV for sparse MLA) and #67377 (AITER FlyDSL dense MXFP8
+  # GEMMs); its MORI v1.2.3.post1 is built with UMBP.
+  image: vllm/vllm-openai-rocm:nightly-9bc16ae6a34b1e0fe260e8d12b98568478bf38c3@sha256:1f70fc06f38a18ae5e6ba1e25d9f59fd6f9fd79080d03a6dfdbb84f2bca33052
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
