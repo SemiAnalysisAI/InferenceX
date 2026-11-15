@@ -50,6 +50,28 @@ def test_collector_preserves_nested_json_and_empty_inputs(invoke, tmp_path, payl
         assert json.loads(output.read_text()) == expected
 
 
+def test_collector_keeps_request_records_one_line_per_column(invoke, tmp_path):
+    rows = [
+        {"conc": conc, "request_records": {"schema_version": 1, "columns": {
+            "outcome": [0, 1] * conc, "ttft_ms": [12.5, None] * conc}}}
+        for conc in (1, 2)
+    ]
+    for row in rows:
+        artifact = tmp_path / "inputs" / f"bmk_conc{row['conc']}"
+        artifact.mkdir(parents=True)
+        (artifact / "agg.json").write_text(json.dumps(row, indent=2))
+    (tmp_path / "inputs" / "bmk_agentic").mkdir()
+    (tmp_path / "inputs" / "bmk_agentic" / "point.json").write_text('{"request_metrics": {}}')
+
+    result = invoke("infx.results.collect_results", "inputs", "test")
+
+    assert result.returncode == 0, result.stderr
+    text = (tmp_path / "agg_test.json").read_text()
+    assert json.loads(text) == [{"request_metrics": {}}, *rows]
+    assert '        "outcome": [0,1,0,1],' in text.splitlines()
+    assert '        "ttft_ms": [12.5,null]' in text.splitlines()
+
+
 def test_collector_orders_rows_by_artifact_path(invoke, tmp_path):
     for name in ("tp8_conc64", "tp4_conc4", "tp8_conc4", "tp2_conc16", "tp4_conc64", "tp1_conc1"):
         artifact = tmp_path / "inputs" / f"bmk_dsr1_1k1k_{name}"

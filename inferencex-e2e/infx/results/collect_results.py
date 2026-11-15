@@ -2,6 +2,8 @@ import json
 import sys
 from pathlib import Path
 
+from infx.results.request_records import dumps
+
 
 def main() -> None:
     """Concatenate every JSON result under the results dir in argv into agg_<exp_name>.json."""
@@ -18,8 +20,7 @@ def main() -> None:
         print("No benchmark JSON artifacts to aggregate.")
         return
 
-    with open(f"agg_{exp_name}.json", "w") as f:
-        json.dump(agg_results, f, indent=2)
+    Path(f"agg_{exp_name}.json").write_text(dumps(agg_results))
 
 
 if __name__ == "__main__":

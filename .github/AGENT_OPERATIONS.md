@@ -106,3 +106,23 @@ Artifacts:
 - `eval_results_all`: `agg_eval_all.json`, which may not exist.
 - `run-stats`: `run_stats.json`, containing nodes run and success status.
 - `power_audit_<result>`: canonical power validity verdict and reason codes.
+
+### Fixed-sequence request records
+
+The fixed-sequence client writes a `request_records` block (`schema_version: 1`) into its raw result JSON: one entry per measured attempt, failed ones included, as equal-length arrays under `columns`. `infx.results.fixed_sequence` copies the block and the client's `duration`, `completed` and `request_throughput` into `agg_<result>.json`, so they reach `bmk_<result>` and `agg_bmk.json`. Results produced before the block existed do not have it.
+
+| Field | Meaning |
+|---|---|
+| `columns.start_offset_ms` | When the attempt was sent, measured from the start of the window. |
+| `columns.outcome` | Index into `outcomes`. `0` (`completed`) is the only success. The rest are failure classes: `http_status` (non-200 response), `timeout` (the client's 6 h request timeout), `connection` (refused, reset, or cut mid-stream), `stream_error` (an error event inside a 200 stream), `empty_response` (the stream ended without a token), `other` (not classified). |
+| `columns.ttft_ms` | Time to first token; null when none arrived. A failed attempt keeps the TTFT it observed. |
+| `columns.tpot_ms` | `(e2el_ms - ttft_ms) / (output_len - 1)` for a completed attempt; null below two output tokens and for a failed attempt. |
+| `columns.e2el_ms` | Send to last chunk for a completed attempt; send to the failure for a failed one. |
+| `columns.output_len`, `columns.input_len` | Token counts; `output_len` is null for a failed attempt. |
+| `counts` | `requested`, `dispatched`, `completed`, `failed`, `failed_by_class`, `http_status` (attempts per non-200 status code), `warmup_excluded`, and `retries`, which is always 0 because the client sends each request once. `dispatched = completed + failed`. |
+| `window` | `benchmark_start_time_unix`, `benchmark_end_time_unix`, and `duration`: the client's monotonic clock from just before the first measured request is dispatched until every attempt has returned. Warmup requests finish before it opens. |
+| `load` | `max_concurrency` limits in-flight requests; it is not an offered rate. `request_rate` is `"inf"` on every sweep lane. |
+
+Times are milliseconds rounded to 3 decimals. Read `outcome` before any latency column, because a failed attempt can carry a TTFT.
+
+Above 200,000 attempts the aggregate drops `columns` and records `columns_omitted` (`reason`, `attempts`, `limit`) in the block; the raw client JSON keeps every column. A point over the 5% failure gate is not uploaded as `bmk_<result>`. When its client ran to the end and wrote a result, the raw client JSON and `agg_<result>.json`, both with the block, are in `power_audit_<result>`.

@@ -207,6 +207,83 @@ def multinode_env_vars(base_env_vars):
     }
 
 
+def request_records(attempts):
+    """A client ``request_records`` block of ``attempts`` attempts whose second one failed."""
+    return {
+        "schema_version": 1,
+        "counts": {"requested": attempts, "dispatched": attempts, "completed": attempts - 1,
+                   "failed": 1},
+        "columns": {
+            "outcome": [int(index == 1) for index in range(attempts)],
+            "ttft_ms": [None if index == 1 else 100.0 * (index + 1) for index in range(attempts)],
+        },
+    }
+
+
+def test_aggregate_forwards_request_records_and_run_totals(
+    single_node_env_vars, sample_benchmark_result,
+):
+    from infx.results.fixed_sequence import build_result
+
+    records = request_records(3)
+    raw = {**sample_benchmark_result, "duration": 277.98, "completed": 2,
+           "request_throughput": 0.25, "request_records": records}
+
+    result = build_result(raw, single_node_env_vars)
+
+    assert result["request_records"] == records
+    assert (result["duration"], result["completed"], result["request_throughput"]) == (
+        277.98, 2, 0.25)
+    older_client = build_result(sample_benchmark_result, single_node_env_vars)
+    assert {"request_records", "duration", "completed", "request_throughput"}.isdisjoint(
+        older_client)
+
+
+def test_aggregate_omits_columns_above_the_attempt_limit_and_says_why(
+    single_node_env_vars, sample_benchmark_result,
+):
+    from infx.results.fixed_sequence import build_result
+    from infx.results.request_records import MAX_AGGREGATE_ATTEMPTS
+
+    at_limit = request_records(MAX_AGGREGATE_ATTEMPTS)
+    over_limit = request_records(MAX_AGGREGATE_ATTEMPTS + 1)
+
+    kept = build_result({**sample_benchmark_result, "request_records": at_limit},
+                        single_node_env_vars)
+    omitted = build_result({**sample_benchmark_result, "request_records": over_limit},
+                           single_node_env_vars)
+
+    assert kept["request_records"] == at_limit
+    assert omitted["request_records"] == {
+        "schema_version": 1,
+        "counts": over_limit["counts"],
+        "columns_omitted": {
+            "reason": "attempts_exceed_aggregate_limit",
+            "attempts": MAX_AGGREGATE_ATTEMPTS + 1,
+            "limit": MAX_AGGREGATE_ATTEMPTS,
+        },
+    }
+    assert len(over_limit["columns"]["outcome"]) == MAX_AGGREGATE_ATTEMPTS + 1
+
+
+def test_result_file_keeps_one_line_per_column_and_the_log_omits_columns(
+    tmp_path, single_node_env_vars, sample_benchmark_result,
+):
+    records = request_records(3)
+    raw = {**sample_benchmark_result, "request_records": records}
+
+    result = run_script(tmp_path, single_node_env_vars, raw)
+
+    assert result.returncode == 0, result.stderr
+    text = (tmp_path / "agg_benchmark_result.json").read_text()
+    assert json.loads(text)["request_records"] == records
+    assert '      "outcome": [0,1,0],' in text.splitlines()
+    assert '  "hw": "mi300x",' in text.splitlines()
+    logged = json.loads(result.stdout)
+    assert logged["request_records"] == {"schema_version": 1, "counts": records["counts"]}
+    assert logged["tput_per_gpu"] == json.loads(text)["tput_per_gpu"]
+
+
 def run_script(tmp_path, env, benchmark_result, result_filename="benchmark_result"):
     """Helper to run the infx.results.fixed_sequence script."""
     result_file = tmp_path / f"{result_filename}.json"
@@ -793,6 +870,18 @@ class TestMultinodePower:
         assert agg["prefill_avg_power_w"] == 400.0
         assert agg["decode_avg_power_w"] == 300.0
         assert (tmp_path / "power_validation_benchmark_result.json").is_file()
+
+    def test_power_patch_keeps_request_records_one_line_per_column(self, tmp_path, power_env):
+        records = request_records(3)
+        pkg = build_package(tmp_path, bench_extra={**self.BENCH_EXTRA, "request_records": records})
+
+        result = run_script(tmp_path, power_env, json.loads(pkg.original_result.read_text()))
+
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        text = (tmp_path / "agg_benchmark_result.json").read_text()
+        assert json.loads(text)["power_valid"] == 1
+        assert json.loads(text)["request_records"] == records
+        assert '      "ttft_ms": [100.0,null,300.0]' in text.splitlines()
 
     def test_missing_package_is_best_effort(self, tmp_path, power_env):
         result = run_script(tmp_path, power_env, self._bench_without_package())

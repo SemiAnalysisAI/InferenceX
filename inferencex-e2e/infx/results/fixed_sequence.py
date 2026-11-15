@@ -13,6 +13,7 @@ from typing import Any
 
 from infx.bench_serving.benchmark_outcome import benchmark_outcome
 
+from . import request_records
 from .metadata import parse_component_metadata, run_attempt
 from .power import (
     ALL_POWER_METRIC_KEYS,
@@ -76,6 +77,11 @@ def build_result(benchmark: Mapping[str, Any], env: Mapping[str, str]) -> dict[s
                 "Benchmark outcome does not match the recorded request counts and gate"
             )
         data["benchmark_outcome"] = expected
+    for key in ("duration", "completed", "request_throughput"):
+        if key in benchmark:
+            data[key] = benchmark[key]
+    if request_records.KEY in benchmark:
+        data[request_records.KEY] = request_records.for_aggregate(benchmark[request_records.KEY])
 
     router = parse_component_metadata(env.get("ROUTER_METADATA"), "ROUTER_METADATA")
     if router is not None:
@@ -310,8 +316,7 @@ def process_result(env: Mapping[str, str]) -> int:
     if (attempt := run_attempt(env)) is not None:
         data["run_attempt"] = attempt
     agg_path = Path(f"agg_{result_filename}.json")
-    with open(agg_path, "w") as f:
-        json.dump(data, f, indent=2)
+    agg_path.write_text(request_records.dumps(data))
     status = 0
     if data["is_multinode"] or env.get("POWER_PRODUCER_SHA"):
         status = aggregate_power_result(env, bench_path, agg_path)
@@ -327,9 +332,9 @@ def process_result(env: Mapping[str, str]) -> int:
             result["power_invalid_reasons"] = ["validation_artifact_unavailable"]
             if env.get("REQUIRE_POWER", "").lower() in {"1", "true", "yes"}:
                 status = 1
-        agg_path.write_text(json.dumps(result, indent=2))
+        agg_path.write_text(request_records.dumps(result))
     with open(agg_path) as f:
-        print(json.dumps(json.load(f), indent=2))
+        print(json.dumps(request_records.without_columns(json.load(f)), indent=2))
     return max(status, int(data.get("benchmark_outcome", {}).get("status") == "failed"))
 
 
