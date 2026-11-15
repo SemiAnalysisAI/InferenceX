@@ -12884,6 +12884,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5043
 
 - config-keys:
+    - wan22-bf16-b200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add a B200 Wan2.2-T2V-A14B baseline on vLLM-Omni v0.32.0, pinned by its linux/amd64 digest: wan22.yaml release-v1 (four prompts by five seeds, one warmup; 832x480, 81 frames at 16 fps, 40 UniPC steps, guidance 4.0 high-noise / 3.0 low-noise, boundary 0.875, flow_shift 12.0, empty negative prompt, BF16), C1 on 8 GPUs."
+    - "Deployment: CFG parallel 2 x Ulysses 4, tiled VAE patch parallelism 8, prompt-embedding cache disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5081
+
+- config-keys:
     - qwen3.5-fp8-mi355x-atom-agentic-mtp
   description:
     - "Update the ATOM image from rocm/atom-dev:nightly_202610181506 to nightly_202610291449."
