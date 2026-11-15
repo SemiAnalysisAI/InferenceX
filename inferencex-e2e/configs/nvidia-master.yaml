@@ -4650,6 +4650,13 @@ minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-n1103:
         srt-recipe: disagg-variants.yaml:override_1p_dep8_dep8_dynamo1111
         prefill: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache-n1103-dg023 }
+        conc-list: [224]
+        srt-recipe: disagg-variants.yaml:override_1p_dep8_dep8_dynamo1111_dg023
+        prefill: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
+        decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
 
 minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-n1106:
   image: lmsysorg/sglang:nightly-cu134-20261106-2fd45ed@sha256:c890d7f275c1330df669fda507fd1d9b3967ddf5042577f865396dc2130d5934
