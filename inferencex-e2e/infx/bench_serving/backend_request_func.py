@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
+import asyncio
 import json
 import os
 import sys
@@ -33,7 +34,11 @@ class RequestFuncInput:
 
 @dataclass
 class RequestFuncOutput:
-    """One request's result. ``ttft`` is time to first token, ``itl`` the inter-token gaps."""
+    """One request's result. ``ttft`` is time to first token, ``itl`` the inter-token gaps.
+
+    ``start_time`` and ``end_time`` are ``time.perf_counter`` readings at send and at return.
+    ``failure_class`` names why a failed request failed, and ``http_status`` its non-200 status.
+    """
 
     generated_text: str = ""
     success: bool = False
@@ -44,6 +49,22 @@ class RequestFuncOutput:
     tpot: float = 0.0
     prompt_len: int = 0
     error: str = ""
+    start_time: float | None = None
+    end_time: float | None = None
+    failure_class: str = ""
+    http_status: int | None = None
+
+
+def exception_failure_class(exc: BaseException) -> str:
+    """The failure class of an exception a request raised: timeout, connection, or other."""
+    # asyncio.TimeoutError is a separate class before Python 3.11.
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
+        return "timeout"
+    if isinstance(
+        exc, (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError, ConnectionError)
+    ):
+        return "connection"
+    return "other"
 
 
 async def async_request_tgi(
@@ -260,6 +281,7 @@ async def async_request_openai_completions(
 
         generated_text = ""
         st = time.perf_counter()
+        output.start_time = st
         most_recent_timestamp = st
         try:
             async with session.post(url=api_url, json=payload, headers=headers) as response:
@@ -297,10 +319,12 @@ async def async_request_openai_completions(
                                 break
                     if output.error:
                         output.success = False
+                        output.failure_class = "stream_error"
                     elif first_chunk_received:
                         output.success = True
                     else:
                         output.success = False
+                        output.failure_class = "empty_response"
                         output.error = (
                             "Never received a valid chunk to calculate TTFT."
                             "This response will be marked as failed!"
@@ -310,10 +334,14 @@ async def async_request_openai_completions(
                 else:
                     output.error = response.reason or ""
                     output.success = False
-        except Exception:  # noqa: BLE001
+                    output.failure_class = "http_status"
+                    output.http_status = response.status
+        except Exception as exc:  # noqa: BLE001
             output.success = False
+            output.failure_class = exception_failure_class(exc)
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
+        output.end_time = time.perf_counter()
 
     if pbar:
         pbar.update(1)
@@ -362,6 +390,7 @@ async def async_request_openai_chat_completions(
         generated_text = ""
         ttft = 0.0
         st = time.perf_counter()
+        output.start_time = st
         most_recent_timestamp = st
         try:
             async with session.post(url=api_url, json=payload, headers=headers) as response:
@@ -398,7 +427,10 @@ async def async_request_openai_chat_completions(
                             most_recent_timestamp = timestamp
 
                     output.generated_text = generated_text
-                    if not output.error and ttft == 0.0:
+                    if output.error:
+                        output.failure_class = "stream_error"
+                    elif ttft == 0.0:
+                        output.failure_class = "empty_response"
                         output.error = (
                             "Never received a valid chunk to calculate TTFT."
                             "This response will be marked as failed!"
@@ -408,10 +440,14 @@ async def async_request_openai_chat_completions(
                 else:
                     output.error = response.reason or ""
                     output.success = False
-        except Exception:  # noqa: BLE001
+                    output.failure_class = "http_status"
+                    output.http_status = response.status
+        except Exception as exc:  # noqa: BLE001
             output.success = False
+            output.failure_class = exception_failure_class(exc)
             exc_info = sys.exc_info()
             output.error = "".join(traceback.format_exception(*exc_info))
+        output.end_time = time.perf_counter()
 
     if pbar:
         pbar.update(1)

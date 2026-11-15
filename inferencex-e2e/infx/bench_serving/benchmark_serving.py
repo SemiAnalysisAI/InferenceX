@@ -62,6 +62,7 @@ except ImportError:
 from .benchmark_outcome import benchmark_outcome
 from .benchmark_utils import convert_to_pytorch_benchmark_format
 from .encoding_dsv4 import encode_messages as dsv4_encode_messages
+from .request_records import KEY as REQUEST_RECORDS_KEY, build_request_records
 
 MILLISECONDS_TO_SECONDS_CONVERSION = 1000
 
@@ -711,6 +712,18 @@ async def benchmark(
         "itls": [output.itl for output in outputs],
         "generated_texts": [output.generated_text for output in outputs],
         "errors": [output.error for output in outputs],
+        REQUEST_RECORDS_KEY: build_request_records(
+            outputs,
+            actual_output_lens,
+            requested=len(input_requests),
+            warmups=num_warmups,
+            max_concurrency=max_concurrency,
+            request_rate=request_rate,
+            benchmark_start_time=benchmark_start_time,
+            benchmark_start_time_unix=benchmark_start_time_unix,
+            benchmark_end_time_unix=benchmark_end_time_unix,
+            duration=benchmark_duration,
+        ),
     }
 
     def process_one_metric(
@@ -815,7 +828,7 @@ def save_to_pytorch_benchmark_format(
         "std_itl_ms",
         "p99_itl_ms",
     ]
-    ignored_metrics = ["ttfts", "itls", "generated_texts", "errors"]
+    ignored_metrics = ["ttfts", "itls", "generated_texts", "errors", REQUEST_RECORDS_KEY]
     pt_records = convert_to_pytorch_benchmark_format(
         args=args,
         metrics={k: [results[k]] for k in metrics if k in results},

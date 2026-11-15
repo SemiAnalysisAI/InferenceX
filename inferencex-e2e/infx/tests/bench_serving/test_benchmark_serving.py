@@ -179,9 +179,13 @@ def run_benchmark(monkeypatch, ttfts, **overrides):
 
     async def serve(request_func_input, pbar=None):
         cost = {'/start_profile': 0.0, '/stop_profile': 100.0}
+        sent = clock.now
         clock.now += cost.get(request_func_input.api_url.removeprefix('http://x'), 2.0)
         ttft = ttfts.get(request_func_input.prompt, 0.0)
-        return client.RequestFuncOutput(success=True, latency=1.0, ttft=ttft, output_tokens=3)
+        return client.RequestFuncOutput(
+            success=True, latency=1.0, ttft=ttft, output_tokens=3, prompt_len=5,
+            start_time=sent, end_time=clock.now,
+        )
 
     monkeypatch.setitem(client.ASYNC_REQUEST_FUNCS, 'fake', serve)
     kwargs = {
@@ -210,3 +214,45 @@ def test_profiler_shutdown_is_not_part_of_the_measured_duration(monkeypatch):
 
     assert result['duration'] == 4.0
     assert result['request_throughput'] == 0.5
+
+
+def test_request_records_cover_the_measured_requests_and_not_the_warmups(monkeypatch):
+    result = run_benchmark(
+        monkeypatch, {'a': 0.1, 'b': 0.25, 'c': 0.5}, num_warmups=2, max_concurrency=1,
+    )
+
+    records = result['request_records']
+    assert result['duration'] == 6.0
+    assert records['window']['duration'] == 6.0
+    assert records['counts'] == {
+        'requested': 3, 'dispatched': 3, 'completed': 3, 'failed': 0,
+        'failed_by_class': {
+            'http_status': 0, 'timeout': 0, 'connection': 0, 'stream_error': 0,
+            'empty_response': 0, 'other': 0,
+        },
+        'http_status': {}, 'warmup_excluded': 2, 'retries': 0,
+    }
+    assert records['load'] == {
+        'max_concurrency': 1, 'max_concurrency_kind': 'request_concurrency_limit',
+        'request_rate': 'inf',
+    }
+    assert records['columns'] == {
+        'start_offset_ms': [0.0, 2000.0, 4000.0],
+        'outcome': [0, 0, 0],
+        'ttft_ms': [100.0, 250.0, 500.0],
+        'tpot_ms': [450.0, 375.0, 250.0],
+        'e2el_ms': [1000.0, 1000.0, 1000.0],
+        'output_len': [3, 3, 3],
+        'input_len': [5, 5, 5],
+    }
+
+
+def test_request_records_survive_a_save_without_details(tmp_path, monkeypatch):
+    records = {'schema_version': 1, 'columns': {'outcome': [0]}}
+    stub_benchmark(monkeypatch, {'completed': 1, 'errors': ['dropped'], 'request_records': records})
+
+    client.main(cli_args(tmp_path, save_detailed=False))
+
+    saved = json.loads((tmp_path / 'result.json').read_text())
+    assert saved['request_records'] == records
+    assert 'errors' not in saved
