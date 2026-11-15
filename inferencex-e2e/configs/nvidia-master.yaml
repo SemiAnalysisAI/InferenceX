@@ -5992,6 +5992,34 @@ dsv41flash-fp4-gb300-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 10, 16, 24, 32, 48], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [136, 170, 200, 256, 320, 384, 512, 640, 768, 1024], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
+dsv41flash-fp4-gb300-tokenspeed-agentic-dspark:
+  image: lightseekorg/tokenspeed:rc-377b78@sha256:c5e3c4164b85af734ec368a430d0126f1380835083068357c4ce7b79557343d8
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: tokenspeed
+  multinode: false
+  router: { name: smg, version: 1.16.0.post20261115 }
+  srt-recipe-dir: dsv41flash/tokenspeed/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [128], srt-recipe: agg-variants.yaml:override_dep4_c128 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [176], srt-recipe: agg-variants.yaml:override_dep4_c176 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [216], srt-recipe: agg-variants.yaml:override_dep4_c216 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [240], srt-recipe: agg-variants.yaml:override_dep4_c240 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [256], srt-recipe: agg-variants.yaml:override_dep4_c256 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [288], srt-recipe: agg-variants.yaml:override_dep4_c288 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [320], srt-recipe: agg-variants.yaml:override_dep4_c320 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [352], srt-recipe: agg-variants.yaml:override_dep4_c352 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [368], srt-recipe: agg-variants.yaml:override_dep4_c368 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [384], srt-recipe: agg-variants.yaml:override_dep4_c384 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [448], srt-recipe: agg-variants.yaml:override_dep4_c448 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [512], srt-recipe: agg-variants.yaml:override_dep4_c512 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [768], srt-recipe: agg-variants.yaml:override_dep4_c768 }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [896], srt-recipe: agg-variants.yaml:override_dep4_c896 }
+
 # MiniMax-M3.1-Flash AgentX on GB300: the B200 recipe and search space plus a
 # DEP4 c96 point, with the vLLM blog's FlashInfer PrimiTS DSpark drafter and the
 # day-zero arm64 CUDA 13.4 build of the same image
