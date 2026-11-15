@@ -298,3 +298,16 @@ override_1p3d_c128:
         max-num-seqs: 64
         max-num-batched-tokens: 256
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":256,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64,72,80,88,96,104,112,120,128,160,176,192,208,224,240,256]}'
+override_1p1d_c144_router:
+  name: k31-pr-1p1d-c144
+  setup_script: k31-pr-router-image.sh
+  frontend:
+    container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:3325e71ce47fb1829b2ace830883e54dd1ef89c4529dc43be7045f2621fe55c1
+  roles:
+    decode:
+      nodes: 1
+      workers: 1
+      args:
+        max-num-seqs: 160
+        max-num-batched-tokens: 640
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":640,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64,72,80,88,96,104,112,120,128,160,176,192,208,224,240,256,288,320,352,384,416,448,480,512,544,576,608,640]}'
