@@ -38,7 +38,7 @@ from .media import X264_PRESET_OPTIONS
 from .serving import settings as serving_settings, summarize as serving_summary
 
 
-MODEL_ID = "MiniMaxAI/MiniMax-H3"
+H3_MODEL_ID = "MiniMaxAI/MiniMax-H3"
 WAN22_MODEL_ID = "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
 RUNTIMES = {"sglang", "vllm-omni"}
 MAX_JSON_BYTES = 1024 * 1024
@@ -233,8 +233,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("plan must contain finite JSON values") from exc
     for field in ("plan_id", "model_id", "model_revision"):
         _text(frozen.get(field), field)
-    if frozen["model_id"] not in (MODEL_ID, WAN22_MODEL_ID):
-        raise ValueError(f"this runner supports only {MODEL_ID} and {WAN22_MODEL_ID}")
+    if frozen["model_id"] not in (H3_MODEL_ID, WAN22_MODEL_ID):
+        raise ValueError(f"this runner supports only {H3_MODEL_ID} and {WAN22_MODEL_ID}")
     if not re.fullmatch(r"[a-fA-F0-9]{40}", frozen["model_revision"]):
         raise ValueError("model_revision must be an immutable 40-character commit")
     if schema_version(frozen) not in (1, 2):

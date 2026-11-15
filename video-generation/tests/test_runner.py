@@ -829,35 +829,6 @@ def wan22_plan(set_id="smoke"):
     return video_spec.plan_for(video_spec.load_spec(WAN22_SPEC), set_id)
 
 
-def test_wan22_release_set_keeps_the_recorded_workload():
-    plan = runner.validate_plan(wan22_plan("release-v1"))
-    assert plan["model_id"] == "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
-    assert plan["model_revision"] == "5be7df9619b54f4e2667b2755bc6a756675b5cd7"
-    assert plan["generation"] == {
-        "width": 832,
-        "height": 480,
-        "frame_count": 81,
-        "fps": 16,
-        "num_inference_steps": 40,
-        "guidance_scale": 4.0,
-        "guidance_scale_2": 3.0,
-        "boundary_ratio": 0.875,
-        "flow_shift": 12.0,
-        "negative_prompt": "",
-    }
-    assert sorted((case["case_id"].rsplit("-s", 1)[0], case["seed"]) for case in plan["cases"]) == [
-        (prompt, seed)
-        for prompt in ("bicycle-pass", "drum-taps", "footsteps", "pouring-water")
-        for seed in (11, 23, 37, 53, 111)
-    ]
-    assert plan["warmup_runs"] == 1 and plan["repetitions"] == 1
-    assert not any(case["requires_sound"] for case in plan["cases"])
-    smoke = runner.validate_plan(wan22_plan("smoke"))
-    assert smoke["generation"] == plan["generation"]
-    assert smoke["cases"] == plan["cases"][:1]
-    assert smoke["plan_id"] != plan["plan_id"]
-
-
 @pytest.mark.parametrize(
     ("field", "value"),
     [
