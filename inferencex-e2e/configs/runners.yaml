@@ -797,6 +797,8 @@ clusters:
     slurm:
       partition: compute
       exclusive: true
+      # mia1-p01-g11 is a known bad node.
+      exclude: [mia1-p01-g11]
       gres: "gpu:{gpus}"
       cpus-per-task: 128
       srun-args: [--container-remap-root, --container-writable]
