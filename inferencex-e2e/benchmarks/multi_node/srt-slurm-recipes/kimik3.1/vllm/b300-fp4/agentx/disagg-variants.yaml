@@ -304,82 +304,113 @@ override_1p3d_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-# Two prefill and three decode workers. Decode admits up to 128 requests (640 rows with 4 draft
-# tokens) at 0.97 of GPU memory; graphs every 10 rows.
-override_2p3d_mns128:
+# Two prefill and three decode workers. Decode admits up to 128 requests at
+# 0.98 of GPU memory; graphs every 20 rows. The Mooncake store keeps the tail pages a request loaded and
+# drops older tails it consumed, and store lookups start before admission (up to 16 in flight), which cuts
+# store evictions and the prefill work they cause.
+override_2p3d_kv98:
   roles:
-    prefill: &override_2p3d_mns128_prefill
+    prefill: &override_2p3d_kv98_prefill
       nodes: 2
       workers: 2
-      args: &override_2p3d_mns128_prefill_args {}
-    decode: &override_2p3d_mns128_decode
-      nodes: 3
-      workers: 3
-      args: &override_2p3d_mns128_decode_args
-        gpu-memory-utilization: 0.97
-        max-num-seqs: 128
-        max-cudagraph-capture-size: 640
-        compilation-config: '{"cudagraph_capture_sizes":[10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440,450,460,470,480,490,500,510,520,530,540,550,560,570,580,590,600,610,620,630,640]}'
-
-override_2p3d_mns128_eval:
-  roles:
-    prefill:
-      <<: *override_2p3d_mns128_prefill
-      args:
-        <<: *override_2p3d_mns128_prefill_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-    decode:
-      <<: *override_2p3d_mns128_decode
-      args:
-        <<: *override_2p3d_mns128_decode_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-
-# Three prefill and four decode workers. Decode admits up to 128 requests at 0.98 of GPU memory, which
-# leaves more KV cache for the highest concurrency; graphs every 20 rows. At this load the Mooncake store
-# keeps the tail pages a request loaded and drops older tails it consumed, and store lookups start before
-# admission (up to 16 in flight), which cuts store evictions and the prefill work they cause.
-override_3p4d_mns128_kv98:
-  roles:
-    prefill: &override_3p4d_mns128_kv98_prefill
-      nodes: 3
-      workers: 3
       env: &store_tail_cleanup
         VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
         VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
-      args: &override_3p4d_mns128_kv98_prefill_args
+      args: &override_2p3d_kv98_prefill_args
         kv-transfer-config: &kv_transfer_prefetch '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false,"lookup_timeout_s":60,"store_tp_size":1,"store_chunk_size":4096,"lookup_prefetch_limit":16,"lookup_prefetch_ttl_s":30}}]}}'
-    decode: &override_3p4d_mns128_kv98_decode
-      nodes: 4
-      workers: 4
+    decode: &override_2p3d_kv98_decode
+      nodes: 3
+      workers: 3
       env: *store_tail_cleanup
-      args: &override_3p4d_mns128_kv98_decode_args
+      args: &override_2p3d_kv98_decode_args
         kv-transfer-config: *kv_transfer_prefetch
         gpu-memory-utilization: 0.98
         max-num-seqs: 128
         max-cudagraph-capture-size: 640
         compilation-config: '{"cudagraph_capture_sizes":[20,40,60,80,100,120,140,160,180,200,220,240,260,280,300,320,340,360,380,400,420,440,460,480,500,520,540,560,580,600,620,640]}'
 
-override_3p4d_mns128_kv98_eval:
+override_2p3d_kv98_eval:
   roles:
     prefill:
-      <<: *override_3p4d_mns128_kv98_prefill
+      <<: *override_2p3d_kv98_prefill
       args:
-        <<: *override_3p4d_mns128_kv98_prefill_args
+        <<: *override_2p3d_kv98_prefill_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
     decode:
-      <<: *override_3p4d_mns128_kv98_decode
+      <<: *override_2p3d_kv98_decode
       args:
-        <<: *override_3p4d_mns128_kv98_decode_args
+        <<: *override_2p3d_kv98_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
+
+# Four prefill and five decode workers, the highest-throughput point, with the 2P3D decode and store
+# settings plus: the sparse-attention indexer computes its logits in BF16 on prefill and decode, prefill
+# selects the indexer top-k with deep_select, and the Mooncake master evicts 2% of the store per round
+# instead of 10%.
+override_4p5d_kv98:
+  roles:
+    prefill: &override_4p5d_kv98_prefill
+      nodes: 4
+      workers: 4
+      env: *store_tail_cleanup
+      args: &override_4p5d_kv98_prefill_args
+        attention-config: &indexer_logits_bf16 '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
+        kernel-config: '{"sparse_indexer_topk_backend":"deep_select"}'
+        kv-transfer-config: *kv_transfer_prefetch
+    decode: &override_4p5d_kv98_decode
+      nodes: 5
+      workers: 5
+      env: *store_tail_cleanup
+      args: &override_4p5d_kv98_decode_args
+        <<: *override_2p3d_kv98_decode_args
+        attention-config: *indexer_logits_bf16
+  services: &services_evict_2pct
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  - name: mooncake-master
+    type: mooncake-master
+    args:
+    - "--default_kv_lease_ttl=60000"
+    - "--eviction_high_watermark_ratio=0.95"
+    - "--eviction_ratio=0.02"
+    options:
+      store_config:
+        metadata_server: "P2PHANDSHAKE"
+        global_segment_size: "190GB"
+        local_buffer_size: "4GB"
+        protocol: "efa"
+        mode: "embedded"
+        enable_offload: false
+
+override_4p5d_kv98_eval:
+  roles:
+    prefill:
+      <<: *override_4p5d_kv98_prefill
+      args:
+        <<: *override_4p5d_kv98_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_4p5d_kv98_decode
+      args:
+        <<: *override_4p5d_kv98_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+  services: *services_evict_2pct
