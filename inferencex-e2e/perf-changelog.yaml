@@ -12617,3 +12617,9 @@
   description:
     - Sweep the verified k31-pd-1115r2 image at 1P1D c144, c96, c48 and 1P2D global c128 with full warmup and 3600-second profiling. Preserve K3 golden acceptance, prefill SimpleCPU/SPF/BCG and WRITE TC104; size each decode max-sequences and full-graph budget for its concurrency share plus headroom. No experimental prefill overlap code is included.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-pr-sweep
+  description:
+    - Run the self-contained k31-pr-1115 image with official Router 0.1.17 at 1P1D c144 and 1P3D global c128. Decode GMU is 0.90; per-worker sequence/graph limits are 160/640 and 64/256. Preserve prefill SimpleCPU, BCG, SPF and K3 golden acceptance with full 3600-second profiling.
+  pr-link: XXX
