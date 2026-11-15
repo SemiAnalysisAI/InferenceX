@@ -12,7 +12,8 @@ GPU_MEM_UTIL="0.90"
 MAX_MODEL_LEN="16384"
 MAX_NUM_SEQS="512"
 
-DRAFT_MODEL="Inferact/Kimi-K3.1-Pro-DSpark-preview"
+# The released draft (speculators format, GQA sliding-window layers); not the -preview MLA draft.
+DRAFT_MODEL="Inferact/Kimi-K3.1-Pro-DSpark"
 
 MODEL_KEY="$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')"
 # AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch is
@@ -202,7 +203,7 @@ run_cell() {
         --max-num-seqs "$MAX_NUM_SEQS"
         --max-model-len "$MAX_MODEL_LEN"
         --max-cudagraph-capture-size 256
-        --speculative-config "{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $mtp, \"attention_backend\": \"FLASHINFER_MLA\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
+        --speculative-config "{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $mtp, \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
     )
 
     local server_log="$RESULTS_DIR/server_${mode}_mtp${mtp}.log"
