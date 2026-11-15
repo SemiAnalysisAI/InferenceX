@@ -72,6 +72,8 @@ base:
         VLLM_ROCM_DSA_MULTISTREAM: '1'
         # VRAM reserve for unprofiled DCP prefill transients.
         VLLM_ROCM_MEM_HEADROOM_GIB: '8'
+        # Token-shard the residual stream across TP for prefill batches of >= 4096 tokens.
+        VLLM_K3_SP_PREFILL: '1'
         VLLM_ROCM_USE_AITER_FLYDSL_SPARSE_MLA: '1'
         # AITER reads its own variable for the same kernels.
         AITER_FLYDSL_SPARSE_MLA: '1'
@@ -120,6 +122,15 @@ override_gpu_kv_c1:
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
         # Runs each DSA layer's decode prologue as one launch; needs DCP1.
         VLLM_KIMI_SD_DSA_PROLOGUE: '1'
+        # D1a also runs the MXFP4 indexer prep; needs VLLM_KIMI_SD_DSA_PROLOGUE.
+        VLLM_KIMI_SD_DSA_PROLOGUE_INDEXER: '1'
+        # latency_specialized decode levers; read only under that backend.
+        VLLM_K31_BEAT_MARKOV: '1'
+        VLLM_K31_BEAT_DRAFTMETA: '1'
+        VLLM_K31_BEAT_K2SYNC: '1'
+        VLLM_K31_BEAT_EAGERPREP: '1'
+        VLLM_K31_BEAT_KDAK1: '1'
+        VLLM_K3_INDEXER_SAMPLED_TOPK: '1'
   benchmark:
     env:
       CONC: '1'
@@ -137,6 +148,13 @@ override_gpu_kv_c4:
       env:
         # Decode-only capture sizes, as at conc 1.
         VLLM_USE_BREAKABLE_CUDAGRAPH: '0'
+        # latency_specialized decode levers; read only under that backend.
+        VLLM_K31_BEAT_MARKOV: '1'
+        VLLM_K31_BEAT_DRAFTMETA: '1'
+        VLLM_K31_BEAT_K2SYNC: '1'
+        VLLM_K31_BEAT_EAGERPREP: '1'
+        VLLM_K31_BEAT_KDAK1: '1'
+        VLLM_K3_INDEXER_SAMPLED_TOPK: '1'
   benchmark:
     env:
       CONC: '4'
