@@ -229,32 +229,6 @@ override_1p_dep8_dep8_dynamo1111:
         max-running-requests: 512
         mem-fraction-static: 0.88
 
-override_1p_dep8_dep8_dynamo1111_dg023:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-dynamo1111-dg023
-  # The 11-03 nightly with the DeepGEMM of the 11-02 nightly: sglang#47894
-  # moved sgl-deep-gemm from 0.2.3.post2 to 0.2.5.post3 between the two.
-  setup_script: pip-runtime-deps.sh
-  environment:
-    SETUP_PIP_PACKAGES: sgl-deep-gemm==0.2.3.post2
-  dynamo:
-    install: true
-    source:
-      wheel: 1.7.0.dev20261111
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 512
-        mem-fraction-static: 0.88
-
 override_1p_dep8_dep8_hrrn:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-hrrn
   # Shortest-prefill-first starves mid-size prefills: at the same uncached
@@ -603,7 +577,7 @@ override_1p_dep8_dep8_linker:
   identity:
     frameworks:
       sglang: "0.0.0.dev1+g36027fd15"
-  services:
+  services: &linker-services
     - *l3-etcd
     - *l3-master
     - *big-decode-store
@@ -669,6 +643,57 @@ override_1p_dep8_dep8_linker:
         enable-unified-cache-external-linker: true
         unified-cache-external-linker-backend: mooncake
         unified-cache-external-linker-config: &linker-config '{"load_mode":"prefetch","enable_group_semantics":false}'
+
+override_1p_dep8_dep8_linker_chunk128k:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-chunk128k
+  # The linker point with 16384 prefill tokens per DP rank (vLLM's
+  # max-num-batched-tokens) in place of 8192: SGLang divides the chunk by DP.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services: *linker-services
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env: *linker-env
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 131072
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: *linker-config
+
+override_2p_dep4_dep8_linker:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-2p-dep4-dep8-linker
+  # The linker point with vLLM's prefill shape: two DEP4 workers, 16384
+  # prefill tokens per DP rank. A long uncached prompt holds one DEP4 group
+  # instead of all eight prefill ranks.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services: *linker-services
+  roles:
+    prefill:
+      env:
+        <<: *linker-env
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "32768"
+      args:
+        chunked-prefill-size: 65536
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: *linker-config
 
 override_1p_dep8_dep8_linker_least_loaded:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-least-loaded
