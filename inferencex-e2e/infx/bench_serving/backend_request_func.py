@@ -1,11 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
+import netrc
 import os
 import sys
 import time
 import traceback
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -14,6 +18,27 @@ from tqdm.asyncio import tqdm
 from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 
 AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=6 * 60 * 60)
+
+
+def env_changes_request(api_url: str) -> bool:
+    """Whether a proxy or a netrc entry from the environment applies to ``api_url``.
+
+    With ``trust_env=True``, aiohttp 3.14 looks up the netrc file and the proxy in worker threads
+    for every request, after the TTFT clock starts. The request functions trust the environment
+    only when it changes the request. The netrc file is the one aiohttp reads: ``$NETRC``, else
+    ``~/.netrc`` (``~/_netrc`` on Windows).
+    """
+    parts = urllib.parse.urlsplit(api_url)
+    host = parts.hostname or ""
+    if parts.scheme in urllib.request.getproxies() and not urllib.request.proxy_bypass(host):
+        return True
+    path = os.environ.get("NETRC")
+    if path is None:
+        path = Path.home() / ("_netrc" if os.name == "nt" else ".netrc")
+    try:
+        return netrc.netrc(path).authenticators(host) is not None
+    except (OSError, netrc.NetrcParseError):
+        return False
 
 
 @dataclass
@@ -57,7 +82,9 @@ async def async_request_tgi(
     api_url = request_func_input.api_url
     assert api_url.endswith("generate_stream")  # noqa: S101
 
-    async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
+    async with aiohttp.ClientSession(
+        trust_env=env_changes_request(request_func_input.api_url), timeout=AIOHTTP_TIMEOUT
+    ) as session:
         params = {
             "best_of": request_func_input.best_of,
             "max_new_tokens": request_func_input.output_len,
@@ -124,7 +151,9 @@ async def async_request_trt_llm(
     api_url = request_func_input.api_url
     assert api_url.endswith("generate_stream")  # noqa: S101
 
-    async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
+    async with aiohttp.ClientSession(
+        trust_env=env_changes_request(request_func_input.api_url), timeout=AIOHTTP_TIMEOUT
+    ) as session:
         assert request_func_input.best_of == 1  # noqa: S101
         payload = {
             "accumulate_tokens": True,
@@ -188,7 +217,9 @@ async def async_request_deepspeed_mii(
 
     MII rejects temperature 0.0 and cannot stream, so ``ttft`` stays 0 (see DeepSpeed-MII PR 311).
     """
-    async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
+    async with aiohttp.ClientSession(
+        trust_env=env_changes_request(request_func_input.api_url), timeout=AIOHTTP_TIMEOUT
+    ) as session:
         assert request_func_input.best_of == 1  # noqa: S101
 
         payload = {
@@ -236,7 +267,9 @@ async def async_request_openai_completions(
         "OpenAI Completions API URL must end with 'completions' or 'profile'."
     )
 
-    async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
+    async with aiohttp.ClientSession(
+        trust_env=env_changes_request(request_func_input.api_url), timeout=AIOHTTP_TIMEOUT
+    ) as session:
         payload = {
             "model": request_func_input.model_name or request_func_input.model,
             "prompt": request_func_input.prompt,
@@ -330,7 +363,9 @@ async def async_request_openai_chat_completions(
         "OpenAI Chat Completions API URL must end with 'chat/completions'."
     )
 
-    async with aiohttp.ClientSession(trust_env=True, timeout=AIOHTTP_TIMEOUT) as session:
+    async with aiohttp.ClientSession(
+        trust_env=env_changes_request(request_func_input.api_url), timeout=AIOHTTP_TIMEOUT
+    ) as session:
         content = request_func_input.prompt
         if request_func_input.multi_modal_content:
             content = [{"type": "text", "text": request_func_input.prompt}]
