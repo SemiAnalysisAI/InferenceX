@@ -961,7 +961,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp:
   # Carries vllm-project/vllm#64715 (UMBP standalone for DeepSeek-V4.1-Flash), #66036
   # (per-tensor fp8_e4m3 KV for sparse MLA) and #67377 (AITER FlyDSL dense MXFP8
   # GEMMs); its MORI v1.2.3.post1 is built with UMBP.
-  image: vllm/vllm-openai-rocm:nightly-9bc16ae6a34b1e0fe260e8d12b98568478bf38c3@sha256:1f70fc06f38a18ae5e6ba1e25d9f59fd6f9fd79080d03a6dfdbb84f2bca33052
+  image: vllm/vllm-openai-rocm:nightly-60bd6dd2edd175a1c55fd3488f871e4c3d2ef27d@sha256:67a3a0fb79893fc5a0fcff5f9b739ba8fec7e920875a12e0574c2e9f50cd814c
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
