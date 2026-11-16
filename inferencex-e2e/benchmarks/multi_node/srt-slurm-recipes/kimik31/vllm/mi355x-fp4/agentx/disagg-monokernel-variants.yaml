@@ -234,6 +234,7 @@ override_1p1d_c8:
   roles:
     prefill:
       args:
+        gpu-memory-utilization: 0.89
         max-num-seqs: 1
         speculative-config: '{"model":"/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","num_speculative_tokens":7,"method":"dspark","attention_backend":"ROCM_AITER_MLA","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:

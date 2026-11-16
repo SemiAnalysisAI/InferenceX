@@ -1,4 +1,4 @@
-kimik31-pd-c8-capone:
+kimik31-pd-c8:
   image: yukiozzz/vllm-openai-rocm:k31-pd-1115r2@sha256:aef3690568b253cecb2791e95f8ca68da9c11577d2501a394ac7e556af7f9909
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
