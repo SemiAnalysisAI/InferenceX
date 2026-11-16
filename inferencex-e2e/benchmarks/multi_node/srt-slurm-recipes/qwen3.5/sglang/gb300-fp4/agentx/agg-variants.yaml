@@ -1,5 +1,9 @@
 schema: 2
 base:
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261106
   slurm:
     time_limit: '8:00:00'
   health_check:
@@ -8,9 +12,23 @@ base:
   resources:
     gpu_type: gb300
     gpus_per_node: 4
+  services:
+  - name: etcd
+    type: etcd
+  - name: nats
+    type: nats
+    options:
+      max_payload_mb: 8
   frontend:
-    type: sglang-router
+    type: dynamo
     enable_multiple_frontends: false
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: '1'
+    args:
+      router-mode: kv
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
   engine: sglang
   roles:
     agg:
