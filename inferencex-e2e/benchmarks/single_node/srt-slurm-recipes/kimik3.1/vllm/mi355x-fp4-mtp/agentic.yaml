@@ -72,6 +72,8 @@ base:
         VLLM_ROCM_DSA_MULTISTREAM: '1'
         # VRAM reserve for unprofiled DCP prefill transients.
         VLLM_ROCM_MEM_HEADROOM_GIB: '8'
+        # Token-shard the residual stream across TP for prefill batches of >= 4096 tokens.
+        VLLM_K3_SP_PREFILL: '1'
         VLLM_ROCM_USE_AITER_FLYDSL_SPARSE_MLA: '1'
         # AITER reads its own variable for the same kernels.
         AITER_FLYDSL_SPARSE_MLA: '1'
