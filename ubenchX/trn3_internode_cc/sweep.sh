@@ -20,7 +20,7 @@ for topo in $TOPOS; do
     # another user's container on any of these nodes: wait rather than share the chips or links
     until idle "${NODESET[$topo]}"; do sleep 60; done
     PORT=$((PORT + 8))
-    NODES=${NODESET[$topo]} OP=$op BUF=$BUF NAME=$NAME PORT=$PORT "$HERE/run.sh"
+    NODES=${NODESET[$topo]} OP=$op BUF=$BUF NAME=$NAME PORT=$PORT CC_FLAGS=$CC_FLAGS "$HERE/run.sh"
   done
 done
 echo "sweep done"

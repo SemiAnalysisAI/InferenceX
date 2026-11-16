@@ -44,6 +44,10 @@ python ubenchX/trn3_intrachip_cc/parse.py ubenchX/trn3_intrachip_cc/runs/std_r0 
 python ubenchX/trn3_internode_cc/plot.py internode.csv plots --intrachip intrachip.csv
 ```
 
+`CC_FLAGS` (optional) adds `nccom-test` flags to every run, for example `CC_FLAGS="--unique-tensor --unique-buff"`
+(fresh input and output buffers per operation); the flags are recorded in `NAME.txt`. Use a separate `OUT_DIR`, since
+the sweep skips runs that already have results.
+
 Each run writes `NAME.json` (`nccom-test` report), `NAME.log` (node 0 output; `NAME.n<i>.log` for the others)
 and `NAME.txt` (nodes, ranks, and per-node EFA transmit bytes before and after the run). `plot.py` writes
 `rank_scaling.png` (1 chip, 1 node, 1 rack, 1 UltraServer) and `two_node.png` (intra-rack NeuronLink, cross-rack

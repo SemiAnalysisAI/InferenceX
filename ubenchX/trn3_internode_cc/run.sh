@@ -33,7 +33,7 @@ efa_tx() { for h in "${HOSTS[@]}"; do "${SSH[@]}" "$h" 'cat /sys/class/infiniban
 
 BEFORE=$(efa_tx); PIDS=()
 for i in $(seq 0 $((N - 1))); do
-  ARGS=(-r $R -d bf16 -n $ITERS -w $WARMUP --non-interactive --show-algorithm -b $MIN -e $END -f 2 ${SHAPE[*]})
+  ARGS=(-r $R -d bf16 -n $ITERS -w $WARMUP --non-interactive --show-algorithm -b $MIN -e $END -f 2 ${SHAPE[*]} $CC_FLAGS)
   # the data collector port must differ from the root comm port; the runtime binds both on node 0
   [ $N -gt 1 ] && ARGS+=(-N $N --script-mode --node-index $i --seed 42 --data-collector-host $H0 --data-collector-port $((PORT + 1)))
   # only node 0's report holds the results; the others write theirs inside the container
@@ -51,5 +51,5 @@ wait "${PIDS[0]}"; RC=$?
 for i in $(seq 1 $((N - 1))); do "${SSH[@]}" "${HOSTS[$i]}" "docker kill cc-$NAME-$i" > /dev/null 2>&1; done
 wait
 mv "$OUT_DIR/$NAME.n0.log" "$OUT_DIR/$NAME.log"
-echo "name=$NAME op=$OP buf=$BUF nodes=${NODES// /,} hosts=$(IFS=,; echo "${HOSTS[*]}") lnc=$LNC ranks=$R iters=$ITERS warmup=$WARMUP efa_tx_before=$(echo $BEFORE | tr ' ' ,) efa_tx_after=$(efa_tx | xargs | tr ' ' ,) rc=$RC" > "$OUT_DIR/$NAME.txt"
+echo "name=$NAME op=$OP buf=$BUF flags=$(echo $CC_FLAGS | tr ' ' ,) nodes=${NODES// /,} hosts=$(IFS=,; echo "${HOSTS[*]}") lnc=$LNC ranks=$R iters=$ITERS warmup=$WARMUP efa_tx_before=$(echo $BEFORE | tr ' ' ,) efa_tx_after=$(efa_tx | xargs | tr ' ' ,) rc=$RC" > "$OUT_DIR/$NAME.txt"
 echo "$(date -u +%T) $NAME rc=$RC $(grep -c 'Failure running' "$OUT_DIR/$NAME.log") failed sizes"

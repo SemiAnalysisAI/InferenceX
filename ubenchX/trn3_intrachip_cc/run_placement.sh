@@ -11,6 +11,7 @@
 #   lnc1_r8         LNC=1, 8 ranks (the whole chip)
 #   lnc2_r2         LNC=2, 2 ranks (2 HBM stacks)
 #   lnc2_r4         LNC=2, 4 ranks (the whole chip)
+# CC_FLAGS (optional) adds nccom-test flags to every run, e.g. "--unique-tensor --unique-buff".
 # Sizes: the nccl-tests grid (-b 8 -e 4G -f 2), powers of two, in HBM; in SBUF (--sb2sb) 256 B (one bf16 per
 # partition) .. 8 MiB (x2), above which the SBUF collectives do not run. Sizes below one bf16 element per rank of a
 # group (2 B x group size) cannot be split and are not launched; SBUF all_gather starts at one bf16 per partition
@@ -32,7 +33,7 @@ case $PL in
   lnc1_r4_cross2) echo '{"replica_groups": [[[0,2],[1,3]]]}' > rg.json; RG=(--custom-replica-groups rg.json) ;;
 esac
 G=$R; [ ${#RG[@]} -gt 0 ] && G=2   # ranks per replica group
-COMMON=(-r "$R" -d bf16 -n 50 -w 10 --show-algorithm "${RG[@]}")
+COMMON=(-r "$R" -d bf16 -n 50 -w 10 --show-algorithm "${RG[@]}" ${CC_FLAGS:-})
 run() {  # name, args...   (OPS="name ..." limits which runs execute)
   local name=$1; shift
   if [ -n "${OPS:-}" ] && [[ " $OPS " != *" $name "* ]]; then return; fi
@@ -53,4 +54,4 @@ for op in all_gather all_reduce reduce_scatter alltoall; do   # nccom-test's nam
   MIN=$SPLIT_MIN; [ $op = all_reduce ] && MIN=8
   run "${op}_hbm" $op -b $MIN -e 4GB -f 2
 done
-echo "$PL lnc=$LNC cores=$NEURON_RT_VISIBLE_CORES ranks=$R group=$G" > "$OUT/placement.txt"
+echo "$PL lnc=$LNC cores=$NEURON_RT_VISIBLE_CORES ranks=$R group=$G flags=${CC_FLAGS:-}" > "$OUT/placement.txt"
