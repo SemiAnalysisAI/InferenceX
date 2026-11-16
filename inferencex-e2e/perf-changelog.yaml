@@ -12623,3 +12623,9 @@
   description:
     - Run the self-contained k31-pr-1115 image with official Router 0.1.17 at 1P1D c144 and 1P3D global c128. Decode GMU is 0.90; per-worker sequence/graph limits are 160/640 and 64/256. Preserve prefill SimpleCPU, BCG, SPF and K3 golden acceptance with full 3600-second profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-pr-low-conc
+  description:
+    - Add SimpleCPU K3 golden-acceptance full AgentX points at 1P2D c24/c48 and 1P1D c8 using the pinned model-discovery-fixed image. Preserve prefill BCG/SPF; use decode sequence/graph limits 32/128, 48/192 and 16/64 with GMU 0.90. No unqualified UMBP, MegaMoE or serial-dispatch prototype.
+  pr-link: XXX
