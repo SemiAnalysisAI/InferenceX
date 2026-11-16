@@ -88,6 +88,24 @@ if u.find_spec("tilert.pd_vllm.rs_front_sup"):
     if rs_front_sup.install_packaged() is None:
         raise SystemExit("the tilert release's Rust front binary is missing or fails its sha256")
 PY
+        # tilert 0.2.0's rs_spec reads parser-config fields (tool_call_body_array, ...) that the
+        # pinned vLLM nightly's ParserEngineConfig does not have yet, so the router's /rs_spec
+        # raises AttributeError and pd_stream never comes up. A field this vLLM lacks is a
+        # feature it lacks: read each one with a False default. Fail if the release changed.
+        python3 - "$pd_root/pkg/tilert/pd_vllm/rs_spec.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+src = p.read_text()
+for old, new in (
+    ("cfg.tool_args_json", "getattr(cfg, 'tool_args_json', False)"),
+    ("cfg.tool_call_body_array", "getattr(cfg, 'tool_call_body_array', False)"),
+    ("tr.skip_in_token_id_mode", "getattr(tr, 'skip_in_token_id_mode', False)"),
+):
+    if src.count(old) != 1:
+        raise SystemExit(f"{p}: expected one {old!r}, found {src.count(old)}; recheck the rs_spec shim")
+    src = src.replace(old, new)
+p.write_text(src)
+PY
         # srt-slurm starts the supervisor as `python -m infx_rs_front_strict`: the release
         # supervisor with its Python-router fallback turned into a failure, so a run whose Rust
         # front never comes up, or dies mid-run, fails instead of publishing Python-router numbers.
