@@ -14,6 +14,8 @@ import huggingface_hub.constants
 from tqdm.asyncio import tqdm
 from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 
+from .request_records import COMPLETION_EVIDENCE
+
 AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=6 * 60 * 60)
 
 
@@ -38,6 +40,8 @@ class RequestFuncOutput:
 
     ``start_time`` and ``end_time`` are ``time.perf_counter`` readings at send and at return.
     ``failure_class`` names why a failed request failed, and ``http_status`` its non-200 status.
+    ``completion_evidence`` ORs the ``COMPLETION_EVIDENCE`` bits the stream showed; it does not
+    decide ``success``.
     """
 
     generated_text: str = ""
@@ -53,6 +57,7 @@ class RequestFuncOutput:
     end_time: float | None = None
     failure_class: str = ""
     http_status: int | None = None
+    completion_evidence: int = 0
 
 
 def exception_failure_class(exc: BaseException) -> str:
@@ -312,11 +317,18 @@ async def async_request_openai_completions(
 
                                 most_recent_timestamp = timestamp
                                 generated_text += text or ""
+                                if choices[0].get("finish_reason"):
+                                    output.completion_evidence |= COMPLETION_EVIDENCE[
+                                        "finish_reason"
+                                    ]
                             elif usage := data.get("usage"):
                                 output.output_tokens = usage.get("completion_tokens")
+                                output.completion_evidence |= COMPLETION_EVIDENCE["usage"]
                             elif error := data.get("error"):
                                 output.error = json.dumps(error)
                                 break
+                        else:
+                            output.completion_evidence |= COMPLETION_EVIDENCE["done"]
                     if output.error:
                         output.success = False
                         output.failure_class = "stream_error"
@@ -418,13 +430,20 @@ async def async_request_openai_chat_completions(
                                     output.itl.append(timestamp - most_recent_timestamp)
 
                                 generated_text += content or ""
+                                if choices[0].get("finish_reason"):
+                                    output.completion_evidence |= COMPLETION_EVIDENCE[
+                                        "finish_reason"
+                                    ]
                             elif usage := data.get("usage"):
                                 output.output_tokens = usage.get("completion_tokens")
+                                output.completion_evidence |= COMPLETION_EVIDENCE["usage"]
                             elif error := data.get("error"):
                                 output.error = json.dumps(error)
                                 break
 
                             most_recent_timestamp = timestamp
+                        else:
+                            output.completion_evidence |= COMPLETION_EVIDENCE["done"]
 
                     output.generated_text = generated_text
                     if output.error:

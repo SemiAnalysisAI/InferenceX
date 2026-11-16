@@ -208,16 +208,21 @@ def multinode_env_vars(base_env_vars):
 
 
 def request_records(attempts):
-    """A client ``request_records`` block of ``attempts`` attempts whose second one failed."""
-    return {
-        "schema_version": 1,
-        "counts": {"requested": attempts, "dispatched": attempts, "completed": attempts - 1,
-                   "failed": 1},
-        "columns": {
-            "outcome": [int(index == 1) for index in range(attempts)],
-            "ttft_ms": [None if index == 1 else 100.0 * (index + 1) for index in range(attempts)],
-        },
-    }
+    """The client's ``request_records`` block for ``attempts`` attempts whose second got a 503."""
+    from infx.bench_serving.backend_request_func import RequestFuncOutput
+    from infx.bench_serving.request_records import build_request_records
+
+    outputs = [
+        RequestFuncOutput(failure_class="http_status", http_status=503) if index == 1
+        else RequestFuncOutput(success=True, latency=1.0, ttft=0.1 * (index + 1))
+        for index in range(attempts)
+    ]
+    return build_request_records(
+        outputs, [0 if index == 1 else 4 for index in range(attempts)], requested=attempts,
+        warmups=0, max_concurrency=1, request_rate=float("inf"), benchmark_start_time=0.0,
+        benchmark_start_time_unix=1_700_000_000.0, benchmark_end_time_unix=1_700_000_010.0,
+        duration=10.0,
+    )
 
 
 def test_aggregate_forwards_request_records_and_run_totals(
@@ -254,16 +259,46 @@ def test_aggregate_omits_columns_above_the_attempt_limit_and_says_why(
                            single_node_env_vars)
 
     assert kept["request_records"] == at_limit
-    assert omitted["request_records"] == {
-        "schema_version": 1,
-        "counts": over_limit["counts"],
-        "columns_omitted": {
-            "reason": "attempts_exceed_aggregate_limit",
-            "attempts": MAX_AGGREGATE_ATTEMPTS + 1,
-            "limit": MAX_AGGREGATE_ATTEMPTS,
-        },
+    block = omitted["request_records"]
+    assert "columns" not in block
+    assert block.pop("columns_omitted") == {
+        "reason": "attempts_exceed_aggregate_limit",
+        "attempts": MAX_AGGREGATE_ATTEMPTS + 1,
+        "limit": MAX_AGGREGATE_ATTEMPTS,
     }
+    assert block == {name: value for name, value in over_limit.items() if name != "columns"}
+    assert block["accounting"] == {"complete": True, "reasons": []}
+    assert block["counts"]["dispatched"] == MAX_AGGREGATE_ATTEMPTS + 1
     assert len(over_limit["columns"]["outcome"]) == MAX_AGGREGATE_ATTEMPTS + 1
+
+
+def tampered(records, change):
+    """A copy of ``records`` after ``change`` edited it in place."""
+    copy = json.loads(json.dumps(records))
+    change(copy)
+    return copy
+
+
+@pytest.mark.parametrize("change,reasons", [
+    (lambda block: block.pop("accounting"), ["accounting_not_stated"]),
+    (lambda block: block["accounting"].update(complete=False, reasons=["requested_not_dispatched"]),
+     ["requested_not_dispatched"]),
+    (lambda block: block["columns"]["e2el_ms"].pop(),
+     ["column_length_mismatch", "dispatched_count_mismatch"]),
+    (lambda block: block["columns"]["outcome"].__setitem__(0, 2),
+     ["outcome_count_mismatch", "failure_class_count_mismatch"]),
+    (lambda block: block.pop("counts"), ["malformed_block"]),
+], ids=["no-statement", "client-said-incomplete", "short-column", "counts-disagree", "malformed"])
+def test_aggregate_never_calls_a_block_complete_that_its_own_data_contradicts(
+    single_node_env_vars, sample_benchmark_result, change, reasons,
+):
+    from infx.results.fixed_sequence import build_result
+
+    raw = {**sample_benchmark_result, "request_records": tampered(request_records(3), change)}
+
+    result = build_result(raw, single_node_env_vars)
+
+    assert result["request_records"]["accounting"] == {"complete": False, "reasons": reasons}
 
 
 def test_result_file_keeps_one_line_per_column_and_the_log_omits_columns(
@@ -280,7 +315,9 @@ def test_result_file_keeps_one_line_per_column_and_the_log_omits_columns(
     assert '      "outcome": [0,1,0],' in text.splitlines()
     assert '  "hw": "mi300x",' in text.splitlines()
     logged = json.loads(result.stdout)
-    assert logged["request_records"] == {"schema_version": 1, "counts": records["counts"]}
+    assert "columns" not in logged["request_records"]
+    assert logged["request_records"]["counts"] == records["counts"]
+    assert logged["request_records"]["accounting"] == {"complete": True, "reasons": []}
     assert logged["tput_per_gpu"] == json.loads(text)["tput_per_gpu"]
 
 
@@ -881,7 +918,7 @@ class TestMultinodePower:
         text = (tmp_path / "agg_benchmark_result.json").read_text()
         assert json.loads(text)["power_valid"] == 1
         assert json.loads(text)["request_records"] == records
-        assert '      "ttft_ms": [100.0,null,300.0]' in text.splitlines()
+        assert '      "ttft_ms": [100.0,null,300.0],' in text.splitlines()
 
     def test_missing_package_is_best_effort(self, tmp_path, power_env):
         result = run_script(tmp_path, power_env, self._bench_without_package())

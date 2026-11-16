@@ -8,18 +8,32 @@ import uuid
 from collections.abc import Mapping
 from typing import Any
 
-from infx.bench_serving.request_records import KEY
+from infx.bench_serving.request_records import KEY, accounting_gaps
 
-# About 48 bytes of compact JSON per attempt, so one point adds at most about 10 MB.
+# About 50 bytes of compact JSON per attempt, so one point adds at most about 10 MB.
 MAX_AGGREGATE_ATTEMPTS = 200_000
 OMITTED_REASON = "attempts_exceed_aggregate_limit"
 
 
 def for_aggregate(block: Mapping[str, Any]) -> dict[str, Any]:
-    """``block`` as an aggregate carries it: above the attempt limit, the columns give way to the reason."""
-    attempts = max(map(len, block["columns"].values()))
+    """``block`` as an aggregate carries it, with its accounting checked against its own columns.
+
+    The aggregate states the block complete only when the client did and the check agrees. Above
+    the attempt limit, the columns give way to the reason.
+    """
+    stated = block.get("accounting")
+    gaps = list(stated.get("reasons", [])) if isinstance(stated, Mapping) else []
+    if not gaps and not (isinstance(stated, Mapping) and stated.get("complete") is True):
+        gaps.append("accounting_not_stated")
+    try:
+        gaps += [gap for gap in accounting_gaps(block) if gap not in gaps]
+        attempts = max(map(len, block["columns"].values()), default=0)
+    except (AttributeError, KeyError, TypeError):
+        gaps.append("malformed_block")
+        attempts = 0
+    block = {**block, "accounting": {"complete": not gaps, "reasons": gaps}}
     if attempts <= MAX_AGGREGATE_ATTEMPTS:
-        return dict(block)
+        return block
     kept = {name: value for name, value in block.items() if name != "columns"}
     kept["columns_omitted"] = {
         "reason": OMITTED_REASON,

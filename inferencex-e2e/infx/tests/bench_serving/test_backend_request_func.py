@@ -54,8 +54,12 @@ def stream(endpoint: str, events: list[object]) -> req.RequestFuncOutput:
     return call(endpoint, handler)
 
 
-def call(endpoint: str, handler) -> req.RequestFuncOutput:
-    """Run the request function for ``endpoint`` against a local server answering with ``handler``."""
+def call(endpoint: str, handler, drive=None):
+    """Run the request function for ``endpoint`` against a local server answering with ``handler``.
+
+    ``drive`` receives the request as a task and returns what ``call`` returns, in place of
+    awaiting it.
+    """
 
     async def run() -> req.RequestFuncOutput:
         app = web.Application()
@@ -66,7 +70,8 @@ def call(endpoint: str, handler) -> req.RequestFuncOutput:
         await site.start()
         port = runner.addresses[0][1]
         try:
-            return await REQUEST[endpoint](request_input(endpoint, port))
+            pending = asyncio.ensure_future(REQUEST[endpoint](request_input(endpoint, port)))
+            return await (pending if drive is None else drive(pending))
         finally:
             await runner.cleanup()
 
@@ -198,3 +203,95 @@ def test_refused_connection_fails_before_any_byte(endpoint):
     assert output.failure_class == "connection"
     assert output.http_status is None
     assert output.ttft == 0
+
+
+FINISH = {
+    "completions": {"choices": [{"text": "hi", "finish_reason": "length"}]},
+    "chat/completions": {"choices": [{"delta": {"content": "hi"}, "finish_reason": "length"}]},
+}
+USAGE = {"choices": [], "usage": {"completion_tokens": 2}}
+EMPTY_FIRST_CHOICE = {
+    "completions": {"choices": [{"text": ""}]},
+    "chat/completions": {"choices": [{"delta": {"role": "assistant", "content": ""}}]},
+}
+
+
+@ENDPOINTS
+def test_cancelling_an_in_flight_request_raises_instead_of_returning_a_failed_result(endpoint):
+    streaming, release = asyncio.Event(), asyncio.Event()
+
+    async def handler(request: web.Request) -> web.StreamResponse:
+        await request.read()
+        response = web.StreamResponse()
+        await response.prepare(request)
+        await write_events(response, [CHOICE[endpoint]])
+        streaming.set()
+        await release.wait()
+        return response
+
+    async def drive(pending: asyncio.Task) -> asyncio.Task:
+        await streaming.wait()
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+        release.set()
+        return pending
+
+    assert call(endpoint, handler, drive).cancelled()
+
+
+@ENDPOINTS
+def test_usage_and_keep_alive_before_the_first_token_do_not_start_ttft(endpoint):
+    async def handler(request: web.Request) -> web.StreamResponse:
+        await request.read()
+        response = web.StreamResponse()
+        await response.prepare(request)
+        await write_events(response, [b": keep-alive\n\n", {"choices": [], "usage": {}}])
+        await asyncio.sleep(0.2)
+        await write_events(response, [CHOICE[endpoint], FINISH[endpoint], USAGE, "[DONE]"])
+        await response.write_eof()
+        return response
+
+    output = call(endpoint, handler)
+
+    assert output.success is True
+    assert output.ttft >= 0.2
+    assert len(output.itl) == 1
+    assert output.output_tokens == 2
+
+
+@ENDPOINTS
+def test_first_choice_without_text_starts_ttft(endpoint):
+    events = [EMPTY_FIRST_CHOICE[endpoint], CHOICE[endpoint], FINISH[endpoint], USAGE, "[DONE]"]
+
+    output = stream(endpoint, events)
+
+    assert output.success is True
+    assert len(output.itl) == 2
+    assert output.generated_text == "hihi"
+
+
+@pytest.mark.parametrize("ending,evidence", [
+    (["finish", "usage", "[DONE]"], 7),
+    (["finish", "[DONE]"], 3),
+    (["finish", "usage"], 6),
+    (["finish"], 2),
+    ([], 0),
+], ids=["finish-usage-done", "no-usage", "no-done", "finish-only", "tokens-only"])
+@ENDPOINTS
+def test_stream_end_is_recorded_as_evidence_and_does_not_decide_success(endpoint, ending, evidence):
+    events = {"finish": FINISH[endpoint], "usage": USAGE, "[DONE]": "[DONE]"}
+
+    output = stream(endpoint, [CHOICE[endpoint], *(events[name] for name in ending)])
+
+    assert output.completion_evidence == evidence
+    assert output.success is True
+    assert output.failure_class == ""
+
+
+@ENDPOINTS
+def test_failed_stream_keeps_the_evidence_it_showed(endpoint):
+    output = stream(endpoint, [{"choices": [], "usage": {"completion_tokens": 0}}, "[DONE]"])
+
+    assert output.failure_class == "empty_response"
+    assert output.completion_evidence == 5

@@ -178,6 +178,8 @@ def run_benchmark(monkeypatch, ttfts, **overrides):
     monkeypatch.setattr(client, 'time', Namespace(perf_counter=lambda: clock.now, time=lambda: 0))
 
     async def serve(request_func_input, pbar=None):
+        if request_func_input.prompt == 'raises':
+            raise RuntimeError('request function bug')
         cost = {'/start_profile': 0.0, '/stop_profile': 100.0}
         sent = clock.now
         clock.now += cost.get(request_func_input.api_url.removeprefix('http://x'), 2.0)
@@ -244,7 +246,9 @@ def test_request_records_cover_the_measured_requests_and_not_the_warmups(monkeyp
         'e2el_ms': [1000.0, 1000.0, 1000.0],
         'output_len': [3, 3, 3],
         'input_len': [5, 5, 5],
+        'completion_evidence': [0, 0, 0],
     }
+    assert records['accounting'] == {'complete': True, 'reasons': []}
 
 
 def test_request_records_survive_a_save_without_details(tmp_path, monkeypatch):
@@ -256,3 +260,8 @@ def test_request_records_survive_a_save_without_details(tmp_path, monkeypatch):
     saved = json.loads((tmp_path / 'result.json').read_text())
     assert saved['request_records'] == records
     assert 'errors' not in saved
+
+
+def test_exception_escaping_one_request_ends_the_run_without_a_result(monkeypatch):
+    with pytest.raises(RuntimeError, match='request function bug'):
+        run_benchmark(monkeypatch, {'a': 0.1, 'raises': 0.1, 'c': 0.1})
