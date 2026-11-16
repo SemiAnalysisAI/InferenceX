@@ -135,8 +135,8 @@ override_tp4_c32:
 # latency_specialized): fused CuTe DSL kernels for FULL-graph decode steps of up to
 # 8 requests x (7 + 1) rows; larger steps and prefill run the stock forward. The
 # executor refuses NVFP4 caches, so these points run fp8 KV and fp8 index-K caches,
-# with the FLASHINFER_TS drafter backend the PR validated. The PR is applied to the
-# pinned nightly by setup_script.
+# with the FLASHINFER_TS drafter backend the PR validated. The nightly includes
+# the PR; no patch.
 # Above 16 the stock points run as before. The server ran about 6 requests at once
 # at most, even at concurrency 16, so every specialized point caps max-num-seqs at
 # 8, the kernel's request cap.
@@ -146,7 +146,6 @@ override_tp4_c32:
 
 override_tp4_sd_c1:
   name: minimaxm31flash-gb300-dynamo-agg-tp4-sd-c1
-  setup_script: minimaxm31flash-vllm-patches.sh
   roles:
     agg:
       args:
@@ -160,7 +159,6 @@ override_tp4_sd_c1:
 
 override_tp4_sd_c4:
   name: minimaxm31flash-gb300-dynamo-agg-tp4-sd-c4
-  setup_script: minimaxm31flash-vllm-patches.sh
   roles:
     agg:
       args:
@@ -174,7 +172,6 @@ override_tp4_sd_c4:
 
 override_tp4_sd_c8:
   name: minimaxm31flash-gb300-dynamo-agg-tp4-sd-c8
-  setup_script: minimaxm31flash-vllm-patches.sh
   roles:
     agg:
       args:
@@ -188,7 +185,6 @@ override_tp4_sd_c8:
 
 override_tp4_sd_c12:
   name: minimaxm31flash-gb300-dynamo-agg-tp4-sd-c12
-  setup_script: minimaxm31flash-vllm-patches.sh
   roles:
     agg:
       args:
@@ -202,7 +198,6 @@ override_tp4_sd_c12:
 
 override_tp4_sd_c16:
   name: minimaxm31flash-gb300-dynamo-agg-tp4-sd-c16
-  setup_script: minimaxm31flash-vllm-patches.sh
   roles:
     agg:
       args:
