@@ -12909,6 +12909,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5082
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:kimi-k31-6d74a15 (sha256:c470d0de) to vllm/vllm-openai-rocm:kimi-k31-5c14fe8 (sha256:a61996b4), vLLM mum-tracking 5c14fe8de, which adds seungrokj/mum#26 and seungrokj/mum#28 on top of 6d74a152f."
+    - "Every point sets VLLM_K3_SP_PREFILL=1 (seungrokj/mum#26): prefill batches of at least 4096 tokens keep the attn-res residual stream token-sharded across TP, replacing each layer's three all-reduces with reduce-scatters and all-gathers over symmetric memory that sum the TP partials in FP32 in a fixed order."
+    - "Concurrency 1 and 4 (latency_specialized decode backend) pick up the seungrokj/mum#28 levers through their defaults (all 1): VLLM_K31_BEAT_MARKOV, VLLM_K31_BEAT_DRAFTMETA, VLLM_K31_BEAT_K2SYNC, VLLM_K31_BEAT_EAGERPREP, VLLM_K31_BEAT_KDAK1 and VLLM_K3_INDEXER_SAMPLED_TOPK, plus VLLM_KIMI_SD_DSA_PROLOGUE_INDEXER at concurrency 1, where VLLM_KIMI_SD_DSA_PROLOGUE is on. Concurrency 16-48 use the stock decode backend, which ignores these flags."
+    - "No change to layouts, draft token counts, capture sizes or the DSpark draft's data types."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5089  
+
+- config-keys:
     - qwen3.5-fp8-mi355x-atom-agentic-mtp
   description:
     - "Update the ATOM image from rocm/atom-dev:nightly_202610181506 to nightly_202610291449."
