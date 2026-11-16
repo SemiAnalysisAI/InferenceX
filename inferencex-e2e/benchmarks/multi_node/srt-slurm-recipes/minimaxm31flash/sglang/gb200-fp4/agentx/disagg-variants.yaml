@@ -596,6 +596,33 @@ override_1p_dep8_dep8_nightly1112_dynamo1030:
       env:
         PYTHONPATH: /configs/compat/dynamo1030-sglang
 
+override_1p_dep8_dep8_nightly1112_sampling_openai:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-nightly1112-sampling-openai
+  # The 11-12 HiCache control without generation_config sampling defaults.
+  # Dynamo from 11-02 (ai-dynamo/dynamo#17777) fills unset temperature/top_p
+  # from them (1.0/0.95); this isolates that change in the decode slowdown.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        sampling-defaults: openai
+    decode:
+      args:
+        sampling-defaults: openai
+
 override_1p_dep8_dep8_linker:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker
   # The unified-cache external linker replaces the prefill HiCache: one
