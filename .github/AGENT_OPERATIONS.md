@@ -119,10 +119,20 @@ The fixed-sequence client writes a `request_records` block (`schema_version: 1`)
 | `columns.tpot_ms` | `(e2el_ms - ttft_ms) / (output_len - 1)` for a completed attempt; null below two output tokens and for a failed attempt. |
 | `columns.e2el_ms` | Send to last chunk for a completed attempt; send to the failure for a failed one. |
 | `columns.output_len`, `columns.input_len` | Token counts; `output_len` is null for a failed attempt. |
+| `columns.completion_evidence` | What the stream showed before it ended, as the sum of `completion_evidence_bits`: `done` (the `[DONE]` event), `finish_reason` (a choice carried one), `usage` (a usage block arrived). The client records it and does not use it to decide `outcome`. |
 | `counts` | `requested`, `dispatched`, `completed`, `failed`, `failed_by_class`, `http_status` (attempts per non-200 status code), `warmup_excluded`, and `retries`, which is always 0 because the client sends each request once. `dispatched = completed + failed`. |
+| `accounting` | `complete` is true only when every column holds one entry per dispatched attempt, every requested attempt was dispatched, and the counts equal what the `outcome` column holds; otherwise `reasons` lists what does not reconcile. The aggregate repeats the check on the data it carries. A block that is not complete, or has no `accounting`, does not account for its run. |
 | `window` | `benchmark_start_time_unix`, `benchmark_end_time_unix`, and `duration`: the client's monotonic clock from just before the first measured request is dispatched until every attempt has returned. Warmup requests finish before it opens. |
 | `load` | `max_concurrency` limits in-flight requests; it is not an offered rate. `request_rate` is `"inf"` on every sweep lane. |
 
 Times are milliseconds rounded to 3 decimals. Read `outcome` before any latency column, because a failed attempt can carry a TTFT.
 
+The client writes its result only after every measured attempt has returned. A run that is cancelled or interrupted (SIGINT, SIGTERM, an exception escaping a request) exits non-zero and writes no result file, so it leaves no block rather than a partial one.
+
+`completed` is the client's existing success rule: HTTP 200, at least one choice chunk, and no error event. It does not require `[DONE]`, a finish reason, or a usage block, so a response that ends early counts as completed with fewer tokens; `completion_evidence` is what tells such an attempt apart.
+
 Above 200,000 attempts the aggregate drops `columns` and records `columns_omitted` (`reason`, `attempts`, `limit`) in the block; the raw client JSON keeps every column. A point over the 5% failure gate is not uploaded as `bmk_<result>`. When its client ran to the end and wrote a result, the raw client JSON and `agg_<result>.json`, both with the block, are in `power_audit_<result>`.
+
+The block is capture-only: it changes what the client records, not what it sends, how it times a request, how it classifies success, or how a workload is configured, so published numbers do not move and it carries no `perf-changelog.yaml` entry. A change to success classification, latency definitions, request behavior, or workload settings is not capture-only; keep it out of capture changes and judge it against the [changelog rule](../AGENTS.md#benchmark-invariants-non-negotiable) on its own.
+
+`inferencex-e2e/infx/tests/bench_serving/synthetic_point.py --out <dir>` runs the client, `infx.results.fixed_sequence`, and `infx.results.collect_results` against a scripted local server, with no model or GPU, and writes the raw and aggregate files with a `manifest.json` of the values each scripted attempt should produce. Its output is synthetic test data and is labelled so.
