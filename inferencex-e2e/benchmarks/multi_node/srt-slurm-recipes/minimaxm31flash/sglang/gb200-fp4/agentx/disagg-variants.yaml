@@ -565,6 +565,37 @@ override_1p_dep8_dep8_nightly1112:
         max-running-requests: 512
         mem-fraction-static: 0.88
 
+override_1p_dep8_dep8_nightly1112_dynamo1030:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-nightly1112-dynamo1030
+  # The 11-12 HiCache control with the Dynamo every fast decode point ran.
+  # Dynamo 1030 imports MultimodalProcessorOutput from schedule_batch; the
+  # compat sitecustomize (srt-slurm patch 903) re-exports it there.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        PYTHONPATH: /configs/compat/dynamo1030-sglang
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+    decode:
+      env:
+        PYTHONPATH: /configs/compat/dynamo1030-sglang
+
 override_1p_dep8_dep8_linker:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker
   # The unified-cache external linker replaces the prefill HiCache: one
