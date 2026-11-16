@@ -100,6 +100,8 @@ base:
         # also gives each tray's decode leader a core of its own, with no setting).
         TILERT_EP_BATCH: "4"
         TILERT_WEP_GRAPH_LANES: "1,2"
+        # The setup script fills in the checkpoint's inference/config.json if the cache lacks it.
+        TILERT_CKPT_DIR: /hf_hub_cache/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
       args:
         model: dsv41
         # TileRT reads the Hugging Face checkpoint directly; no converted weights.

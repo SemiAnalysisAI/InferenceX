@@ -7042,8 +7042,12 @@ dsv41flash-fp4-gb300-tilert-agentic-dspark-dep:
   srt-recipe-dir: dsv41flash/tilert/gb300-fp4/agentx
   scenarios:
     agentic-coding:
-    - search-space:
+    # Four prefill DP ranks per tray (two DP2 workers) each offload up to 64 GiB of KV on an 840 GiB tray.
+    - dram-utilization: 0.304762
+      search-space:
       - spec-decoding: "mtp"
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
         srt-recipe: disagg-dep-variants.yaml:override_6p1d_dep2_dep32_eb4_c1200
         conc-list: [1200]
         prefill:
@@ -7059,6 +7063,8 @@ dsv41flash-fp4-gb300-tilert-agentic-dspark-dep:
           ep: 32
           dp-attn: true
       - spec-decoding: "mtp"
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
         srt-recipe: disagg-dep-variants.yaml:override_6p1d_dep2_dep32_eb8_c2000
         conc-list: [2000]
         prefill:
@@ -7074,6 +7080,8 @@ dsv41flash-fp4-gb300-tilert-agentic-dspark-dep:
           ep: 32
           dp-attn: true
       - spec-decoding: "mtp"
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
         srt-recipe: disagg-dep-variants.yaml:override_6p1d_dep2_dep32_eb16_c3200
         conc-list: [3200]
         prefill:
