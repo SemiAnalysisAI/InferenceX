@@ -17,6 +17,7 @@ from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizer
 from .request_records import COMPLETION_EVIDENCE
 
 AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=6 * 60 * 60)
+INCOMPLETE_STREAM = "The stream ended without [DONE]. This response will be marked as failed!"
 
 
 @dataclass
@@ -40,8 +41,8 @@ class RequestFuncOutput:
 
     ``start_time`` and ``end_time`` are ``time.perf_counter`` readings at send and at return.
     ``failure_class`` names why a failed request failed, and ``http_status`` its non-200 status.
-    ``completion_evidence`` ORs the ``COMPLETION_EVIDENCE`` bits the stream showed; it does not
-    decide ``success``.
+    ``completion_evidence`` ORs the ``COMPLETION_EVIDENCE`` bits the stream showed; an OpenAI
+    stream succeeds only if it showed ``done``.
     """
 
     generated_text: str = ""
@@ -332,15 +333,19 @@ async def async_request_openai_completions(
                     if output.error:
                         output.success = False
                         output.failure_class = "stream_error"
-                    elif first_chunk_received:
-                        output.success = True
-                    else:
+                    elif not first_chunk_received:
                         output.success = False
                         output.failure_class = "empty_response"
                         output.error = (
                             "Never received a valid chunk to calculate TTFT."
                             "This response will be marked as failed!"
                         )
+                    elif output.completion_evidence & COMPLETION_EVIDENCE["done"]:
+                        output.success = True
+                    else:
+                        output.success = False
+                        output.failure_class = "incomplete_stream"
+                        output.error = INCOMPLETE_STREAM
                     output.generated_text = generated_text
                     output.latency = most_recent_timestamp - st
                 else:
@@ -454,6 +459,9 @@ async def async_request_openai_chat_completions(
                             "Never received a valid chunk to calculate TTFT."
                             "This response will be marked as failed!"
                         )
+                    elif not output.completion_evidence & COMPLETION_EVIDENCE["done"]:
+                        output.failure_class = "incomplete_stream"
+                        output.error = INCOMPLETE_STREAM
                     output.success = not output.error
                     output.latency = most_recent_timestamp - st
                 else:

@@ -230,7 +230,7 @@ def test_request_records_cover_the_measured_requests_and_not_the_warmups(monkeyp
         'requested': 3, 'dispatched': 3, 'completed': 3, 'failed': 0,
         'failed_by_class': {
             'http_status': 0, 'timeout': 0, 'connection': 0, 'stream_error': 0,
-            'empty_response': 0, 'other': 0,
+            'empty_response': 0, 'other': 0, 'incomplete_stream': 0,
         },
         'http_status': {}, 'warmup_excluded': 2, 'retries': 0,
     }

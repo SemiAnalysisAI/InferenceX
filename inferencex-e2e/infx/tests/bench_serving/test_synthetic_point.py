@@ -79,7 +79,7 @@ def test_scripted_curve_survives_the_client_the_aggregation_and_the_collector(tm
     assert points[8]["expected"]["counts"]["failed_by_class"] == {
         "connection": 8, "empty_response": 8, "http_status": 8, "stream_error": 8}
     truncated = points[1]["expected"]["attempts"][85]
-    assert (truncated["outcome"], truncated["completion_evidence"]) == ("completed", 0)
+    assert (truncated["outcome"], truncated["completion_evidence"]) == ("incomplete_stream", 0)
 
 
 def request(**overrides):

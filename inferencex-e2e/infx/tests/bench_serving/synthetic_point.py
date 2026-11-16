@@ -43,7 +43,8 @@ class Reply:
     """One scripted reply. ``delay_s`` precedes the first byte and ``gap_s`` each later token.
 
     ``completed`` streams ``tokens`` tokens, a finish reason, usage, and ``[DONE]``.
-    ``truncated`` streams ``tokens`` tokens and ends the response with none of the three.
+    ``truncated`` streams ``tokens`` tokens and ends the response with none of the three, which
+    the client fails as ``incomplete_stream``.
     ``http_status`` answers ``status``. ``stream_error`` and ``connection`` stream ``tokens``
     tokens, then send an error event or close the socket mid-body. ``empty_response`` sends
     usage and ``[DONE]`` without a token. ``hang`` streams one token and never finishes.
@@ -60,18 +61,18 @@ class Reply:
         first = self.delay_s * 1000
         stream = first + max(self.tokens - 1, 0) * self.gap_s * 1000
         done, finish, usage = (COMPLETION_EVIDENCE[name] for name in ("done", "finish_reason", "usage"))
-        if self.kind in ("completed", "truncated"):
+        if self.kind == "completed":
             return {
                 "outcome": "completed",
                 "ttft_ms": first,
                 "tpot_ms": self.gap_s * 1000 if self.tokens > 1 else None,
                 "e2el_ms": stream,
                 "output_len": self.tokens,
-                "completion_evidence": done | finish | usage if self.kind == "completed" else 0,
+                "completion_evidence": done | finish | usage,
             }
-        streamed = self.kind in ("stream_error", "connection")
+        streamed = self.kind in ("stream_error", "connection", "truncated")
         return {
-            "outcome": self.kind,
+            "outcome": "incomplete_stream" if self.kind == "truncated" else self.kind,
             "ttft_ms": first if streamed else None,
             "tpot_ms": None,
             "e2el_ms": stream if streamed else first,
@@ -288,13 +289,13 @@ def slow(tokens: int = 4) -> Reply:
 def curve() -> dict[int, list[Reply]]:
     """The scripted points by concurrency.
 
-    1: 100 attempts in order, five failed (one per class the server can cause, two HTTP codes),
-    one truncated, one single-token; exactly at the 5% gate, so it passes.
+    1: 120 attempts in order, six failed (one per class the server can cause, two HTTP codes),
+    one single-token; exactly at the 5% gate, so it passes.
     2: all completed, alternating fast and slow batches.
     4: all completed and slow; aggregated above a lowered limit so the columns are omitted.
     8: four of ten batches fail, so the 5% gate fails the point.
     """
-    mixed = [fast()] * 100
+    mixed = [fast()] * 120
     mixed[10] = Reply("http_status", delay_s=0.02, status=503)
     mixed[25] = Reply("stream_error", delay_s=0.03, tokens=2, gap_s=0.02)
     mixed[40] = Reply("empty_response", delay_s=0.03)

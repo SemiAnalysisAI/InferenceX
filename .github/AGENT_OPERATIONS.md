@@ -114,12 +114,12 @@ The fixed-sequence client writes a `request_records` block (`schema_version: 1`)
 | Field | Meaning |
 |---|---|
 | `columns.start_offset_ms` | When the attempt was sent, measured from the start of the window. |
-| `columns.outcome` | Index into `outcomes`. `0` (`completed`) is the only success. The rest are failure classes: `http_status` (non-200 response), `timeout` (the client's 6 h request timeout), `connection` (refused, reset, or cut mid-stream), `stream_error` (an error event inside a 200 stream), `empty_response` (the stream ended without a token), `other` (not classified). |
+| `columns.outcome` | Index into `outcomes`. `0` (`completed`) is the only success. The rest are failure classes: `http_status` (non-200 response), `timeout` (the client's 6 h request timeout), `connection` (refused, reset, or cut mid-stream), `stream_error` (an error event inside a 200 stream), `empty_response` (the stream ended without a token), `incomplete_stream` (the stream ended without `[DONE]`), `other` (not classified). |
 | `columns.ttft_ms` | Time to first token; null when none arrived. A failed attempt keeps the TTFT it observed. |
 | `columns.tpot_ms` | `(e2el_ms - ttft_ms) / (output_len - 1)` for a completed attempt; null below two output tokens and for a failed attempt. |
 | `columns.e2el_ms` | Send to last chunk for a completed attempt; send to the failure for a failed one. |
 | `columns.output_len`, `columns.input_len` | Token counts; `output_len` is null for a failed attempt. |
-| `columns.completion_evidence` | What the stream showed before it ended, as the sum of `completion_evidence_bits`: `done` (the `[DONE]` event), `finish_reason` (a choice carried one), `usage` (a usage block arrived). The client records it and does not use it to decide `outcome`. |
+| `columns.completion_evidence` | What the stream showed before it ended, as the sum of `completion_evidence_bits`: `done` (the `[DONE]` event), `finish_reason` (a choice carried one), `usage` (a usage block arrived). Of the three, only `done` decides `outcome`. |
 | `counts` | `requested`, `dispatched`, `completed`, `failed`, `failed_by_class`, `http_status` (attempts per non-200 status code), `warmup_excluded`, and `retries`, which is always 0 because the client sends each request once. `dispatched = completed + failed`. |
 | `accounting` | `complete` is true only when every column holds one entry per dispatched attempt, every requested attempt was dispatched, and the counts equal what the `outcome` column holds; otherwise `reasons` lists what does not reconcile. The aggregate repeats the check on the data it carries. A block that is not complete, or has no `accounting`, does not account for its run. |
 | `window` | `benchmark_start_time_unix`, `benchmark_end_time_unix`, and `duration`: the client's monotonic clock from just before the first measured request is dispatched until every attempt has returned. Warmup requests finish before it opens. |
@@ -129,7 +129,7 @@ Times are milliseconds rounded to 3 decimals. Read `outcome` before any latency 
 
 The client writes its result only after every measured attempt has returned. A run that is cancelled or interrupted (SIGINT, SIGTERM, an exception escaping a request) exits non-zero and writes no result file, so it leaves no block rather than a partial one.
 
-`completed` is the client's existing success rule: HTTP 200, at least one choice chunk, and no error event. It does not require `[DONE]`, a finish reason, or a usage block, so a response that ends early counts as completed with fewer tokens; `completion_evidence` is what tells such an attempt apart.
+`completed` means HTTP 200, at least one choice chunk, no error event, and a stream that ended with `[DONE]`. A response that ends without `[DONE]` is `incomplete_stream`, whatever it streamed first. A finish reason and a usage block are recorded in `completion_evidence` and not required.
 
 Above 200,000 attempts the aggregate drops `columns` and records `columns_omitted` (`reason`, `attempts`, `limit`) in the block; the raw client JSON keeps every column. A point over the 5% failure gate is not uploaded as `bmk_<result>`. When its client ran to the end and wrote a result, the raw client JSON and `agg_<result>.json`, both with the block, are in `power_audit_<result>`.
 

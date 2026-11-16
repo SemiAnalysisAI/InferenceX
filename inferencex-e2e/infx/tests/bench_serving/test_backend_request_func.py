@@ -271,22 +271,24 @@ def test_first_choice_without_text_starts_ttft(endpoint):
     assert output.generated_text == "hihi"
 
 
-@pytest.mark.parametrize("ending,evidence", [
-    (["finish", "usage", "[DONE]"], 7),
-    (["finish", "[DONE]"], 3),
-    (["finish", "usage"], 6),
-    (["finish"], 2),
-    ([], 0),
+@pytest.mark.parametrize("ending,evidence,failure", [
+    (["finish", "usage", "[DONE]"], 7, ""),
+    (["finish", "[DONE]"], 3, ""),
+    (["finish", "usage"], 6, "incomplete_stream"),
+    (["finish"], 2, "incomplete_stream"),
+    ([], 0, "incomplete_stream"),
 ], ids=["finish-usage-done", "no-usage", "no-done", "finish-only", "tokens-only"])
 @ENDPOINTS
-def test_stream_end_is_recorded_as_evidence_and_does_not_decide_success(endpoint, ending, evidence):
+def test_stream_succeeds_only_if_it_ends_with_done(endpoint, ending, evidence, failure):
     events = {"finish": FINISH[endpoint], "usage": USAGE, "[DONE]": "[DONE]"}
 
     output = stream(endpoint, [CHOICE[endpoint], *(events[name] for name in ending)])
 
     assert output.completion_evidence == evidence
-    assert output.success is True
-    assert output.failure_class == ""
+    assert output.success is (failure == "")
+    assert output.failure_class == failure
+    assert output.error.startswith("The stream ended without [DONE]") is (failure != "")
+    assert output.ttft > 0
 
 
 @ENDPOINTS

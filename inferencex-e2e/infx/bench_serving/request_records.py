@@ -20,6 +20,7 @@ OUTCOMES = (
     "stream_error",
     "empty_response",
     "other",
+    "incomplete_stream",
 )
 # Bits of the ``completion_evidence`` column: what a stream showed before it ended.
 COMPLETION_EVIDENCE = {"done": 1, "finish_reason": 2, "usage": 4}

@@ -54,7 +54,7 @@ def test_each_attempt_keeps_its_outcome_and_what_the_client_observed():
         'requested': 4, 'dispatched': 4, 'completed': 2, 'failed': 2,
         'failed_by_class': {
             'http_status': 1, 'timeout': 0, 'connection': 1, 'stream_error': 0,
-            'empty_response': 0, 'other': 0,
+            'empty_response': 0, 'other': 0, 'incomplete_stream': 0,
         },
         'http_status': {'503': 1}, 'warmup_excluded': 8, 'retries': 0,
     }
