@@ -444,7 +444,8 @@ override_3p_dep4_dep16_si20_linker:
         expert-parallel-size: 4
         max-running-requests: 256
         stream-interval: 20
-        mem-fraction-static: 0.88
+        # 0.88 ran a prefill rank out of device KV with nothing evictable.
+        mem-fraction-static: 0.85
         enable-hierarchical-cache: null
         hicache-size: null
         hicache-write-policy: null
@@ -505,7 +506,7 @@ override_6p_tp2ep2_dp8tp2_si20_linker:
       sglang: "0.0.0.dev1+g36027fd15"
   services: *gb300-linker-services
   roles:
-    prefill:
+    prefill: &gb300-tp2ep2-linker-prefill
       nodes: 3
       workers: 6
       gpus: 2
@@ -523,3 +524,46 @@ override_6p_tp2ep2_dp8tp2_si20_linker:
         unified-cache-external-linker-backend: mooncake
         unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
     decode: *gb300-dp8tp2-decode
+
+override_6p_tp2ep2_2xdp4tp2_si20_linker:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-tp2ep2-2xdp4tp2-si20-linker
+  # The TP2 linker point with decode split into two DP4 x TP2 attention, EP8
+  # MegaMoE workers of two nodes each: the same 16 decode GPUs, with the MoE
+  # all-to-all over 8 GPUs instead of 16.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services: *gb300-linker-services
+  roles:
+    prefill: *gb300-tp2ep2-linker-prefill
+    decode:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      args: &gb300-dp4tp2-decode-args
+        tensor-parallel-size: 8
+        data-parallel-size: 4
+        expert-parallel-size: 8
+        max-running-requests: 384
+        cuda-graph-max-bs-decode: 96
+        stream-interval: 20
+
+override_6p_tp2ep2_1xdp4tp2_si20_linker:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-tp2ep2-1xdp4tp2-si20-linker
+  # The same prefill with a single DP4 x TP2, EP8 decode worker: 20 GPUs. The
+  # linker stores run on the two decode nodes and the infra node, so the pool
+  # is 12 x 190 + 2 x 4 x 190 + 4 x 190 GB = 4560 GB.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services: *gb300-linker-services
+  roles:
+    prefill: *gb300-tp2ep2-linker-prefill
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      args:
+        <<: *gb300-dp4tp2-decode-args
+        max-running-requests: 256
+        cuda-graph-max-bs-decode: 64
