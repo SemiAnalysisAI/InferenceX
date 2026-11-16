@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import io
+import itertools
 import json
 import math
 import os
@@ -34,6 +35,7 @@ ENDPOINTS = {
     "evaluations": PUBLIC + "/api/v1/evaluations",
     "benchmark-siblings": PUBLIC + "/api/v1/benchmark-siblings",
     "options": PUBLIC + "/api/v1/views/options",
+    "derived-agentic-metrics": PUBLIC + "/api/v1/derived-agentic-metrics",
 }
 USER_AGENT = "InferenceX-Klaud-Cold/1.0"
 MAX_BYTES = 16 * 1024 * 1024
@@ -81,6 +83,7 @@ def fetch(
     date: str | None = None,
     exact: bool = True,
     benchmark: int | None = None,
+    ids: list[int] | None = None,
     benchmark_type: str | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     opener: Callable[..., Any] | None = None,
@@ -88,10 +91,14 @@ def fetch(
 ) -> Feed:
     """GET one ``resource`` from ENDPOINTS and return it as a Feed.
 
-    ``model``, ``date``, ``benchmark``, ``benchmark_type`` and ``token`` fill the query or auth header where the
+    ``model``, ``date``, ``benchmark``, ``ids``, ``benchmark_type`` and ``token`` fill the query or auth header where the
     resource takes them. Retries transient failures, then raises ReadError with a fixed code.
     """
     query = {}
+    if resource == "derived-agentic-metrics":
+        if not ids:
+            raise ReadError("benchmark-ids-required")
+        query["ids"] = ",".join(str(int(value)) for value in ids)
     if resource == "benchmark-siblings":
         if benchmark is None:
             raise ReadError("benchmark-id-required")
@@ -200,6 +207,29 @@ def feed_issues(feed: Feed | None, now: datetime, policy: Policy) -> list[str]:
     if age < -policy.clock_skew_seconds or age > policy.public_max_age_seconds:
         issues.append("feed-retrieval-stale")
     return issues
+
+
+DERIVED_IDS_PER_REQUEST = 200
+
+
+def normalized_interactivity(ids: list[int]) -> tuple[dict[int, float], list[str]]:
+    """Each persisted AgentX result's P90 E2E normalized interactivity and the URLs read.
+
+    The dashboard reads this axis from derived-agentic-metrics, never the row. IDs without
+    stored traces are omitted. Raises ReadError on an unreadable response.
+    """
+    values: dict[int, float] = {}
+    urls = []
+    for batch in itertools.batched(sorted(set(ids)), DERIVED_IDS_PER_REQUEST):
+        feed = fetch("derived-agentic-metrics", ids=list(batch))
+        if not isinstance(feed.payload, dict):
+            raise ReadError("invalid-derived-payload")
+        for key, row in feed.payload.items():
+            value = row.get("p90_e2e_norm_intvty") if isinstance(row, dict) else None
+            if isinstance(value, int | float) and value > 0:
+                values[int(key)] = value
+        urls.append(feed.url)
+    return values, urls
 
 
 def catalog(images: Feed | None, now: datetime, policy: Policy) -> tuple[list[dict], list[str]]:
