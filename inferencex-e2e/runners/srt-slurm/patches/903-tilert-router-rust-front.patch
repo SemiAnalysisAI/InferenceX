@@ -1,0 +1,100 @@
+diff --git a/src/srtctl/frontends/tilert_router.py b/src/srtctl/frontends/tilert_router.py
+index 2b14aaa3..35f9776a 100644
+--- a/src/srtctl/frontends/tilert_router.py
++++ b/src/srtctl/frontends/tilert_router.py
+@@ -20,6 +20,10 @@ if TYPE_CHECKING:
+     from srtctl.core.topology import Process
+ 
+ ROUTER_MANAGED_ARGS = frozenset({"vllm-url", "decode", "host", "port"})
++# ``frontend.args.rust-front: true`` runs the router under the release's Rust front supervisor instead of passing a flag:
++# the supervisor serves the client port with the packaged front and moves the router to 127.0.0.1 on the next port.
++RUST_FRONT_ARG = "rust-front"
++RUST_FRONT_SUPERVISOR = ("python", "-m", "tilert.pd_vllm.rs_front_sup")
+ ROUTER_WORKERS_REQUIRED = "TileRT router requires at least one prefill worker and at least one decode worker"
+ 
+ 
+@@ -35,6 +39,8 @@ class TileRTRouterFrontend(StaticRouterFrontend):
+     process_name: ClassVar[str] = "tilert_router"
+     # The router connects to its workers at startup.
+     wait_for_workers_before_start: ClassVar[bool] = True
++    # Set from frontend.args.rust-front when the frontends start.
++    rust_front: bool = False
+ 
+     @property
+     def health_endpoint(self) -> str:
+@@ -44,6 +50,9 @@ class TileRTRouterFrontend(StaticRouterFrontend):
+         if config.frontend.enable_multiple_frontends:
+             raise ValueError("frontend.type: tilert-router requires frontend.enable_multiple_frontends: false")
+         _reject_router_args(config.frontend.args)
++        rust_front = (config.frontend.args or {}).get(RUST_FRONT_ARG, False)
++        if not isinstance(rust_front, bool):
++            raise ValueError(f"frontend.args.{RUST_FRONT_ARG} must be true or false")
+         if config.backend_for_role("decode").type != "tilert":
+             raise ValueError("tilert-router requires a TileRT decode engine")
+         resources = config.topology
+@@ -101,6 +110,22 @@ class TileRTRouterFrontend(StaticRouterFrontend):
+             f"{worker.url}/health" for worker in self.collect_workers(backend, backend_processes, network_interface)
+         ]
+ 
++    def start_frontends(
++        self,
++        topology: Any,
++        runtime: RuntimeContext,
++        config: Any,
++        backend: Any,
++        backend_processes: list[Process],
++        stop_event: Any = None,
++    ) -> list[Any]:
++        self.rust_front = (config.frontend.args or {}).get(RUST_FRONT_ARG) is True
++        return super().start_frontends(topology, runtime, config, backend, backend_processes, stop_event)
++
++    def get_frontend_args_list(self, args: dict[str, Any] | None) -> list[str]:
++        """The router's flags; ``rust-front`` selects the launcher (`build_router_command`) and is not one."""
++        return super().get_frontend_args_list({k: v for k, v in (args or {}).items() if k != RUST_FRONT_ARG})
++
+     def build_router_command(self, workers: list[RouterWorker], host: str, port: int, backend: Any) -> list[str]:
+         prefills = [worker for worker in workers if worker.mode == "prefill"]
+         decodes = [worker for worker in workers if worker.mode == "decode"]
+@@ -117,6 +142,7 @@ class TileRTRouterFrontend(StaticRouterFrontend):
+         # --vllm-url takes every prefill worker as one comma-separated value (TileRT 0.1.8 pd_router splits it on
+         # commas; 0.1.6 accepts one URL); one worker renders its URL alone.
+         return [
++            *(RUST_FRONT_SUPERVISOR if self.rust_front else ()),
+             *self.executable,
+             "--vllm-url",
+             ",".join(worker.url for worker in prefills),
+diff --git a/tests/test_tilert.py b/tests/test_tilert.py
+index e4170f6d..7793c28c 100644
+--- a/tests/test_tilert.py
++++ b/tests/test_tilert.py
+@@ -294,3 +294,30 @@ def test_router_setup_runs_before_launch_and_failure_stops_launch(tmp_path: Path
+     )
+     assert failed.returncode == 7
+     assert failed.stdout == "installed\n"
++
++
++def test_rust_front_wraps_the_router_and_is_not_a_router_flag(tmp_path: Path) -> None:
++    data = _recipe()
++    data["frontend"].setdefault("args", {})["rust-front"] = True
++    config = _load(data)
++    orchestrator = _orchestrator(config, tmp_path, ("p0", "d0"))
++    frontend = TileRTRouterFrontend()
++    hosts = {"p0": "10.0.0.10", "d0": "10.0.0.11"}
++    with patch("srtctl.frontends.static_router.get_hostname_ip", side_effect=lambda node, _: hosts[node]):
++        workers = frontend.collect_workers(config.backend, orchestrator.backend_processes)
++    plain = frontend.build_router_command(workers, "0.0.0.0", 8000, config.backend)
++    assert plain[:3] == ["python", "-m", "tilert.pd_vllm.pd_router"]
++    frontend.rust_front = True
++    command = frontend.build_router_command(workers, "0.0.0.0", 8000, config.backend)
++    command.extend(frontend.get_frontend_args_list(config.frontend.args))
++    assert command[:6] == ["python", "-m", "tilert.pd_vllm.rs_front_sup", "python", "-m", "tilert.pd_vllm.pd_router"]
++    assert command[3:3 + len(plain)] == plain
++    assert "--rust-front" not in command
++    assert _flag(command, "--port") == "8000"
++
++
++def test_rust_front_must_be_a_boolean() -> None:
++    data = _recipe()
++    data["frontend"].setdefault("args", {})["rust-front"] = "yes"
++    with pytest.raises(ValidationError, match="rust-front must be true or false"):
++        _load(data)
