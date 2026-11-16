@@ -547,7 +547,7 @@ override_1p_dep8_dep8_linker:
         MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
         MOONCAKE_STANDALONE_STORAGE: "0"
         PYTHONPATH: /configs/compat/dynamo1030-sglang
-      args:
+      args: &linker-prefill-args
         tensor-parallel-size: 8
         data-parallel-size: 8
         expert-parallel-size: 8
@@ -563,6 +563,61 @@ override_1p_dep8_dep8_linker:
     decode:
       env:
         PYTHONPATH: /configs/compat/dynamo1030-sglang
+
+override_1p_dep8_dep16_linker:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep16-linker
+  # The linker point with a DEP16 decode. DEP8 prefill, not vLLM's 3 x DEP4:
+  # EP4 leaves each prefill rank 1.90M KV tokens against 2.83M at EP8, and the
+  # 2P DEP4 linker point filled that pool for its first 35 minutes (72.6k).
+  # Decode-node stores follow the decode nodes: 4 x 4 x 190 GB.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+  services: *linker-services
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env: *linker-env
+      args: *linker-prefill-args
+    decode: &linker-dep16-decode
+      nodes: 4
+      gpus: 16
+      env:
+        PYTHONPATH: /configs/compat/dynamo1030-sglang
+      args:
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        # 48 per DP rank, as on DEP8.
+        max-running-requests: 768
+        mem-fraction-static: 0.85
+
+override_2p_dep8_dep16_linker:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-2p-dep8-dep16-linker
+  # The DEP16 linker point with two DEP8 prefill workers, for when one cannot
+  # keep TTFT down at conc 280-360. Both share the same linker pool.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+  services: *linker-services
+  roles:
+    prefill:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      env: *linker-env
+      args: *linker-prefill-args
+    decode: *linker-dep16-decode
 
 override_3p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
