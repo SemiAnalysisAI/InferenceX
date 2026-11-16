@@ -169,3 +169,15 @@
   backends: [flashinfer-ep]
   description:
     - Run flashinfer-ep EP8 on B300.
+- date: 2026-11-12
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5039
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+  suites: [ep-core]
+  description:
+    - Time the pair period over back-to-back pairs with no event between them. The event window around each pair read 4.5-13.5 us above it at T=1 on NVIDIA EP8 and about 6 us on AMD.
+- date: 2026-11-12
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5039
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+  suites: [swap-blocks]
+  description:
+    - Take 40 iterations per swap-blocks point instead of 100, so p99 is the slowest sample.

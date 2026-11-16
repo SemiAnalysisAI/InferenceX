@@ -84,6 +84,7 @@ base:
         tool-call-parser: auto
         watchdog-timeout: 3600
         enable-metrics: true
+        stream-interval: 32
   sbatch_directives:
     mem: "0"
     exclusive: ""
