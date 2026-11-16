@@ -6,7 +6,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from aiohttp import web
+from aiohttp import encode_basic_auth, web
 
 from infx.bench_serving import backend_request_func as req
 
@@ -100,35 +100,43 @@ def netrc_path(monkeypatch, tmp_path):
     for name in ("http_proxy", "https_proxy", "all_proxy", "no_proxy"):
         monkeypatch.delenv(name, raising=False)
         monkeypatch.delenv(name.upper(), raising=False)
-    # env_changes_request calls urllib.request.getproxies(), which also reads the system proxy
+    # env_configured calls urllib.request.getproxies(), which also reads the system proxy
     # settings on macOS and Windows.
     monkeypatch.setattr(urllib.request, "getproxies", urllib.request.getproxies_environment)
-    monkeypatch.setattr(urllib.request, "proxy_bypass", urllib.request.proxy_bypass_environment)
     path = tmp_path / "netrc"
     monkeypatch.setenv("NETRC", str(path))
     return path
 
 
 def test_no_proxy_and_no_netrc_entry_leave_the_environment_untrusted(netrc_path):
-    assert not req.env_changes_request("http://127.0.0.1:8000/v1/completions")
+    assert not req.env_configured()
 
 
-def test_a_proxy_for_the_url_scheme_is_trusted(netrc_path, monkeypatch):
-    monkeypatch.setenv("HTTP_PROXY", "http://proxy.internal:3128")
-    assert req.env_changes_request("http://10.0.0.5:8000/v1/completions")
-    assert not req.env_changes_request("https://10.0.0.5:8000/v1/completions")
+def test_a_proxy_for_any_scheme_is_trusted(netrc_path, monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.internal:3128")
+    assert req.env_configured()
 
 
-def test_no_proxy_excludes_the_host(netrc_path, monkeypatch):
+def test_a_proxy_is_trusted_when_no_proxy_lists_the_host(netrc_path, monkeypatch):
+    # A redirect can leave the host in NO_PROXY for one that needs the proxy.
     monkeypatch.setenv("HTTP_PROXY", "http://proxy.internal:3128")
     monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1")
-    assert not req.env_changes_request("http://127.0.0.1:8000/v1/completions")
+    assert req.env_configured()
 
 
-def test_a_netrc_entry_for_the_host_is_trusted(netrc_path):
-    netrc_path.write_text("machine bench.internal login user password secret\n")
-    assert req.env_changes_request("http://bench.internal:8000/v1/generate_stream")
-    assert not req.env_changes_request("http://127.0.0.1:8000/v1/generate_stream")
+@pytest.mark.parametrize(
+    ("content", "trusted"),
+    [
+        # A redirect can go to a host other than the benchmark host.
+        ("machine bench.internal login user password secret\n", True),
+        ("default login user password secret\n", True),
+        ("", False),
+        ("machine", False),
+    ],
+)
+def test_netrc_entries(netrc_path, content, trusted):
+    netrc_path.write_text(content)
+    assert req.env_configured() is trusted
 
 
 def test_no_home_directory_leaves_the_environment_untrusted(netrc_path, monkeypatch):
@@ -137,7 +145,52 @@ def test_no_home_directory_leaves_the_environment_untrusted(netrc_path, monkeypa
 
     monkeypatch.delenv("NETRC")
     monkeypatch.setattr(Path, "home", classmethod(no_home))
-    assert not req.env_changes_request("http://127.0.0.1:8000/v1/completions")
+    assert not req.env_configured()
+
+
+def test_a_redirect_keeps_the_netrc_credentials_of_its_target(netrc_path):
+    """A 307 from 127.0.0.1 to localhost sends the netrc credentials of localhost."""
+    netrc_path.write_text("machine localhost login user password secret\n")
+    authorizations = []
+
+    async def redirect(request: web.Request) -> web.Response:
+        port = request.url.port
+        return web.Response(status=307, headers={"Location": f"http://localhost:{port}/target"})
+
+    async def target(request: web.Request) -> web.StreamResponse:
+        authorizations.append(request.headers.get("Authorization"))
+        await request.read()
+        response = web.StreamResponse()
+        await response.prepare(request)
+        await response.write(f"data: {json.dumps(CHOICE['completions'])}\n\n".encode())
+        await response.write(b"data: [DONE]\n\n")
+        await response.write_eof()
+        return response
+
+    async def run() -> req.RequestFuncOutput:
+        app = web.Application()
+        app.router.add_post("/v1/completions", redirect)
+        app.router.add_post("/target", target)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        try:
+            return await req.async_request_openai_completions(
+                req.RequestFuncInput(
+                    prompt="p",
+                    api_url=f"http://127.0.0.1:{runner.addresses[0][1]}/v1/completions",
+                    prompt_len=1,
+                    output_len=4,
+                    model="m",
+                )
+            )
+        finally:
+            await runner.cleanup()
+
+    output = asyncio.run(run())
+    assert output.success, output.error
+    assert authorizations == [encode_basic_auth("user", "secret")]
 
 
 def test_a_proxy_from_the_environment_still_carries_the_request(netrc_path, monkeypatch):
