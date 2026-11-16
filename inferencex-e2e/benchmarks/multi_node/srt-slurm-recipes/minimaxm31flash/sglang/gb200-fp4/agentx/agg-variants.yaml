@@ -96,6 +96,30 @@ override_tp4_c1:
         cuda-graph-max-bs-decode: 2
         mem-fraction-static: 0.8
 
+# The MSA-V1 MonoKernel serves batch-size-1 DSpark decode and verify steps;
+# larger batches take the standard path. Same settings as the GB300 point.
+override_tp4_monokernel_c1:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-agg-tp4-monokernel-c1
+  roles:
+    agg:
+      env:
+        ALLOW_JIT: "1"
+        # Canonical MegaAttention placement; it needs the GPUs to itself.
+        SGLANG_FORCE_COARSE_WAR_BARRIER: "1"
+      args:
+        tensor-parallel-size: 4
+        chunked-prefill-size: 32768
+        page-size: 128
+        speculative-num-steps: 1
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 8
+        speculative-draft-kv-cache-dtype: auto
+        enable-nvidia-megakernel: true
+        disable-attn-tp-gather: true
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        mem-fraction-static: 0.8
+
 override_tp4_c4:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-agg-tp4-c4
   roles:

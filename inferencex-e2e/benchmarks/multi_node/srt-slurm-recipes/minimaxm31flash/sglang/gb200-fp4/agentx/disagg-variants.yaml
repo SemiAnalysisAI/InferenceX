@@ -204,76 +204,6 @@ override_1p_dep8_dep8:
         max-running-requests: 512
         mem-fraction-static: 0.88
 
-override_1p_dep8_dep8_dynamo1111:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-dynamo1111
-  # The 11-03 and 11-06 nightlies bundle a Dynamo that imports
-  # MultimodalProcessorOutput from schedule_batch, which SGLang moved to
-  # req_types on 11-02 (sglang#48087); Dynamo reads either location from
-  # 11-06 (ai-dynamo/dynamo#18293). Pin the Dynamo that the 11-12 image ships.
-  dynamo:
-    install: true
-    source:
-      wheel: 1.7.0.dev20261111
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 512
-        mem-fraction-static: 0.88
-
-override_1p_dep8_dep8_hrrn:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-hrrn
-  # Shortest-prefill-first starves mid-size prefills: at the same uncached
-  # length, 8-32K-token turns waited 3x longer than on vLLM. HRRN ages each
-  # waiting request by the prefill tokens processed since it arrived.
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 512
-        mem-fraction-static: 0.88
-        schedule-policy: hrrn
-
-override_1p_dep8_dep8_soft_affinity:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-soft-affinity
-  # Hard session affinity pins a session to one prefill DP rank, and the
-  # busiest rank queued 3.5x longer than the idlest. Soft affinity keeps the
-  # binding as a preference the router can override.
-  frontend:
-    args:
-      router-session-affinity-mode: soft
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 512
-        mem-fraction-static: 0.88
-        router-session-affinity-mode: soft
-
 override_1p_dep8_dep8_l3:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-l3
   # Lists replace on merge, so this repeats every base service.
@@ -543,28 +473,6 @@ override_1p_dep8_dep8_l3_buffer150:
         hicache-storage-backend: mooncake
         hicache-storage-backend-extra-config: '{"enable_group_semantics":false}'
 
-override_1p_dep8_dep8_nightly1112:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-nightly1112
-  # The 1P DEP8 HiCache point on the 2026-11-12 nightly, as the control for the
-  # linker points below.
-  identity:
-    frameworks:
-      sglang: "0.0.0.dev1+g36027fd15"
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 512
-        mem-fraction-static: 0.88
-
 override_1p_dep8_dep8_linker:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker
   # The unified-cache external linker replaces the prefill HiCache: one
@@ -574,9 +482,17 @@ override_1p_dep8_dep8_linker:
   # 4 x 190 GB stores instead. L3 = 8 x 190 GB (prefill) + 2 x 4 x 190 GB
   # (decode) + 4 x 190 GB (infra) = 3800 GB. Prefetch mode loads before the
   # forward pass; layer-wise reads stalled the forward on DSV4.1 GB300 (#4595).
+  # Dynamo 1.7.0.dev20261030 in place of the image's 1.7.0.dev20261111: the
+  # newer Dynamo decodes about 0.75 ms per step slower. Dynamo 1030 imports
+  # MultimodalProcessorOutput from schedule_batch, which this SGLang moved to
+  # req_types; the compat sitecustomize (srt-slurm patch 903) re-exports it.
   identity:
     frameworks:
       sglang: "0.0.0.dev1+g36027fd15"
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
   services: &linker-services
     - *l3-etcd
     - *l3-master
@@ -630,6 +546,7 @@ override_1p_dep8_dep8_linker:
         MOONCAKE_DEVICE: "@fabric.rdma-devices"
         MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
         MOONCAKE_STANDALONE_STORAGE: "0"
+        PYTHONPATH: /configs/compat/dynamo1030-sglang
       args:
         tensor-parallel-size: 8
         data-parallel-size: 8
@@ -643,256 +560,9 @@ override_1p_dep8_dep8_linker:
         enable-unified-cache-external-linker: true
         unified-cache-external-linker-backend: mooncake
         unified-cache-external-linker-config: &linker-config '{"load_mode":"prefetch","enable_group_semantics":false}'
-
-override_1p_dep8_dep8_linker_chunk128k:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-chunk128k
-  # The linker point with 16384 prefill tokens per DP rank (vLLM's
-  # max-num-batched-tokens) in place of 8192: SGLang divides the chunk by DP.
-  identity:
-    frameworks:
-      sglang: "0.0.0.dev1+g36027fd15"
-  services: *linker-services
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env: *linker-env
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 131072
-        max-running-requests: 512
-        # 16384 tokens per rank need more activation headroom than 0.88 leaves.
-        mem-fraction-static: 0.82
-        enable-hierarchical-cache: null
-        hicache-size: null
-        hicache-write-policy: null
-        enable-unified-cache-external-linker: true
-        unified-cache-external-linker-backend: mooncake
-        unified-cache-external-linker-config: *linker-config
-
-override_2p_dep4_dep8_linker:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-2p-dep4-dep8-linker
-  # The linker point with vLLM's prefill shape: two DEP4 workers, 16384
-  # prefill tokens per DP rank. A long uncached prompt holds one DEP4 group
-  # instead of all eight prefill ranks.
-  identity:
-    frameworks:
-      sglang: "0.0.0.dev1+g36027fd15"
-  services: *linker-services
-  roles:
-    prefill:
-      env:
-        <<: *linker-env
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "32768"
-      args:
-        chunked-prefill-size: 65536
-        mem-fraction-static: 0.82
-        enable-hierarchical-cache: null
-        hicache-size: null
-        hicache-write-policy: null
-        enable-unified-cache-external-linker: true
-        unified-cache-external-linker-backend: mooncake
-        unified-cache-external-linker-config: *linker-config
-
-override_4p_tp2ep2_dp4tp2_linker:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-4p-tp2ep2-dp4tp2-linker
-  # The linker point with the prefill shape EndpointX runs in production:
-  # four TP2 attention + MegaMoE EP2 instances, no attention DP. The model has
-  # 4 KV heads, so TP2 splits the main KV across the pair. The router places a
-  # session on an instance, and a long uncached prompt holds one pair instead
-  # of all eight DP-coupled ranks. Same eight 190 GB linker segments.
-  # MiniMax sparse PD needs the same attention TP on both sides, so decode
-  # runs DP4 x TP2 attention with MegaMoE EP8, as EndpointX does.
-  identity:
-    frameworks:
-      sglang: "0.0.0.dev1+g36027fd15"
-  services: *linker-services
-  roles:
-    prefill:
-      nodes: 2
-      workers: 4
-      gpus: 2
-      env:
-        <<: *linker-env
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "32768"
-      args:
-        tensor-parallel-size: 2
-        data-parallel-size: null
-        expert-parallel-size: 2
-        enable-dp-attention: null
-        enable-dp-lm-head: null
-        chunked-prefill-size: 16384
-        max-running-requests: 128
-        mem-fraction-static: 0.85
-        enable-hierarchical-cache: null
-        hicache-size: null
-        hicache-write-policy: null
-        enable-unified-cache-external-linker: true
-        unified-cache-external-linker-backend: mooncake
-        unified-cache-external-linker-config: *linker-config
-    decode:
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 4
-        expert-parallel-size: 8
-        # 96 per DP rank; c224 puts about 56 on each.
-        max-running-requests: 384
-        cuda-graph-max-bs-decode: 64
-
-override_1p_dep8_dep8_linker_dynamo1030:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-dynamo1030
-  # The linker point with the Dynamo every fast decode point ran. Dynamo 1030
-  # imports MultimodalProcessorOutput from schedule_batch; the compat
-  # sitecustomize (srt-slurm patch 903) re-exports it there.
-  identity:
-    frameworks:
-      sglang: "0.0.0.dev1+g36027fd15"
-  dynamo:
-    install: true
-    source:
-      wheel: 1.7.0.dev20261030
-  services: *linker-services
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env:
-        <<: *linker-env
-        PYTHONPATH: /configs/compat/dynamo1030-sglang
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 512
-        mem-fraction-static: 0.88
-        enable-hierarchical-cache: null
-        hicache-size: null
-        hicache-write-policy: null
-        enable-unified-cache-external-linker: true
-        unified-cache-external-linker-backend: mooncake
-        unified-cache-external-linker-config: *linker-config
     decode:
       env:
         PYTHONPATH: /configs/compat/dynamo1030-sglang
-
-override_1p_dep8_dep8_linker_sampling_openai:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-sampling-openai
-  # The linker point without generation_config sampling defaults. Dynamo from
-  # 11-02 (ai-dynamo/dynamo#17777) fills unset temperature/top_p from them
-  # (1.0/0.95); this isolates that change in the decode slowdown.
-  identity:
-    frameworks:
-      sglang: "0.0.0.dev1+g36027fd15"
-  services: *linker-services
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env: *linker-env
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 512
-        mem-fraction-static: 0.88
-        enable-hierarchical-cache: null
-        hicache-size: null
-        hicache-write-policy: null
-        enable-unified-cache-external-linker: true
-        unified-cache-external-linker-backend: mooncake
-        unified-cache-external-linker-config: *linker-config
-        sampling-defaults: openai
-    decode:
-      args:
-        sampling-defaults: openai
-
-override_1p_dep8_dep8_linker_least_loaded:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-least-loaded
-  # The linker point with vLLM's routing: prefill goes to the least-loaded rank
-  # with no session affinity (the shared pool serves any rank's prefix), and
-  # decode keeps soft affinity.
-  identity:
-    frameworks:
-      sglang: "0.0.0.dev1+g36027fd15"
-  services:
-    - *l3-etcd
-    - *l3-master
-    - *big-decode-store
-    - <<: *big-decode-store
-      name: store-decode-1
-      args: ["--port", "8801"]
-      readiness:
-        port: 8801
-        timeout_seconds: 600
-    - <<: *big-decode-store
-      name: store-decode-2
-      args: ["--port", "8802"]
-      readiness:
-        port: 8802
-        timeout_seconds: 600
-    - <<: *big-decode-store
-      name: store-decode-3
-      args: ["--port", "8803"]
-      readiness:
-        port: 8803
-        timeout_seconds: 600
-    - *big-infra-store
-    - <<: *big-infra-store
-      name: store-infra-1
-      args: ["--port", "8811"]
-      readiness:
-        port: 8811
-        timeout_seconds: 600
-    - <<: *big-infra-store
-      name: store-infra-2
-      args: ["--port", "8812"]
-      readiness:
-        port: 8812
-        timeout_seconds: 600
-    - <<: *big-infra-store
-      name: store-infra-3
-      args: ["--port", "8813"]
-      readiness:
-        port: 8813
-        timeout_seconds: 600
-    - *l3-otel
-  frontend:
-    env:
-      DYN_ROUTER_SESSION_AFFINITY_MODE: soft
-    worker_selection:
-      prefill: prefill-least-loaded
-      instances:
-        - name: prefill-least-loaded
-          type: dynamo-two-tier-cost-fn
-          parameters:
-            cache_threshold: 1.0
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env: *linker-env
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 512
-        mem-fraction-static: 0.88
-        router-session-affinity-ttl-secs: null
-        enable-hierarchical-cache: null
-        hicache-size: null
-        hicache-write-policy: null
-        enable-unified-cache-external-linker: true
-        unified-cache-external-linker-backend: mooncake
-        unified-cache-external-linker-config: *linker-config
 
 override_3p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
