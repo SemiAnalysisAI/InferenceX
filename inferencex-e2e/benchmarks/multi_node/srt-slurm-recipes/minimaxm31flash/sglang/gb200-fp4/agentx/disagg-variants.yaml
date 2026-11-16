@@ -565,64 +565,6 @@ override_1p_dep8_dep8_nightly1112:
         max-running-requests: 512
         mem-fraction-static: 0.88
 
-override_1p_dep8_dep8_nightly1112_dynamo1030:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-nightly1112-dynamo1030
-  # The 11-12 HiCache control with the Dynamo every fast decode point ran.
-  # Dynamo 1030 imports MultimodalProcessorOutput from schedule_batch; the
-  # compat sitecustomize (srt-slurm patch 903) re-exports it there.
-  identity:
-    frameworks:
-      sglang: "0.0.0.dev1+g36027fd15"
-  dynamo:
-    install: true
-    source:
-      wheel: 1.7.0.dev20261030
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
-        PYTHONPATH: /configs/compat/dynamo1030-sglang
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 512
-        mem-fraction-static: 0.88
-    decode:
-      env:
-        PYTHONPATH: /configs/compat/dynamo1030-sglang
-
-override_1p_dep8_dep8_nightly1112_sampling_openai:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-nightly1112-sampling-openai
-  # The 11-12 HiCache control without generation_config sampling defaults.
-  # Dynamo from 11-02 (ai-dynamo/dynamo#17777) fills unset temperature/top_p
-  # from them (1.0/0.95); this isolates that change in the decode slowdown.
-  identity:
-    frameworks:
-      sglang: "0.0.0.dev1+g36027fd15"
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
-      args:
-        tensor-parallel-size: 8
-        data-parallel-size: 8
-        expert-parallel-size: 8
-        chunked-prefill-size: 65536
-        max-running-requests: 512
-        mem-fraction-static: 0.88
-        sampling-defaults: openai
-    decode:
-      args:
-        sampling-defaults: openai
-
 override_1p_dep8_dep8_linker:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker
   # The unified-cache external linker replaces the prefill HiCache: one
@@ -799,6 +741,77 @@ override_4p_tp2ep2_dp4tp2_linker:
         # 96 per DP rank; c224 puts about 56 on each.
         max-running-requests: 384
         cuda-graph-max-bs-decode: 64
+
+override_1p_dep8_dep8_linker_dynamo1030:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-dynamo1030
+  # The linker point with the Dynamo every fast decode point ran. Dynamo 1030
+  # imports MultimodalProcessorOutput from schedule_batch; the compat
+  # sitecustomize (srt-slurm patch 903) re-exports it there.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+  services: *linker-services
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        <<: *linker-env
+        PYTHONPATH: /configs/compat/dynamo1030-sglang
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: *linker-config
+    decode:
+      env:
+        PYTHONPATH: /configs/compat/dynamo1030-sglang
+
+override_1p_dep8_dep8_linker_sampling_openai:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-sampling-openai
+  # The linker point without generation_config sampling defaults. Dynamo from
+  # 11-02 (ai-dynamo/dynamo#17777) fills unset temperature/top_p from them
+  # (1.0/0.95); this isolates that change in the decode slowdown.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services: *linker-services
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env: *linker-env
+      args:
+        tensor-parallel-size: 8
+        data-parallel-size: 8
+        expert-parallel-size: 8
+        chunked-prefill-size: 65536
+        max-running-requests: 512
+        mem-fraction-static: 0.88
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: *linker-config
+        sampling-defaults: openai
+    decode:
+      args:
+        sampling-defaults: openai
 
 override_1p_dep8_dep8_linker_least_loaded:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep8-linker-least-loaded
