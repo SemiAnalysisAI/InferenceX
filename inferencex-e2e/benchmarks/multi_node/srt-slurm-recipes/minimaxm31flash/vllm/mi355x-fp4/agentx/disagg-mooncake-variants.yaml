@@ -1,9 +1,3 @@
-# MiniMax-M3.1-Flash AgentX on MI355X with vLLM PD disaggregation: one TP4 prefill and two
-# TP4 decode engines move KV over vLLM's MooncakeConnector (RDMA, prefill writes into
-# decode) behind vllm-router with consistent-hash routing. Checkpoint, image and engine
-# settings follow the single-node lane
-# (single_node/srt-slurm-recipes/minimaxm31flash/vllm/mi355x-fp4/agentic.yaml); DBO runs on
-# the prefill only.
 schema: 2
 
 base:
@@ -50,8 +44,7 @@ base:
     # bootstrap server on the port the Router queries (patches/669-vllm-router-mooncake.patch).
     # Each role's kv-transfer-config replaces the connector preset.
     connector: mooncake
-    # Each engine sees only its own four GPUs, as in the validated runs, instead of all
-    # eight plus --device-ids.
+    # Each engine sees only its own four GPUs instead of all eight plus --device-ids.
     set_visible_devices: true
   roles:
     prefill:
@@ -115,6 +108,9 @@ base:
           # One memory registration at a time; each rank registers its whole KV region with every NIC.
           MC_MAX_CONCURRENT_REG_MR: '1'
           VLLM_MOONCAKE_CONNECTOR_TIMEOUT: '600'
+          # The shared hub cache is mounted at $HF_HOME/hub; srtctl's pre-download reads HF_HOME from role env only.
+          HF_HOME: /hf_hub_cache
+          HF_HUB_CACHE: /hf_hub_cache/hub
         MC_MAX_MR_SIZE: '1073741824'
     decode:
       nodes: 1
@@ -141,9 +137,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# Prefill admits 2x CONC. Each decode engine caps its batch at CONC/8, which trades queueing
-# before decode for shorter decode steps; its FULL graphs cover that batch x (1 + 7 draft
-# tokens). c72-c80 give the prefill 1499 GB of host KV, its 1.0 dram-utilization share.
 override_c40:
   roles:
     prefill:
@@ -151,7 +144,9 @@ override_c40:
         max-num-seqs: 80
     decode:
       args:
+        # CONC/8 trades queueing before decode for shorter decode steps.
         max-num-seqs: 5
+        # FULL graphs cover the batch x (1 + 7 draft tokens).
         compilation-config: '{"cudagraph_capture_sizes":[8,16,24,32,40],"max_cudagraph_capture_size":40}'
 
 override_c48:
@@ -189,6 +184,7 @@ override_c72:
     prefill:
       args:
         max-num-seqs: 144
+        # 1499 GB, the prefill's 1.0 dram-utilization share of its node.
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"MooncakeConnector","kv_role":"kv_producer","kv_connector_extra_config":{"mooncake_protocol":"rdma","num_workers":10}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":false,"cpu_lru_eviction":true}}]}}'
     decode:
       args:
