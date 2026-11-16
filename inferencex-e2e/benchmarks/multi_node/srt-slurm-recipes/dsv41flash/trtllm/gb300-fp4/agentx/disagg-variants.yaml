@@ -7,7 +7,7 @@ base:
     container: {}
     frameworks:
       dynamo: "1.7.0.dev20261110"
-      tensorrt_llm: "1.4.0a0.dev202610310238"
+      tensorrt_llm: "1.4.0rc4.dev202611160007"
   dynamo:
     install: true
     source:
@@ -184,8 +184,6 @@ base:
           host_cache_size: 0
           tokens_per_block: 128
         max_seq_len: 996595
-        moe_config:
-          use_low_precision_moe_combine: true
         num_postprocess_workers: 4
         pipeline_parallel_size: 1
         print_iter_log: true

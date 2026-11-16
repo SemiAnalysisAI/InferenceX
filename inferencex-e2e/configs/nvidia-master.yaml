@@ -6915,7 +6915,7 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
           dp-attn: true
 
 dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
-  image: nvcr.io/nvidia/tensorrt-llm/release:feat-ds-v4.1-bringup-1.4.0a0.dev202610310238@sha256:960406744410b9601d134334d2b4f468f8fee5875f9194aaad1dccea5d7880e7
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.4.0rc4.dev202611160007@sha256:bdaf37edd59e821b5540deeb92032674a79bdb0ad74c93fa7b4343b79c18dec0
   model: nvidia/DeepSeek-V4.1-Flash-NVFP4
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
@@ -6934,7 +6934,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_5p1d_dep2_dep8_c7000
         conc-list: [7000]
         prefill:
@@ -6950,7 +6950,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_7p1d_dep2_dep16_c7900
         conc-list: [7900]
         prefill:
@@ -6966,7 +6966,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_5p1d_dep2_dep16_c5100
         conc-list: [5100]
         prefill:
@@ -6982,7 +6982,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_10p1d_dep2_dep16_c11718
         conc-list: [11718]
         prefill:
@@ -7001,7 +7001,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_7p1d_dep2_dep32_c7600
         conc-list: [7600]
         prefill:
@@ -7017,7 +7017,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_3p1d_dep2_dep32_c2286
         conc-list: [2286]
         prefill:
@@ -7033,7 +7033,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_2p1d_dep2_dep32_c1283
         conc-list: [1283]
         prefill:
@@ -7052,7 +7052,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_1p4d_dep2_tep8_c84
         conc-list: [84]
         prefill:
@@ -7068,7 +7068,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_1p4d_dep2_tep8_c240
         conc-list: [240]
         prefill:
@@ -7084,7 +7084,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_1p4d_dep2_tep8_c140
         conc-list: [140]
         prefill:
@@ -7100,7 +7100,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_1p6d_dep2_tp4_c180
         conc-list: [180]
         prefill:
@@ -7116,7 +7116,7 @@ dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
       - spec-decoding: mtp
         power: true
         kv-offloading: dram
-        kv-offload-backend: { name: native, version: "1.4.0a0.dev202610310238" }
+        kv-offload-backend: { name: native, version: "1.4.0rc4.dev202611160007" }
         srt-recipe: disagg-variants.yaml:override_1p6d_dep2_tp4_c114
         conc-list: [114]
         prefill:
