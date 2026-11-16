@@ -20,6 +20,11 @@ is mounted into the job as `/video-package`. H100, H200, B200 and MI355X select
 [native video delivery](../inferencex-e2e/docs/video-generation.md) for
 artifact identity, reuse validation and post-merge publication.
 
+The Ascend 950DT vLLM-Omni candidate covers 1, 2, 4 and 8 NPU devices at C1.
+It is excluded from automatic sweeps until the actual cluster and native power
+exporter are supplied and the deployments qualify. See the
+[candidate configuration and prerequisites](../inferencex-e2e/docs/video-generation.md#ascend-950dt-candidate).
+
 ## Entry points
 
 The native entry `python3 -m infx.bench video` calls `evaluator.srt_selected`

@@ -105,6 +105,79 @@ the first native video reuse request; a PR-local checker cannot bypass that gate
 To add or change a deployment, follow the
 [H3 submission guide](../../video-generation/SUBMITTING.md).
 
+### Ascend 950DT candidate
+
+[`configs/ascend-candidate.yaml`](../configs/ascend-candidate.yaml) defines
+`h3-bf16-950dt-vllm-omni-video` at 1, 2, 4 and 8 NPU devices, each on one node
+at C1. It is an explicit-input candidate, excluded from `MASTER_CONFIGS` and
+automatic sweeps. `cluster:ascend-950dt` is the proposed placement name; there
+is no corresponding runner in the inventory. Supply the actual inventory before
+rendering or scheduling. No 950DT deployment is qualified by this candidate.
+
+The [recipe](../benchmarks/single_node/srt-slurm-recipes/h3/vllm-omni/950dt-bf16/serving-client.yaml)
+uses the same frozen `h3-v2.yaml/release-v1` workload as the active H3 rows.
+It selects BF16 with dense `FLASH_ATTN`, Ulysses, text-encoder TP and tiled VAE
+parallelism equal to the selected device count, and distributed layerwise offload
+(DLO). Cross-request prompt embeddings and AdaLN caching are disabled. The
+[upstream four-device guide](https://github.com/vllm-project/vllm-omni/blob/v0.32.0/recipes/MiniMaxAI/MiniMax-H3-NPU-950PR.md)
+is the starting configuration; each of the four candidate device counts needs its
+own execution, memory, timing and power evidence. DLO needs sufficient host memory;
+the 1-device point must not be assumed to fit or meet the request timeout.
+
+The candidate pins `quay.io/ascend/vllm-omni:v0.32.0-a5` by its multi-architecture
+OCI index digest. It contains `linux/amd64` and `linux/arm64` images. On the actual
+host, verify the selected child image, interpreter, CANN/driver compatibility,
+`torch_npu`, MindIE-SD, and ffmpeg/ffprobe before freezing the deployment. Keep
+`VIDEO_RUNTIME_REVISION` equal to the engine commit in the executed image.
+
+The cluster owner must supply these facts:
+
+- The runner label, CPU architecture, NPU capacity, Slurm partition and GRES,
+  container runtime, host memory and existing model/image cache paths. A node must
+  expose eight allocatable NPU devices to run the full candidate matrix. Every job
+  requests `nodes:1`.
+- Device and Ascend driver mounts, plus scheduler-controlled visibility. Configure
+  `srt-slurm.extra.visible_devices_env: ASCEND_RT_VISIBLE_DEVICES` for workers.
+  The pinned srt-slurm does not set this variable for node-owning generic services:
+  the scheduler/container integration must also pass the allocated device mask to
+  the video service. The Ascend entrypoint rejects a missing or empty mask, and
+  the recipe cannot override it. For a cluster using NPU GRES instead of Slurm's GPU
+  directive, set `gpus-per-node-directive: false` and the real `slurm.gres` template
+  containing `{gpus}`. The video launcher passes the resolved GRES to both the
+  allocation and the service step.
+- A CANN runtime exposing
+  [`aclrtDeviceGetUuid`](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/910beta2/API/runtimeapi/aclcppdevg_03_0069.html).
+  `VIDEO_DEVICE_BACKEND=ascend`
+  inventories visible devices through `libascendcl.so`, in runtime order, and
+  records each 16-byte UUID as `NPU-` followed by its canonical UUID string. Missing
+  APIs, driver errors and unusable identities fail before engine startup.
+- A native power exporter with a pinned image and explicit index, identity, power
+  metric and measurement scope in `srt-slurm.extra.default_gpu_exporter`. It must
+  emit watts and the same `NPU-<UUID>` identities as the server. Verify the physical
+  card/chip/logical-device mapping: a sensor covering several logical devices must
+  not be counted repeatedly. The standard video power identity and window checks
+  remain required; TDP constants and synthetic identities are not measurements.
+
+After supplying a real runner inventory, render all four points from
+`inferencex-e2e/` without submitting jobs:
+
+```bash
+recipe_output=$(mktemp -d)
+uv run --locked --extra recipes infx generate \
+  --config-key h3-bf16-950dt-vllm-omni-video \
+  --config-file configs/ascend-candidate.yaml \
+  --runner-config /absolute/path/to/950dt-runners.yaml \
+  --output-dir "$recipe_output"
+```
+
+To enable official sweeps, move the candidate to `configs/ascend-master.yaml`,
+register it in `infx.config.MASTER_CONFIGS` and the review/config-change tooling,
+and add the verified cluster record to `configs/runners.yaml`. Append one regular
+`video-generation` changelog entry at that point. Keep all 1/2/4/8-device points in
+the qualifying full sweep, obtain accepted reuse, and verify publication using the
+submission guide. Until then the candidate adds no active benchmark point and no
+performance changelog entry.
+
 ### Render a deployment locally
 
 Render locally from `inferencex-e2e/`, using the repository's pinned srt-slurm

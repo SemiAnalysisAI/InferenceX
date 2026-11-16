@@ -25,6 +25,10 @@ The configured deployments are the `*-video` keys in
 recipe directory under
 [`srt-slurm-recipes/h3/`](../inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/h3/).
 
+The [Ascend 950DT candidate](../inferencex-e2e/docs/video-generation.md#ascend-950dt-candidate)
+is excluded from those active masters. Its 1/2/4/8-device matrix needs a real
+cluster and native power exporter before promotion and a qualifying sweep.
+
 Start from an existing combination. Keep its frozen workload, model revision,
 concurrency population, and measurement boundary. To change a deployment, edit its
 row. To add a deployment that must stay separately selectable, copy the row under a

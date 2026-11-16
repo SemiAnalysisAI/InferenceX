@@ -286,6 +286,42 @@ def test_video_point_serves_the_video_service_and_stages_every_concurrency(harne
     assert lines(harness.logs, "scancel") == []
 
 
+def test_video_gres_allocation_uses_selected_devices_for_job_and_steps(harness):
+    records = yaml.safe_load(harness.config.read_text())
+    cluster = records["clusters"]["b200-nscale"]
+    cluster["slurm"]["gres"] = "npu:{gpus}"
+    cluster["slurm"]["srun-args"] = ["--container-remap-root"]
+    cluster["slurm"]["srt-slurm"]["gpus-per-node-directive"] = False
+    config = harness.tmp / "gres-runners.yaml"
+    config.write_text(yaml.safe_dump({"labels": {"cluster:lab": ["lab_00"]}, "clusters": {"lab": cluster}}))
+    env = video_env(harness, "lab", RUNNER_NAME="lab_00", GPU_COUNT="2")
+    assert_ok(launch(env, config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    argv = call["argv"]
+    bound = yaml.safe_load(Path(argv[argv.index("--file") + 1]).read_text())
+    rendered = srtslurm(harness.workspace)
+    resolved = resolve_config_with_defaults(job_recipe(bound, argv), rendered)
+    assert rendered["use_gpus_per_node_directive"] is False
+    assert resolved["sbatch_directives"]["gres"] == "npu:2"
+    assert resolved["srun_options"]["gres"] == "npu:2"
+    assert resolved["srun_options"]["container-remap-root"] == ""
+    assert "gpus-per-node" not in resolved["srun_options"]
+    assert resolved["resources"]["gpus_per_node"] == 2
+
+
+def test_video_cluster_without_gpu_directive_requires_gres(harness):
+    records = yaml.safe_load(harness.config.read_text())
+    slurm = records["clusters"]["b200-nscale"]["slurm"]
+    slurm["srt-slurm"]["gpus-per-node-directive"] = False
+    slurm.pop("gres", None)
+    harness.config.write_text(yaml.safe_dump(records))
+    result = launch(video_env(harness, "b200-nscale"), harness.config, harness.workspace)
+    assert result.returncode == 1
+    assert "must declare gres" in result.stderr
+    assert srtctl_calls(harness.logs) == []
+
+
 def test_video_point_requiring_power_fails_without_a_native_package(harness):
     env = video_env(harness, "h100-cw", REQUIRE_POWER="1")
     result = launch(env, harness.config, harness.workspace)

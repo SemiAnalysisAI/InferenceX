@@ -124,6 +124,11 @@ def bind_video(run: SrtRun, checkout: Checkout, arguments: Path) -> int:
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.video", "prepare",
         f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
     ]  # fmt: skip
+    if run.srt.gpus_per_node_directive is False:
+        gres = run.backend.settings.gres_for(run.request.gpu_count)
+        if gres is None:
+            raise LaunchError("video clusters without gpus-per-node-directive must declare gres")
+        prepare += ["--gres", gres]
     return _bind(run, prepare, checkout.root)
 
 

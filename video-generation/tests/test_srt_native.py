@@ -326,12 +326,68 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
         )
         power = json.loads((output / cell["power"]["path"]).read_text())
         assert power["valid"] and power["phases"] == cell["power"]["phases"]
+        assert power["source"] is None
+        assert power["semantics"]["sensor"] is None and power["semantics"]["scope"] is None
         assert power["phases"]["measurement"]["aggregate"]["joules_per_valid_clip"] == 18000.25
         assert power["phases"]["measurement"]["aggregate"]["observed_peak_power_w"] == 1201.0
         assert len(power["sample_series"]) == 70 and set(power["per_gpu"]) == set(
             matrix["gpu_uuids"]
         )
     assert "gpu/c1/baseline/artifacts/measurement-r001-c001.mp4" in checksums
+
+
+@pytest.mark.parametrize("missing_metric", [False, True], ids=["measured", "missing-metric"])
+def test_bundle_uses_validated_custom_exporter_provenance(tmp_path, missing_metric):
+    from infx.results import video as video_results
+    from infx.tests.results.test_video_results import IDENTITY, _cell, _service_package
+
+    pkg = _service_package(tmp_path)
+    cell = _cell(pkg, pkg.logs_root)
+    (cell / "baseline/run.json").write_text(json.dumps(_run(4)))
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.update(source_metric="accelerator_power_watts", power_scope="accelerator_device_board")
+    if missing_metric:
+        del manifest["source_metric"]
+    manifest_path.write_text(json.dumps(manifest))
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    assert video_results.run(
+        logs_root=pkg.logs_root,
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[4],
+        gpu_count=4,
+        expected_producer_sha="a" * 40,
+        identity=IDENTITY,
+        require_power=True,
+    ) == int(missing_metric)
+    output = tmp_path / "h3-results"
+    result = srt_bundle.build_bundle(
+        video_dir=pkg.logs_root / "video",
+        power_dir=pkg.power_dir,
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[4],
+        output=output,
+        environ={"PATH": os.environ["PATH"]},
+    )
+
+    power = json.loads((output / "gpu/c4/power.json").read_text())
+    assert power["source"] == "srt-slurm.dcgm-power"
+    assert power["semantics"]["scope"] == "accelerator_device_board"
+    assert power["semantics"]["sensor"] == (None if missing_metric else "accelerator_power_watts")
+    assert power["semantics"]["power_unit"] == "W"
+    assert power["window"]["clock_source"] == "head_node_unix_clock"
+    assert power["valid"] is (not missing_metric)
+    assert result["power_verified"] is (not missing_metric)
+    measurement = power["phases"]["measurement"]
+    if missing_metric:
+        assert "package_recompute_invalid" in power["invalid_reasons"]
+        assert measurement["aggregate"] is None and power["metrics"] == {}
+    else:
+        assert measurement["aggregate"]["joules_per_valid_clip"] == pytest.approx(21000)
 
 
 def test_bundle_counts_malformed_power_samples_instead_of_hiding_them(tmp_path):
