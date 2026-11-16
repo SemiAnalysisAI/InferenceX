@@ -1379,7 +1379,7 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64:
         moe-a2a-backend: none
         speculative-moe-runner-backend: flashinfer_trtllm
         speculative-moe-a2a-backend: none
-        mem-fraction-static: 0.76
+        mem-fraction-static: 0.72
         max-mamba-cache-size: 936
         max-running-requests: 64
         stream-interval: 20
@@ -1674,7 +1674,7 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64_prefill32k:
         moe-a2a-backend: none
         speculative-moe-runner-backend: flashinfer_trtllm
         speculative-moe-a2a-backend: none
-        mem-fraction-static: 0.76
+        mem-fraction-static: 0.72
         max-mamba-cache-size: 936
         max-running-requests: 64
         stream-interval: 20
@@ -1802,7 +1802,7 @@ override_2p1d_p_tp2_d_tp8_ep4_cap64_prefill32k_flashinfer:
         moe-a2a-backend: none
         speculative-moe-runner-backend: flashinfer_trtllm
         speculative-moe-a2a-backend: none
-        mem-fraction-static: 0.76
+        mem-fraction-static: 0.72
         max-mamba-cache-size: 936
         max-running-requests: 64
         stream-interval: 20
