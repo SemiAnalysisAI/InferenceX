@@ -66,11 +66,12 @@ fi
 
 # Test only (branch thshan/glm52-pd-test-c48): a recipe whose name contains "_hugetlb"
 # backs its HiCache host pools with 2 MiB hugetlb pages (SGLANG_HUGEPAGE_MODE=required),
-# which memory compaction does not migrate. 710,000 pages (1,387 GiB) cover four PP ranks'
-# KV + DSA indexer pools (~1,370 GiB). Reserved after the reclaim checks above;
+# which memory compaction does not migrate. 760,000 pages (1,484 GiB) cover four PP ranks'
+# KV + DSA indexer pools (~1,370 GiB) with room for SGLang's per-rank pool share (PP0 needs
+# 352 GiB; 710,000 pages left the indexer pool short). Reserved after the reclaim checks above;
 # teardown.sh and every later job's setup release whatever is left free.
 if [[ "${SRT_RECIPE:-}" == *_hugetlb* ]]; then
-    want=$((used + reserved + 710000))
+    want=$((used + reserved + 760000))
     sync
     echo 1 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null
     for attempt in 1 2 3; do
