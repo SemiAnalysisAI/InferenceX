@@ -1,0 +1,330 @@
+base:
+  schema: 2
+  name: musespark-fp4-mi355x-tokenspeed-agentic-dflash
+  identity:
+    model:
+      revision: c7bc74fd64371315a091bc15f9723882eead0dc1
+    container: {}
+    frameworks:
+      tokenspeed: 0.1.1.post20261116
+      tokenspeed-kernel: 0.1.5.post20261116
+      tokenspeed-kernel-amd: 0.1.4.post20261116
+      tokenspeed-scheduler: 0.1.57
+      tokenspeed-engine: 0.1.0.post20261118
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  # Weight loading, graph capture and the first kernel compilations.
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+    # srtctl runs SMG directly: these are the gateway settings `ts serve` uses for Muse Spark.
+    args:
+      reasoning-parser: muse
+      tool-call-parser: muse
+      parser: symphony
+      policy: round_robin
+      disable-circuit-breaker: true
+      disable-retries: true
+      disable-load-monitoring: true
+      tokenizer-cache-enable-l0: true
+      tokenizer-cache-enable-l1: true
+      health-check-timeout-secs: 610
+  engine: tokenspeed
+  setup_script: tokenspeed-nightly-rocm.sh
+  environment:
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261116/tokenspeed-0.1.1.post20261116-py3-none-any.whl#sha256=de862f270b2c92590e3c8226b027c3fc0de9a271842e4a28ab96155c56e4a683
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261116-rocm72/tokenspeed_kernel-0.1.5.post20261116-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=8cb0329bbe85ce10042b172c685a6144557357be83eed042ea2db55b717fd584
+    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261116/tokenspeed_kernel_amd-0.1.4.post20261116-py3-none-any.whl#sha256=1c0ec9eb8e5d2635ff69c36332149177ff486a1d74b2efd5ddf961ac42edcd69
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.0.post20261118/tokenspeed_engine-0.1.0.post20261118-cp312-abi3-manylinux_2_28_x86_64.whl#sha256=b1e817b8008d06835698b7d95f1a9d10b9ae4787f6d4d3b47781ebf1087b30b3
+    TOKENSPEED_SCHEDULER_VERSION: 0.1.57
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      env:
+        PYTHONNOUSERSITE: '1'
+        # One HIP queue per graph keeps the two-stream speculative decode graph
+        # off the runtime's slow per-node launch path.
+        DEBUG_HIP_FORCE_GRAPH_QUEUES: '1'
+        DEBUG_HIP_GRAPH_BATCH_SIZE: '1'
+        # Serve from the pre-seeded shared HF cache with no Hub API calls.
+        HF_HUB_OFFLINE: '1'
+      args:
+        served-model-name: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
+        revision: c7bc74fd64371315a091bc15f9723882eead0dc1
+        dtype: bfloat16
+        quantization: mxfp4
+        data-parallel-size: 1
+        pipeline-parallel-size: 1
+        init-expert-location: trivial
+        moe-backend: gluon
+        all2all-backend: none
+        kv-cache-dtype: fp8_e4m3
+        max-model-len: 1048576
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 8, 12, 16, 32, 64]
+        max-cudagraph-capture-size: 64
+        disable-prefill-graph: true
+        enable-prefix-caching: true
+        gpu-memory-utilization: 0.92
+        reasoning-parser: muse
+        grammar-backend: xgrammar
+        # DFlash2 drafts seven tokens per step; the verify window adds the current token.
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Muse-Spark-Open-DFlash2
+        speculative-draft-model-revision: 46c90f412549c472941a68382d91a99e5e6372a0
+        speculative-num-steps: 7
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 8
+        # Real verification. The connector selects greedy sampling only for synthetic throughput.
+        sampling-backend: triton
+        enable-speculative-sampling: true
+        enable-metrics: true
+        metrics-host: 0.0.0.0
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'tokenspeed:'
+
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        # Attention TP8; MoE TP8 with EP1 keeps all 256 experts on every GPU.
+        attn-tp-size: 8
+        moe-tp-size: 8
+        ep-size: 1
+        # One persistent launch per decoder layer. The monokernel serves one request a
+        # launch, so the running cap is 1 and the other sessions queue.
+        decode-monokernel: true
+        max-num-seqs: 1
+        prefill-decode-interval: 0
+        disable-kvstore: true
+        kvstore-ratio: 0.0
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  roles:
+    agg:
+      args:
+        # Attention TP8; MoE TP8 with EP1 keeps all 256 experts on every GPU.
+        attn-tp-size: 8
+        moe-tp-size: 8
+        ep-size: 1
+        # One persistent launch per decoder layer. The monokernel serves one request a
+        # launch, so the running cap is 1 and the other sessions queue.
+        decode-monokernel: true
+        max-num-seqs: 1
+        prefill-decode-interval: 0
+        disable-kvstore: true
+        kvstore-ratio: 0.0
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        # Attention TP8; MoE TP8 with EP1 keeps all 256 experts on every GPU.
+        attn-tp-size: 8
+        moe-tp-size: 8
+        ep-size: 1
+        # One persistent launch per decoder layer. The monokernel serves one request a
+        # launch, so the running cap is 1 and the other sessions queue.
+        decode-monokernel: true
+        max-num-seqs: 1
+        prefill-decode-interval: 0
+        disable-kvstore: true
+        kvstore-ratio: 0.0
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c6:
+  roles:
+    agg:
+      args:
+        # Attention TP8; MoE TP8 with EP1 keeps all 256 experts on every GPU.
+        attn-tp-size: 8
+        moe-tp-size: 8
+        ep-size: 1
+        # One persistent launch per decoder layer. The monokernel serves one request a
+        # launch, so the running cap is 1 and the other sessions queue.
+        decode-monokernel: true
+        max-num-seqs: 1
+        prefill-decode-interval: 0
+        disable-kvstore: true
+        kvstore-ratio: 0.0
+        stream-interval: 50
+  benchmark:
+    env:
+      CONC: '6'
+      KV_OFFLOADING: none
+
+override_tp8_c8:
+  roles:
+    agg:
+      args:
+        # Attention TP8; MoE TP8 with EP1 keeps all 256 experts on every GPU.
+        attn-tp-size: 8
+        moe-tp-size: 8
+        ep-size: 1
+        # One persistent launch per decoder layer. The monokernel serves one request a
+        # launch, so the running cap is 1 and the other sessions queue.
+        decode-monokernel: true
+        max-num-seqs: 1
+        prefill-decode-interval: 0
+        disable-kvstore: true
+        kvstore-ratio: 0.0
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp8_c10:
+  roles:
+    agg:
+      args:
+        # Attention TP8; MoE TP8 with EP1 keeps all 256 experts on every GPU.
+        attn-tp-size: 8
+        moe-tp-size: 8
+        ep-size: 1
+        # Steps with one running request take the monokernel; larger steps keep the
+        # regular path. One decode stream cannot carry this concurrency.
+        decode-monokernel: true
+        max-num-seqs: 8
+        prefill-decode-interval: 256
+        disable-kvstore: true
+        kvstore-ratio: 0.0
+        stream-interval: 40
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
+
+override_tp8_c16:
+  roles:
+    agg:
+      args:
+        # Attention TP8; MoE TP8 with EP1 keeps all 256 experts on every GPU.
+        attn-tp-size: 8
+        moe-tp-size: 8
+        ep-size: 1
+        # Steps with one running request take the monokernel; larger steps keep the
+        # regular path. One decode stream cannot carry this concurrency.
+        decode-monokernel: true
+        max-num-seqs: 8
+        prefill-decode-interval: 256
+        disable-kvstore: true
+        kvstore-ratio: 0.0
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp8_c28:
+  roles:
+    agg:
+      args:
+        # Attention TP8; MoE TP8 with EP1 keeps all 256 experts on every GPU.
+        attn-tp-size: 8
+        moe-tp-size: 8
+        ep-size: 1
+        # Steps with one running request take the monokernel; larger steps keep the
+        # regular path. One decode stream cannot carry this concurrency.
+        decode-monokernel: true
+        max-num-seqs: 8
+        prefill-decode-interval: 256
+        disable-kvstore: true
+        kvstore-ratio: 0.0
+        stream-interval: 20
+  benchmark:
+    env:
+      CONC: '28'
+      KV_OFFLOADING: none
+
+override_tp4_c28:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        # Attention TP4; EP4 places 64 experts on each GPU.
+        attn-tp-size: 4
+        moe-tp-size: 1
+        ep-size: 4
+        max-num-seqs: 56
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 56]
+        prefill-decode-interval: 96
+        # At least 48 decode rounds after every prefill chunk: back-to-back prefill stalls decode.
+        prefill-decode-min-interval: 48
+        enable-short-prefill-first: true
+        # Host KV store, in GB per GPU.
+        kvstore-size: 250
+        stream-interval: 20
+  benchmark:
+    env:
+      CONC: '28'
+      KV_OFFLOADING: dram
+
+override_tp4_c36:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        # Attention TP4; EP4 places 64 experts on each GPU.
+        attn-tp-size: 4
+        moe-tp-size: 1
+        ep-size: 4
+        max-num-seqs: 72
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 56]
+        prefill-decode-interval: 96
+        # At least 48 decode rounds after every prefill chunk: back-to-back prefill stalls decode.
+        prefill-decode-min-interval: 48
+        enable-short-prefill-first: true
+        # Host KV store, in GB per GPU.
+        kvstore-size: 250
+        stream-interval: 20
+  benchmark:
+    env:
+      CONC: '36'
+      KV_OFFLOADING: dram
+
+override_tp4_c40:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        # Attention TP4; EP4 places 64 experts on each GPU.
+        attn-tp-size: 4
+        moe-tp-size: 1
+        ep-size: 4
+        max-num-seqs: 80
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 56]
+        prefill-decode-interval: 96
+        # At least 48 decode rounds after every prefill chunk: back-to-back prefill stalls decode.
+        prefill-decode-min-interval: 48
+        enable-short-prefill-first: true
+        # Host KV store, in GB per GPU.
+        kvstore-size: 250
+        stream-interval: 20
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram
