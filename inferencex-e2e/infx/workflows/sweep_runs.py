@@ -19,6 +19,11 @@ SOURCE_IDENTITY_ARTIFACT = "source-identity"
 SOURCE_IDENTITY_FILE = "source_identity.json"
 SOURCE_IDENTITY_FLAGS = ("evals_only", "agentx_fast", "all_evals", "fail_fast")
 FULL_SHA = re.compile(r"[0-9a-f]{40}")
+FULL_SWEEP_LABELS = (
+    "full-sweep-enabled",
+    "non-canary-full-sweep-enabled",
+    "full-sweep-fail-fast",
+)
 
 REUSABLE_AGGREGATE_ARTIFACTS = {
     "results_bmk",

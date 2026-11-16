@@ -995,7 +995,7 @@ def _fixed_sequence_entries(
     is_multinode = config.get(Fields.MULTINODE.value, False)
     disagg = config.get(Fields.DISAGG.value, False)
     isl, osl = sequence[Fields.ISL.value], sequence[Fields.OSL.value]
-    require_power = sequence.get(Fields.REQUIRE_POWER.value, sequence.get("require_power", False))
+    require_power = sequence.get(Fields.REQUIRE_POWER.value, False)
     if require_power and (isl, osl) != (8192, 1024):
         raise ValueError("require-power rollout supports only fixed-sequence 8192/1024")
     model_code = config[Fields.MODEL_PREFIX.value]
@@ -1170,7 +1170,7 @@ def _agentic_entries(
             entry[Fields.POWER.value] = True
         if benchmark.get(Fields.CPU_POWER.value):
             entry[Fields.CPU_POWER.value] = True
-        if benchmark.get(Fields.REQUIRE_POWER.value, benchmark.get("require_power", False)):
+        if benchmark.get(Fields.REQUIRE_POWER.value):
             entry[Fields.REQUIRE_POWER.value] = True
         entry.update(
             {

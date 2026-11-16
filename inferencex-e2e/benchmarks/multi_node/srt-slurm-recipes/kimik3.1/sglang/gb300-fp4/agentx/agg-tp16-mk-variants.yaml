@@ -111,6 +111,7 @@ base:
         model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":4}'
         weight-loader-disable-mmap: true
         weight-loader-prefetch-checkpoints: false
+        weight-loader-drop-cache-after-load: false
         watchdog-timeout: 3600
         enable-metrics: true
         enable-cache-report: true
@@ -134,24 +135,35 @@ base:
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
       AGENTIC_WARMUP_GRACE_PERIOD: "1800"
 
-# max-running-requests equals the concurrency, so every verify step stays on a megakernel graph.
-override_tp16_c1:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-agg-tp16-mk-c1
-  roles:
-    agg:
-      args:
-        max-running-requests: 1
-
+# max-running-requests is half the concurrency: each verify step serves fewer requests at a
+# higher per-request rate, and every step stays on a megakernel graph.
 override_tp16_c2:
   name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-agg-tp16-mk-c2
   roles:
     agg:
       args:
-        max-running-requests: 2
+        max-running-requests: 1
 
 override_tp16_c4:
   name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-agg-tp16-mk-c4
   roles:
     agg:
+      env:
+        # Megakernel schedule options for the 2-request verify step.
+        K31MK_ATTNRES_CARVEOUT: "100"
+        K31MK_AUX_SIDE_STREAM: "1"
+        K31MK_EXPERTS_COOPERATIVE: "0"
+        K31MK_FUSED_INDEX_Q_VERIFY: "1"
+        K31MK_INDEX_SPLIT_COARSE_BITS: "12"
+        K31MK_INDEX_SPLIT_MIN: "320000"
+        K31MK_KDA_COMMIT: "1"
+        K31MK_KDA_TOKEN_OWNED: "1"
+        K31MK_MLAQ_AFTER_SCORING: "1"
+        K31MK_MLA_VALUE_EARLY_TRIGGER: "1"
+        K31MK_OPROJ_NORM_FOLD: "1"
+        K31MK_RANK0_BCAST: "1"
+        K31MK_RANKTOPK_BITONIC: "1"
+        K31MK_REARM_FENCE: "3"
+        K31MK_TAIL_RMS_FOLD: "1"
       args:
-        max-running-requests: 4
+        max-running-requests: 2
