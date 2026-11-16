@@ -304,7 +304,7 @@ override_dep8_c256:
         enable-expert-parallel: true
         all2all-backend: mori
         moe-backend: aiter_mega_moe
-        engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
+        engram-config: '{"cpu_offload":false,"embedding_across_dp":true}'
         max-num-seqs: 128
         max-num-batched-tokens: 32768
         prefill-schedule-interval: 96
@@ -341,7 +341,7 @@ override_dep8_c512:
         enable-expert-parallel: true
         all2all-backend: mori
         moe-backend: aiter_mega_moe
-        engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
+        engram-config: '{"cpu_offload":false,"embedding_across_dp":true}'
         max-num-seqs: 128
         max-num-batched-tokens: 32768
         prefill-schedule-interval: 96
@@ -378,7 +378,7 @@ override_dep8_c1024:
         enable-expert-parallel: true
         all2all-backend: mori
         moe-backend: aiter_mega_moe
-        engram-config: '{"cpu_offload":true,"embedding_across_dp":true}'
+        engram-config: '{"cpu_offload":false,"embedding_across_dp":true}'
         max-num-seqs: 160
         max-num-batched-tokens: 32768
         prefill-schedule-interval: 96
