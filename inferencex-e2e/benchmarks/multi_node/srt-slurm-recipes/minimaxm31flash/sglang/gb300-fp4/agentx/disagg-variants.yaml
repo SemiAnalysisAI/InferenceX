@@ -522,6 +522,49 @@ override_3p_dep4_dep16_si20_linker_chunk32k:
         unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
     decode: *gb300-dep16-decode
 
+override_3p_dep4_dep16_si20_linker_chunk32k_dynamo1030:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-linker-chunk32k-dynamo1030
+  # The point above on Dynamo 1.7.0.dev20261030, which the GB200 linker point
+  # also runs. The compat sitecustomize (srt-slurm patch 903) lets it start on
+  # the 11-12 image.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+  services: *gb300-linker-services
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+        PYTHONPATH: /configs/compat/dynamo1030-sglang
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 32768
+        max-running-requests: 256
+        stream-interval: 20
+        mem-fraction-static: 0.85
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
+    decode:
+      <<: *gb300-dep16-decode
+      env:
+        PYTHONPATH: /configs/compat/dynamo1030-sglang
+
 override_6p_tp2ep2_dp8tp2_si20_nightly1112:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-tp2ep2-dp8tp2-si20-nightly1112
   # Prefill as TP2 attention with MegaMoE EP2 and no attention DP, against the
