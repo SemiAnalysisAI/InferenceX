@@ -9,6 +9,7 @@ import json
 import math
 import os
 import re
+import statistics
 
 from ep_oracle import (
     MODE_ALLOWED_SEMANTICS,
@@ -140,9 +141,18 @@ def _pcts(xs):
              "p95": percentile(xs, 95), "p99": percentile(xs, 99)} if xs else None)
 
 
-# Consumer contract, not labels: the frontend keys the headline on
-# `components.pair_period` carrying exactly CHAIN_PERIOD_ORIGIN, so a typo fails silently.
-CHAIN_PERIOD_ORIGIN = "chained-median"
+def _error_for_max(value):
+    """An error magnitude for a MAX reduction: NaN would vanish from one, so it reads as infinity."""
+    return 0.0 if value is None else value if math.isfinite(value) else math.inf
+
+
+def _recorded_error(value):
+    """JSON has no infinity: an error that is not finite is written as null beside its failed verdict."""
+    return value if value is None or math.isfinite(value) else None
+
+
+# The period's level is the span chain's time per pair; its spread is the pair windows'.
+CHAIN_PERIOD_ORIGIN = "chained-span-median"
 CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
 CUDA_GRAPH_ORIGIN = "cuda-graph-replay"
 
@@ -279,7 +289,8 @@ class Point:
     counts the samples whose start some rank held until its throttled host recovered, and
     `host_stalled` the samples some rank's host ran throttled around anyway; `suspect` counts the
     samples that were missed or stalled, once. The chained family runs on its own trials:
-    `chain`/`chain_spread` are per-iteration, `gap` and `settle` one scalar per trial;
+    `chain`/`chain_spread` are per-iteration, `gap`, `settle` and `window_overhead` one scalar per
+    trial;
     `chain_host_retries` and `chain_host_stalled` count, for a dispatch that waits on the host, the
     chain siblings restarted for a throttled host and the trials still throttled after the last
     restart (None elsewhere).
@@ -316,6 +327,7 @@ class Point:
     combine_floor: list = field(default_factory=list)
     gap: list = field(default_factory=list)
     settle: list = field(default_factory=list)
+    window_overhead: list = field(default_factory=list)
     missed: dict = field(default_factory=dict)
     host_held: dict = field(default_factory=dict)
     host_stalled: dict = field(default_factory=dict)
@@ -549,8 +561,14 @@ class Sweep:
                     point.chain_output_error = max(point.chain_output_error, error)
                 pair = chained["pair"]
                 median, spread = self.reduce.median_spread(pair)
-                point.chain += median
+                # An event node costs device time, so a window around each pair reads above the
+                # pairs of the span chain, which has no event between them. The span sets the
+                # level; the windows, shifted onto it, keep the pair-to-pair spread.
+                level = statistics.median(self.reduce.scalars(chained["span"]))
+                overhead = _pcts(median)["p50"] - level
+                point.chain += [value - overhead for value in median]
                 point.chain_spread += spread
+                point.window_overhead.append(overhead)
                 # Per-op floors: cross-rank MIN only, since chained windows park each rank's wait.
                 point.dispatch_floor += self.reduce.vec(chained["dispatch"], MIN)
                 point.combine_floor += self.reduce.vec(chained["combine"], MIN)
@@ -581,7 +599,7 @@ class Sweep:
             and point.graph_ok
         )
         point.max_rel = max(
-            report["max_elementwise_relative_error"] or 0.0
+            _error_for_max(report["max_elementwise_relative_error"])
             for report in (point.oracle_pre, point.oracle_post, point.oracle_chain)
         )
 
@@ -619,12 +637,12 @@ class Sweep:
             # The chain's own final output vs a drained pair: proves the last pair of each chain,
             # never the interior ones. Read beside the error, never alone.
             "chain_last_output_passed": chain_passed,
-            "chain_last_output_error": chain_error,
+            "chain_last_output_error": _recorded_error(chain_error),
             # The full oracle against the state the chain left behind (a fresh pair afterwards).
             "post_chain_state_passed": post_chain_state_passed,
             "cuda_graph_output_rewritten": graph_rewritten,
             "cuda_graph_last_output_passed": graph_passed,
-            "cuda_graph_last_output_error": graph_error,
+            "cuda_graph_last_output_error": _recorded_error(graph_error),
             "max_relative_error": None,  # filled after `passed` below keeps collective order
             "oracle_passed": oracle_passed,
             "oracle_failed_checks": oracle_failed_checks,
@@ -668,7 +686,7 @@ class Sweep:
         recv_min = reduce.integer(received, ops.MIN)
         global_ok = reduce.integer(point.local_ok, ops.MIN)
         correctness = self._correctness(point)
-        correctness["max_relative_error"] = reduce.vec([point.max_rel], ops.MAX)[0]
+        correctness["max_relative_error"] = _recorded_error(reduce.vec([point.max_rel], ops.MAX)[0])
         correctness["passed"] = point_ok = bool(global_ok) and recv_total > 0
         dispatch_bytes, combine_bytes, roundtrip_bytes = self._bytes(rstats["routed_copies"])
         # The wire basis is a property of the RECEIVE (MoRI's LL kernels deduplicate where the other
@@ -687,12 +705,13 @@ class Sweep:
                 "dispatch": measured(point.dispatch, dp),
                 "isolated_sum": _component(pub(isum), 0, derived=True),
                 # What a decode loop pays per MoE layer: the steady-state period of back-to-back
-                # pairs, cross-rank median. Do not sum it.
+                # pairs with no event between them, cross-rank median. Do not sum it.
                 "pair_period": _component(chainp, len(point.chain), origin=CHAIN_PERIOD_ORIGIN),
                 "roundtrip": measured(point.roundtrip, rtp),
                 "stage": _component(sp, len(point.stage)),
             },
-            # The last-entering rank's op windows from the floors chain; tracks kernel time ~10%.
+            # The last-entering rank's op windows from the floors chain. Each holds its events'
+            # own cost, so the two can sum to more than the pair period.
             "chain_floor_us": {
                 "combine": _component(_pcts(point.combine_floor), len(point.combine_floor), origin=CHAIN_FLOOR_ORIGIN),
                 "dispatch": _component(_pcts(point.dispatch_floor), len(point.dispatch_floor), origin=CHAIN_FLOOR_ORIGIN),
@@ -702,6 +721,9 @@ class Sweep:
                 "interpair_gap_us": _component(_pcts(point.gap), len(point.gap)),
                 "pair_spread_us": _component(_pcts(point.chain_spread), len(point.chain_spread)),
                 "settle_drift_us": _component(_pcts(point.settle), len(point.settle)),
+                # What an event window around one pair adds: the windowed median minus the span
+                # chain's time per pair.
+                "window_overhead_us": _component(_pcts(point.window_overhead), len(point.window_overhead)),
                 # Dispatch that waits on the host only (null elsewhere): siblings restarted for a
                 # throttled host, and trials still throttled after the last restart.
                 "host_retried_siblings": point.chain_host_retries,
