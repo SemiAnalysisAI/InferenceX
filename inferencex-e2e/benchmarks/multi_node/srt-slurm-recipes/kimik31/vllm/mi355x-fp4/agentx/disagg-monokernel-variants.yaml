@@ -10,6 +10,7 @@ base:
     mem: '0'
   container_mounts:
     /dev/infiniband: /dev/infiniband
+    /var/lib/hf-hub-cache/models--moonshotai--Kimi-K3.1-Pro/snapshots/6d0a0202956796543364d666ab19c6ad1a494ee1: /model
   extra_mount:
   - /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
   - /var/lib/hf-hub-cache:/k31-preview:ro

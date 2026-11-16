@@ -12632,6 +12632,8 @@
 
 - config-keys:
     - kimik31-pd-c144-c8-capone
+    - kimik31-pd-c8-capone
   description:
     - Run two full 1P1D points on the same validated k31-pd-1115r2 image. The c144 arm restores decode GMU 0.92 with max sequences 144 and a 576-token full graph. The c8 arm uses the latency-specialized cap-one decode path with K7 block rejection, max sequences 1, FULL_DECODE_ONLY graphs at 1 and 8 rows, no ReplaySSM, and no DRAM offload. Preserve prefix matching at 512 tokens and use the SA model cache mount.
+    - Add a c8-only retry after the first c8 service became healthy but AgentX received an unmounted /model tokenizer path. Mount the immutable node-local target snapshot at /model for the client; keep the image, worker commands, topology and full workload unchanged.
   pr-link: XXX
