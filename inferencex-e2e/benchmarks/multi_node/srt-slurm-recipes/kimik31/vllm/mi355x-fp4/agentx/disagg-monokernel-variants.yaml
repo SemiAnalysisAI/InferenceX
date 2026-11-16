@@ -4,7 +4,6 @@ base:
     time_limit: 08:00:00
   sbatch_directives:
     mem: '0'
-    exclude: vultr-mi355x-6
   srun_options:
     container-remap-root: ''
     container-writable: ''
