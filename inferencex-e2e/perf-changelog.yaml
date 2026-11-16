@@ -12918,3 +12918,12 @@
     - "Concurrency 1 and 4 (latency_specialized decode backend) pick up the seungrokj/mum#28 levers through their defaults (all 1): VLLM_K31_BEAT_MARKOV, VLLM_K31_BEAT_DRAFTMETA, VLLM_K31_BEAT_K2SYNC, VLLM_K31_BEAT_EAGERPREP, VLLM_K31_BEAT_KDAK1 and VLLM_K3_INDEXER_SAMPLED_TOPK, plus VLLM_KIMI_SD_DSA_PROLOGUE_INDEXER at concurrency 1, where VLLM_KIMI_SD_DSA_PROLOGUE is on. Concurrency 16-48 use the stock decode backend, which ignores these flags."
     - "No change to layouts, draft token counts, capture sizes or the DSpark draft's data types."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5089  
+
+- config-keys:
+    - dsv41flash-fp4-gb200-llmd-vllm-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 AgentX disaggregated recipes on GB200 behind llm-d-router v1.0.0 (llmd-vllm), with NIXL P/D transfer, DSpark MTP speculative decoding (5 draft tokens on prefill, 4 on decode), EPLB with 32 redundant experts on decode, and precise prefix-cache routing fed by per-rank KV events."
+    - "Both points run two external-LB DP4/EP4 prefill workers, one per node, each offloading up to 64 GiB of KV to CPU (vllm-simple backend). Decode is one external-LB DP8/EP8 group across two nodes (2P1D DEP8, 16 GPUs) or one DP4/EP4 group on a single node (2P1D DEP4, 12 GPUs)."
+    - "Each point sweeps concurrency 256, 512 and 1024."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -27,6 +27,7 @@ adjustments:
     vllm: 1.5
     dynamo-sglang: 1.5
     dynamo-vllm: 1.5
+    llmd-vllm: 1.5
   model-prefix:
     kimik3.1: 100.0
     dsv41flash: 0.5

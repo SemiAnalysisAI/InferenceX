@@ -1,0 +1,255 @@
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb200-llmd-vllm-agentx-disagg
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      vllm: "0.33.0rc1.dev1030+gcf5cea2da"
+
+  dynamo:
+    install: false
+
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+
+  slurm:
+    time_limit: "06:00:00"
+
+  health_check:
+    max_attempts: 2160
+    interval_seconds: 10
+
+  resources:
+    gpu_type: "gb200"
+    gpus_per_node: 4
+
+  services:
+  - name: llm-d-sidecar
+    type: llm-d-sidecar
+    placement:
+      node: decode
+      per: worker
+    args:
+    - "--prefill-max-retries=3"
+    - "--zap-log-level=1"
+
+  frontend:
+    type: llm-d
+    enable_multiple_frontends: false
+    container_image: "ghcr.io/llm-d/llm-d-router-agentx:09-12-2026@sha256:cea6c6757df8c64d21bc770d0d95ddbead8ee924766a2dd7da1416ac27057499"
+    args:
+      v: 2
+      allow-experimental-plugins: true
+      health-checking: true
+      tracing: false
+    epp_config:
+      plugins:
+      - type: always-disagg-pd-decider
+      - type: disagg-profile-handler
+        parameters:
+          deciders:
+            prefill: always-disagg-pd-decider
+      - type: prefill-filter
+      - type: decode-filter
+      - type: token-producer
+      - type: metrics-data-source
+        parameters:
+          scheme: http
+          path: /metrics
+          insecureSkipVerify: true
+      - type: core-metrics-extractor
+      - type: inflight-load-producer
+        parameters:
+          prefixMatchInfoProducerName: precise-prefix-cache-producer
+      - type: precise-prefix-cache-producer
+        parameters:
+          indexerConfig:
+            kvBlockIndexConfig:
+              inMemoryConfig:
+                podCacheSize: 128
+            kvCacheBackendConfigs:
+            - name: gpu
+              weight: 1.0
+            - name: cpu
+              weight: 0.9
+          tokenProcessorConfig:
+            blockSizeTokens: 64
+          speculativeIndexing: false
+          kvEventsConfig:
+            topicFilter: "kv@"
+            concurrency: 8
+      - type: prefix-cache-affinity-filter
+        parameters:
+          prefixMatchInfoProducerName: precise-prefix-cache-producer
+          affinityThreshold: 0.80
+          maxTTFTPenaltyMs: 18000
+          peakPrefillThroughput: 46000
+      - type: token-load-scorer
+      - type: active-request-scorer
+      - type: max-score-picker
+      dataLayer:
+        sources:
+        - pluginRef: metrics-data-source
+          extractors:
+          - pluginRef: core-metrics-extractor
+      schedulingProfiles:
+      - name: prefill
+        plugins:
+        - pluginRef: prefill-filter
+        - pluginRef: prefix-cache-affinity-filter
+        - pluginRef: token-load-scorer
+        - pluginRef: max-score-picker
+      - name: decode
+        plugins:
+        - pluginRef: decode-filter
+        - pluginRef: active-request-scorer
+        - pluginRef: max-score-picker
+
+  engine:
+    type: vllm
+    connector:
+    dp_launch_mode: per_node
+    set_visible_devices: true
+
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      gpus: 4
+      kv_events: true
+      env:
+        <<: &dsv41_env
+          VLLM_SERVER_DEV_MODE: "1"
+          VLLM_NO_USAGE_STATS: "1"
+          VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+          VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+          TRITON_LIBCUDA_PATH: "/usr/lib64"
+          VLLM_SKIP_P2P_CHECK: "1"
+          VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+          VLLM_USE_DEEP_GEMM: "1"
+          VLLM_USE_V2_MODEL_RUNNER: "1"
+          NVIDIA_GDRCOPY: "enabled"
+          UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+          UCX_CUDA_IPC_ENABLE_MNNVL: "1"
+          GLOO_SOCKET_IFNAME: "eth0"
+          NCCL_SOCKET_IFNAME: "eth0"
+          NCCL_IB_HCA: "ibp"
+          NUMPY_MADVISE_HUGEPAGE: "0"
+          VLLM_LOGGING_LEVEL: "INFO"
+          VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "300"
+          UCX_LOG_LEVEL: "info"
+      args:
+        revision: "5254448103b6254fc646dacbca1cbbf20e9216c1"
+        tokenizer-revision: "5254448103b6254fc646dacbca1cbbf20e9216c1"
+        served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
+        tensor-parallel-size: 1
+        data-parallel-size: 4
+        data-parallel-external-lb: true
+        distributed-timeout-seconds: 21600
+        cpu-distributed-timeout-seconds: 21600
+        enable-expert-parallel: true
+        enable-ep-weight-filter: true
+        kernel-config: '{"moe_backend":"deep_gemm_mega_moe","enable_flashinfer_autotune":true,"sparse_indexer_topk_backend":"deep_select"}'
+        attention-config: '{"backend":"FLASHMLA_MEGA_ATTN_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        engram-config: '{"cpu_offload":true,"embedding_across_dp":false,"dp_shared_memory":true}'
+        tokenizer-mode: deepseek_v41
+        renderer-num-workers: 4
+        reasoning-parser: deepseek_v41
+        tool-call-parser: deepseek_v41
+        enable-auto-tool-choice: true
+        language-model-only: true
+        max-model-len: 1048576
+        max-num-batched-tokens: 40960
+        long-prefill-token-threshold: 8192
+        max-num-seqs: 128
+        kv-cache-memory: 56155600896
+        enable-cumem-allocator: true
+        enable-prefix-caching: true
+        enable-chunked-prefill: true
+        enable-prompt-tokens-details: true
+        safetensors-load-strategy: prefetch
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[5,10,15,20,25,30,40,50,60,80,100,120,160,200,240,320,400,480,640,850,1280,1705,2045],"max_cudagraph_capture_size":2045}'
+        kv-cache-dtype: "fp8"
+        # 64 GiB of CPU KV per prefill DP rank.
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_producer","kv_connector_extra_config":{"kv_lease_duration":600}},{"kv_connector":"OffloadingConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":68719476736,"eviction_policy":"lru"}}]}}'
+        disable-uvicorn-access-log: true
+        disable-access-log-for-endpoints: "/health,/metrics,/v1/models"
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        <<: *dsv41_env
+      args:
+        revision: "5254448103b6254fc646dacbca1cbbf20e9216c1"
+        tokenizer-revision: "5254448103b6254fc646dacbca1cbbf20e9216c1"
+        served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
+        tensor-parallel-size: 1
+        data-parallel-size: 8
+        data-parallel-external-lb: true
+        distributed-timeout-seconds: 21600
+        cpu-distributed-timeout-seconds: 21600
+        enable-expert-parallel: true
+        enable-eplb: true
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":32,"window_size":1000,"step_interval":3000,"use_async":true}'
+        disable-ep-weight-filter: true
+        kernel-config: '{"moe_backend":"deep_gemm_mega_moe","enable_flashinfer_autotune":true,"sparse_indexer_topk_backend":"deep_select"}'
+        attention-config: '{"backend":"FLASHMLA_MEGA_ATTN_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        engram-config: '{"cpu_offload":false,"embedding_across_dp":true,"dp_shared_memory":false}'
+        tokenizer-mode: deepseek_v41
+        renderer-num-workers: 4
+        reasoning-parser: deepseek_v41
+        tool-call-parser: deepseek_v41
+        enable-auto-tool-choice: true
+        language-model-only: true
+        max-model-len: 1048576
+        max-num-batched-tokens: 4096
+        max-num-seqs: 512
+        gpu-memory-utilization: 0.90
+        enable-cumem-allocator: true
+        enable-prefix-caching: true
+        enable-chunked-prefill: true
+        enable-prompt-tokens-details: true
+        safetensors-load-strategy: prefetch
+        speculative-config: '{"method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block","enable_adaptive_verification":false}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200],"max_cudagraph_capture_size":200}'
+        kv-cache-dtype: "fp8"
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"kv_lease_duration":600}}'
+        disable-uvicorn-access-log: true
+        disable-access-log-for-endpoints: "/health,/metrics,/v1/models"
+
+  sbatch_directives:
+    mem: "0"
+    cpus-per-task: "144"
+
+  srun_options:
+    container-remap-root: ""
+
+  telemetry:
+    collector_join_timeout_seconds: 12
+
+  benchmark:
+    placement:
+      node: head
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+
+override_2p1d_dep8:
+  name: "dsv41flash-fp4-gb200-llmd-vllm-agentx-disagg-2p1d-dep8"
+  roles:
+    decode:
+      nodes: 2
+      workers: 1
+
+override_2p1d_dep4:
+  name: "dsv41flash-fp4-gb200-llmd-vllm-agentx-disagg-2p1d-dep4"
+  roles:
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        data-parallel-size: 4
