@@ -46,7 +46,7 @@ echo "=== Downloading SPEED-Bench dataset ==="
 # Pin the image's Hugging Face stack: an unconstrained install can pull a huggingface-hub
 # that the image's transformers rejects, and then no server starts.
 pip install -q -c <(pip freeze | grep -iE '^(huggingface[-_]hub|transformers|tokenizers)==') datasets tiktoken
-curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
+curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/5ac8609a56ac941540b10c92e68d556e6343cd4c/nemo_skills/dataset/speed-bench/prepare.py \
   | python3 - --config qualitative --output_dir "$SPEEDBENCH_DIR"
 if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     echo "CRITICAL: SPEED-Bench download failed — $SPEEDBENCH_DIR/qualitative.jsonl not found"

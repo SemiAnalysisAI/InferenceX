@@ -1,0 +1,99 @@
+schema_version: 1
+
+model:
+  id: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+  revision: 5be7df9619b54f4e2667b2755bc6a756675b5cd7
+
+generation:
+  width: 832
+  height: 480
+  # 81 / 16 = 5.0625 s per clip.
+  frame_count: 81
+  fps: 16
+  num_inference_steps: 40
+  # guidance_scale drives the high-noise expert and guidance_scale_2 the low-noise expert.
+  guidance_scale: 4.0
+  guidance_scale_2: 3.0
+  # The A14B expert switch, equal to the checkpoint's model_index.json value.
+  boundary_ratio: 0.875
+  # UniPC sigma shift for the 480p cell; every engine must receive it per request.
+  flow_shift: 12.0
+  negative_prompt: ""
+
+prompts:
+  drum-taps:
+    text: >-
+      A single continuous medium shot of a drummer tapping a snare drum three
+      times in a rehearsal room. The drumsticks visibly contact the drumhead on
+      each tap. The camera remains still. No subtitles or scene cuts.
+    requires_motion: true
+    requires_sound: false
+  pouring-water:
+    text: >-
+      A single continuous close-up of a hand steadily pouring water from a clear
+      glass jug into an empty drinking glass on a wooden table. The water level
+      visibly rises. Daylight, a still camera, no subtitles or scene cuts.
+    requires_motion: true
+    requires_sound: false
+  bicycle-pass:
+    text: >-
+      A single continuous wide shot of a cyclist riding from the left side of the
+      frame to the right along a park path. The moving wheels remain visible. The
+      camera stays still. No subtitles or scene cuts.
+    requires_motion: true
+    requires_sound: false
+  footsteps:
+    text: >-
+      A single continuous low-angle shot of a person in ordinary shoes walking
+      across a wooden floor from left to right. Each step visibly lands on the
+      floor. The camera stays still. No subtitles or scene cuts.
+    requires_motion: true
+    requires_sound: false
+
+sets:
+  smoke:
+    plan_id: wan22-t2v-a14b-smoke-v1
+    repetitions: 1
+    warmup_runs: 1
+    cases:
+      - {case_id: drum-taps-s11, prompt: drum-taps, seed: 11}
+  release-v1:
+    plan_id: wan22-t2v-a14b-release-v1
+    repetitions: 1
+    warmup_runs: 1
+    cases:
+      - {case_id: drum-taps-s11, prompt: drum-taps, seed: 11}
+      - {case_id: drum-taps-s23, prompt: drum-taps, seed: 23}
+      - {case_id: drum-taps-s37, prompt: drum-taps, seed: 37}
+      - {case_id: drum-taps-s53, prompt: drum-taps, seed: 53}
+      - {case_id: drum-taps-s111, prompt: drum-taps, seed: 111}
+      - {case_id: pouring-water-s11, prompt: pouring-water, seed: 11}
+      - {case_id: pouring-water-s23, prompt: pouring-water, seed: 23}
+      - {case_id: pouring-water-s37, prompt: pouring-water, seed: 37}
+      - {case_id: pouring-water-s53, prompt: pouring-water, seed: 53}
+      - {case_id: pouring-water-s111, prompt: pouring-water, seed: 111}
+      - {case_id: bicycle-pass-s11, prompt: bicycle-pass, seed: 11}
+      - {case_id: bicycle-pass-s23, prompt: bicycle-pass, seed: 23}
+      - {case_id: bicycle-pass-s37, prompt: bicycle-pass, seed: 37}
+      - {case_id: bicycle-pass-s53, prompt: bicycle-pass, seed: 53}
+      - {case_id: bicycle-pass-s111, prompt: bicycle-pass, seed: 111}
+      - {case_id: footsteps-s11, prompt: footsteps, seed: 11}
+      - {case_id: footsteps-s23, prompt: footsteps, seed: 23}
+      - {case_id: footsteps-s37, prompt: footsteps, seed: 37}
+      - {case_id: footsteps-s53, prompt: footsteps, seed: 53}
+      - {case_id: footsteps-s111, prompt: footsteps, seed: 111}
+
+reference:
+  vllm_omni_h100:
+    pull_request: https://github.com/SemiAnalysisAI/InferenceX/pull/4246
+    vllm_omni_revision: a8576ccb725c4e21cd13c3eb5f9a546b21149d2b
+    hardware: 8x H100 80GB
+    outcome: >-
+      One drum-taps seed-11 request with the generation values above returned a
+      valid 832x480, 81-frame, 16 fps clip 38.0 s after submission.
+  trainium3:
+    implementation: https://github.com/aws-neuron/vllm-omni-neuron
+    release: 0.29.0.0.2.0
+    note: >-
+      Its examples default to guidance 5.0/5.0 and flow_shift 5.0; a comparable
+      run must send the generation values above per request.

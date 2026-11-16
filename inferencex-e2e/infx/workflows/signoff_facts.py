@@ -24,6 +24,7 @@ from typing import Any
 from infx import github
 from infx.golden_al_distribution import curves
 from infx.klaud import api
+from infx.results import published_metrics
 
 SERIES = ("model", "precision", "framework", "hardware", "spec_method")
 TOPOLOGY = (
@@ -282,6 +283,9 @@ def eval_gaps(
 
 # --- Check 18(g,h): removed points, dominance, and deltas -----------------------------
 
+REGRESSION_LIMIT = 0.10
+DASHBOARD_METRICS = {"tput_per_gpu": "max", **published_metrics.X_AXES}
+
 
 def _dominates(a: dict, b: dict) -> bool:
     x, y = "tput_per_gpu", "mean_intvty"
@@ -413,7 +417,11 @@ def _measurement(row: dict) -> dict | None:
     values = {metric: metrics.get(metric) for metric in ("tput_per_gpu", "mean_intvty")}
     if not all(isinstance(value, int | float) and value > 0 for value in values.values()):
         return None
-    return values | {"date": row.get("date"), "run_url": row.get("run_url")}
+    return (
+        values
+        | published_metrics.x_axes(row)
+        | {"date": row.get("date"), "run_url": row.get("run_url")}
+    )
 
 
 def unofficial_run(run_id: int) -> list[dict]:
@@ -440,12 +448,44 @@ def _latest(rows: list[Any]) -> dict[tuple, dict]:
     return latest
 
 
+def _pct(old: float | None, new: float | None) -> float | None:
+    return round(100 * (new / old - 1), 2) if old and new else None
+
+
+def _regressions(label: str, old: dict, new: dict) -> list[dict]:
+    """Each dashboard metric on which ``new`` is worse than ``old`` by more than the limit."""
+    worse = []
+    for metric, better in DASHBOARD_METRICS.items():
+        before, after = old.get(metric), new.get(metric)
+        if (
+            before
+            and after
+            and (
+                after < (1 - REGRESSION_LIMIT) * before
+                if better == "max"
+                else after > (1 + REGRESSION_LIMIT) * before
+            )
+        ):
+            worse.append(
+                {
+                    "label": label,
+                    "metric": metric,
+                    "old": before,
+                    "new": after,
+                    "pct": _pct(before, after),
+                }
+            )
+    return worse
+
+
 def points_diff(base: dict, head: dict, ingested: list[Any], new_run: list[Any]) -> list[dict]:
     """Added and removed generated points per config key, with measurements and dominance.
 
     Points match measurements by recipe fingerprint and concurrency. Base points use the
     ingested curve; head points prefer the PR's validated sweep, then the ingested curve.
-    A removed point passes only when the measured head frontier covers it.
+    A removed point passes only when the measured head frontier covers it. Re-tuned points
+    report the change on each dashboard metric, and ``regressions`` lists every metric worse
+    by more than REGRESSION_LIMIT in its better direction.
     """
     from infx.matrix.changed import compare
 
@@ -476,30 +516,18 @@ def points_diff(base: dict, head: dict, ingested: list[Any], new_run: list[Any])
         added_labels = {item["label"] for item in added}
         replaced = {item["label"]: item for item in added if item["measured"]}
         dropped = [item for item in removed if item["label"] not in added_labels]
-        deltas = [
-            {
-                "label": item["label"],
-                "tput_per_gpu_pct": round(
-                    100
-                    * (
-                        replaced[item["label"]]["measured"]["tput_per_gpu"]
-                        / item["measured"]["tput_per_gpu"]
-                        - 1
-                    ),
-                    2,
-                ),
-                "mean_intvty_pct": round(
-                    100
-                    * (
-                        replaced[item["label"]]["measured"]["mean_intvty"]
-                        / item["measured"]["mean_intvty"]
-                        - 1
-                    ),
-                    2,
-                ),
-            }
+        retuned = [
+            (item["label"], item["measured"], replaced[item["label"]]["measured"])
             for item in removed
             if item["measured"] and item["label"] in replaced
+        ]
+        deltas = [
+            {"label": label}
+            | {
+                f"{metric}_pct": _pct(old.get(metric), new.get(metric))
+                for metric in ("tput_per_gpu", "mean_intvty", *published_metrics.X_AXES)
+            }
+            for label, old, new in retuned
         ]
         report.append(
             {
@@ -515,6 +543,11 @@ def points_diff(base: dict, head: dict, ingested: list[Any], new_run: list[Any])
                 ],
                 "unmeasured_removed": [item["label"] for item in dropped if not item["measured"]],
                 "retuned_deltas": deltas,
+                "regressions": [
+                    regression
+                    for label, old, new in retuned
+                    for regression in _regressions(label, old, new)
+                ],
             }
         )
     return report
@@ -550,6 +583,24 @@ def ingested_points(prefix: str, checkpoint: str, as_of: str | None) -> tuple[st
         if matching:
             return name, matching
     raise LookupError(f"no public benchmark name for {prefix} ({checkpoint})")
+
+
+def add_normalized_interactivity(ingested: list[Any]) -> str | None:
+    """Set each measured ingested AgentX row's P90 E2E normalized interactivity from
+    derived-agentic-metrics, where the dashboard reads it. Return the read error, if any."""
+    agentic = [
+        row
+        for row in _latest(ingested).values()
+        if row.get("benchmark_type") == "agentic_traces" and str(row.get("id")).isdigit()
+    ]
+    try:
+        values = api.normalized_interactivity([int(row["id"]) for row in agentic])[0]
+    except api.ReadError as error:
+        return str(error)
+    for row in agentic:
+        if int(row["id"]) in values:
+            row["metrics"]["p90_e2e_norm_intvty"] = values[int(row["id"])]
+    return None
 
 
 # --- Check 18(c): newly referenced images ---------------------------------------------
@@ -746,8 +797,10 @@ def build_report(
                 for run_id in (validated or {}).get("run_ids", [])
                 for row in unofficial_run(run_id)
             ]
+            normalized_error = add_normalized_interactivity(ingested)
             return {
                 "changes": points_diff(before, after, ingested, new_run),
+                "normalized_interactivity_unavailable": normalized_error,
                 "ingested_models_unavailable": unavailable,
                 "generation_errors": {
                     "base": before_errors,
