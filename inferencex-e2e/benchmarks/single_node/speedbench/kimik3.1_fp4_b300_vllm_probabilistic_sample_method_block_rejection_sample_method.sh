@@ -74,14 +74,16 @@ fi
 
 nvidia-smi
 
-# Pyxis containers share the host network, so a stray listener on the node fails every cell's
-# bind; stop before the downloads and name the holder.
-# ss also catches a listener bound to a non-loopback address; /dev/tcp covers images without it.
+# Pyxis containers share the host network, so another job's listener on the node can hold the
+# default port (dsxe-sa-b300-prd0-gpu-07 had 127.0.0.1:8888 taken in run 43906252703). Serve on a free
+# port instead of failing; ss also catches a listener bound to a non-loopback address, /dev/tcp covers
+# images without ss.
 if [[ -n "$(ss -Hltn "sport = :${PORT}" 2>/dev/null)" ]] \
         || (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null; then
-    echo "CRITICAL: port ${PORT} on $(hostname) is already in use by a process outside this job."
-    ss -ltnp "sport = :${PORT}" 2>&1 || true
-    exit 1
+    busy_port="$PORT"
+    ss -ltnp "sport = :${busy_port}" 2>&1 || true
+    PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("0.0.0.0", 0)); print(s.getsockname()[1])')"
+    echo "Port $busy_port is in use on $(hostname); serving on $PORT"
 fi
 
 # An unstaged checkpoint lands in the cluster's writable download root; hf download resumes and
