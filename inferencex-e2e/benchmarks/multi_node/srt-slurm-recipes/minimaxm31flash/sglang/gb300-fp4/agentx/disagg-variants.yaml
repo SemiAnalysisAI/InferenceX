@@ -565,6 +565,112 @@ override_3p_dep4_dep16_si20_linker_chunk32k_dynamo1030:
       env:
         PYTHONPATH: /configs/compat/dynamo1030-sglang
 
+override_3p_dep4_dep16_si20_n1113_chunk32k:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-n1113-chunk32k
+  # The linker chunk32k point on the 11-13 nightly with Dynamo 1030: the
+  # reference for the four points below, which each change one thing.
+  identity: &gb300-n1113-identity
+    frameworks:
+      sglang: "0.0.0.dev1+g5792cf6e5"
+  dynamo: &gb300-dynamo1030
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+  services: *gb300-linker-services
+  roles:
+    prefill: &gb300-n1113-linker-prefill
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+        PYTHONPATH: /configs/compat/dynamo1030-sglang
+      args: &gb300-n1113-linker-prefill-args
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 32768
+        max-running-requests: 256
+        stream-interval: 20
+        mem-fraction-static: 0.85
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
+    decode: &gb300-n1113-decode
+      nodes: 4
+      gpus: 16
+      env:
+        PYTHONPATH: /configs/compat/dynamo1030-sglang
+      args: &gb300-n1113-decode-args
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        max-running-requests: 768
+        stream-interval: 20
+
+override_3p_dep4_dep16_si20_n1113_chunk64k:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-n1113-chunk64k
+  # 16384 prefill tokens per DP rank.
+  identity: *gb300-n1113-identity
+  dynamo: *gb300-dynamo1030
+  services: *gb300-linker-services
+  roles:
+    prefill:
+      <<: *gb300-n1113-linker-prefill
+      args:
+        <<: *gb300-n1113-linker-prefill-args
+        chunked-prefill-size: 65536
+    decode: *gb300-n1113-decode
+
+override_3p_dep4_dep16_si20_n1113_cap10:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-n1113-cap10
+  # At most 10 running requests per decode DP rank.
+  identity: *gb300-n1113-identity
+  dynamo: *gb300-dynamo1030
+  services: *gb300-linker-services
+  roles:
+    prefill: *gb300-n1113-linker-prefill
+    decode:
+      <<: *gb300-n1113-decode
+      args:
+        <<: *gb300-n1113-decode-args
+        max-running-requests: 160
+
+override_3p_dep4_dep16_si20_n1113_eplb:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-n1113-eplb
+  # EPLB on the decode, one redundant expert per rank.
+  identity: *gb300-n1113-identity
+  dynamo: *gb300-dynamo1030
+  services: *gb300-linker-services
+  roles:
+    prefill: *gb300-n1113-linker-prefill
+    decode:
+      <<: *gb300-n1113-decode
+      args: &gb300-n1113-decode-eplb-args
+        <<: *gb300-n1113-decode-args
+        enable-eplb: true
+        ep-num-redundant-experts: 16
+        eplb-rebalance-num-iterations: 3000
+
+override_3p_dep4_dep16_si20_n1113_cap10_eplb:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-n1113-cap10-eplb
+  identity: *gb300-n1113-identity
+  dynamo: *gb300-dynamo1030
+  services: *gb300-linker-services
+  roles:
+    prefill: *gb300-n1113-linker-prefill
+    decode:
+      <<: *gb300-n1113-decode
+      args:
+        <<: *gb300-n1113-decode-eplb-args
+        max-running-requests: 160
+
 override_6p_tp2ep2_dp8tp2_si20_nightly1112:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-tp2ep2-dp8tp2-si20-nightly1112
   # Prefill as TP2 attention with MegaMoE EP2 and no attention DP, against the
