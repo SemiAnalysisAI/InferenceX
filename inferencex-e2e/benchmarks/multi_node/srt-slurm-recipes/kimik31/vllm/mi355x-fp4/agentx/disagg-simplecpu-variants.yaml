@@ -297,6 +297,17 @@ override_1p1d_c144:
         max-num-seqs: 160
         max-num-batched-tokens: 640
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":640,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64,72,80,88,96,104,112,120,128,160,176,192,208,224,240,256,288,320,352,384,416,448,480,512,544,576,608,640]}'
+override_1p1d_c144_cap144:
+  name: k31-1p1d-c144-cap144
+  roles:
+    decode:
+      nodes: 1
+      workers: 1
+      args:
+        gpu-memory-utilization: 0.92
+        max-num-seqs: 144
+        max-num-batched-tokens: 576
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":576,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64,72,80,88,96,104,112,120,128,160,176,192,208,224,240,256,288,320,352,384,416,448,480,512,544,576]}'
 override_1p1d_c96:
   name: k31-1p1d-c96
   roles:
