@@ -6245,6 +6245,13 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg:
         srt-recipe: disagg-variants.yaml:override_3p_dep4_dep16_si20_hc230
         prefill: { num-worker: 3, tp: 4, ep: 4, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache-chunk32k }
+        conc-list: [500]
+        srt-recipe: disagg-variants.yaml:override_3p_dep4_dep16_si20_chunk32k
+        prefill: { num-worker: 3, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
 
 # The 3 x DEP4 + DEP16 c500 point on the 2026-11-12 nightly, which has the
 # unified-cache external linker for MiniMax-M3.1 (sgl-project/sglang#48125)
@@ -6277,6 +6284,13 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-linker:
         kv-offload-backend: { name: linker }
         conc-list: [500]
         srt-recipe: disagg-variants.yaml:override_3p_dep4_dep16_si20_linker
+        prefill: { num-worker: 3, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: linker-chunk32k }
+        conc-list: [500]
+        srt-recipe: disagg-variants.yaml:override_3p_dep4_dep16_si20_linker_chunk32k
         prefill: { num-worker: 3, tp: 4, ep: 4, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
       - spec-decoding: mtp

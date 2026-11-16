@@ -462,6 +462,66 @@ override_3p_dep4_dep16_si20_linker:
         max-running-requests: 768
         stream-interval: 20
 
+# The two 3 x DEP4 points above with 8192 prefill tokens per DP rank, as the
+# 6 x DEP2 base has: SGLang divides chunked-prefill-size by the DP size, so
+# the inherited 16384 left DEP4 ranks at 4096.
+override_3p_dep4_dep16_si20_chunk32k:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-chunk32k
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 32768
+        max-running-requests: 256
+        stream-interval: 20
+        mem-fraction-static: 0.88
+    decode: &gb300-dep16-decode
+      nodes: 4
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        max-running-requests: 768
+        stream-interval: 20
+
+override_3p_dep4_dep16_si20_linker_chunk32k:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-linker-chunk32k
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g36027fd15"
+  services: *gb300-linker-services
+  roles:
+    prefill:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+      args:
+        tensor-parallel-size: 4
+        data-parallel-size: 4
+        expert-parallel-size: 4
+        chunked-prefill-size: 32768
+        max-running-requests: 256
+        stream-interval: 20
+        mem-fraction-static: 0.85
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
+    decode: *gb300-dep16-decode
+
 override_6p_tp2ep2_dp8tp2_si20_nightly1112:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-tp2ep2-dp8tp2-si20-nightly1112
   # Prefill as TP2 attention with MegaMoE EP2 and no attention DP, against the
