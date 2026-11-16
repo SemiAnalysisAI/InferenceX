@@ -18,6 +18,7 @@ from .request_records import COMPLETION_EVIDENCE
 
 AIOHTTP_TIMEOUT = aiohttp.ClientTimeout(total=6 * 60 * 60)
 INCOMPLETE_STREAM = "The stream ended without [DONE]. This response will be marked as failed!"
+CHAT_DELTA_TEXT = ("content", "reasoning_content", "reasoning", "tool_calls")
 
 
 @dataclass
@@ -426,8 +427,14 @@ async def async_request_openai_chat_completions(
                             data = json.loads(chunk)
 
                             if choices := data.get("choices"):
-                                content = choices[0]["delta"].get("content")
-                                if ttft == 0.0:
+                                delta = choices[0]["delta"]
+                                content = delta.get("content")
+                                # A delta that only announces the role carries no token.
+                                if "role" in delta and not any(
+                                    delta.get(key) for key in CHAT_DELTA_TEXT
+                                ):
+                                    pass
+                                elif ttft == 0.0:
                                     ttft = timestamp - st
                                     output.ttft = ttft
 

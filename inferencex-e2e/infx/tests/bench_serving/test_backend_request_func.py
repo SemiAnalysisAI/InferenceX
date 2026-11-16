@@ -210,10 +210,7 @@ FINISH = {
     "chat/completions": {"choices": [{"delta": {"content": "hi"}, "finish_reason": "length"}]},
 }
 USAGE = {"choices": [], "usage": {"completion_tokens": 2}}
-EMPTY_FIRST_CHOICE = {
-    "completions": {"choices": [{"text": ""}]},
-    "chat/completions": {"choices": [{"delta": {"role": "assistant", "content": ""}}]},
-}
+ROLE = {"choices": [{"delta": {"role": "assistant", "content": ""}}]}
 
 
 @ENDPOINTS
@@ -260,15 +257,53 @@ def test_usage_and_keep_alive_before_the_first_token_do_not_start_ttft(endpoint)
     assert output.output_tokens == 2
 
 
-@ENDPOINTS
-def test_first_choice_without_text_starts_ttft(endpoint):
-    events = [EMPTY_FIRST_CHOICE[endpoint], CHOICE[endpoint], FINISH[endpoint], USAGE, "[DONE]"]
+def test_first_completions_choice_without_text_starts_ttft():
+    events = [{"choices": [{"text": ""}]}, CHOICE["completions"], FINISH["completions"], USAGE,
+              "[DONE]"]
 
-    output = stream(endpoint, events)
+    output = stream("completions", events)
 
     assert output.success is True
     assert len(output.itl) == 2
     assert output.generated_text == "hihi"
+
+
+def test_chat_role_announcement_does_not_start_ttft():
+    async def handler(request: web.Request) -> web.StreamResponse:
+        await request.read()
+        response = web.StreamResponse()
+        await response.prepare(request)
+        await write_events(response, [ROLE])
+        await asyncio.sleep(0.2)
+        chat = "chat/completions"
+        await write_events(response, [CHOICE[chat], FINISH[chat], USAGE, "[DONE]"])
+        await response.write_eof()
+        return response
+
+    output = call("chat/completions", handler)
+
+    assert output.success is True
+    assert output.ttft >= 0.2
+    assert len(output.itl) == 1
+    assert output.generated_text == "hihi"
+
+
+def test_chat_role_delta_that_carries_reasoning_text_is_the_first_token():
+    reasoning = {"choices": [{"delta": {"role": "assistant", "reasoning_content": "hm"}}]}
+    chat = "chat/completions"
+
+    output = stream(chat, [reasoning, CHOICE[chat], FINISH[chat], USAGE, "[DONE]"])
+
+    assert output.success is True
+    assert len(output.itl) == 2
+
+
+def test_chat_stream_with_only_a_role_announcement_is_an_empty_response():
+    output = stream("chat/completions", [ROLE, "[DONE]"])
+
+    assert output.success is False
+    assert output.failure_class == "empty_response"
+    assert output.ttft == 0
 
 
 @pytest.mark.parametrize("ending,evidence,failure", [
