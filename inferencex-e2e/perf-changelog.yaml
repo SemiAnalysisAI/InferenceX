@@ -12908,6 +12908,7 @@
     - "Each server streams the Wan snapshot once before vLLM-Omni loads it (VIDEO_PREFETCH_MODEL=1): b300-dsxe serves the model from a network-filesystem HF cache, where the engine's multi-thread shard loader alone missed the one-hour readiness window."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5082
 
+- config-keys:
     - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
     - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
   scenario-type:
