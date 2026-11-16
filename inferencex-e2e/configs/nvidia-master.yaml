@@ -7902,7 +7902,7 @@ glm5.3flash-fp4-b300-sglang-agentic-mtp:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 96], srt-recipe: "agentic.yaml:override_dram" }
 
 minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg:
-  image: vllm/vllm-openai:cu135-nightly-60bd6dd2edd175a1c55fd3488f871e4c3d2ef27d@sha256:4c2a5b41718b68d7cd2c8630f878073d2de46f7d5466455d9da7bbf0ebb1e0eb
+  image: vllm/vllm-openai:cu134-nightly-f5d93296c8ec82b7e7dabdb308d24d43cb1907bf@sha256:ad65ca93274c2f017a8753e05ed66dbf0a801787c09850602a7bbf5423557baa
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:gb200-nv
