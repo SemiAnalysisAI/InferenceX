@@ -102,8 +102,8 @@ jobs:
       ${{ fromJSON(format('["self-hosted",{0}{1}{2}]',
         toJSON(matrix.runner),
         matrix.runner_partition != '' && format(',{0}', toJSON(matrix.runner_partition)) || '',
-        vars.PRIORITY_SCHEDULER_ENABLED == 'true' && format(',{0}{1},{2}',
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' && format('{0},', toJSON(format('nodes:{0}', matrix.nodes))) || '',
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' && format(',{0},{1},{2}',
+          toJSON(format('nodes:{0}', matrix.nodes)),
           toJSON(format('ci-job-{0}-{1}', matrix.priority, matrix.queue-token)),
           toJSON(format('ci-attempt-{0}', github.run_attempt))) || '')) }}
     name: p${{ matrix.priority }} | CollectiveX ${{ matrix.id }}
