@@ -12929,4 +12929,4 @@
     - "Lower --max-running-requests below the concurrency on TP2 c4 (2), c8 (3), c16 (3), c32 (8) and TP4 c4 (2); the remaining lanes queue in the server, trading TTFT for P90 ITL."
     - "Add TP2 c24 (max-running-requests 6, the c16 settings) and c48 (max-running-requests 24, the c32 settings)."
     - "Add DP2 c80, c96 and c128 behind sglang-router, with the DP2 c64 settings and max-running-requests equal to the concurrency."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5096
