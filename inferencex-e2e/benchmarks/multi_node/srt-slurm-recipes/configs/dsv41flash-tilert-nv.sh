@@ -39,6 +39,7 @@ fi
 # check its sha256, then use that file.
 declare -A TILERT_WHEEL_SHA256=(
     [0.1.8]=17ae557029a14c2676e20ae5d61c895fb5658a06f0bdd232fe7b21d478f1f838
+    [0.2.0]=53a7c1511308fc6932b8ab909222091ef301ca475346fb6a2f6fe4eced98e725
 )
 want_sha=${TILERT_WHEEL_SHA256[$ROUTER_VERSION]:-}
 if [[ -z "$want_sha" ]]; then
@@ -74,6 +75,19 @@ PY
     python3 -c 'import importlib.util as u; assert u.find_spec("tilert.pd_vllm.prefill_connector"), "no tilert.pd_vllm.prefill_connector"'
     if [[ "$TILERT_ROLE" == router ]]; then
         python3 -c 'import tilert.pd_vllm.pd_router, vllm.tokenizers.deepseek_v41'
+        # A release that parses output splits reasoning with vLLM's parser engine; a release with
+        # the Rust front must carry the front binary its supervisor runs, or every request would
+        # take the Python fallback.
+        python3 - <<'PY'
+import importlib, importlib.util as u
+if u.find_spec("tilert.pd_vllm.oai_parser"):
+    for name in ("vllm.parser.deepseek_v41", "vllm.parser.engine.streaming_parser_engine", "vllm.parser.engine.events"):
+        importlib.import_module(name)
+if u.find_spec("tilert.pd_vllm.rs_front_sup"):
+    from tilert.pd_vllm import rs_front_sup
+    if rs_front_sup.install_packaged() is None:
+        raise SystemExit("the tilert release's Rust front binary is missing or fails its sha256")
+PY
     fi
 else
     # The tilert release carries the serving layer (PD code and its engine API).
