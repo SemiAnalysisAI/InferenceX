@@ -129,7 +129,8 @@ base:
     args:
       # Serve the client port with the release's Rust front (pd_stream); the router moves to
       # 127.0.0.1 on the next port. If the front is not up, the client port falls back to the
-      # router (rs_front_sup logs "FALLBACK"); a run must log "pd_stream up".
+      # router (rs_front_sup logs "FALLBACK"); InferenceX's infx_rs_front_strict wrapper turns that
+      # fallback into a failed run, so every published run was served by pd_stream.
       rust-front: true
       model: dsv41
       # Splits reasoning from content; public builds parse no tool calls.

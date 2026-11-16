@@ -88,6 +88,22 @@ if u.find_spec("tilert.pd_vllm.rs_front_sup"):
     if rs_front_sup.install_packaged() is None:
         raise SystemExit("the tilert release's Rust front binary is missing or fails its sha256")
 PY
+        # srt-slurm starts the supervisor as `python -m infx_rs_front_strict`: the release
+        # supervisor with its Python-router fallback turned into a failure, so a run whose Rust
+        # front never comes up, or dies mid-run, fails instead of publishing Python-router numbers.
+        cat > "$pd_root/pkg/infx_rs_front_strict.py" <<'PY'
+import os, sys
+from tilert.pd_vllm import rs_front_sup
+
+def _refuse(self, why):
+    rs_front_sup._log(f"FALLBACK refused: {why}; failing the run")
+    self.stop_all()
+    os._exit(1)
+
+rs_front_sup.Sup.fallback = _refuse
+sys.exit(rs_front_sup.main())
+PY
+        python3 -c 'import importlib.util as u; assert u.find_spec("infx_rs_front_strict")'
     fi
 else
     # The tilert release carries the serving layer (PD code and its engine API).

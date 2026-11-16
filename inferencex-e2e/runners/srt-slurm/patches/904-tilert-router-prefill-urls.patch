@@ -5,7 +5,7 @@ index 35f9776a..4aeccba1 100644
 @@ -24,6 +24,9 @@ ROUTER_MANAGED_ARGS = frozenset({"vllm-url", "decode", "host", "port"})
  # the supervisor serves the client port with the packaged front and moves the router to 127.0.0.1 on the next port.
  RUST_FRONT_ARG = "rust-front"
- RUST_FRONT_SUPERVISOR = ("python", "-m", "tilert.pd_vllm.rs_front_sup")
+ RUST_FRONT_SUPERVISOR = ("python", "-m", "infx_rs_front_strict")
 +# TileRT 0.2.0's router sends each prefill straight to one of the prefill workers listed in this variable (in this order);
 +# earlier releases do not read it.
 +PREFILL_URLS_ENV = "TILERT_ROUTER_P_URLS"
@@ -93,9 +93,9 @@ index 7793c28c..b6f53eeb 100644
      frontend.rust_front = True
      command = frontend.build_router_command(workers, "0.0.0.0", 8000, config.backend)
      command.extend(frontend.get_frontend_args_list(config.frontend.args))
--    assert command[:6] == ["python", "-m", "tilert.pd_vllm.rs_front_sup", "python", "-m", "tilert.pd_vllm.pd_router"]
+-    assert command[:6] == ["python", "-m", "infx_rs_front_strict", "python", "-m", "tilert.pd_vllm.pd_router"]
 -    assert command[3:3 + len(plain)] == plain
-+    assert command[2:8] == ["python", "-m", "tilert.pd_vllm.rs_front_sup", "python", "-m", "tilert.pd_vllm.pd_router"]
++    assert command[2:8] == ["python", "-m", "infx_rs_front_strict", "python", "-m", "tilert.pd_vllm.pd_router"]
 +    assert command[:2] == plain[:2]
 +    assert command[5:3 + len(plain)] == plain[2:]
      assert "--rust-front" not in command
