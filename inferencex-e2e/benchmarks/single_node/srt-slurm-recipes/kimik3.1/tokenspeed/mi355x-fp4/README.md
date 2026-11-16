@@ -58,9 +58,6 @@ settings `ts serve` applies: passthrough reasoning and tool-call parsers,
 round-robin routing, L0 and L1 tokenizer caches, warn logging, and no retries,
 circuit breaker or load monitoring. The engine also receives the passthrough
 reasoning parser, as under `ts serve`.
-TODO(k31-gateway-tokenizer): the K3.1 checkpoint ships a Python chat encoder
-instead of a Jinja chat template, so SMG still needs a `tokenizer-path` with a
-template.
 
 For synthetic throughput, the golden-AL connector derives acceptance from the
 committed Kimi K3.1 Pro DSpark curve (probabilistic draft, block verification)

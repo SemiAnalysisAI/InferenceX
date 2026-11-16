@@ -30,9 +30,6 @@ base:
       reasoning-parser: passthrough
       tool-call-parser: passthrough
       policy: round_robin
-      # TODO(k31-gateway-tokenizer): set tokenizer-path. The K3.1 checkpoint ships a Python chat
-      # encoder instead of a Jinja chat template, so SMG needs a tokenizer directory that has one
-      # (a K3-era directory served the measured runs). How CI provides it is open.
       disable-circuit-breaker: true
       disable-retries: true
       disable-load-monitoring: true
