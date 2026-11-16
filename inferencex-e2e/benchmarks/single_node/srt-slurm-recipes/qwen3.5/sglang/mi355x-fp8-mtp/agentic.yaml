@@ -43,8 +43,6 @@ base:
         speculative-num-steps: 3
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 4
-        # qwen35_a17b serves TP4 decode widths 1-8 and this EAGLE chain
-        # (topk 1, 3 steps, 4 draft tokens). Wider steps stay on SGLang.
         enable-amd-monokernel: true
         enable-metrics: true
         enable-cache-report: true
