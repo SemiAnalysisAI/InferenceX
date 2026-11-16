@@ -1009,9 +1009,6 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
 
-# MiniMax-M3.1-Flash AgentX on MI355X with vLLM PD disaggregation over MooncakeConnector
-# behind vllm-router: the single-node lane's image, checkpoint, DSpark and caches, one TP4
-# prefill and two TP4 decode engines. Host KV offload runs on the prefill engine only.
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark-disagg:
   image: vllm/vllm-openai-rocm:minimax-m31-flash-75bc8cf1@sha256:f8e8ab239e5edb7c3070c5802fc7fc0cbb889513bf81183dfc98ce1c77e1dfe1
   model: amd/MiniMax-M3.1-Flash-Quark-MXFP4
