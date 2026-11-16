@@ -228,8 +228,8 @@ override_tp8_dcp8_c48:
         decode-context-parallel-size: 8
         prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
         prefill-graph-max-tokens: 3072
-        prefill-decode-interval: 32
-        prefill-decode-min-interval: 1
+        prefill-decode-interval: 80
+        prefill-decode-min-interval: 4
         enable-mixed-batch: true
         speculative-num-steps: 3
         speculative-num-draft-tokens: 4

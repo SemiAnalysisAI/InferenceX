@@ -21,7 +21,7 @@ Each concurrency has its own override:
 | 16          | 8         | 8              | 5             | 80                        | 8                             |       |
 | 24          | 8         | 12             | 4             | 64                        | 16                            | short prefill first |
 | 32          | 8         | 16             | 3             | 64                        | 16                            | short prefill first, mixed batches |
-| 48          | 8         | 48             | 3             | 32                        | 1                             | mixed batches |
+| 48          | 8         | 48             | 3             | 80                        | 4                             | mixed batches |
 
 Decode graphs are captured up to `max-num-seqs`, and a cap below the
 concurrency queues the extra sessions. From concurrency 8, each GPU stores one
