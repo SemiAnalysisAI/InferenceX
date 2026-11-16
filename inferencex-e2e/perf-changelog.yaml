@@ -12926,4 +12926,4 @@
     - "HiCache points (concurrency 4, 6, 8 and 10): add --mamba-full-memory-ratio 0.5 (default 0.9), which grows the device KV pool from 651,520 to 827,648 tokens per GPU and lowers the running-request cap set by the Mamba state cache from 36 to 25, and raise --hicache-size from 32 to 64, which grows the KV host pool from 1,314,560 to 3,380,992 tokens per rank."
     - "Raise dram-utilization from 0.131 to 0.263 to cover the measured 65.4 GB per rank of HiCache host pools (523 GB per node)."
     - "Image, checkpoint, parallelism, mem-fraction-static, MTP draft and kernels unchanged; GPU-resident points at concurrency 1 and 2 unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PR_NUMBER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5095
