@@ -12970,6 +12970,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Switch DSA prefill from the auto-selected trtllm to dsa-prefill-backend flashmla_sparse; keep dsa-decode-backend trtllm and pin kv-cache-dtype fp8_e4m3, which auto already selected on B300."
+    - "Switch DSA prefill from the auto-selected trtllm to dsa-prefill-backend flashmla_sparse; keep dsa-decode-backend trtllm. FlashMLA sparse prefill requires a bfloat16 KV cache, so kv-cache-dtype moves from the auto-selected fp8_e4m3 to bfloat16."
     - "MoE stays on flashinfer_trtllm; image, search space and every other flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5115
