@@ -1,0 +1,33 @@
+diff --git a/src/srtctl/ports.py b/src/srtctl/ports.py
+index 7fb47de..790fb26 100644
+--- a/src/srtctl/ports.py
++++ b/src/srtctl/ports.py
+@@ -82,7 +82,11 @@ VLLM_NIXL_PORT_BASE = 5400
+ # vLLM Router discovery endpoint (frontend.type: vllm-router with a discovery
+ # connector): the one ZMQ listener on the router node that MoRI-IO workers
+ # register their HTTP and transfer addresses with (--vllm-discovery-address).
+-VLLM_DISCOVERY_PORT = 36367
++#
++# Keep this below Linux's default ephemeral range. The old 36367 value was
++# already occupied on an allocated SA head node, preventing the discovery task
++# from binding even though the Router HTTP task still started.
++VLLM_DISCOVERY_PORT = 28000
+ # MoRI-IO adds rank offsets to both bases. Keep these blocks below Linux's
+ # default ephemeral range (32768-60999), used by its other bind(0) listeners.
+ VLLM_MORIIO_HANDSHAKE_PORT_BASE = 26000
+diff --git a/tests/test_vllm_router_frontend.py b/tests/test_vllm_router_frontend.py
+index ce19576..7fbb697 100644
+--- a/tests/test_vllm_router_frontend.py
++++ b/tests/test_vllm_router_frontend.py
+@@ -74,6 +74,11 @@ def test_vllm_router_pd_command_uses_nixl_bootstrap_ports() -> None:
+     ]
+ 
+ 
++def test_discovery_port_is_reserved_outside_the_ephemeral_range() -> None:
++    """The managed Router and MoRI-IO workers share one reserved ZMQ port."""
++    assert VLLM_DISCOVERY_PORT == 28000
++
++
+ def test_discovery_connector_router_registers_workers_instead_of_listing_them() -> None:
+     """With MoRI-IO the Router runs in discovery mode: connector and ZMQ address flags, no worker URLs."""
+     backend = VLLMBackend(connector="moriio")
