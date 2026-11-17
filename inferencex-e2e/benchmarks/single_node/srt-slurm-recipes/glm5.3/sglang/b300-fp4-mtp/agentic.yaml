@@ -26,6 +26,10 @@ base:
         tensor-parallel-size: 8
         expert-parallel-size: 1
         quantization: modelopt_fp4
+        # Pin the DSA sparse-attention kernels instead of auto selection:
+        # FlashMLA sparse for prefill, TRT-LLM sparse MLA for decode.
+        nsa-prefill-backend: flashmla_sparse
+        nsa-decode-backend: trtllm
         # GLM-5.3 emits the GLM-4.7 tool-call format.
         tool-call-parser: glm47
         reasoning-parser: glm45
