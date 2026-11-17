@@ -12987,4 +12987,4 @@
   description:
     - "Update to vllm/vllm-openai:nightly-8ca766326652caf4b8e50d1b9118d8a22f6adc73, which selects FlashInfer's SM90 MSA kernels for the indexer and sparse attention."
     - "Serve flags, DSpark speculation and the search space are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PRNUM
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5122
