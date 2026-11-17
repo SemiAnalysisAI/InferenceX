@@ -403,7 +403,9 @@ override_tp4_c256_dp_ep:
         chunked-prefill-size: 65536
         prefill-decode-interval: 40
         schedule-policy: shortest-prefill-first
-        swa-prefix-tails: 4096
+        # Idle AgentX sessions outlive 4096 SWA tails per rank; their prefixes were then
+        # recomputed whole, about a fifth of c256's prefill work.
+        swa-prefix-tails: 12288
         max-running-requests: 256
         cuda-graph-max-bs-decode: 128
       env:
