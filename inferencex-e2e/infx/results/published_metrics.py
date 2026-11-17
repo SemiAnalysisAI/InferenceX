@@ -27,6 +27,8 @@ BETTER = {
     **dict.fromkeys(("tput_per_gpu", "input_tput_per_gpu", "output_tput_per_gpu", *DERIVED), "max"),
 }
 DEFAULT_FRONTIER = ("p90_intvty", "tput_per_gpu")
+# The dashboard's x axes and the direction that is better
+X_AXES = {"intvty": "max", "e2el": "min", "ttft": "min", "e2e_norm_intvty": "max"}
 
 
 def curve_of(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -64,6 +66,26 @@ def metric(row: Mapping[str, Any], name: str) -> float | None:
         return interactivity(row, name.removesuffix("_intvty"))
     value = row.get(name) if name in DERIVED else (row.get("metrics") or {}).get(name)
     return value if isinstance(value, int | float) else None
+
+
+def x_axes(row: Mapping[str, Any]) -> dict[str, float | None]:
+    """``row``'s value on each dashboard x axis at the dashboard's default statistic, P90 for
+    AgentX and median for a fixed sequence. E2E normalized interactivity is AgentX only. A
+    persisted row needs the derived-agentic-metrics value merged into its metrics first."""
+    agentic = row.get("benchmark_type") == "agentic_traces"
+    statistic = "p90" if agentic else "median"
+    metrics = row.get("metrics") or {}
+
+    def positive(name: str) -> float | None:
+        value = metrics.get(f"{statistic}_{name}")
+        return value if isinstance(value, int | float) and value > 0 else None
+
+    return {
+        "intvty": interactivity(row, statistic),
+        "e2el": positive("e2el"),
+        "ttft": positive("ttft"),
+        "e2e_norm_intvty": positive("e2e_norm_intvty") if agentic else None,
+    }
 
 
 def frontier(rows: list[dict], axes: tuple[str, ...] = DEFAULT_FRONTIER) -> list[dict]:
