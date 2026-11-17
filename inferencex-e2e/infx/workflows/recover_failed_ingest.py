@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -16,6 +17,15 @@ import yaml
 
 from infx import github
 from infx.config import git_path_at_ref, git_repository_root
+from infx.matrix.changelog import (
+    DIRECTORY,
+    FILE_NAME,
+    LEGACY_FILE,
+    ChangelogError,
+    added_files,
+    directory_at,
+    parse_file,
+)
 
 from .reuse import resolve_reusable_run
 from .sweep_runs import pr_commit_shas, trusted_external_pr
@@ -24,8 +34,6 @@ from .validate_perf_changelog import (
     ChangelogValidationError,
     parse_changelog,
     read_git_file,
-    validate_raw_change,
-    without_pr_link,
 )
 
 DEFAULT_REPO = "SemiAnalysisAI/InferenceX"
@@ -37,6 +45,9 @@ RUN_URL = re.compile(
     r"^https://github\.com/(?P<repo>[^/]+/[^/]+)/actions/runs/"
     r"(?P<run_id>\d+)(?:/job/(?P<job_id>\d+))?/?(?:\?.*)?$"
 )
+# The recovery file names its own PR, and the original merge already removed its retired
+# configs, which the planner rejects when they are absent from the base.
+RECOVERY_DROPPED_FIELDS = ("pr-link", "retired-keys")
 
 
 class RecoveryError(ValueError):
@@ -258,57 +269,25 @@ def audit_changelog_bytes(raw: bytes, label: str) -> dict[str, Any]:
     }
 
 
-def validate_reconstruction(
-    base_raw: bytes,
-    repaired_raw: bytes,
-    pr_number: int,
-) -> tuple[int, int]:
-    """Validate that a repaired tree is only the target PR's append delta."""
-    if not repaired_raw.startswith(base_raw):
-        raise RecoveryError("repaired changelog does not preserve the recovery base byte-for-byte")
-
-    suffix = repaired_raw[len(base_raw) :]
-    expected_start = b"- config-keys:" if base_raw.endswith(b"\n\n") else b"\n- config-keys:"
-    if not suffix.startswith(expected_start):
-        raise RecoveryError(
-            "repaired changelog does not append target entries after one empty line"
-        )
-    appended_raw = suffix if expected_start.startswith(b"-") else suffix[1:]
-    additions = parse_changelog(
-        appended_raw,
-        "reconstructed target PR entries",
-    )
-    validate_raw_change(
-        base_raw,
-        repaired_raw,
-        len(additions),
-        0,
-    )
-    if not additions:
-        raise RecoveryError("recovery reconstruction must contain only appended target PR entries")
-    expected_link = f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
-    wrong_links = [
-        str(entry.get("pr-link") or "")
-        for entry in additions
-        if str(entry.get("pr-link") or "") != expected_link
-    ]
-    if wrong_links:
-        raise RecoveryError(f"reconstructed entries must all use {expected_link}: {wrong_links}")
-    return len(additions), 0
-
-
 def pr_url(pr_number: int) -> str:
     """Return the canonical changelog link for a PR."""
     return f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
 
 
-def without_link(entry: dict[str, Any]) -> str:
-    """Return a stable identity for a changelog entry, ignoring its pr-link."""
-    return json.dumps(without_pr_link(entry), sort_keys=True, separators=(",", ":"))
+def recovery_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return the part of a changelog entry that a recovery file carries."""
+    return {key: value for key, value in entry.items() if key not in RECOVERY_DROPPED_FIELDS}
 
 
-def extract_original_entries(base_raw: bytes, merge_raw: bytes, pr_number: int) -> bytes:
-    """Return the original PR's ingest entries, excluding retirements with no results."""
+def recovery_identity(entry: dict[str, Any]) -> str:
+    """Return a stable identity for the results an entry ingests."""
+    return json.dumps(recovery_entry(entry), sort_keys=True, separators=(",", ":"))
+
+
+def extract_original_entries(
+    base_raw: bytes, merge_raw: bytes, pr_number: int
+) -> list[dict[str, Any]]:
+    """Return the entries the original merge appended to the legacy changelog file."""
     if not merge_raw.startswith(base_raw):
         raise RecoveryError(
             "original merge did not preserve its parent changelog byte-for-byte; "
@@ -323,40 +302,63 @@ def extract_original_entries(base_raw: bytes, merge_raw: bytes, pr_number: int) 
     links = [str(entry.get("pr-link") or "") for entry in entries]
     if not entries or any(link != pr_url(pr_number) for link in links):
         raise RecoveryError(f"original merge entries must all link {pr_url(pr_number)}: {links}")
+    return entries
+
+
+def original_entry(
+    checkout: Path, base_sha: str, merge_sha: str, pr_number: int
+) -> tuple[str, dict[str, Any]]:
+    """Return the path that recorded the original merge's result entry, and that entry.
+
+    The entry comes from the per-PR changelog file the merge added, or else from the
+    entries the merge appended to the legacy changelog file. Retirement entries are
+    dropped because they have no results to ingest.
+    """
+    try:
+        with contextlib.chdir(checkout):
+            files = added_files(base_sha, merge_sha, LEGACY_FILE)
+            directory = directory_at(merge_sha, LEGACY_FILE)
+    except ValueError as exc:
+        raise RecoveryError(str(exc)) from exc
+    base_raw = read_git_file_from(checkout, base_sha, LEGACY_FILE)
+    merge_raw = read_git_file_from(checkout, merge_sha, LEGACY_FILE)
+    if files:
+        numbers = [number for number, _ in files]
+        if numbers != [pr_number]:
+            raise RecoveryError(
+                f"original merge must add only {DIRECTORY}/{pr_number}.yaml, found {numbers}"
+            )
+        if merge_raw != base_raw:
+            raise RecoveryError(
+                f"original merge also changed {LEGACY_FILE}, so recover its entries manually"
+            )
+        source, entries = f"{directory}/{pr_number}.yaml", [files[0][1]]
+    else:
+        source = git_path_at_ref(merge_sha, LEGACY_FILE, cwd=checkout)
+        entries = extract_original_entries(base_raw, merge_raw, pr_number)
     active = [entry for entry in entries if entry.get("retired") is not True]
     if not active:
         raise RecoveryError("retirement-only merges have no result artifacts to recover")
-    if len(active) != len(entries):
-        return yaml.safe_dump(active, sort_keys=False).encode()
-    return appended
-
-
-def relink_entries(entries_raw: bytes, original_pr: int, recovery_link: str) -> bytes:
-    """Replace only each entry's pr-link line, keeping every other byte verbatim."""
-    old_line = f"  pr-link: {pr_url(original_pr)}".encode()
-    lines = entries_raw.split(b"\n")
-    matches = [index for index, line in enumerate(lines) if line.rstrip() == old_line]
-    original = parse_changelog(entries_raw, "original entries")
-    if len(matches) != len(original):
+    if len(active) > 1:
         raise RecoveryError(
-            f"found {len(matches)} pr-link lines for {len(original)} entries; relink manually"
+            f"original merge has {len(active)} result entries and a recovery file holds one, "
+            "so recover them manually"
         )
-    for index in matches:
-        lines[index] = f"  pr-link: {recovery_link}".encode()
-    relinked_raw = b"\n".join(lines)
-    relinked = parse_changelog(relinked_raw, "relinked entries")
-    if [without_link(entry) for entry in relinked] != [
-        without_link(entry) for entry in original
-    ] or any(entry.get("pr-link") != recovery_link for entry in relinked):
-        raise RecoveryError("relinking changed more than the pr-link values")
-    return relinked_raw
+    return source, active[0]
 
 
-def append_entries(main_raw: bytes, entries_raw: bytes) -> bytes:
-    """Append entries after exactly one empty line, preserving every historical byte."""
-    if not main_raw.endswith(b"\n"):
-        raise RecoveryError("current changelog does not end with a newline; repair it first")
-    return main_raw + (b"" if main_raw.endswith(b"\n\n") else b"\n") + entries_raw
+def changelog_file_entries(checkout: Path, ref: str, directory: str) -> list[dict[str, Any]]:
+    """Return the entry of every per-PR changelog file at ``ref``."""
+    listing = run_command(["git", "ls-tree", "--name-only", ref, f"{directory}/"], cwd=checkout)
+    entries = []
+    for path in listing.stdout.splitlines():
+        if name := FILE_NAME.fullmatch(Path(path).name):
+            text = run_command(["git", "show", f"{ref}:{path}"], cwd=checkout).stdout
+            try:
+                entries.append(parse_file(text, int(name.group(1)), path))
+            except ChangelogError as exc:
+                raise RecoveryError(str(exc)) from exc
+    return entries
 
 
 def check_merge_ingest_runs(runs: list[dict[str, Any]], merge_sha: str) -> list[dict[str, Any]]:
@@ -400,7 +402,7 @@ def plan_recovery_pr(
     token: str,
     checkout: Path,
 ) -> dict[str, Any]:
-    """Verify eligibility and compute the exact recovery append without writing anything."""
+    """Verify eligibility and compute the exact recovery changelog file without writing anything."""
     pr = gh_api(repo, f"pulls/{pr_number}")
     merge_sha = str(pr.get("merge_commit_sha") or "")
     if not pr.get("merged_at") or not merge_sha or pr.get("base", {}).get("ref") != "main":
@@ -425,22 +427,21 @@ def plan_recovery_pr(
     run_command(["git", "fetch", "--quiet", "origin", "main", merge_sha], cwd=checkout)
     run_command(["git", "merge-base", "--is-ancestor", merge_sha, "origin/main"], cwd=checkout)
     base_sha = run_command(["git", "rev-parse", f"{merge_sha}^"], cwd=checkout).stdout.strip()
+    original_changelog, entry = original_entry(checkout, base_sha, merge_sha, pr_number)
     try:
-        changelog_path = git_path_at_ref("origin/main", "perf-changelog.yaml", cwd=checkout)
+        with contextlib.chdir(checkout):
+            directory = directory_at("origin/main", LEGACY_FILE)
     except ValueError as exc:
         raise RecoveryError(str(exc)) from exc
-    entries_raw = extract_original_entries(
-        read_git_file_from(checkout, base_sha, "perf-changelog.yaml"),
-        read_git_file_from(checkout, merge_sha, "perf-changelog.yaml"),
-        pr_number,
-    )
-    main_raw = read_git_file_from(checkout, "origin/main", changelog_path)
-    identities = [without_link(entry) for entry in parse_changelog(main_raw, "origin/main")]
-    for entry in parse_changelog(entries_raw, "original entries"):
-        if identities.count(without_link(entry)) != 1:
-            raise RecoveryError(
-                "origin/main already repeats an original entry; it may already be recovered"
-            )
+    on_main = parse_changelog(
+        read_git_file_from(checkout, "origin/main", LEGACY_FILE), "origin/main"
+    ) + changelog_file_entries(checkout, "origin/main", directory)
+    copies = [recovery_identity(existing) for existing in on_main].count(recovery_identity(entry))
+    if copies != 1:
+        raise RecoveryError(
+            f"origin/main carries the original entry {copies} times instead of once, "
+            "so it may already be recovered"
+        )
 
     return {
         "repo": repo,
@@ -457,8 +458,9 @@ def plan_recovery_pr(
         "source_head_sha": source.get("head_sha"),
         "source_workflow": source.get("path"),
         "source_conclusion": source.get("conclusion"),
-        "changelog_path": changelog_path,
-        "entries": entries_raw.decode(),
+        "original_changelog": original_changelog,
+        "changelog_directory": directory,
+        "entry": recovery_entry(entry),
         "branch": f"chore/recover-{pr_number}-ingest",
         "title": f"chore: recover PR {pr_number} ingest / 恢复 PR {pr_number} 结果入库",
     }
@@ -470,8 +472,8 @@ def recovery_pr_body(plan: dict[str, Any], ai_disclosure: str) -> str:
     runs = ", ".join(str(run["id"]) for run in plan["failed_merge_ingest_runs"]) or "none"
     return f"""Recover the official ingest for #{pr} ({plan["original_title"]}). \
 Its Merge Ingest publication for merge commit `{plan["merge_sha"]}` never succeeded \
-(runs: {runs}). No GPU work reruns: this PR re-appends the #{pr} changelog entry with \
-this PR as its link and reuses source run [{source}]({plan["source_run_url"]}), \
+(runs: {runs}). No GPU work reruns. This PR re-adds the #{pr} changelog entry as \
+`perf-changelog/<this PR number>.yaml` and reuses source run [{source}]({plan["source_run_url"]}), \
 to be pinned with `/use {source}`.
 
 <details>
@@ -495,8 +497,8 @@ conclusion `{plan["source_conclusion"]}`, head `{plan["source_head_sha"]}`.
 <summary>中文</summary>
 
 恢复 #{pr} 的正式入库。其合并提交 `{plan["merge_sha"]}` 的 Merge Ingest 发布从未成功，\
-运行为 {runs}。本 PR 不重跑任何 GPU 任务，仅以本 PR 链接重新追加 #{pr} 的 changelog \
-条目，并通过 `/use {source}` 复用源运行 {source}。
+运行为 {runs}。本 PR 不重跑任何 GPU 任务，仅将 #{pr} 的 changelog 条目重新添加为 \
+`perf-changelog/<本 PR 编号>.yaml`，并通过 `/use {source}` 复用源运行 {source}。
 
 </details>
 """
@@ -508,7 +510,7 @@ def execute_recovery_pr(
     ai_disclosure: str,
     post_use: bool,
 ) -> dict[str, Any]:
-    """Create the bootstrap PR, append the relinked entries, validate, and push."""
+    """Create the bootstrap PR, add the recovery changelog file, validate, and push."""
     repo, branch, pr = plan["repo"], plan["branch"], plan["original_pr"]
     if run_command(["git", "ls-remote", "--heads", "origin", branch], cwd=checkout).stdout:
         raise RecoveryError(f"remote branch {branch} already exists")
@@ -563,25 +565,24 @@ def finish_recovery_pr(
     recovery_pr: int,
     post_use: bool,
 ) -> None:
-    """Append, commit, validate, and push the recovery entry on the bootstrap branch."""
-    pr, path = plan["original_pr"], plan["changelog_path"]
-    main_raw = read_git_file_from(worktree, "origin/main", path)
-    repaired = append_entries(
-        main_raw, relink_entries(plan["entries"].encode(), pr, pr_url(recovery_pr))
+    """Write, commit, validate, and push the recovery changelog file on the bootstrap branch."""
+    pr, directory = plan["original_pr"], plan["changelog_directory"]
+    path = f"{directory}/{recovery_pr}.yaml"
+    (worktree / path).write_text(
+        yaml.safe_dump(plan["entry"], sort_keys=False, allow_unicode=True, width=1_000_000),
+        encoding="utf-8",
     )
-    validate_reconstruction(main_raw, repaired, recovery_pr)
-    (worktree / path).write_bytes(repaired)
     run_command(["git", "add", "--", path], cwd=worktree)
     run_command(
         [
             "git", "commit",
-            "-m", f"Re-append PR {pr} changelog entry for ingest recovery",
-            "-m", f"以恢复 PR 链接重新追加 PR {pr} 的 changelog 条目。",
+            "-m", f"Re-add PR {pr} changelog entry for ingest recovery",
+            "-m", f"为结果入库恢复重新添加 PR {pr} 的 changelog 条目。",
         ],
         cwd=worktree,
     )  # fmt: skip
     commit = run_command(["git", "rev-parse", "HEAD"], cwd=worktree).stdout.strip()
-    project = worktree / Path(path).parent
+    project = worktree / Path(directory).parent
     refs = [
         "--changelog-file", "perf-changelog.yaml",
         "--base-ref", "origin/main",
@@ -629,7 +630,7 @@ def create_recovery_pr(args: argparse.Namespace) -> None:
     actions = [
         f"create {plan['branch']} from origin/main with an empty bootstrap commit and push it",
         f"open PR {plan['title']!r} against main",
-        f"append the entries above to {plan['changelog_path']}, relinked to the new PR",
+        f"write the entry above as {plan['changelog_directory']}/<recovery PR>.yaml",
         "commit, run validate_perf_changelog and matrix.plan against origin/main, then push",
     ]
     if args.post_use:

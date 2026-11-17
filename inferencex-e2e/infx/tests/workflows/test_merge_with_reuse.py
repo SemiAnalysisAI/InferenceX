@@ -1648,3 +1648,83 @@ def test_merge_from_nested_directory_survives_historical_checkout(
         assert Path.cwd() == project
         assert repo.active_branch.name == "main"
         assert f"pr-7-reuse-{os.getpid()}" not in repo.heads
+
+
+@pytest.mark.parametrize("main_moved", [False, True])
+def test_merge_with_a_per_pr_changelog_file_leaves_the_legacy_file_alone(
+    tmp_path, monkeypatch, main_moved,
+):
+    from infx.workflows import merge_with_reuse as merger
+
+    checkout = tmp_path / "checkout"
+    repo = gitpython.Repo.init(checkout)
+    repo.config_writer().set_value("user", "name", "Test").release()
+    repo.config_writer().set_value("user", "email", "test@example.com").release()
+    repo.git.branch("-M", "main")
+    project = checkout / "inferencex-e2e"
+    (project / "configs").mkdir(parents=True)
+    (project / "configs/runners.yaml").write_text("labels: {}\n")
+    (project / "perf-changelog").mkdir()
+    (project / "perf-changelog/README.md").write_text("One file per PR.\n")
+    legacy = (
+        "- config-keys: [base]\n  description: [original]\n"
+        "  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1\n"
+    )
+    (project / "perf-changelog.yaml").write_text(legacy)
+    repo.git.add(".")
+    repo.index.commit("base")
+    repo.create_head("feature").checkout()
+    (project / "perf-changelog/7.yaml").write_text("config-keys: [new]\ndescription: [new]\n")
+    repo.git.add(".")
+    pr_sha = repo.index.commit("add changelog file").hexsha
+    repo.heads.main.checkout()
+    if main_moved:
+        (project / "perf-changelog/8.yaml").write_text("config-keys: [other]\ndescription: [x]\n")
+        legacy += (
+            "\n- config-keys: [transition]\n  description: [transition]\n"
+            "  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/6\n"
+        )
+        (project / "perf-changelog.yaml").write_text(legacy)
+        repo.git.add(".")
+        repo.index.commit("main moves on")
+    origin = gitpython.Repo.init(tmp_path / "origin.git", bare=True)
+    repo.create_remote("origin", str(origin.git_dir))
+    repo.git.push("origin", "main", "feature", "feature:refs/pull/7/head")
+
+    pull = make_mock_pull(head_ref="feature", head_sha=pr_sha)
+    gh = make_mock_gh(pull)
+    gh.get_repo.return_value.get_commit.return_value.get_check_runs.return_value = [
+        make_check_run(name="check-changelog"),
+    ]
+    gh.get_repo.return_value.get_commit.return_value.get_combined_status.return_value.statuses = []
+
+    def update_remote_head():
+        pull.head.sha = origin.commit("refs/heads/feature").hexsha
+
+    pull.update.side_effect = update_remote_head
+    monkeypatch.setenv("GH_TOKEN", "fixture-token")
+    monkeypatch.setattr(merger, "pr_commit_shas", lambda *_: {pr_sha})
+    monkeypatch.setattr(merger, "completed_pr_runs", lambda *_: [{
+        "id": 42, "conclusion": "success", "head_sha": pr_sha,
+    }])
+    monkeypatch.setattr(merger, "artifact_names", lambda *_: {"results_bmk"})
+    monkeypatch.chdir(project)
+
+    assert merge_pr(7, _git_ops=GitOps(repo), _gh=gh) == 0
+
+    head = origin.commit("refs/heads/feature")
+    pull.create_issue_comment.assert_called_once_with("/use 42")
+    pull.merge.assert_called_once_with(merge_method="squash", sha=head.hexsha)
+    assert origin.git.show(f"{head.hexsha}:inferencex-e2e/perf-changelog.yaml") == legacy.rstrip()
+    assert origin.git.show(f"{head.hexsha}:inferencex-e2e/perf-changelog/7.yaml") == (
+        "config-keys: [new]\ndescription: [new]"
+    )
+    if main_moved:
+        assert len(head.parents) == 2
+        assert head.parents[0].hexsha == pr_sha
+        assert "inferencex-e2e/perf-changelog/8.yaml" in origin.git.ls_tree(
+            "-r", "--name-only", head.hexsha
+        ).splitlines()
+    else:
+        assert [parent.hexsha for parent in head.parents] == [pr_sha]
+        assert head.message.startswith("chore: refresh PR #7 for sweep reuse")

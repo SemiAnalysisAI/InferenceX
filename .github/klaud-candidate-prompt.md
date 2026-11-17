@@ -38,7 +38,7 @@ this candidate, and recovery started this session in a new run to continue it. T
 draft PR, frozen baseline (prepare-baseline returns it), attempt comments and runs are yours;
 never recreate them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt
 counter, repairs used and run IDs from your attempt comments. A commit pushed after the head
-of your last attempt comment counts as a used repair, unless it is the perf-changelog entry or
+of your last attempt comment counts as a used repair, unless it adds the perf-changelog file or
 a merge of main.
 Recovery starts a session only after every owned run ended, and it already reran the newest
 run if someone preempted it. Inspect those runs (finished or preempted) and continue. Repair
@@ -144,8 +144,8 @@ dispatch (20-minute profile). Never pass it to a sweep without `--smoke` or to t
 Autosweeps cover only the family's AgentX (agentic-coding) points; never run fixed-seq-len points.
 Smoke retains minimum-concurrency throughput and canonical representative eval concurrency;
 it is startup evidence, not a full curve. When candidate.json has `smoke-covers-full: true`, the
-smoke matrix already equals the full sweep: skip the targeted run, append the perf-changelog
-entry with the image edit and dispatch the final sweep as the initial attempt.
+smoke matrix already equals the full sweep: skip the targeted run, add the perf-changelog
+file with the image edit and dispatch the final sweep as the initial attempt.
 Persist each run ID/head/attempt and typed progress
 comment immediately, before waiting. Inspect jobs because queued workflows can contain active
 jobs and failed benchmarks can leave evals running. Diagnose the FIRST server error, not
@@ -179,10 +179,13 @@ finish error in Next, never `inconclusive`.
 Benchmarks may take three hours. Never cancel healthy or queued work to fit the session limit;
 park instead.
 
-After smoke benchmarks AND selected evals pass, append ONE inferencex-e2e/perf-changelog.yaml
-entry whose config-keys list every family key at the physical tail with this PR URL,
-preserving every prior byte. Set exactly
-`scenario-type: [agentic-coding]`; omit append-only and eval-selection modifiers.
+After smoke benchmarks AND selected evals pass, add ONE changelog file,
+inferencex-e2e/perf-changelog/<PR number>.yaml, by running
+`uv run --extra recipes python -m infx.matrix.changelog new --pr <PR number> -m "<description>"`
+from inferencex-e2e/, adding `--key <config>` for any family key the config diff misses.
+Its config-keys must list every family key. Set exactly
+`scenario-type: [agentic-coding]`; omit append-only and eval-selection modifiers. Never
+touch inferencex-e2e/perf-changelog.yaml or another PR's changelog file.
 Its description must be one plain-English sentence
 of at most 120 characters: state the engine image version change and, only when necessary,
 one essential compatibility adjustment. Do not include evidence, benchmark results, upstream
@@ -190,7 +193,7 @@ release summaries, rationale or limitations there; those belong in attempt comme
 Commit/push, generate the final matrix with
 infx.matrix.plan and run `check-final --matrix-file FILE` before dispatch.
 Merge main only immediately before dispatching a new final sweep, and never while an owned final
-run is queued or running. A perf-changelog conflict with main never justifies a merge or a new
+run is queued or running. A merge conflict with main never justifies a merge or a new
 sweep. Keep the measured head, retry infrastructure failures as reruns of the same run and finish
 on that head. Finish does not require a mergeable PR, and recovery later merges main into the
 finished PR with a `[skip-sweep]` commit.

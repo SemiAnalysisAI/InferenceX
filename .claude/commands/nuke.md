@@ -67,7 +67,7 @@ Each PR triggers a full GPU sweep, so surface the total PR count explicitly.
 
 ## Step 4 — create one PR per family
 
-Use these helpers (write them to /tmp) for precise, per-config-key edits. A blind
+Use this helper (write it to /tmp) for precise, per-config-key edits. A blind
 `sed` is unsafe because the same old tag appears under many keys. Only the master `image:`
 changes: the srt-slurm binder writes it into the recipe.
 
@@ -93,18 +93,6 @@ for key in keys:
 open(f,'w').write('\n'.join(lines))
 ```
 
-`/tmp/append_changelog.py`:
-```python
-#!/usr/bin/env python3
-# Usage: append_changelog.py <changelog> <description> <key1> [key2 ...]
-import sys
-f, desc, keys = sys.argv[1], sys.argv[2], sys.argv[3:]
-content = open(f).read().rstrip('\n')
-block = ["", "- config-keys:"] + [f"    - {k}" for k in keys]
-block += ["  description:", f'    - "{desc}"', "  pr-link: PRLINK_PLACEHOLDER"]
-open(f,'w').write(content + '\n' + '\n'.join(block) + '\n')
-```
-
 For each family, run strictly sequentially because git checkouts can't be parallel:
 
 ```bash
@@ -112,23 +100,15 @@ git checkout main -q && git reset --hard origin/main -q
 branch="klaud/<basekey>-<TAG>"
 git checkout -b "$branch" -q
 python3 /tmp/edit_image.py <master.yaml> <NEW_IMAGE> <key> [<key>-mtp]
-python3 /tmp/append_changelog.py inferencex-e2e/perf-changelog.yaml "<DESC>" <key> [<key>-mtp]
 git add -A
 git commit -q -m "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>"
 git push -u origin "$branch" -q --force-with-lease
 url=$(gh pr create --repo SemiAnalysisAI/InferenceX --base main --head "$branch" \
       --title "[Klaud Cold] Update <basekey>[ (+mtp)] <PHRASE> to <TAG>" \
       --body "<BODY>" --label full-sweep-fail-fast | grep -o 'https://github.com/[^ ]*')
-# patch the changelog pr-link with the real URL, then amend + force-push
-# (read first, then write: open(f,'w') truncates before a same-line read runs)
-before=$(wc -l < inferencex-e2e/perf-changelog.yaml)
-python3 - inferencex-e2e/perf-changelog.yaml "$url" <<'PY'
-import sys; f,u=sys.argv[1],sys.argv[2]
-content = open(f).read()
-open(f,'w').write(content.replace("PRLINK_PLACEHOLDER",u,1))
-PY
-[ "$(wc -l < inferencex-e2e/perf-changelog.yaml)" -eq "$before" ] || { echo "perf-changelog.yaml line count changed"; exit 1; }
-git add inferencex-e2e/perf-changelog.yaml && git commit -q --amend --no-edit && git push -q --force-with-lease
+# the changelog file is named after the PR, so write it once the PR exists
+(cd inferencex-e2e && uv run --extra recipes python -m infx.matrix.changelog new --pr "${url##*/}" -m "<DESC>")
+git add inferencex-e2e/perf-changelog && git commit -q --amend --no-edit && git push -q --force-with-lease
 ```
 
 Conventions:

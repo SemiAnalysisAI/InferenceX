@@ -9,6 +9,7 @@ from contextlib import ExitStack
 from infx import yamlio
 from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
+from . import changelog
 from .fingerprint import recipe_fingerprint
 from .generate import (
     SCENARIO_TYPES,
@@ -417,14 +418,16 @@ def build_plan(
         base = None
         base_master = {}
         for entry in parsed_entries:
-            if entry.retired:
+            retired_keys = entry.config_keys if entry.retired else entry.retired_keys or []
+            if retired_keys:
                 if base is None:
                     base = stack.enter_context(snapshot(base_ref))
                     base_master = load_config_files(base.master_configs, validate=False)
-                retired_configs = get_config_keys_from_master(entry.config_keys, base_master)
+                retired_configs = get_config_keys_from_master(retired_keys, base_master)
                 still_active = sorted(set(retired_configs) & master_config.keys())
                 if still_active:
                     raise ValueError(f"retired configs still exist in head: {still_active}")
+            if entry.retired:
                 continue
             all_configs = get_config_keys_from_master(entry.config_keys, master_config)
             # Wildcards may match video configs a non-video entry means to skip; a named one must plan.
@@ -543,7 +546,10 @@ def build_plan(
 
 
 def main() -> None:
-    """Print the sweep matrix, as JSON, for the changelog lines added between two refs."""
+    """Print the sweep matrix, as JSON, for the changelog entries a head adds since its merge base.
+
+    Entries come from lines appended to the legacy changelog file and from new per-PR files.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-ref", type=str, required=True)
     parser.add_argument("--head-ref", type=str, required=True)
@@ -570,16 +576,21 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
+    base_ref = changelog.merge_base(args.base_ref, args.head_ref)
+    added_yaml = get_added_lines(base_ref, args.head_ref, args.changelog_file)
+    changelog_data = (
+        yamlio.load(added_yaml, yamlio.UniqueKeySafeLoader) if added_yaml.strip() else []
+    )
+    changelog_data += [
+        entry for _, entry in changelog.added_files(base_ref, args.head_ref, args.changelog_file)
+    ]
+    if not changelog_data:
+        raise ValueError("No additions found in the changelog.")
 
-    if not added_yaml.strip():
-        raise ValueError("No additions found in the changelog file.")
-
-    changelog_data = yamlio.load(added_yaml, yamlio.UniqueKeySafeLoader)
     if args.repository and isinstance(changelog_data, list):
         changelog_data = entries_from_repository(changelog_data, args.repository, args.pull_request)
         if not changelog_data:
-            metadata = ChangelogMetadata(base_ref=args.base_ref, head_ref=args.head_ref, entries=[])
+            metadata = ChangelogMetadata(base_ref=base_ref, head_ref=args.head_ref, entries=[])
             empty = ChangelogMatrixEntry(changelog_metadata=metadata)
             print(empty.model_dump_json(by_alias=True, exclude_none=True))
             return
@@ -587,7 +598,7 @@ def main() -> None:
     try:
         result = build_plan(
             changelog_data,
-            base_ref=args.base_ref,
+            base_ref=base_ref,
             head_ref=args.head_ref,
             trim=args.trim_conc,
             all_evals=args.all_evals,

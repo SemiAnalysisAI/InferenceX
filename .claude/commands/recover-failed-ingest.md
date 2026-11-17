@@ -70,10 +70,13 @@ ETL or mapping. Missing output is not repaired by rerunning a database ingest.
 
 ## Verify recovery eligibility
 
-Retirement-only merges have no benchmark results to ingest or recover; do not
-re-append their `retired: true` entries. For mixed changes, the recovery tool
-excludes retired entries and recovers only entries with results. Keep the
-planner's requirement that retired keys existed in the original base revision.
+Retirement-only merges have no benchmark results to ingest or recover. Do not
+re-add their `retired: true` entries. For mixed changes, the recovery tool drops
+retired entries and `retired-keys` and recovers only the entry with results. Keep
+the planner's requirement that retired keys existed in the original base revision.
+A recovery file holds one entry, so the tool stops when the original merge left more
+than one entry with results. Then combine them by hand into one entry when their
+modifiers match, or open one recovery PR per entry.
 
 The target must be completed, on `main`, with event `push` and the workflow above.
 A green legacy dispatch is not proof of valid data; leave bogus historical rows alone.
@@ -113,7 +116,8 @@ git merge-base --is-ancestor "$SOURCE_HEAD_SHA" "refs/remotes/origin/source-pr-$
 git diff --name-status "$SOURCE_HEAD_SHA" "refs/remotes/origin/source-pr-$ORIGINAL_PR"
 uv run --project inferencex-e2e --extra workflows python -m infx.workflows.recover_failed_ingest \
   audit-changelog --ref "$ORIGINAL_MERGE_SHA"
-git diff "${ORIGINAL_MERGE_SHA}^" "$ORIGINAL_MERGE_SHA" -- inferencex-e2e/perf-changelog.yaml
+git diff "${ORIGINAL_MERGE_SHA}^" "$ORIGINAL_MERGE_SHA" -- \
+  inferencex-e2e/perf-changelog.yaml inferencex-e2e/perf-changelog/
 ```
 
 If the original PR merged `main`, a whole-tree diff mostly shows `main`'s changes.
@@ -121,7 +125,7 @@ Restrict the comparison to the files the original merge commit changed:
 
 ```bash
 git diff --name-only "${ORIGINAL_MERGE_SHA}^" "$ORIGINAL_MERGE_SHA" |
-  grep -v perf-changelog.yaml | xargs git diff --stat "$SOURCE_HEAD_SHA" \
+  grep -v perf-changelog | xargs git diff --stat "$SOURCE_HEAD_SHA" \
   "refs/remotes/origin/source-pr-$ORIGINAL_PR" --
 ```
 
@@ -137,11 +141,13 @@ intended entries from the original PR diff or stop on ambiguity.
 `create-pr` automates this section. It verifies the original PR merged, that no
 merge-ingest push run for its merge commit is pending or succeeded, and that the
 source is completed, belongs to the PR, carries unexpired results, and passes the
-pinned `/use` reuse rules. It then extracts the merge's changelog append and fails
-closed on any ambiguity. It is a dry run by default; review the printed entries,
-then add `--execute`, which runs every step below through the push in a temporary
-worktree. `--post-use` also posts `/use`; post it yourself if you are not an
-authorized maintainer.
+pinned `/use` reuse rules. It then reads the original entry from the
+`perf-changelog/<original PR>.yaml` file the merge added, or else from the merge's
+append to the legacy `perf-changelog.yaml`. It fails closed on any ambiguity or when
+`origin/main` already carries a copy of that entry. It is a dry run by default.
+Review the printed entry, then add `--execute`, which runs every step below through
+the push in a temporary worktree. `--post-use` also posts `/use`; post it yourself if
+you are not an authorized maintainer.
 
 ```bash
 uv run --project inferencex-e2e --extra workflows python -m infx.workflows.recover_failed_ingest \
@@ -159,13 +165,15 @@ Reuse needs no sweep label. If a primary label is present, allow only one.
 Never use `evals-only` or `agentx-fast` on the recovery PR, or select a source
 produced with either modifier. Do not rely on `[skip-sweep]`.
 
-Append only to `inferencex-e2e/perf-changelog.yaml`, preserving every historical
-byte. Preserve the original `config-keys`, verbatim `description`, `evals-only`,
-and `scenario-type`; use the new recovery PR URL. Put recovery IDs in the PR
-body, not the description shown in the app. Do not later remove the recovery entry:
-it is permanent publication metadata, not a transient trigger.
+Write the entry as `inferencex-e2e/perf-changelog/$RECOVERY_PR.yaml`, one YAML
+mapping without `pr-link`, because the file name sets the link. The legacy
+`perf-changelog.yaml` is frozen, so do not append to it. Preserve the original
+`config-keys`, verbatim `description`, `evals-only`, and `scenario-type`, and drop
+`retired-keys`. Put recovery IDs in the PR body, not the description shown in the
+app. Do not later remove the recovery file. It is permanent publication metadata,
+not a transient trigger.
 
-Commit the append, set `RECOVERY_COMMIT=$(git rev-parse HEAD)`, and validate:
+Commit the file, set `RECOVERY_COMMIT=$(git rev-parse HEAD)`, and validate:
 
 ```bash
 (
@@ -179,11 +187,12 @@ Commit the append, set `RECOVERY_COMMIT=$(git rev-parse HEAD)`, and validate:
 ```
 
 Require only the intended recovery scope; current matrix row counts may differ
-from the source. Push the append, which starts no GPU jobs while the PR has no
+from the source. Push the commit, which starts no GPU jobs while the PR has no
 primary sweep label:
 
 ```bash
-test "$(git diff --name-only origin/main...HEAD)" = "inferencex-e2e/perf-changelog.yaml" || exit 1
+test "$(git diff --name-only origin/main...HEAD)" = \
+  "inferencex-e2e/perf-changelog/$RECOVERY_PR.yaml" || exit 1
 git diff --check origin/main...HEAD || exit 1
 git push origin "$BRANCH"
 ```
@@ -199,7 +208,7 @@ A 👎 explains itself only in the matching `reuse-sweep-comment.yml` run log
 
 ```bash
 test "$(gh pr diff "$RECOVERY_PR" -R SemiAnalysisAI/InferenceX --name-only)" = \
-  "inferencex-e2e/perf-changelog.yaml"
+  "inferencex-e2e/perf-changelog/$RECOVERY_PR.yaml"
 gh pr checks "$RECOVERY_PR" -R SemiAnalysisAI/InferenceX --watch --fail-fast
 ```
 

@@ -1258,6 +1258,12 @@ class ChangelogEntry(BaseModel):
         default=False,
         description="Record configs removed from the base revision without scheduling benchmarks",
     )
+    retired_keys: list[str] | None = Field(
+        alias="retired-keys",
+        default=None,
+        min_length=1,
+        description="Configs this PR removes alongside the configs it sweeps; never scheduled",
+    )
     eval_min_prefill_ep: int | None = Field(
         alias="eval-min-prefill-ep",
         default=None,
@@ -1289,6 +1295,7 @@ class ChangelogEntry(BaseModel):
             or self.no_evals
             or self.eval_min_prefill_ep is not None
             or self.scenario_type is not None
+            or self.retired_keys is not None
         ):
             raise ValueError("retired entries cannot use sweep or scenario selection fields")
         if self.no_evals and (

@@ -10,7 +10,7 @@ measured window published to srt-slurm's native GPU power telemetry.
 
 InferenceX owns scheduling and results. `inferencex-e2e/configs/nvidia-master.yaml`
 and `amd-master.yaml` declare the deployments (`h3-bf16-<sku>-<engine>-video`), `infx.matrix` plans
-them from `perf-changelog.yaml`, `run-sweep.yml` runs the `video` bucket through
+them from the PR's `perf-changelog/<PR>.yaml`, `run-sweep.yml` runs the `video` bucket through
 `benchmark-tmpl.yml`, and `python -m infx.launch run` takes the `srt-video` path:
 the SKU recipe under `benchmarks/single_node/srt-slurm-recipes/h3/` starts the
 engine through `python3 -m infx.bench video serve` as a generic service and runs

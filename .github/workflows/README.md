@@ -162,8 +162,8 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 ## PR Sweep Labels
 
-`run-sweep.yml` sweeps only same-repository PRs that change
-`inferencex-e2e/perf-changelog.yaml`, using the appended entries as the matrix.
+`run-sweep.yml` sweeps only same-repository PRs that add a changelog file,
+`inferencex-e2e/perf-changelog/<PR number>.yaml`, using its entry as the matrix.
 Apply exactly one primary label, normally `full-sweep-fail-fast`.
 Fork PRs use the [trusted dispatch](#trusted-external-fork-sweep-dispatch-poc).
 
@@ -219,8 +219,11 @@ AgentX throughput forces speculative acceptance to the committed golden acceptan
 
 ## Changelog Conflict Recovery
 
-Run from `inferencex-e2e/`. After fetching and merging `origin/main`, if the
-changelog conflicts, use the helper while index stages 1/2/3 still exist:
+Transition only. Changelog files under `inferencex-e2e/perf-changelog/` are one
+per PR and never conflict. This section applies only to a PR opened before that
+directory landed which appended its entry to the frozen `perf-changelog.yaml`.
+Run from `inferencex-e2e/`. After fetching and merging `origin/main`, if that
+file conflicts, use the helper while index stages 1/2/3 still exist:
 
 ```bash
 uv run --extra workflows python -m infx.workflows.prepare_perf_changelog_merge resolve-conflict \
@@ -318,11 +321,13 @@ so pin only runs produced without them. To force a fresh sweep after a reuse
 command, remove and re-add the primary sweep label.
 
 `uv run --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path for reuse.
-It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
+It merges `main`, preserves legacy changelog bytes and fixes an appended `XXX` PR link
+(transition-only PRs that appended to `perf-changelog.yaml`),
 pushes a synchronization commit, waits for checks, then merges.
 
 At merge, `merge-ingest.yml` ("Merge Ingest") publishes the reused sweep. It
-runs on pushes to `main` that change `inferencex-e2e/perf-changelog.yaml`. Its
+runs on pushes to `main` that add a file under `inferencex-e2e/perf-changelog/`
+or change the frozen `inferencex-e2e/perf-changelog.yaml`. Its
 single `ingest` job first computes the changelog delta with `infx.matrix.plan`.
 For entries with results, it resolves the merge commit's PR, reuse command, and
 source run with `infx.workflows.reuse`, and fails before uploading or dispatching

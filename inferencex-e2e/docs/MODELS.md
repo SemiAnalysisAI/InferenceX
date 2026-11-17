@@ -22,7 +22,7 @@ This exception changes branch eligibility only. The image must still be publishe
 
 ## Deprecation policy
 
-InferenceX-e2e runs on a fixed GPU pool with a small team, so scenarios, precisions, and recipe variants that no longer earn their cluster hours are retired. The support matrix below is the current record of what is active and retired; git history and `perf-changelog.yaml` hold past settings.
+InferenceX-e2e runs on a fixed GPU pool with a small team, so scenarios, precisions, and recipe variants that no longer earn their cluster hours are retired. The support matrix below is the current record of what is active and retired; git history and the performance changelog (`perf-changelog.yaml` and `perf-changelog/`) hold past settings.
 
 ## Benchmarks what matters
 
@@ -183,7 +183,7 @@ Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "N
 ## Notes
 
 - The `Prefix` column is the canonical `model-prefix` used in `configs/*-master.yaml` and by the `full-sweep` subcommand's `--model-prefix` filter, for example `python -m infx.matrix.generate full-sweep --config-files configs/nvidia-master.yaml --model-prefix dsr1`.
-- "Retired" means the model no longer has any active scenario. Retired models' configs are deleted from the master configs; the former `configs/deprecated/` archive was removed in #3463, so past settings live in git history and `perf-changelog.yaml`.
+- "Retired" means the model no longer has any active scenario. Retired models' configs are deleted from the master configs; the former `configs/deprecated/` archive was removed in #3463, so past settings live in git history and the performance changelog (`perf-changelog.yaml` and `perf-changelog/`).
 - MiniMax-M3 and DeepSeek-V4-Pro retirement does not affect MiniMax-M3.1-Flash or DeepSeek-V4.1-Flash. Their SPEED-Bench collectors, golden AL curves, and B300 checkpoint mappings remain available for acceptance-length research and historical result interpretation; CollectiveX's DeepSeek-V4-Pro communication shape is also independent of serving benchmark coverage.
 - Kimi-K3 retirement removes all serving benchmark configs. Its SPEED-Bench collectors, golden AL curves, B300 checkpoint mapping, and vendor-eval tooling remain available for research and historical result interpretation. OperatorX retains Kimi-K3 operator shapes, but no longer inherits their retired serving recipes. Those cases use the current hardware/backend default image without recipe-specific env or engine args. Removing the entries also changes the vLLM default images for other unmatched cases on MI355X and B300; [`operatorx/perf-changelog.yaml`](../../operatorx/perf-changelog.yaml) records the runtime changes.
 - Deprecating a precision (e.g. Qwen3.5 bf16) or one arm of an A/B pair (e.g. non-MTP) narrows a model's recipe coverage without retiring the model. The model stays listed as active as long as one scenario still runs.
