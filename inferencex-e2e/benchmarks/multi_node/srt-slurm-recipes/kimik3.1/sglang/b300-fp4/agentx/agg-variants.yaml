@@ -106,13 +106,12 @@ base:
     mem: '0'
     container-remap-root: ''
 
-# The image's K3.1 GB runtime bundle trims the single-request decode step by ~1.3%. Explicit
-# non-expandable segments keep the KV pool the bundle would otherwise shrink.
 override_tp8_c1:
   roles:
     agg:
       env:
         SGLANG_ENABLE_NV_MEGA_RUNTIME_K31_GB_OPTIMIZATION: '1'
+        # Keeps the KV pool that the K3.1 GB runtime bundle would otherwise shrink.
         PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:False'
         CUDA_MODULE_LOADING: LAZY
       args:
@@ -131,8 +130,6 @@ override_tp8_c4:
         # Full collections run 10,000x less often than with the default threshold.
         gc-threshold: [700, 10, 100000]
 
-# DCP8 shards the TP-replicated MLA KV across the eight ranks; EP2 speeds up the decode
-# down-projection. The TRT-LLM DSA kernels take an FP8 query.
 override_tp8_ep2_dcp8_c32:
   roles:
     agg:
