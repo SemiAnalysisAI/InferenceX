@@ -378,16 +378,28 @@ frameworks; apply (c) only to official InferenceX (non-preview) submissions.
     and SKU.
 - (c) MAIN-BRANCH PROVENANCE: read the current
   `inferencex-e2e/docs/MODELS.md` section "Serving-image main-branch policy".
-  For official InferenceX (non-preview), established models must use upstream engine
-  images built from the engine's upstream `master` (or equivalent default development
-  branch, such as `main`). New models may temporarily use model-enablement branches,
-  but must transition within a reasonable time after release.
+  For official InferenceX (non-preview) submissions with upstream hardware support,
+  established models must use official upstream engine images built from the engine's
+  `main` or `master` (or equivalent default development branch), unless they meet the
+  community-engine branch exception below. New models may temporarily use
+  model-enablement branches, but must transition within a reasonable time after release.
   - Verify the engine's build branch from available build/source evidence. Do not
     infer it solely from the registry or image tag, or require the latest branch tip.
+  - Allow official upstream non-default-branch images for community-based engines
+    such as SGLang, vLLM, and TokenSpeed when the respective upstream community
+    maintainers (Inferact for vLLM, RadixArk for SGLang, and LightSeek for TokenSpeed)
+    explicitly approve the branch/image for the submission and the
+    upstream PRs must merge in a timely manner after submission, followed by migration
+    to a main-branch image. Verify the linked upstream PRs, maintainer approval, and
+    image build/source provenance in the sign-off's additional detail section.
+    Pending upstream merges alone do not fail this exception; do not claim they have
+    already merged. Assess timeliness case by case with the upstream maintainers.
+    This exception changes branch eligibility only, not upstream image publication,
+    engine-patch restrictions, engine-first ordering, precision, or eval requirements.
   - FAIL when an established model's official submission uses a non-default-branch
-    image. Allow temporary model-enablement branches for new models; assess reasonable
-    time case by case without inventing a fixed day count, approval form, migration
-    owner, or dated deadline.
+    image without meeting this exception. Allow temporary model-enablement branches
+    for new models; assess reasonable time case by case without inventing a fixed day
+    count, approval form, migration owner, or dated deadline.
   - Preview submissions are exempt from (c), not from the other applicable checks.
     If release age, preview status, or build provenance is unclear, identify the
     uncertainty and request maintainer clarification rather than assert compliance.

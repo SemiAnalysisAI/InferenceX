@@ -148,7 +148,7 @@ def tokenspeed_dspark(**args: Any) -> dict[str, Any]:
 def test_tokenspeed_dspark_throughput_forces_greedy_and_evals_keep_block_verification(
     tmp_path: Path, golden_dir: Path
 ) -> None:
-    curve = "kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml"
+    curve = "kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block.yaml"
     (golden_dir / curve).write_text(yaml.safe_dump({"kimi-k3.1-pro": {"thinking_on": {5: 3.41}}}))
     verification = {
         "sampling-backend": "triton", "enable-speculative-sampling": True,
