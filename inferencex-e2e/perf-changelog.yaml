@@ -12970,6 +12970,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Pin the DSA sparse-attention backends instead of auto selection: nsa-prefill-backend flashmla_sparse and nsa-decode-backend trtllm."
+    - "Switch DSA prefill from the auto-selected trtllm to dsa-prefill-backend flashmla_sparse; keep dsa-decode-backend trtllm and pin kv-cache-dtype fp8_e4m3, which auto already selected on B300."
     - "MoE stays on flashinfer_trtllm; image, search space and every other flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5115

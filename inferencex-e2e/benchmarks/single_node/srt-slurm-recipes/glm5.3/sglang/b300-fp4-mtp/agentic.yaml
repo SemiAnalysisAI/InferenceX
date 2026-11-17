@@ -26,10 +26,12 @@ base:
         tensor-parallel-size: 8
         expert-parallel-size: 1
         quantization: modelopt_fp4
-        # Pin the DSA sparse-attention kernels instead of auto selection:
-        # FlashMLA sparse for prefill, TRT-LLM sparse MLA for decode.
-        nsa-prefill-backend: flashmla_sparse
-        nsa-decode-backend: trtllm
+        # Auto on SM100 resolves to an FP8 KV cache with trtllm for both DSA
+        # prefill and decode; switch prefill to FlashMLA sparse, keep the
+        # TRT-LLM sparse MLA decode, and pin the FP8 KV cache explicitly.
+        kv-cache-dtype: fp8_e4m3
+        dsa-prefill-backend: flashmla_sparse
+        dsa-decode-backend: trtllm
         # GLM-5.3 emits the GLM-4.7 tool-call format.
         tool-call-parser: glm47
         reasoning-parser: glm45
