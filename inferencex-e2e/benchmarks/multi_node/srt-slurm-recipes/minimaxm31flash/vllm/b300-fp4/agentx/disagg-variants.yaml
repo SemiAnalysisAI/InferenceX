@@ -528,3 +528,33 @@ override_8p1d_dep2_dep8_bs8:
         data-parallel-size: 8
         max-num-seqs: 8
         compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","max_decode_cudagraph_capture_requests":8,"decode_cudagraph_capture_request_sizes":[1,2,3,4,5,6,7,8]}'
+  benchmark:
+    # 256 short requests before the AgentX client: prefill and decode then set up their NIXL connections
+    # (one per prefill-rank/decode-rank pair) while the GPUs are nearly idle. Left to the AgentX warmup,
+    # that setup overlaps 480 long prefills, and three deployments in a row lost a prefill worker to a
+    # sticky "CUDA: unknown error" within seconds. Report-only: the client runs whatever this prints.
+    command: |
+      python3 - <<'PY'
+      import concurrent.futures, json, os, time, urllib.request
+
+      url = f"http://{os.environ['SRT_FRONTEND_HOST']}:{os.environ['SRT_FRONTEND_PORT']}/v1/chat/completions"
+
+      def ask(i):
+          filler = " ".join(f"item{i}-{k}" for k in range(120))
+          body = {"model": "MiniMaxAI/MiniMax-M3.1-Flash", "max_tokens": 8,
+                  "messages": [{"role": "user", "content": f"Request {i}: reply OK. {filler}"}]}
+          request = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
+          try:
+              with urllib.request.urlopen(request, timeout=300) as response:
+                  response.read()
+                  return response.status == 200
+          except Exception:  # report-only: any failure counts as a failed request
+              return False
+
+      start = time.monotonic()
+      with concurrent.futures.ThreadPoolExecutor(64) as pool:
+          succeeded = sum(pool.map(ask, range(256)))
+      time.sleep(15)  # connections still being set up when the last reply arrives
+      print(f"NIXL connection priming: {succeeded}/256 short requests succeeded, {time.monotonic() - start:.0f}s", flush=True)
+      PY
+      bash /infmax-workspace/benchmarks/srt_agentic.sh
