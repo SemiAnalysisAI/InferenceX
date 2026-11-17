@@ -1,0 +1,64 @@
+schema: 2
+name: mi355x-glm52-atom-agentx-agg-tp8-mtp3-mono
+slurm:
+  time_limit: "08:00:00"
+resources:
+  gpu_type: mi355x
+  gpus_per_node: 8
+frontend:
+  type: atomesh
+  enable_multiple_frontends: false
+  args:
+    log-level: info
+    disable-health-check: true
+    disable-circuit-breaker: true
+    prometheus-port: 29100
+engine: atom
+roles:
+  agg:
+    nodes: 1
+    workers: 1
+    gpus: 8
+    env:
+      PYTHONUNBUFFERED: "1"
+      PYTHONHASHSEED: "0"
+      PYTHONNOUSERSITE: "1"
+      # srtctl's pre-download sees only HF_HOME, so the node-local cache is mounted at $HF_HOME/hub.
+      HF_HOME: /mnt/hf_home
+      HF_HUB_CACHE: /mnt/hf_home/hub
+      AITER_LOG_LEVEL: WARNING
+      AITER_USE_FLYDSL_MOE_SORTING: "1"
+      ATOM_MONO_ENABLE: "1"
+    args:
+      served-model-name: amd/GLM-5.2-MXFP4
+      trust-remote-code: true
+      kv_cache_dtype: fp8
+      # The DSA indexer mono decode reads an FP8 index cache.
+      index_cache_dtype: fp8
+      block-size: 64
+      method: mtp
+      # The GLM-5.2 mono decode at three draft tokens had the lowest TPOT of draft lengths 3-5 at TP8.
+      num-speculative-tokens: 3
+      timeout-keep-alive: 900
+      gpu-memory-utilization: 0.95
+      max-num-batched-tokens: 16384
+      max-num-seqs: 2
+      cudagraph-capture-sizes: "[1,2]"
+sbatch_directives:
+  cpus-per-task: "128"
+  mem: "0"
+srun_options:
+  mem: "0"
+  container-writable: ""
+  container-remap-root: ""
+extra_mount:
+  - /var/lib/hf-hub-cache:/mnt/hf_home/hub
+health_check:
+  max_attempts: 1080
+  interval_seconds: 5
+benchmark:
+  env:
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "atom:"
+    AIPERF_APPLY_CHAT_TEMPLATE: "true"
+    TOKENIZERS_PARALLELISM: "false"
+    TRANSFORMERS_VERBOSITY: error
