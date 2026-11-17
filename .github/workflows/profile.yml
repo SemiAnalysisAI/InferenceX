@@ -192,29 +192,16 @@ jobs:
     runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; workflow_dispatch only
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(matrix.config.runner),
-            toJSON(format('nodes:{0}', matrix.config['node-count'])),
-            toJSON(format(
-              'ci-job-{0}-{1}',
-              matrix.config.priority,
-              matrix.config['queue-token']
-            )),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(matrix.config.runner),
-            toJSON(format(
-              'ci-job-{0}-{1}',
-              matrix.config.priority,
-              matrix.config['queue-token']
-            )),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          )
+        format(
+          '["self-hosted",{0},{1},{2},{3}]',
+          toJSON(matrix.config.runner),
+          toJSON(format('nodes:{0}', matrix.config['node-count'])),
+          toJSON(format(
+            'ci-job-{0}-{1}',
+            matrix.config.priority,
+            matrix.config['queue-token']
+          )),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
         format('[{0}]', toJSON(matrix.config.runner))
       ) }}
