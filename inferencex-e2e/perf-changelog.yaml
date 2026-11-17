@@ -12923,6 +12923,7 @@
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-agg
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-linker
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-tep2
   scenario-type: [agentic-coding]
   description:
     - "Add disaggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB200 with lmsysorg/sglang:nightly-cu134-20261030-e371881 (Dynamo 1.7.0.dev20261030, Mooncake transfer, minimax-msa kernels)."
@@ -12930,5 +12931,6 @@
     - "Prefill: shortest-prefill-first, 8192 tokens per DP rank per chunk, mem-fraction-static 0.88, HiCache 200 GB per rank write_back. Decode: mem-fraction-static 0.90 on DEP8, 0.85 on DEP16."
     - "1 DEP8 prefill worker with a DEP8 decode at conc 224 and 256 on lmsysorg/sglang:nightly-cu134-20261112-36027fd, with the unified-cache external linker (Mooncake, prefetch loads) in place of HiCache: every prefill rank contributes a 190 GB segment, and each decode node and the infra node host 4 x 190 GB stores, 3800 GB in all. This point installs Dynamo 1.7.0.dev20261030 over the image's 1.7.0.dev20261111, which decodes slower; srt-slurm patch 903 re-exports MultimodalProcessorOutput from schedule_batch for it."
     - "The same linker prefill with a DEP16 decode (decode-node stores grow to 4 x 4 x 190 GB): 1 DEP8 prefill worker at conc 280, 320 and 360, or 2 DEP8 prefill workers sharing the linker pool at conc 320 and 360. Decode: 48 requests per DP rank, mem-fraction-static 0.85."
+    - "TP2 attention + MegaMoE EP2 prefill instances without attention DP behind the same DEP16 linker decode, on lmsysorg/sglang-staging:nightly-cu134-20261117-209741e, which transfers MiniMax NVFP4 KV between attention TP 2 and 1: 6 instances at conc 384 and 448, 8 at conc 448-640, 10 at conc 576-768. Prefill: 16384-token chunks, 128 running requests, mem-fraction-static 0.85, and layer-wise linker loads, so a hit takes device KV only when its request is scheduled. Each prefill rank contributes a 190 GB segment; Dynamo 1.7.0.dev20261030 as on the other linker points."
     - "Agg: TP4 at conc 1-16, a TP4 MSA-V1 MonoKernel point at conc 1 (page size 128, one-step DSpark with 8 draft tokens), and TP4 with HiCache 180 GB per rank at conc 32-56, behind the same Dynamo frontend."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4695

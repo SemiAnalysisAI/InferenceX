@@ -619,6 +619,92 @@ override_2p_dep8_dep16_linker:
       args: *linker-prefill-args
     decode: *linker-dep16-decode
 
+override_6p_tep2_dep16_linker:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-6p-tep2-dep16-linker
+  # TP2 attention + MegaMoE EP2 prefill instances with no attention DP behind
+  # the DEP16 linker decode. A long uncached prompt runs on one pair instead of
+  # holding all eight DP-coupled ranks, and this SGLang transfers MiniMax NVFP4
+  # KV between attention TP 2 and 1, so the decode stays DEP16. The model has
+  # 4 KV heads: TP2 splits the main KV across the pair, while the 4 KB/token
+  # indexer cache is held on both ranks.
+  # Layer-wise linker loads: a hit takes device slots only when its request is
+  # scheduled, so requests waiting for the decode bootstrap hold no device KV.
+  # With prefetch loads, the 4 x TP2 run (1.58M tokens per instance) evicted
+  # prefetched prefixes before use and recomputed them.
+  # L3 = 12 x 190 GB (prefill) + 4 x 4 x 190 GB (decode) + 4 x 190 GB (infra).
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g209741ec5"
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+  services: *linker-services
+  roles:
+    prefill: &tep2-prefill
+      nodes: 3
+      workers: 6
+      gpus: 2
+      env:
+        <<: *linker-env
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "32768"
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: null
+        expert-parallel-size: 2
+        enable-dp-attention: null
+        enable-dp-lm-head: null
+        chunked-prefill-size: 16384
+        max-running-requests: 128
+        mem-fraction-static: 0.85
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: '{"load_mode":"layer_wise","enable_group_semantics":false}'
+    decode: *linker-dep16-decode
+
+override_8p_tep2_dep16_linker:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-8p-tep2-dep16-linker
+  # The TEP2 point with eight prefill instances, sized so the prefill keeps up
+  # with a DEP16 decode at 6-7 requests per DP rank.
+  # L3 = 16 x 190 GB (prefill) + 4 x 4 x 190 GB (decode) + 4 x 190 GB (infra).
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g209741ec5"
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+  services: *linker-services
+  roles:
+    prefill:
+      <<: *tep2-prefill
+      nodes: 4
+      workers: 8
+    decode: *linker-dep16-decode
+
+override_10p_tep2_dep16_linker:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-10p-tep2-dep16-linker
+  # The TEP2 point with ten prefill instances, for a DEP16 decode at 8-10
+  # requests per DP rank.
+  # L3 = 20 x 190 GB (prefill) + 4 x 4 x 190 GB (decode) + 4 x 190 GB (infra).
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g209741ec5"
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+  services: *linker-services
+  roles:
+    prefill:
+      <<: *tep2-prefill
+      nodes: 5
+      workers: 10
+    decode: *linker-dep16-decode
+
 override_3p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
   roles:
