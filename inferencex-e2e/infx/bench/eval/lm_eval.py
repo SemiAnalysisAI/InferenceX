@@ -134,17 +134,12 @@ def run(ctx: EvalContext) -> EvalOutcome:
         "tokenized_requests=False",
         f"max_length={ctx.context_length}",
     ]
-    # TokenSpeed's gateway (SMG) refuses any top_p but the one a model pins (Kimi K3: 0.95),
-    # and temperature 0 decodes greedily without reading top_p.
-    sampling = f"max_tokens={max_tokens},temperature=0"
-    if ctx.env.get("FRAMEWORK") != "tokenspeed":
-        sampling += ",top_p=1"
     argv = [
         sys.executable, "-m", "lm_eval", "--model", "local-chat-completions",
         "--apply_chat_template", "--tasks", tasks(ctx.env),
         "--output_path", str(ctx.results_dir), "--log_samples",
         "--model_args", ",".join(model_args),
-        "--gen_kwargs", sampling,
+        "--gen_kwargs", f"max_tokens={max_tokens},temperature=0",
     ]  # fmt: skip
     if limit := env.optional("EVAL_LIMIT", env=ctx.env):
         argv += ["--limit", limit]
