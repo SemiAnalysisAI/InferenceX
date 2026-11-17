@@ -57,7 +57,7 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     if engine == "tokenspeed":
         if "speculative-config" in args:
             raise ValueError(
-                "TokenSpeed AgentX requires explicit speculative flags, not speculative-config"
+                "TokenSpeed AgentX requires explicit MTP flags, not speculative-config"
             )
         algorithm = str(args.get("speculative-algorithm", "")).lower()
         if not algorithm:

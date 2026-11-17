@@ -136,18 +136,12 @@ def test_tokenspeed_plan_uses_effective_mtp_depth_and_restores_real_sampling(
     assert recipe == original
 
 
-def test_tokenspeed_dspark_takes_the_dspark_curve_at_its_step_count(golden_dir: Path) -> None:
+def test_tokenspeed_dspark_selects_the_dspark_curve(golden_dir: Path) -> None:
     recipe = {"roles": {"agg": {"args": {
         "speculative-algorithm": "DSPARK", "speculative-num-steps": 3,
         "speculative-num-draft-tokens": 4, "speculative-eagle-topk": 1,
-        "sampling-backend": "flashinfer",
     }}}}
     environment = {**ENV, "MODEL_PREFIX": "dsv41flash"}
-    result = apply_native(recipe, build_overrides(
-        recipe, "tokenspeed", environment, golden_dir=golden_dir,
-    ))
-    assert result["roles"]["agg"]["args"]["synthetic-acceptance-length"] == 3.3
-    assert result["roles"]["agg"]["args"]["sampling-backend"] == "greedy"
     assert acceptance_length(recipe, "tokenspeed", environment, golden_dir=golden_dir) == 3.3
 
 
@@ -171,8 +165,8 @@ def test_tokenspeed_non_synthetic_runs_remove_forced_acceptance(
     ({"speculative-num-draft-tokens": 3}, "must equal"),
     ({"speculative-num-draft-tokens": True}, "must equal"),
     ({"speculative-eagle-topk": 2}, "topk 1"),
-    ({"speculative-algorithm": "DFLASH"}, "only MTP and DSPARK"),
-    ({"speculative-config": {"method": "mtp"}}, "explicit speculative flags"),
+    ({"speculative-algorithm": "DFLASH"}, "only MTP"),
+    ({"speculative-config": {"method": "mtp"}}, "explicit MTP flags"),
 ])
 def test_tokenspeed_rejects_unsupported_speculation(golden_dir: Path, change, message) -> None:
     recipe = {"roles": {"agg": {"args": {

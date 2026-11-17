@@ -30,7 +30,7 @@ TokenSpeed MTP 和 DSPARK 配置同样根据 `speculative-num-steps` 自动选�
 `speculative-num-draft-tokens` 等于步数加一，且 `speculative-eagle-topk: 1`。
 连接器为 AgentX 吞吐测试设置 `synthetic-acceptance-length` 和所需的
 `sampling-backend: greedy`；仅评测和固定序列长度运行会移除该接受长度，并选择
-`sampling-backend: flashinfer` 进行真实验证。TokenSpeed 连接器接受显式 MTP 和 DSPARK 参数，
+`sampling-backend: flashinfer` 进行真实验证。TokenSpeed 连接器接受显式 MTP 或 DSPARK 参数，
 拒绝其他投机算法和 JSON `speculative-config` 简写。
 
 vLLM 通过合成拒绝采样支持这一策略。例如，EAGLE3 运行可以通过 `synthetic_acceptance_length` 注入所选 YAML 值：

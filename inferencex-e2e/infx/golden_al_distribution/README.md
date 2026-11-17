@@ -39,8 +39,8 @@ count plus one and `speculative-eagle-topk: 1`. The connector sets
 `synthetic-acceptance-length` and the required `sampling-backend: greedy` for
 AgentX throughput. Eval-only and fixed-sequence runs remove that length and
 select `sampling-backend: flashinfer` for real verification. TokenSpeed's
-connector accepts explicit MTP and DSPARK flags; other speculative algorithms
-and the JSON `speculative-config` shorthand are rejected.
+connector accepts explicit MTP or DSPARK flags; other speculative algorithms and the
+JSON `speculative-config` shorthand are rejected.
 
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
 
