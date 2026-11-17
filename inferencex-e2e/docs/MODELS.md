@@ -8,7 +8,17 @@ Following the principles of fairness and equitableness, the service-level object
 
 ## Serving-image main-branch policy
 
-For official InferenceX (non-preview) that have hardware support in upstream, established models must use upstream engines images built from the inference engine's upstream `master` branch (or its equivalent default development branch). New models may temporarily use model-enablement branches, but must move to main-branch images within a reasonable time after release.
+For official InferenceX (non-preview) submissions with upstream hardware support, established models must use official upstream engine images built from the engine's `main` or `master` branch (or equivalent default development branch), except as allowed below. New models may temporarily use model-enablement branches, but must move to main-branch images within a reasonable time after release.
+
+Coding agents can produce optimizations faster than human CODEOWNERS in projects such as vLLM and SGLang can review and merge them. To get useful optimizations onto the AgentX dashboard sooner, official upstream images built from non-main branches are also allowed when all of the following conditions are met:
+
+- The engine is community-based, such as SGLang, vLLM, or TokenSpeed.
+- The respective upstream community maintainers explicitly approve using the branch and its official image for the submission: Inferact for vLLM, RadixArk for SGLang, and LightSeek for TokenSpeed.
+- The upstream PRs containing the submitted changes must merge into `main` (or the equivalent default development branch) in a timely manner after submission, and the submission must then move to a main-branch image.
+
+The submission must link the upstream PRs, maintainer approval, and image build/source provenance so reviewers can verify the exception. Timeliness is assessed case by case with the upstream maintainers; this is not permission to maintain a permanent out-of-tree fork.
+
+This exception changes branch eligibility only. The image must still be published by the upstream project and run as shipped; existing engine-patch restrictions, engine-submission ordering, precision rules, and evaluation requirements still apply.
 
 ## Deprecation policy
 
