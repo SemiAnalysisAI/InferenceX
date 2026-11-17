@@ -150,7 +150,7 @@ base:
         stream-interval: 10
         language-model-only: true
         enable-prefix-caching: true
-        speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 4
       workers: 1
