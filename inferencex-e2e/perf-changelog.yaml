@@ -12979,3 +12979,12 @@
     - "The dcp8-disagg and agg frontends drop router-session-affinity-ttl-secs 1: with one-second session affinity a share of 1P5D decode picks stayed on an engine that was already busy."
     - "Aggregated TP16/DCP16 at concurrency 1 moves to the new image and Dynamo with no other change."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5069
+
+- config-keys:
+    - minimaxm31flash-fp4-h200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to vllm/vllm-openai:nightly-8ca766326652caf4b8e50d1b9118d8a22f6adc73, which selects FlashInfer's SM90 MSA kernels for the indexer and sparse attention."
+    - "Serve flags, DSpark speculation and the search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PRNUM
