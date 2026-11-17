@@ -7994,9 +7994,6 @@ wan22-bf16-h100-sglang-video:
       - spec: wan22.yaml
         set: release-v1
         search-space:
-          - gpus: 1
-            srt-recipe: serving-client-g1.yaml
-            conc-list: [1]
           - gpus: 2
             srt-recipe: serving-client-g2.yaml
             conc-list: [1]
