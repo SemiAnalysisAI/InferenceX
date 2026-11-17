@@ -8,7 +8,7 @@ on:
       - 'inferencex-e2e/configs/nvidia-master.yaml'
       - 'inferencex-e2e/benchmarks/**'
       - 'inferencex-e2e/perf-changelog.yaml'
-      - 'inferencex-e2e/perf-changelog/**'
+      - 'inferencex-e2e/perf-changelog/*.yaml'
 
 permissions: {}
 

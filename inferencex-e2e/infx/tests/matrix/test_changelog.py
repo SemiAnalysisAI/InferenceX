@@ -11,18 +11,19 @@ from infx.matrix import changelog
 LINK = "https://github.com/SemiAnalysisAI/InferenceX/pull/"
 
 
-def report(*changes: tuple[str, int, list[str]]) -> dict:
-    """Build an ``infx.matrix.changed`` report from (key, head points, scenarios) changes."""
+def report(*changes: tuple[str, int | None, list[str]]) -> dict:
+    """Build a ``derived_changes`` report from (key, head points or None if deleted, scenarios)."""
     return {
         "changed": [
             {
                 "config-key": key,
-                "head-points": head,
+                "head-points": head or 0,
                 "added": [{"scenario-type": scenario} for scenario in scenarios],
                 "removed": [],
             }
             for key, head, scenarios in changes
-        ]
+        ],
+        "head-keys": [key for key, head, _ in changes if head is not None],
     }
 
 
@@ -114,7 +115,7 @@ def test_added_files_require_a_pr_number_name(repo):
 
 
 def test_a_draft_lists_removed_configs_beside_the_swept_ones():
-    changes = report(("new-agg", 9, ["agentic-coding"]), ("old", 0, []))
+    changes = report(("new-agg", 9, ["agentic-coding"]), ("old", None, []))
 
     entry = changelog.draft_entry(changes, ["Split old into agg"], ["rerun-me"])
 
@@ -127,7 +128,7 @@ def test_a_draft_lists_removed_configs_beside_the_swept_ones():
 
 
 def test_a_draft_for_removals_only_is_a_retirement():
-    entry = changelog.draft_entry(report(("old", 0, [])), ["Retire old"], [])
+    entry = changelog.draft_entry(report(("old", None, [])), ["Retire old"], [])
 
     assert entry == {"config-keys": ["old"], "retired": True, "description": ["Retire old"]}
 
@@ -141,7 +142,7 @@ def test_coverage_accepts_patterns_and_reports_every_gap():
     changes = report(
         ("dsr1-fp8-b200-sglang", 4, ["fixed-seq-len"]),
         ("kimik3.1-fp4-gb300-vllm", 4, ["agentic-coding"]),
-        ("old", 0, []),
+        ("old", None, []),
     )
     entry = {"config-keys": ["dsr1-*"], "scenario-type": ["fixed-seq-len"]}
 
@@ -155,7 +156,21 @@ def test_coverage_accepts_patterns_and_reports_every_gap():
 def test_coverage_of_a_retirement_reads_its_config_keys():
     entry = {"config-keys": ["old"], "retired": True}
 
-    assert changelog.coverage_errors(entry, report(("old", 0, []))) == []
+    assert changelog.coverage_errors(entry, report(("old", None, []))) == []
+
+
+def test_a_config_left_with_no_points_is_not_a_removal():
+    changes = report(("idle", 0, ["fixed-seq-len"]))
+
+    assert changelog.split_changes(changes) == (["idle"], [], ["fixed-seq-len"])
+
+
+def test_coverage_without_scenario_type_still_requires_changed_video_points():
+    changes = report(("wan2.2-bf16-b200-vllm", 4, ["video-generation"]))
+
+    assert changelog.coverage_errors({"config-keys": ["wan2.2-bf16-b200-vllm"]}, changes) == [
+        "scenario-type must include the changed scenarios ['video-generation']"
+    ]
 
 
 @pytest.fixture

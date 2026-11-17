@@ -4,13 +4,6 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - 'inferencex-e2e/configs/**'
-      - 'inferencex-e2e/benchmarks/**'
-      - 'inferencex-e2e/infx/launch/**'
-      - 'inferencex-e2e/runners/**'
-      - 'inferencex-e2e/perf-changelog.yaml'
-      - 'inferencex-e2e/perf-changelog/**'
 
 permissions:
   contents: read
@@ -45,6 +38,12 @@ jobs:
         run: |
           source benchmarks/check_env.sh
           check_env_vars GITHUB_BASE_REF PR_NUMBER PR_HEAD_SHA PR_CREATED_AT
+          # Runs on every PR so a required check always reports; only these paths need the diff.
+          base=$(git merge-base "origin/${GITHUB_BASE_REF}" "$PR_HEAD_SHA")
+          if git diff --quiet "$base" "$PR_HEAD_SHA" -- configs benchmarks infx/launch runners perf-changelog.yaml perf-changelog; then
+              echo "No config, script, launcher or changelog changes."
+              exit 0
+          fi
           uv run --locked --extra recipes python -m infx.matrix.changelog check \
             --base-ref "origin/${GITHUB_BASE_REF}" \
             --head-ref "$PR_HEAD_SHA" \

@@ -11,7 +11,7 @@ on:
             - main
         paths:
             - "inferencex-e2e/perf-changelog.yaml"
-            - "inferencex-e2e/perf-changelog/**"
+            - "inferencex-e2e/perf-changelog/*.yaml"
 
 permissions:
   contents: read

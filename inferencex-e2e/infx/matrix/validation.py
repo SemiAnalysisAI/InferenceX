@@ -1237,6 +1237,10 @@ def validate_runner_config(runner_configs: dict) -> dict:
     return runner_configs
 
 
+# An entry without scenario-type reruns these; video runs only for entries that name it.
+DEFAULT_SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+
+
 class ChangelogEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

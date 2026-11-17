@@ -22,6 +22,7 @@ from .generate import (
 )
 from .revision import GENERATOR, snapshot
 from .validation import (
+    DEFAULT_SCENARIO_TYPES,
     ChangelogEntry,
     ChangelogMatrixEntry,
     ChangelogMetadata,
@@ -29,9 +30,6 @@ from .validation import (
     load_config_files,
     load_runner_file,
 )
-
-# An entry without scenario-type reruns these; video runs only for entries that name it.
-DEFAULT_SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:

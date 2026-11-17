@@ -15,9 +15,9 @@ from typing import Any
 import yaml
 
 from infx import yamlio
-from infx.config import git_path_at_ref, git_repository_root
+from infx.config import MASTER_CONFIGS, git_path_at_ref, git_repository_root
 
-from .validation import ChangelogEntry
+from .validation import DEFAULT_SCENARIO_TYPES, ChangelogEntry, load_config_files
 
 LEGACY_FILE = "perf-changelog.yaml"
 DIRECTORY = "perf-changelog"
@@ -100,24 +100,26 @@ def added_files(base_ref: str, head_ref: str, changelog_file: str) -> list[tuple
 
 
 def derived_changes(base: str) -> dict[str, Any]:
-    """Run ``infx.matrix.changed`` against ``base`` and return its JSON report."""
+    """Run ``infx.matrix.changed`` against ``base``; add the config keys the head defines."""
+    project = Path(__file__).resolve().parents[2]
     result = subprocess.run(
         [sys.executable, "-m", "infx.matrix.changed", "--base", base, "--json"],
-        cwd=Path(__file__).resolve().parents[2],
+        cwd=project,
         capture_output=True,
         text=True,
         check=False,
     )
     if result.returncode != 0:
         raise ChangelogError(f"infx.matrix.changed failed:\n{result.stderr.strip()}")
-    return json.loads(result.stdout)
+    master = load_config_files([str(project / path) for path in MASTER_CONFIGS], validate=False)
+    return {**json.loads(result.stdout), "head-keys": sorted(master)}
 
 
 def split_changes(report: dict[str, Any]) -> tuple[list[str], list[str], list[str]]:
     """Return the changed live keys, the removed keys, and the scenarios of the live changes."""
     live, retired, scenarios = [], [], set()
     for change in report["changed"]:
-        if change["head-points"] == 0:
+        if change["config-key"] not in report["head-keys"]:
             retired.append(change["config-key"])
             continue
         live.append(change["config-key"])
@@ -160,8 +162,8 @@ def coverage_errors(entry: dict[str, Any], report: dict[str, Any]) -> list[str]:
     if unlisted:
         field = "config-keys" if entry.get("retired") else "retired-keys"
         errors.append(f"{field} must list the removed configs {unlisted}")
-    selected = entry.get("scenario-type")
-    if selected is not None and live:
+    selected = entry.get("scenario-type") or DEFAULT_SCENARIO_TYPES
+    if live:
         missing = [scenario for scenario in scenarios if scenario not in selected]
         if missing:
             errors.append(f"scenario-type must include the changed scenarios {missing}")
