@@ -12964,3 +12964,15 @@
     - "TP2 concurrency 32: enable the AMD monokernel (8 running requests x 6 rows fit its 48-row launch), drop SGLANG_HIP_DSV41_INDEX_K_PAGE8 which the monokernel refuses, lower prefill-decode-interval from 32 to 8, and use the fastokens tokenizer backend (DeepSeek-V4.1 segmented prompt encoding)."
     - "Search space and every other flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5029
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update both entries to rocm/atom-dev:nightly_202611171508 (ATOM 5f3ae2b5b, Mooncake 206d634), pinned by digest, and the AToMesh router to the same ATOM commit."
+    - "Add single-node TP8 points at concurrency 1 and 2 to the GLM-5.2 MI355X AToMesh + ATOM curve (framework atom-disagg with disagg false, so they share the disaggregated points' series). The TP8 server runs ATOM's GLM-5.2 mono decode (ATOM_MONO_ENABLE=1) on the checkpoint's BF16 attention (ROCm/ATOM#3266) and the DSA indexer mono decode on an FP8 index cache, with MTP at three draft tokens and the golden acceptance 2.99; it admits 2 requests and captures graphs at 1 and 2."
+    - "Drop 1P1D concurrency 128 and 1P3D concurrency 12 and 16. The remaining disaggregated points keep their recipes and set ATOM_MONO_ENABLE=0, so their decode stays on the path the previous image ran."
+    - "Weights run as shipped in amd/GLM-5.2-MXFP4 with no online quantization, AITER quick reduce is unset, and the mono decode's all-reduce sums BF16 partials in FP32."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5120
