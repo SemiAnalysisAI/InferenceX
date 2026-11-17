@@ -12929,4 +12929,38 @@
     - "Aggregated, one 8-GPU node: TP8 at concurrency 1 (2 max running requests, the image's K3.1 GB runtime bundle) and 4 with 8 DFLASH verify tokens, and TP8 EP2 DCP8 with the TRT-LLM DSA backend (FP8 query) at concurrency 32 and 40 (6 verify tokens, 64 max running requests), 48 (5 verify tokens, 96 max running requests) and 56 (5 verify tokens, 48 max running requests, mem-fraction-static 0.89). Each DCP8 point tunes the prefill-decode interval."
     - "Disaggregated: one TP8 EP2 DCP8 prefill worker with one TP8 EP2 DCP8 decode worker at concurrency 48, or two at concurrency 24 and 56. Mooncake moves KV over TCP; prefill runs shortest-prefill-first with write-back HiCache, and each decode worker admits 64 requests with 6 verify tokens."
     - "Every point keeps FP32 KDA recurrent state, FP8 KV, DFLASH block verification with the committed golden acceptance curve, and 230 GB of HiCache host memory per aggregated or prefill rank."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5026
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run EAGLE target verify on aiter unified_attention (split-KV) instead of the legacy Triton extend kernel: set page-size 16 and SGLANG_USE_AITER_UNIFIED_ATTN=1, as the MI325X Qwen3.5 FP8 recipe already does on the same gfx942 architecture."
+    - "Store the KV cache in fp8_e4m3, as the MI325X recipe does. With a bf16 KV cache the faster decode filled the MI300X KV pool (about 3.4M tokens) at concurrency 24-32 and requests queued; fp8 doubles the pool."
+    - "Update the image from lmsysorg/sglang-rocm:v0.5.16-rocm720-mi30x-20260730 to lmsysorg/sglang-rocm:v0.5.23-rocm10-mi30x-20261109 (sha256:cf4774ef), which no longer sets ROCM_QUICK_REDUCE_QUANTIZATION=INT8 (removed in sgl-project/sglang#47163), so all-reduce stays at full precision. Rename the cuda-graph-max-bs overrides to cuda-graph-max-bs-decode with unchanged values; the old name is ambiguous on this image. Concurrencies, TP/EP, memory fraction and admission limits are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5060
+
+- config-keys:
+    - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add B300 DeepSeek-V4.1-Flash FP4 Dynamo + vLLM AgentX aggregated and disaggregated recipes with DSpark."
+    - "Pin both recipes to the November 10 DockerHub vllm/vllm-openai:cu134-nightly-96710245ece8fe57a0df3ea18cdc79cbb8ce93cf image (amd64 digest sha256:674371934305e99c6957c7b74f604cc7a2ab3b7750f24e6ecbf04af0f4ece4d2), using CUDA 13.4 and upstream EFA libraries without an EFA dependency setup script."
+    - "Configure EFA-backed NIXL transfers and host KV offloading for disaggregated workers."
+    - "Place the B300 Dynamo + vLLM AgentX frontend on the allocation head for eval-only jobs."
+    - "Capture DSpark step sizes at multiples of five and six through 40 for aggregated TP4 concurrency 1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4585
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261021 to v0.5.23-rocm10-mi35x-20261111, which pins sgl-amd-mono 7113024f (sglang#49428) and ships fastokens (sglang#47923)."
+    - "Cap running requests for P90 interactivity: TP4 concurrency 1 from 2 to 1, TP2 concurrency 4 from 8 to 1, 16 from 32 to 4, and 32 from 64 to 8. Sessions past the cap queue instead of joining the decode batch."
+    - "TP2 concurrency 32: enable the AMD monokernel (8 running requests x 6 rows fit its 48-row launch), drop SGLANG_HIP_DSV41_INDEX_K_PAGE8 which the monokernel refuses, lower prefill-decode-interval from 32 to 8, and use the fastokens tokenizer backend (DeepSeek-V4.1 segmented prompt encoding)."
+    - "Search space and every other flag are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5029
