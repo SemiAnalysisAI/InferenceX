@@ -8736,3 +8736,27 @@ qwen3.8next-fp4-gb300-tokenspeed-agentic-mtp:
       - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [56], srt-recipe: agg-variants.yaml:override_tp1_c56 }
       - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [80], srt-recipe: agg-variants.yaml:override_tp1_c80 }
       - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [108], srt-recipe: agg-variants.yaml:override_tp1_c108 }
+
+qwen3.8next-fp4-b300-tokenspeed-agentic-mtp:
+  image: ghcr.io/lightseekorg/tokenspeed-runner:cu130-torch-2.14.0-flashinfer-0.7.4@sha256:d4da743cfa5f5a1557538ec862bbd619fcb3525bc7dcab12834eea347eeb8db6
+  model: nvidia/Qwen3.8-Flash-Next-NVFP4
+  model-prefix: qwen3.8next
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: tokenspeed
+  multinode: false
+  router: { name: smg, version: 1.16.0.post20261115 }
+  srt-recipe-dir: qwen3.8next/tokenspeed/b300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.645
+      search-space:
+      - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [1], srt-recipe: agg-variants.yaml:override_tp1_c1 }
+      - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [2], srt-recipe: agg-variants.yaml:override_tp1_c2 }
+      - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [4], srt-recipe: agg-variants.yaml:override_tp1_c4 }
+      - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [8], srt-recipe: agg-variants.yaml:override_tp1_c8 }
+      - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [20], srt-recipe: agg-variants.yaml:override_tp1_c20 }
+      - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [36], srt-recipe: agg-variants.yaml:override_tp1_c36 }
+      - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [56], srt-recipe: agg-variants.yaml:override_tp1_c56 }
+      - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [80], srt-recipe: agg-variants.yaml:override_tp1_c80 }
+      - { tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [108], srt-recipe: agg-variants.yaml:override_tp1_c108 }
