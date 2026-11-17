@@ -236,12 +236,19 @@ def job_facts(
     policy: dict[str, Any],
     criteria: frozenset[str] | None,
 ) -> dict[str, Any]:
-    """Return the facts calculate_priority credits for entry under criteria."""
-    if criteria is not None:
+    """Return the facts calculate_priority credits for entry under criteria.
+
+    Patchwork runs score patchwork-score regardless of their facts, so like
+    calculate_priority this never rejects them.
+    """
+    patchwork = criteria is not None and "patchwork" in criteria
+    if criteria is not None and not patchwork:
         entry = _entry_from_criteria(criteria, policy, entry)
     node_count = entry.get("node-count", 1)
     if not isinstance(node_count, int) or isinstance(node_count, bool) or node_count < 1:
-        raise ValueError(f"node-count must be a positive integer, got {node_count!r}")
+        if not patchwork:
+            raise ValueError(f"node-count must be a positive integer, got {node_count!r}")
+        node_count = 1
     return {
         "framework": str(entry.get("framework", "")),
         "model-prefix": str(entry.get("model-prefix", "")),

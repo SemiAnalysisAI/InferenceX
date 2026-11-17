@@ -12,6 +12,7 @@ from infx.workflows.ci_priority import (
     merge_facts,
     queue_token,
     scheduling_facts,
+    supported_criteria,
 )
 
 
@@ -232,27 +233,24 @@ def test_framework_prefix_matching_requires_a_separator(policy, framework, expec
 
 
 def _score_from_facts(run, job, policy):
-    """Score facts the way the priority scheduler does, to prove they carry the whole score."""
-    adjustments = policy["adjustments"]
+    """Score a matrix entry rebuilt from facts alone with the real scorer."""
+    entry = {
+        "framework": job["framework"],
+        "model-prefix": job["model-prefix"],
+        "precision": job["precision"],
+        "spec-decoding": job["spec-decoding"],
+        "scenario-type": "agentic-coding" if job["agentic"] else "",
+        "eval-only": job["eval-only"],
+        "prefill": {} if job["multi-node"] else None,
+        "node-count": job["node-count"],
+    }
     if run["patchwork"]:
-        return Decimal(str(policy["patchwork-score"])).quantize(Decimal("0.001"))
-    score = Decimal(str(policy["base-score"]))
-    score += Decimal(str(adjustments.get("event", {}).get(run["event"], 0)))
-    score += Decimal(str(adjustments.get("additional-node", 0))) * (job["node-count"] - 1)
-    for flag in ("multi-node", "agentic", "eval-only"):
-        if job[flag]:
-            score += Decimal(str(adjustments.get(flag, 0)))
-    for field in ("precision", "spec-decoding", "model-prefix"):
-        score += Decimal(str(adjustments.get(field, {}).get(job[field], 0)))
-    framework = job["framework"]
-    score += next(
-        (Decimal(str(weight)) for prefix, weight in adjustments["framework-prefix"].items()
-         if framework == prefix or framework.startswith(f"{prefix}-")),
-        Decimal(0),
-    )
-    if run["checklist-complete"]:
-        score += Decimal(str(adjustments.get("checklist-complete", 0)))
-    return score.quantize(Decimal("0.001"))
+        criteria = frozenset({"patchwork"})
+    else:
+        criteria = supported_criteria(policy) - {"patchwork", "checklist-complete"}
+        if run["checklist-complete"]:
+            criteria |= {"checklist-complete"}
+    return calculate_priority(entry, policy, PriorityContext(run["event"], criteria=criteria))
 
 
 @pytest.mark.parametrize("criteria", [
@@ -262,6 +260,7 @@ def _score_from_facts(run, job, policy):
     frozenset({"multi-node", "agentic", "eval-only", "fp4", "mtp", "sglang", "dsv4",
                "checklist-complete"}),
     frozenset({"patchwork"}),
+    frozenset({"patchwork", "criterion-unknown-to-this-policy"}),
 ])
 @pytest.mark.parametrize("event", ["", "push"])
 def test_scheduling_facts_reproduce_every_annotated_priority(policy, criteria, event):
