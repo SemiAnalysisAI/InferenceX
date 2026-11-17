@@ -12637,3 +12637,9 @@
     - Run two full 1P1D points on the same validated k31-pd-1115r2 image. The c144 arm restores decode GMU 0.92 with max sequences 144 and a 576-token full graph. The c8 arm uses latency-specialized decode with K7 block rejection, max sequences 1, FULL_DECODE_ONLY graphs at 1 and 8 rows, no ReplaySSM, and no DRAM offload. Preserve prefix matching at 512 tokens and use the SA model cache mount.
     - Add a c8-only point with the complete node-local tokenizer repository. Reduce prefill GMU from 0.91 to 0.89 because the single-request prefill KV pool was overprovisioned and left no physical memory for a late-loaded Triton kernel on an SA node; keep the decode command, image, topology, and full workload unchanged.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-sa-1p1d-c144-headroom0
+  description:
+    - Run the MINI-validated K3 AL2.88 SimpleCPU and MoRIIO WRITE 1P1D c144 contract on SA with decode max sequences 144, a 576-token full graph, GMU 0.92, and disabled decode Torch allocator headroom. Preserve the SA model cache, tokenizer, verbs library, and setup paths while keeping the image, topology, compute settings, warmup, error threshold, and 3600-second profiling contract aligned.
+  pr-link: XXX
