@@ -12952,3 +12952,12 @@
     - "TP2 concurrency 32: enable the AMD monokernel (8 running requests x 6 rows fit its 48-row launch), drop SGLANG_HIP_DSV41_INDEX_K_PAGE8 which the monokernel refuses, lower prefill-decode-interval from 32 to 8, and use the fastokens tokenizer backend (DeepSeek-V4.1 segmented prompt encoding)."
     - "Search space and every other flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5029
+
+- config-keys:
+    - wan22-bf16-h200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Add an H200 Wan2.2-T2V-A14B baseline on SGLang v0.5.23, by the digest the H3 SGLang rows use: wan22.yaml release-v1 (four prompts by five seeds, one warmup; 832x480, 81 frames at 16 fps, 40 UniPC steps, guidance 4.0 high-noise / 3.0 low-noise, boundary 0.875, flow_shift 12.0, empty negative prompt, BF16), C1 on 1, 2, 4 and 8 GPUs."
+    - "SGLang takes flow_shift from the --flow-shift server flag and boundary_ratio from the checkpoint's model_index.json, so the server refuses to start when either differs from the spec; the client sends every other control per request. Conditioning cache disabled."
+    - "Deployment per count, the vLLM-Omni rows' layout: 1 GPU runs both CFG branches with Ulysses 1; 2 GPUs CFG parallel 2 x Ulysses 1; 4 GPUs CFG parallel 2 x Ulysses 2; 8 GPUs CFG parallel 2 x Ulysses 4. TP 1, performance mode speed, no torch.compile, no DiT offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5113

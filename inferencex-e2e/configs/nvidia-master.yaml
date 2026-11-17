@@ -7980,6 +7980,33 @@ wan22-bf16-b300-vllm-omni-video:
             srt-recipe: serving-client.yaml
             conc-list: [1]
 
+wan22-bf16-h200-sglang-video:
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+  model-prefix: wan22
+  runner: cluster:h200-dgxc
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: wan22/sglang/h200-bf16
+  scenarios:
+    video-generation:
+      - spec: wan22.yaml
+        set: release-v1
+        search-space:
+          - gpus: 1
+            srt-recipe: serving-client-g1.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: serving-client-g2.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client-g4.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
 glm5.3-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.20-cu130@sha256:b27fce60bc5494c118c4910702812bcfa8cee67abcdd1ff8b0902f21647552f4
   model: nvidia/GLM-5.3-NVFP4
