@@ -26,6 +26,12 @@ base:
         tensor-parallel-size: 8
         expert-parallel-size: 1
         quantization: modelopt_fp4
+        # Auto on SM100 resolves to an FP8 KV cache with trtllm for both DSA
+        # prefill and decode. FlashMLA sparse prefill requires a bf16 KV cache;
+        # with bf16, SGLang's own default pairs it with TRT-LLM sparse decode.
+        kv-cache-dtype: bfloat16
+        dsa-prefill-backend: flashmla_sparse
+        dsa-decode-backend: trtllm
         # GLM-5.3 emits the GLM-4.7 tool-call format.
         tool-call-parser: glm47
         reasoning-parser: glm45
