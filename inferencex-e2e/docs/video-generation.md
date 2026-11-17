@@ -52,7 +52,9 @@ The Python entrypoint validates the workload and GPU identity, prepares an
 explicitly selected model view, records the final command, then starts it.
 It adds no engine flags or performance environment defaults. For Wan2.2 on
 SGLang it also requires `--flow-shift` and the checkpoint's `boundary_ratio` to
-equal the plan, because SGLang reads neither from a request. The SGLang child
+equal the plan, because SGLang reads neither from a request. SGLang's Wan2.2
+requests set `x264_preset: ultrafast` and `output_compression: 63` (CRF 18),
+the libx264 encoding vLLM-Omni v0.32.0 delivers by default. The SGLang child
 checks the assigned UUID order before importing its engine. The previous B200
 `frozen-c124` four-clip JSON and YAML artifacts remain readable as historical evidence.
 The App shows their four-sample cells in History, below its ten-valid-sample chart
