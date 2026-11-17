@@ -62,10 +62,10 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
         algorithm = str(args.get("speculative-algorithm", "")).lower()
         if not algorithm:
             return {}
-        if algorithm != "mtp":
-            raise ValueError("TokenSpeed AgentX currently supports only MTP speculation")
+        if algorithm not in ("mtp", "dspark"):
+            raise ValueError("TokenSpeed AgentX currently supports only MTP and DSPARK speculation")
         return {
-            "method": "mtp",
+            "method": algorithm,
             "num_speculative_tokens": args.get("speculative-num-steps"),
         }
     if engine == "tilert":

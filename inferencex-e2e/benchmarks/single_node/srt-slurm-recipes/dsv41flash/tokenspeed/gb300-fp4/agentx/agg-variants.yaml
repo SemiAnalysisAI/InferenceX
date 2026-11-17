@@ -1,0 +1,258 @@
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-tokenspeed-agentic-dspark
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  slurm:
+    time_limit: '6:00:00'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+    args:
+      reasoning-parser: deepseek_v41
+      tool-call-parser: deepseek_v41
+      # TokenSpeed's own launcher (ts serve) starts smg with these; srtctl adds none of them.
+      policy: passthrough
+      disable-circuit-breaker: true
+      disable-retries: true
+      disable-load-monitoring: true
+      tokenizer-cache-enable-l0: true
+      tokenizer-cache-enable-l1: true
+      log-level: warn
+      # A subagent request carries its root session's X-Correlation-ID as X-Dynamo-Parent-Session-ID.
+      routing-key-headers: [x-dynamo-parent-session-id, x-correlation-id]
+      # Pins every request of a routing key to one attention-DP rank of the grouped worker.
+      grouped-dp-sticky: hash
+  engine: tokenspeed
+  environment:
+    # Enroot needs these before container creation because the base image omits them.
+    NVIDIA_VISIBLE_DEVICES: all
+    NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    PYTHONNOUSERSITE: '1'
+    PYTHONUNBUFFERED: '1'
+    PYTHONSAFEPATH: '1'
+    NO_COLOR: '1'
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: per_process_memory_fraction:0.95
+        TOKENSPEED_PREFILL_INDEX_LOGITS_MB: '2048'
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        trust-remote-code: true
+        language-model-only: true
+        reasoning-parser: deepseek_v41
+        max-model-len: 1048576
+        attn-tp-size: 1
+        data-parallel-size: 4
+        ep-size: 4
+        pipeline-parallel-size: 1
+        moe-backend: mega_moe
+        engram-host-table: true
+        gpu-memory-utilization: 0.85
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
+        prefill-graph-max-tokens: 16384
+        speculative-algorithm: DSPARK
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        # The connector selects greedy sampling only for synthetic throughput.
+        sampling-backend: flashinfer
+        disable-kvstore: true
+        enable-metrics: true
+        metrics-host: 0.0.0.0
+  sbatch_directives:
+    mem: '0'
+    exclusive: ''
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'tokenspeed:'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+
+override_dep4_c128:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 48
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        prefill-attempt-interval: 160
+        prefill-any-attempt-interval: 640
+        prefill-single-round: true
+  benchmark:
+    env:
+      CONC: '128'
+
+override_dep4_c176:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        prefill-attempt-interval: 160
+        prefill-any-attempt-interval: 640
+        prefill-single-round: true
+  benchmark:
+    env:
+      CONC: '176'
+
+override_dep4_c216:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 78
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        prefill-attempt-interval: 160
+        prefill-any-attempt-interval: 640
+        prefill-single-round: true
+  benchmark:
+    env:
+      CONC: '216'
+
+override_dep4_c240:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 84
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+        prefill-attempt-interval: 160
+        prefill-any-attempt-interval: 640
+        prefill-single-round: true
+  benchmark:
+    env:
+      CONC: '240'
+
+override_dep4_c256:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 90
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+        prefill-attempt-interval: 160
+        prefill-any-attempt-interval: 640
+        prefill-single-round: true
+  benchmark:
+    env:
+      CONC: '256'
+
+override_dep4_c288:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 192
+        max-cudagraph-capture-size: 72
+        prefill-attempt-interval: 80
+        prefill-any-attempt-interval: 80
+        prefill-single-round: true
+  benchmark:
+    env:
+      CONC: '288'
+
+override_dep4_c320:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 224
+        max-cudagraph-capture-size: 80
+        prefill-attempt-interval: 80
+        prefill-any-attempt-interval: 80
+        prefill-single-round: true
+  benchmark:
+    env:
+      CONC: '320'
+
+override_dep4_c352:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 256
+        max-cudagraph-capture-size: 88
+        prefill-attempt-interval: 56
+        prefill-any-attempt-interval: 56
+        prefill-single-round: true
+  benchmark:
+    env:
+      CONC: '352'
+
+override_dep4_c368:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 272
+        max-cudagraph-capture-size: 92
+        prefill-attempt-interval: 48
+        prefill-any-attempt-interval: 48
+  benchmark:
+    env:
+      CONC: '368'
+
+override_dep4_c384:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 288
+        max-cudagraph-capture-size: 96
+        prefill-attempt-interval: 48
+        prefill-any-attempt-interval: 48
+  benchmark:
+    env:
+      CONC: '384'
+
+override_dep4_c448:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 320
+        max-cudagraph-capture-size: 112
+        prefill-attempt-interval: 48
+        prefill-any-attempt-interval: 48
+  benchmark:
+    env:
+      CONC: '448'
+
+override_dep4_c512:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 384
+        max-cudagraph-capture-size: 144
+        prefill-attempt-interval: 40
+        prefill-any-attempt-interval: 40
+  benchmark:
+    env:
+      CONC: '512'
+
+override_dep4_c768:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 576
+        max-cudagraph-capture-size: 216
+        prefill-attempt-interval: 15
+        prefill-any-attempt-interval: 15
+  benchmark:
+    env:
+      CONC: '768'
+
+override_dep4_c896:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 640
+        max-cudagraph-capture-size: 240
+        prefill-attempt-interval: 12
+        prefill-any-attempt-interval: 12
+  benchmark:
+    env:
+      CONC: '896'

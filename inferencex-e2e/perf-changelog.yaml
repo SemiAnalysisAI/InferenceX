@@ -12952,3 +12952,13 @@
     - "TP2 concurrency 32: enable the AMD monokernel (8 running requests x 6 rows fit its 48-row launch), drop SGLANG_HIP_DSV41_INDEX_K_PAGE8 which the monokernel refuses, lower prefill-decode-interval from 32 to 8, and use the fastokens tokenizer backend (DeepSeek-V4.1 segmented prompt encoding)."
     - "Search space and every other flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5029
+
+- config-keys:
+    - dsv41flash-fp4-gb300-tokenspeed-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Add a GB300 DeepSeek-V4.1-Flash TokenSpeed AgentX entry on lightseekorg/tokenspeed:rc-377b78 (TokenSpeed main 377b78287, sha256:c5e3c416) with its bundled tokenspeed-smg 1.16.0.post20261115 gateway: one DEP4 server (attention DP4 + EP4) per node with MegaMoE, Engram host tables, five-step DSpark, 1M context, 32K prefill chunks, prefill CUDA graphs up to 16384 tokens, gpu-memory-utilization 0.85 and no host KVStore."
+    - "SMG fronts the grouped DP4 worker with the gateway settings ts serve applies and pins each session tree to one attention-DP rank (--grouped-dp-sticky hash over x-dynamo-parent-session-id, then x-correlation-id)."
+    - "Per-concurrency rows (max-num-seqs, decode graphs, prefill attempt / any-attempt interval): 128 (48, graphs 1..12, 160/640, single round), 176 (64, graphs 1..16, 160/640, single round), 216 (78, graphs 1..20, 160/640, single round), 240 (84, graphs 1..21, 160/640, single round), 256 (90, graphs 1..23, 160/640, single round), 288 (192, graphs to 72, 80/80, single round), 320 (224, graphs to 80, 80/80, single round), 352 (256, graphs to 88, 56/56, single round), 368 (272, graphs to 92, 48/48), 384 (288, graphs to 96, 48/48), 448 (320, graphs to 112, 48/48), 512 (384, graphs to 144, 40/40), 768 (576, graphs to 216, 15/15), 896 (640, graphs to 240, 12/12)."
+    - "The golden-AL connector accepts TokenSpeed DSPARK and selects the DeepSeek-V4.1-Flash DSpark curve from speculative-num-steps."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5105

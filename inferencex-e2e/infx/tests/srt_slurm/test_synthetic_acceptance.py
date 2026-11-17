@@ -136,6 +136,15 @@ def test_tokenspeed_plan_uses_effective_mtp_depth_and_restores_real_sampling(
     assert recipe == original
 
 
+def test_tokenspeed_dspark_selects_the_dspark_curve(golden_dir: Path) -> None:
+    recipe = {"roles": {"agg": {"args": {
+        "speculative-algorithm": "DSPARK", "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4, "speculative-eagle-topk": 1,
+    }}}}
+    environment = {**ENV, "MODEL_PREFIX": "dsv41flash"}
+    assert acceptance_length(recipe, "tokenspeed", environment, golden_dir=golden_dir) == 3.3
+
+
 @pytest.mark.parametrize("environment", [{"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}])
 def test_tokenspeed_non_synthetic_runs_remove_forced_acceptance(
     tmp_path: Path, environment: dict[str, str]
