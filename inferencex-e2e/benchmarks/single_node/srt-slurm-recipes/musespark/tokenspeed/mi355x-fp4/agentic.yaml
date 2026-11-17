@@ -6,11 +6,11 @@ base:
       revision: c7bc74fd64371315a091bc15f9723882eead0dc1
     container: {}
     frameworks:
-      tokenspeed: 0.1.1.post20261116
-      tokenspeed-kernel: 0.1.5.post20261116
-      tokenspeed-kernel-amd: 0.1.4.post20261116
-      tokenspeed-scheduler: 0.1.57
-      tokenspeed-engine: 0.1.0.post20261118
+      tokenspeed: 0.1.1.post20261117
+      tokenspeed-kernel: 0.1.5.post20261117
+      tokenspeed-kernel-amd: 0.1.4.post20261117
+      tokenspeed-scheduler: 0.1.58
+      tokenspeed-engine: 0.1.1.post20261117
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -40,11 +40,11 @@ base:
   engine: tokenspeed
   setup_script: tokenspeed-nightly-rocm.sh
   environment:
-    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261116/tokenspeed-0.1.1.post20261116-py3-none-any.whl#sha256=de862f270b2c92590e3c8226b027c3fc0de9a271842e4a28ab96155c56e4a683
-    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261116-rocm72/tokenspeed_kernel-0.1.5.post20261116-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=8cb0329bbe85ce10042b172c685a6144557357be83eed042ea2db55b717fd584
-    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261116/tokenspeed_kernel_amd-0.1.4.post20261116-py3-none-any.whl#sha256=1c0ec9eb8e5d2635ff69c36332149177ff486a1d74b2efd5ddf961ac42edcd69
-    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.0.post20261118/tokenspeed_engine-0.1.0.post20261118-cp312-abi3-manylinux_2_28_x86_64.whl#sha256=b1e817b8008d06835698b7d95f1a9d10b9ae4787f6d4d3b47781ebf1087b30b3
-    TOKENSPEED_SCHEDULER_VERSION: 0.1.57
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261117/tokenspeed-0.1.1.post20261117-py3-none-any.whl#sha256=79bbe2fc284d79656a1b6fd2f7b4f01fb105a027075a814ab2e31da8e3d6976f
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261117-rocm72/tokenspeed_kernel-0.1.5.post20261117-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=b0fc80b30f53a6dcb90bf7cfe49d4e69dd2b588842254ef81bf14227a1dad701
+    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261117/tokenspeed_kernel_amd-0.1.4.post20261117-py3-none-any.whl#sha256=fc85817b4c34f7bdeb5d3d80d29b9d20a293fff508f1a9c21b11a977df15ad63
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.1.post20261117/tokenspeed_engine-0.1.1.post20261117-cp312-abi3-manylinux_2_28_x86_64.whl#sha256=d72fd1649bc5437ee7d3d4e5532a5d9b952e45c6174276bcb111b2a67d722875
+    TOKENSPEED_SCHEDULER_VERSION: 0.1.58
   roles:
     agg:
       nodes: 1
@@ -105,8 +105,7 @@ override_tp8_c1:
         attn-tp-size: 8
         moe-tp-size: 8
         ep-size: 1
-        # One persistent launch per decoder layer. The monokernel serves one request a
-        # launch, so the running cap is 1 and the other sessions queue.
+        # One persistent launch per decoder layer. With one session the running cap is 1.
         decode-monokernel: true
         max-num-seqs: 1
         prefill-decode-interval: 0
@@ -125,11 +124,11 @@ override_tp8_c2:
         attn-tp-size: 8
         moe-tp-size: 8
         ep-size: 1
-        # One persistent launch per decoder layer. The monokernel serves one request a
-        # launch, so the running cap is 1 and the other sessions queue.
+        # One persistent launch per decoder layer, serving up to two requests a launch:
+        # the running cap is 2 and the other sessions queue.
         decode-monokernel: true
-        max-num-seqs: 1
-        prefill-decode-interval: 0
+        max-num-seqs: 2
+        prefill-decode-interval: 384
         disable-kvstore: true
         kvstore-ratio: 0.0
   benchmark:
@@ -145,11 +144,11 @@ override_tp8_c4:
         attn-tp-size: 8
         moe-tp-size: 8
         ep-size: 1
-        # One persistent launch per decoder layer. The monokernel serves one request a
-        # launch, so the running cap is 1 and the other sessions queue.
+        # One persistent launch per decoder layer, serving up to two requests a launch:
+        # the running cap is 2 and the other sessions queue.
         decode-monokernel: true
-        max-num-seqs: 1
-        prefill-decode-interval: 0
+        max-num-seqs: 2
+        prefill-decode-interval: 384
         disable-kvstore: true
         kvstore-ratio: 0.0
   benchmark:
@@ -165,11 +164,11 @@ override_tp8_c6:
         attn-tp-size: 8
         moe-tp-size: 8
         ep-size: 1
-        # One persistent launch per decoder layer. The monokernel serves one request a
-        # launch, so the running cap is 1 and the other sessions queue.
+        # One persistent launch per decoder layer. A running cap of 1 keeps the lowest
+        # time per token; the other sessions queue.
         decode-monokernel: true
         max-num-seqs: 1
-        prefill-decode-interval: 0
+        prefill-decode-interval: 384
         disable-kvstore: true
         kvstore-ratio: 0.0
         stream-interval: 50
@@ -186,11 +185,11 @@ override_tp8_c8:
         attn-tp-size: 8
         moe-tp-size: 8
         ep-size: 1
-        # One persistent launch per decoder layer. The monokernel serves one request a
-        # launch, so the running cap is 1 and the other sessions queue.
+        # One persistent launch per decoder layer, serving up to two requests a launch:
+        # the running cap is 2 and the other sessions queue.
         decode-monokernel: true
-        max-num-seqs: 1
-        prefill-decode-interval: 0
+        max-num-seqs: 2
+        prefill-decode-interval: 384
         disable-kvstore: true
         kvstore-ratio: 0.0
   benchmark:
@@ -206,11 +205,11 @@ override_tp8_c10:
         attn-tp-size: 8
         moe-tp-size: 8
         ep-size: 1
-        # Steps with one running request take the monokernel; larger steps keep the
-        # regular path. One decode stream cannot carry this concurrency.
+        # One persistent launch per decoder layer, serving up to two requests a launch:
+        # the running cap is 2 and the other sessions queue.
         decode-monokernel: true
-        max-num-seqs: 8
-        prefill-decode-interval: 256
+        max-num-seqs: 2
+        prefill-decode-interval: 384
         disable-kvstore: true
         kvstore-ratio: 0.0
         stream-interval: 40
@@ -227,11 +226,11 @@ override_tp8_c16:
         attn-tp-size: 8
         moe-tp-size: 8
         ep-size: 1
-        # Steps with one running request take the monokernel; larger steps keep the
-        # regular path. One decode stream cannot carry this concurrency.
+        # One persistent launch per decoder layer, serving up to two requests a launch:
+        # the running cap is 2 and the other sessions queue.
         decode-monokernel: true
-        max-num-seqs: 8
-        prefill-decode-interval: 256
+        max-num-seqs: 2
+        prefill-decode-interval: 384
         disable-kvstore: true
         kvstore-ratio: 0.0
   benchmark:
@@ -247,8 +246,8 @@ override_tp8_c28:
         attn-tp-size: 8
         moe-tp-size: 8
         ep-size: 1
-        # Steps with one running request take the monokernel; larger steps keep the
-        # regular path. One decode stream cannot carry this concurrency.
+        # Up to eight requests run: steps with one or two take the monokernel, larger
+        # steps keep the regular path.
         decode-monokernel: true
         max-num-seqs: 8
         prefill-decode-interval: 256
