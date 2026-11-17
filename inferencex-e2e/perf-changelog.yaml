@@ -12941,3 +12941,12 @@
     - "Place the B300 Dynamo + vLLM AgentX frontend on the allocation head for eval-only jobs."
     - "Capture DSpark step sizes at multiples of five and six through 40 for aggregated TP4 concurrency 1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4585
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-dep2
+  scenario-type:
+    - agentic-coding
+  description:
+    - "New key on vllm/vllm-openai-rocm:nightly-60bd6dd2edd175a1c55fd3488f871e4c3d2ef27d (2026-11-16, digest sha256:67a3a0fb79893fc5a0fcff5f9b739ba8fec7e920875a12e0574c2e9f50cd814c), the image of the DP2 key dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp (https://github.com/SemiAnalysisAI/InferenceX/pull/5036), which carries vllm-project/vllm#64715 (UMBP standalone mode for DeepSeek-V4.1-Flash on ROCm), #66036 (per-tensor fp8_e4m3 KV cache for sparse MLA on ROCm), #66644 (AITER MegaMoE) and #67377 (AITER FlyDSL dense MXFP8 GEMMs). Its MORI v1.2.3.post1 is built with UMBP."
+    - "Add DEP2 at concurrency 128, 256 and 384 on two GPUs: attention DP2 with the MoE expert-parallel across both ranks (tensor-parallel-size 1, data-parallel-size 2, enable-expert-parallel) on AITER MegaMoE over MoRI (moe-backend aiter_mega_moe, all2all-backend mori), fronted by vllm-router 0.1.14 with consistent_hash. Every other setting is that of the DP2 points in the UMBP key, where the MoE is tensor-parallel across both ranks: prefill cadence (prefill-schedule-interval 11), no --monokernel, five-token DSpark, block size 128, the MXFP4 sparse-logits indexer, Engram tables in host memory, max-num-batched-tokens 16384, cudagraph capture up to 1024 and kv-cache-dtype fp8_e4m3. Concurrency 128 runs without KV offloading; 256 and 384 offload KV to host DRAM through UMBPStoreConnector in standalone mode, with the same 449 GB node-local umbp_standalone_server pool and host-directory socket mount as the DP2 key."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5098
