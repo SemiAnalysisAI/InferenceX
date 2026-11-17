@@ -179,7 +179,7 @@ override_tp8_dcp8_c24:
         prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
         prefill-graph-max-tokens: 3072
         prefill-decode-interval: 64
-        prefill-decode-min-interval: 16
+        prefill-decode-min-interval: 24
         enable-short-prefill-first: true
         speculative-num-steps: 4
         speculative-num-draft-tokens: 5
@@ -201,7 +201,7 @@ override_tp8_dcp8_c32:
         prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
         prefill-graph-max-tokens: 3072
         prefill-decode-interval: 64
-        prefill-decode-min-interval: 16
+        prefill-decode-min-interval: 24
         enable-short-prefill-first: true
         enable-mixed-batch: true
         speculative-num-steps: 3

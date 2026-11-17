@@ -19,8 +19,8 @@ Each concurrency has its own override:
 | 4           | 1         | 2              | 5             | 0                         | 0                             | no prefill graphs |
 | 8           | 8         | 8              | 5             | 64                        | 0                             |       |
 | 16          | 8         | 8              | 5             | 80                        | 8                             |       |
-| 24          | 8         | 12             | 4             | 64                        | 16                            | short prefill first |
-| 32          | 8         | 16             | 3             | 64                        | 16                            | short prefill first, mixed batches |
+| 24          | 8         | 12             | 4             | 64                        | 24                            | short prefill first |
+| 32          | 8         | 16             | 3             | 64                        | 24                            | short prefill first, mixed batches |
 | 48          | 8         | 48             | 3             | 80                        | 4                             | mixed batches |
 
 Decode graphs are captured up to `max-num-seqs`, and a cap below the
