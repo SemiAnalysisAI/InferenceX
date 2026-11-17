@@ -115,11 +115,11 @@ jobs:
             python -P "${GENERATOR[@]}" \
             test-config --config-files "$INPUTS_CONFIG_FILE" --config-keys "$INPUTS_CONFIG_KEY" --conc "$INPUTS_CONC")
           CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-            python -P -m infx.workflows.ci_priority \
-            --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
+            python -P -m infx.workflows.scheduler_facts \
             --event-name "${GITHUB_EVENT_NAME}" \
             --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
-            --criteria-json "${PRIORITY_CRITERIA}")
+            --criteria-json "${PRIORITY_CRITERIA}" \
+            --facts-file "${RUNNER_TEMP}/scheduling-facts.json")
           echo "raw=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
 
         env:
@@ -127,6 +127,15 @@ jobs:
           INPUTS_CONFIG_FILE: ${{ inputs.config-file }}
           INPUTS_CONFIG_KEY: ${{ inputs.config-key }}
           INPUTS_CONC: ${{ inputs.conc }}
+
+      - name: Upload scheduling facts
+        if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ runner.temp }}/scheduling-facts.json
+          archive: false
+          overwrite: true
+          if-no-files-found: error
 
       - id: filter
         name: Take first generated job
@@ -187,7 +196,7 @@ jobs:
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
     name: >-
-      p${{ matrix.config.priority }} | ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
+      ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
       TP${{ matrix.config.tp }}${{ matrix.config.pp != '' && matrix.config.pp != '1' && format('/PP{0}', matrix.config.pp) || '' }}${{ matrix.config.dcp-size != '' && matrix.config.dcp-size != '1' && format('/DCP{0}', matrix.config.dcp-size) || '' }}${{ matrix.config.pcp-size != '' && matrix.config.pcp-size != '1' && format('/PCP{0}', matrix.config.pcp-size) || '' }} c${{ matrix.config.conc }}
     runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; workflow_dispatch only
       ${{ fromJSON(
@@ -196,11 +205,7 @@ jobs:
           '["self-hosted",{0},{1},{2},{3}]',
           toJSON(matrix.config.runner),
           toJSON(format('nodes:{0}', matrix.config['node-count'])),
-          toJSON(format(
-            'ci-job-{0}-{1}',
-            matrix.config.priority,
-            matrix.config['queue-token']
-          )),
+          toJSON(format('ci-job-{0}', matrix.config['queue-token'])),
           toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
         format('[{0}]', toJSON(matrix.config.runner))
