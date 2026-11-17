@@ -12958,8 +12958,10 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Run the DeepSeek-V4.1-Flash MI355X SGLang AgentX points on lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261111."
-    - "Add TP2 at c64, DP2 attention at c128, DP2 attention with EP2 at c128, and DP4 attention with EP4 at c128 and c256."
+    - "Add TP2 at c64, DP2 attention at c128, DP2 attention with EP2 at c128, and DP4 attention with EP4 at c128 and c256; drop DP2 attention at c32, which TP2 c32 now matches in throughput at higher P90 interactivity."
+    - "Cap running requests at 2 (TP2 c8, prefill-decode-interval 192 to 48), 32 (TP2 c64, prefill-decode-interval 4 to 32, AMD monokernel) and 1, 2 and 4 (TP4 c4, c8 and c16) so decode bursts queue instead of widening the step."
+    - "TP2 c32 returns prefill-decode-interval from 8 to 32: P90 interactivity 206.4 against 197.6 at the same throughput in 3600 s runs."
+    - "Every point tokenizes with --tokenizer-backend fastokens (same token ids as the Hugging Face backend, ~0.3 s less TTFT on a 170k-token prompt)."
     - "From c128, DP attention points use shortest-prefill-first with prefill-decode-interval 24 (TP2 DPA), 32 (TP2 DPA EP2, TP4 DPA EP4 c128) or 40 (TP4 DPA EP4 c256), the shared Engram host table layout and, with EP, SGLANG_DP_SHARED_EXPERT_LOCAL=1; TP4 DPA EP4 c256 also uses a 65536-token prefill chunk and a 0.85 prefill-delayer low watermark."
     - "Every point serves with --image-processor-backend pil: AgentX sends text only, and the V4.1 Rust image processor's build lock on the shared cache hung one DP rank at startup."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5034
