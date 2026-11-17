@@ -281,7 +281,7 @@ qwen3.8next-fp4-mi355x-sglang-agentic-mtp:
 # AgentX Pareto sweep for Qwen3.5 FP8 on MI300X. The fast discovery run peaks
 # at c24; c32 records the post-knee throughput and latency cliff.
 qwen3.5-fp8-mi300x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi30x-20260730
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi30x-20261109@sha256:cf4774ef2c3940576378e32152698843b1d693d16804ffc7c74c4a4b1091cde5
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:mi300x-amd
@@ -974,7 +974,7 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
 
 kimik3.1-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:kimi-k31-6d74a15@sha256:c470d0de88e8bb664a07006d44e6603a413c9fffd36cc4add4d4b420d4bde5e0
+  image: vllm/vllm-openai-rocm:kimi-k31-5c14fe8@sha256:a61996b4c270ec09111802f62b44f5c20ad4cb73068be022b2804a287b924b9a
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds
