@@ -8,7 +8,17 @@ Following the principles of fairness and equitableness, the service-level object
 
 ## Serving-image main-branch policy
 
-For official InferenceX (non-preview) that have hardware support in upstream, established models must use upstream engines images built from the inference engine's upstream `master` branch (or its equivalent default development branch). New models may temporarily use model-enablement branches, but must move to main-branch images within a reasonable time after release.
+For official InferenceX (non-preview) submissions with upstream hardware support, established models must use official upstream engine images built from the engine's `main` or `master` branch (or equivalent default development branch), except as allowed below. New models may temporarily use model-enablement branches, but must move to main-branch images within a reasonable time after release.
+
+Coding agents can produce optimizations faster than human CODEOWNERS in projects such as vLLM and SGLang can review and merge them. To get useful optimizations onto the AgentX dashboard sooner, official upstream images built from non-main branches are also allowed when all of the following conditions are met:
+
+- The engine is community-based, such as SGLang, vLLM, or TokenSpeed.
+- The respective upstream community maintainers explicitly approve using the branch and its official image for the submission: Inferact for vLLM, RadixArk for SGLang, and LightSeek for TokenSpeed.
+- The upstream PRs containing the submitted changes must merge into `main` (or the equivalent default development branch) in a timely manner after submission, and the submission must then move to a main-branch image.
+
+The submission must link the upstream PRs, maintainer approval, and image build/source provenance so reviewers can verify the exception. Timeliness is assessed case by case with the upstream maintainers; this is not permission to maintain a permanent out-of-tree fork.
+
+This exception changes branch eligibility only. The image must still be published by the upstream project and run as shipped; existing engine-patch restrictions, engine-submission ordering, precision rules, and evaluation requirements still apply.
 
 ## Deprecation policy
 
@@ -36,7 +46,7 @@ For non-grandfathered models, `ROCM_QUICK_REDUCE_QUANTIZATION`, `VLLM_ROCM_QUICK
 |---|---|---|
 | Agentic coding | Long Context, Multi Turn Realistic traffic trace replay with sub agents | Active. This is the trace-replay agentic-coding benchmark (see the srt-slurm recipes under [`benchmarks/single_node/srt-slurm-recipes/`](../benchmarks/single_node/srt-slurm-recipes) and the shared client [`benchmarks/srt_agentic.sh`](../benchmarks/srt_agentic.sh)). Going forward, new models will likely be onboarded with agentic coding only. Speculative decoding may be enabled or disabled to produce the best Pareto points; a separate non-spec-decode A/B baseline is not required (see [Deprecation policy](#deprecation-policy)). |
 | Single-turn 8k1k | 8192 / 1024 | Active. This is the primary fixed-sequence-length scenario. |
-| Video generation | H3: 124 frames at 24 fps, 1344x768, C1 | MiniMax-H3 uses native srt-slurm: SGLang selects 20-clip `h3-v2.yaml` C1 points on 1, 2, 4 and 8 B200, H200 or MI355X GPUs and 2, 4 and 8 H100 GPUs, and vLLM-Omni the same B200 points. The client and server live in [`video-generation`](../../video-generation); energy is reported per valid clip. Config presence does not qualify execution, power, or quality. See [video delivery](video-generation.md). |
+| Video generation | H3: 124 frames at 24 fps, 1344x768, C1 | MiniMax-H3 uses native srt-slurm: SGLang selects 20-clip `h3-v2.yaml` C1 points on 1, 2, 4 and 8 B200, H200 or MI355X GPUs and 2, 4 and 8 H100 GPUs, and vLLM-Omni the same B200 points. Wan2.2-T2V-A14B (`wan22.yaml`: 81 frames at 16 fps, 832x480, 20 clips) runs on vLLM-Omni on 1, 2, 4 and 8 B200 or B300 GPUs. The client and server live in [`video-generation`](../../video-generation); energy is reported per valid clip. Config presence does not qualify execution, power, or quality. See [video delivery](video-generation.md). |
 | Single-turn 1k1k | 1024 / 1024 | Deprecated since 2026-07-17 ([#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Archived configs lived in `configs/deprecated/` until it was deleted (#3463); see git history. The GLM-5.1 B200 TileRT point added later in [#2533](https://github.com/SemiAnalysisAI/InferenceX/pull/2533) was the last 1k1k config; it was retired on 2026-10-01 ([#3638](https://github.com/SemiAnalysisAI/InferenceX/pull/3638)). |
 | Single-turn 1k8k | 1024 / 8192 | **Deprecated for all models** since 2026-03-27 ([#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Configs were removed, not archived. |
 
@@ -150,7 +160,7 @@ Agreed by the vLLM and SGLang communities for week-1 official AgentX results. "N
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
 | GLM-5.3-Flash | `glm5.3flash` | 2026-11-05 ([#4708](https://github.com/SemiAnalysisAI/InferenceX/pull/4708)) | Agentic coding (SGLang MTP; golden AL curve `glm-5.3-flash__mtp__native__default-default.yaml`) | |
-| Kimi-K3.1-Pro | `kimik3.1` | 2026-11-04 ([#4795](https://github.com/SemiAnalysisAI/InferenceX/pull/4795)) | Agentic coding (vLLM and SGLang DSpark; golden AL curve `kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml`; [week-1 precision policy](#kimi-k31-pro-week-1-precision-policy)) | |
+| Kimi-K3.1-Pro | `kimik3.1` | 2026-11-04 ([#4795](https://github.com/SemiAnalysisAI/InferenceX/pull/4795)) | Agentic coding (vLLM and SGLang DSpark; golden AL curve `kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block.yaml`; [week-1 precision policy](#kimi-k31-pro-week-1-precision-policy)) | |
 | MiniMax-M3.1-Flash | `minimaxm31flash` | 2026-10-23 | Agentic coding (vLLM DSpark; golden AL curve `minimax-m3.1-flash__dspark__native__probabilistic-block.yaml`) | |
 | Muse Spark Open 816B-A42B | `musespark` | 2026-10-15 | Agentic coding (SGLang and GB300 TensorRT-LLM with DFlash2 draft `RadixArk/Muse-Spark-Open-DFlash2`; golden AL curve `muse-spark-open-816b-a42b-nvfp4__dflash__muse-spark-open-dflash2__default-default.yaml`) | |
 | DeepSeek-V4.1-Flash | `dsv41flash` | 2026-09-10 | Agentic coding (vLLM: DSpark, Engram UVA offload; SGLang: DSpark arms added per SKU from 2026-09-17; ATOM: MI355X TP2/TP4 DSpark added 2026-09-23, removed in #3463, restored on srt-slurm 2026-09-30; GPU validation pending) | |

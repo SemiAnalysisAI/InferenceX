@@ -5,8 +5,10 @@ import hashlib
 import json
 import os
 import re
+import sys
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from infx.bench.video import CREDENTIAL_ENV, cell_dir, read_object, window_file, write_json
@@ -105,6 +107,47 @@ def _recipe_environment(env: dict[str, str]) -> dict[str, str]:
     if len(names) != len(set(names)) or any(name not in env for name in names):
         raise ValueError("VIDEO_RECIPE_ENV_KEYS names must be unique and present at launch")
     return {name: env[name] for name in names}
+
+
+PREFETCH_ENV = "VIDEO_PREFETCH_MODEL"
+_PREFETCH_CHUNK = 64 << 20
+_PREFETCH_THREADS = 4
+
+
+def _read_through(path: Path) -> int:
+    """Read one file front to back so later mmap faults hit the page cache."""
+    total, buffer = 0, bytearray(_PREFETCH_CHUNK)
+    with path.open("rb", buffering=0) as handle:
+        if hasattr(os, "posix_fadvise"):
+            os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+        while count := handle.readinto(buffer):
+            total += count
+    return total
+
+
+def prefetch_snapshot(snapshot: Path, *, threads: int = _PREFETCH_THREADS) -> int:
+    """Stream every snapshot file once, largest first, and report the read rate.
+
+    Engines that mmap shards from several threads at once turn a network
+    filesystem's sequential bandwidth into random page faults. Reading each
+    file sequentially first keeps the engine's own load in memory.
+    """
+    files = sorted(
+        (path for path in snapshot.rglob("*") if path.is_file()),
+        key=lambda path: path.stat().st_size,
+        reverse=True,
+    )
+    started = time.monotonic()
+    with ThreadPoolExecutor(max_workers=threads) as pool:
+        total = sum(pool.map(_read_through, files))
+    seconds = max(time.monotonic() - started, 1e-9)
+    print(
+        f"prefetched {len(files)} model files, {total / 1e9:.1f} GB in {seconds:.0f} s "
+        f"({total / seconds / 1e6:.0f} MB/s)",
+        file=sys.stderr,
+        flush=True,
+    )
+    return total
 
 
 def benchmark_window(run: dict, *, utc_minus_monotonic: float) -> dict:
@@ -240,6 +283,8 @@ def serve(
         "slurm_job_id": env.get("SLURM_JOB_ID"),
     }
     write_json(output / "launch.json", launch)
+    if env.get(PREFETCH_ENV) == "1":
+        prefetch_snapshot(model_path)
     os.execvpe(argv[0], argv, env)
 
 

@@ -18,7 +18,7 @@ from urllib.parse import urlsplit, urlunsplit
 from specs.video_spec import canonical_json_bytes, plan_sha256, schema_version
 
 from .media import analyze_media, compare_media
-from .runner import _slots, requested_encoding, valid_numerical_identity
+from .runner import WAN22_MODEL_ID, _slots, requested_encoding, valid_numerical_identity
 
 
 _POLICY_NUMBERS = {
@@ -102,13 +102,20 @@ def _planned_slots(plan: dict) -> tuple[dict[str, dict], dict[str, dict]]:
         value = generation.get(field)
         if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= maximum:
             raise ValueError(f"plan.generation.{field} must be a positive bounded integer")
+    # Wan2.2 plans are silent and carry no duration; the runner derives it from frames and fps.
+    wan = plan.get("model_id") == WAN22_MODEL_ID
     for field, maximum in (("fps", 240), ("duration_seconds", 3600)):
+        if wan and field == "duration_seconds" and field not in generation:
+            continue
         value = generation.get(field)
         if not _finite(value, minimum=0.000001) or value > maximum:
             raise ValueError(f"plan.generation.{field} must be a positive bounded number")
     if "audio_required" in generation and not isinstance(generation["audio_required"], bool):
         raise ValueError("plan.generation.audio_required must be a boolean")
-    if generation.get("audio_required") is not False:
+    silent_wan = wan and not {"audio_required", "audio_sample_rate_hz", "audio_channels"} & set(
+        generation
+    )
+    if generation.get("audio_required") is not False and not silent_wan:
         for field, maximum in (("audio_sample_rate_hz", 192000), ("audio_channels", 8)):
             value = generation.get(field)
             if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= maximum:
