@@ -52,8 +52,6 @@ base:
       env:
         GPU_MAX_HW_QUEUES: '2'
         PYTHONNOUSERSITE: '1'
-        # Serve from the pre-seeded shared HF cache with no Hub API calls.
-        HF_HUB_OFFLINE: '1'
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         revision: d9e99b0792a5e93b78ea9bea62a68167e36ddd9e
