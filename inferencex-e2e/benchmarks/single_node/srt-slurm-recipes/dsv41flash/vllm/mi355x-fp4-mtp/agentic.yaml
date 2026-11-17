@@ -348,7 +348,11 @@ override_dep2_umbp_c256:
         kv-cache-dtype: fp8_e4m3
         kv-transfer-config: '{"kv_connector":"UMBPStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"mode":"standalone","endpoint":"unix:///umbp-host/umbp/standalone.grpc.sock"}}'
       env:
-        MORI_SHMEM_HEAP_SIZE: 64G
+        # The MoRI symmetric heap is allocated before vLLM checks that gpu-memory-utilization
+        # (0.9 of 288 GiB) is still free. 64G left 216 GiB free against 259 GiB requested and the
+        # engine failed to start; 16G is vLLM's own MegaMoE default for this model and the 8 GB
+        # MegaMoEV2 needs with a fused shared expert fits twice over.
+        MORI_SHMEM_HEAP_SIZE: 16G
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
   benchmark:
     env:
@@ -389,7 +393,11 @@ override_dep2_c128:
         prefill-schedule-interval: 11
         kv-cache-dtype: fp8_e4m3
       env:
-        MORI_SHMEM_HEAP_SIZE: 64G
+        # The MoRI symmetric heap is allocated before vLLM checks that gpu-memory-utilization
+        # (0.9 of 288 GiB) is still free. 64G left 216 GiB free against 259 GiB requested and the
+        # engine failed to start; 16G is vLLM's own MegaMoE default for this model and the 8 GB
+        # MegaMoEV2 needs with a fused shared expert fits twice over.
+        MORI_SHMEM_HEAP_SIZE: 16G
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
   benchmark:
     env:
