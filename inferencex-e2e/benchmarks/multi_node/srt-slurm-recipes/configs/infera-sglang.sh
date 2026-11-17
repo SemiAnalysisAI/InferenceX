@@ -17,3 +17,17 @@ fi
 # The router the launcher will exec: the wheel's bundled binary, not one on PATH. Fails if pip
 # fell back to the pure-Python wheel (a platform outside manylinux_2_28 x86_64).
 python3 -c "import infera.engine.sglang; from infera.server.launch_rust import _find_binary; _find_binary()"
+# Lift RLIMIT_MEMLOCK's soft limit to the hard limit in the shell that starts the worker
+# ($PPID: srtctl runs this script, then the worker, from one shell). The RDMA driver charges
+# every KV registration against the soft limit before falling back to peer memory, and the
+# remapped container root has no CAP_IPC_LOCK, so the 8 GiB limit Slurm propagates fails
+# Mooncake's concurrent 1 GiB registrations with ENOMEM. Infera does this itself from
+# AMD-AGI/Infera#239; drop this once the router version carries it.
+python3 - "$PPID" <<'PY'
+import resource, sys
+pid = int(sys.argv[1])
+soft, hard = resource.prlimit(pid, resource.RLIMIT_MEMLOCK)
+if soft != hard:
+    resource.prlimit(pid, resource.RLIMIT_MEMLOCK, (hard, hard))
+    print(f"RLIMIT_MEMLOCK of pid {pid}: soft {soft} -> {hard}")
+PY
