@@ -12971,7 +12971,7 @@
     - agentic-coding
   description:
     - "Switch the draft from Inferact/Kimi-K3.1-Pro-DSpark-preview to the released Inferact/Kimi-K3.1-Pro-DSpark (revision e4e6e626, the revision of its golden acceptance table). The released draft uses GQA sliding-window layers instead of MLA, so the draft attention backend changes from ROCM_AITER_MLA (rejects non-MLA and sliding window) to TRITON_ATTN."
-    - "prefix-match-unit 64 -> 1152 on every point: the draft's sliding-window KV group only matches whole 1152-token blocks, so with 64 vLLM disables fine-grained prefix-cache hits for the whole model and rounds every hit down to the 9216-token scheduler block."
+    - "prefix-match-unit 64 -> 1152 (1280 at concurrency 1): the draft's sliding-window KV group only matches whole blocks, so with 64 vLLM disables fine-grained prefix-cache hits for the whole model and rounds every hit down to the scheduler block. Under DCP8 the block spans 1152 tokens; under DCP1 (concurrency 1) every group's block spans 1280, which the unit must divide."
     - "Concurrency 32 and 48: num_speculative_tokens 3 -> 4, capture sizes regenerated as multiples of 5."
     - "Same image (kimi-k31-5c14fe8); no other server argument or environment change."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119

@@ -112,6 +112,8 @@ override_gpu_kv_c1:
     agg:
       args:
         max-num-seqs: 1
+        # DCP1: every KV group's block spans 1280 tokens (1152 under DCP8), and the unit must divide it.
+        prefix-match-unit: 1280
         decode-context-parallel-size: null
         dcp-comm-backend: null
         cp-kv-cache-interleave-size: null
