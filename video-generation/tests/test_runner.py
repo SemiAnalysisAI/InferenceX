@@ -873,6 +873,8 @@ def test_wan22_sglang_request_omits_only_the_controls_its_server_binds():
         "guidance_scale_2": 3.0,
         "negative_prompt": "",
         "num_outputs_per_prompt": 1,
+        "x264_preset": "ultrafast",
+        "output_compression": 63,
     }
 
 

@@ -100,6 +100,11 @@ _WAN22_CELL = {"width": 832, "height": 480, "frame_count": 81, "fps": 16}
 SGLANG_WAN22_SERVER_CONTROLS = ("boundary_ratio", "flow_shift")
 # SGLang has no crf field; it encodes with crf = int((1 - output_compression / 100) * 51).
 SGLANG_OUTPUT_COMPRESSION = {18: 63}
+# vLLM-Omni v0.32.0 delivers Wan2.2 at libx264 ultrafast CRF 18; SGLang defaults to fast CRF 25.
+_SGLANG_WAN22_ENCODING = {
+    "x264_preset": "ultrafast",
+    "output_compression": SGLANG_OUTPUT_COMPRESSION[18],
+}
 
 
 def _digest(value: Any) -> str:
@@ -341,6 +346,7 @@ def _wan22_payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> 
     if runtime == "sglang":
         for control in SGLANG_WAN22_SERVER_CONTROLS:
             del request[control]
+        request |= _SGLANG_WAN22_ENCODING
     return request
 
 
