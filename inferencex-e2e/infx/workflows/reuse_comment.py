@@ -79,13 +79,13 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         return 0
 
     try:
-        allowed = set(reuse.DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS)
-        if comment.get("author_association") not in allowed:
-            raise RuntimeError("Reuse requires an OWNER, MEMBER, or COLLABORATOR request.")
+        login = str((comment.get("user") or {}).get("login") or "")
+        if not login or not reuse.can_authorize_reuse(repo, login, token):
+            raise RuntimeError("Reuse requires a request from a user with write access.")
         matched, pinned_run_id = reuse.parse_reuse_command(body)
         if not matched:
             raise RuntimeError("Usage: /use <run_id> or /reuse-sweep-run [run_id]")
-        selected, _ = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run", allowed)
+        selected, _ = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run")
         if selected is None or selected.get("id") != comment_id:
             raise RuntimeError("A newer reuse request supersedes this comment.")
         pr = github.api(repo, f"/pulls/{pr_number}", token)
@@ -96,7 +96,7 @@ def acknowledge(repo: str, event: dict[str, Any], token: str) -> int:
         outside_pr = head_sha not in reuse.pr_commit_shas(repo, pr_number, token)
 
         latest = github.api(repo, comment_path, token)
-        selected, _ = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run", allowed)
+        selected, _ = reuse.find_reuse_request(repo, pr_number, token, "/reuse-sweep-run")
         if (
             any(latest.get(key) != comment.get(key) for key in ("body", "updated_at"))
             or selected is None
