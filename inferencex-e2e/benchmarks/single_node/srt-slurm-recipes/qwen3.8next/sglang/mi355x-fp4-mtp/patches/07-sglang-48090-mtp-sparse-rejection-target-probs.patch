@@ -1,14 +1,14 @@
 # [Perf] [AMD] spec: Skip the vocabulary-wide sort in MTP rejection-sampling verify
 # https://github.com/sgl-project/sglang/pull/48090  (PR head 3d0601e162756717ede35abd092c9e1889f33bf5)
-# Generated against the SGLang checkout of the image (1ced9a9eb0) with patches 01-07 applied; source files only (tests dropped).
+# Generated against the SGLang checkout of the image (c67db7c762, 2026-11-17); source files only (tests, benchmarks, AOT registry and docs dropped); rebased from the 1ced9a9eb0 version.
 # Backport: the PR sits on a newer main. The image lacks sglang#41916, so the top-p rescale helper
 # (_adjust_top_p_for_top_k) is copied into eagle_utils.py instead of imported from dflash_utils.
 
 diff --git a/python/sglang/srt/speculative/eagle_utils.py b/python/sglang/srt/speculative/eagle_utils.py
-index d66afe9271..ec2a51760d 100644
+index a775dd3425..1c5e927737 100644
 --- a/python/sglang/srt/speculative/eagle_utils.py
 +++ b/python/sglang/srt/speculative/eagle_utils.py
-@@ -51,9 +51,11 @@ if TYPE_CHECKING:
+@@ -62,9 +62,11 @@ if TYPE_CHECKING:
  
  _is_cuda = is_cuda()
  _is_hip = is_hip()
@@ -19,9 +19,9 @@ index d66afe9271..ec2a51760d 100644
 +_COMPACT_VERIFY_SAMPLING_SET = envs.SGLANG_OPT_SPEC_COMPACT_VERIFY_SAMPLING.is_set()
  _PACKED_VERIFY_BCAST = envs.SGLANG_OPT_SPEC_PACKED_VERIFY_BCAST.get()
  
- logger = logging.getLogger(__name__)
-@@ -555,11 +557,71 @@ def _can_use_sparse_uno_tree_target_sampling(
-     )
+ # The binding defaults probe this explicit capability once instead of relying on
+@@ -603,11 +605,71 @@ def _apply_joint_top_k_top_p(
+     return probs
  
  
 +@torch.compile(dynamic=True)
@@ -96,7 +96,7 @@ index d66afe9271..ec2a51760d 100644
          return None
      from sglang.srt.speculative.uno_utils import _SPARSE_TOP_K_LIMIT
  
-@@ -782,13 +844,22 @@ def eagle_sample(
+@@ -1064,19 +1126,28 @@ def eagle_sample(
          else:
              sampling_fn = tree_speculative_sampling_target_only
  
@@ -106,7 +106,13 @@ index d66afe9271..ec2a51760d 100644
 -            rows_per_request=verify_input.draft_token_num,
 -        )  # (bs * num_draft_tokens, vocab_size)
 -        maybe_detect_nan(target_probs, "v2 verify: target_probs after softmax")
--        if sampling_info.need_top_k_sampling:
+-        target_probs = _apply_joint_top_k_top_p(
+-            target_probs,
+-            sampling_info,
+-            verify_input.draft_token_num,
+-            top_k_renorm_prob,
+-            top_p_renorm_prob,
+-        )
 +        sparse_target = use_rejection_sampling and uno_target_max_top_k is not None
 +        if sparse_target:
 +            target_probs = _sparse_rejection_target_probs(
@@ -122,21 +128,18 @@ index d66afe9271..ec2a51760d 100644
 +                rows_per_request=verify_input.draft_token_num,
 +            )  # (bs * num_draft_tokens, vocab_size)
 +            maybe_detect_nan(target_probs, "v2 verify: target_probs after softmax")
-+        if not sparse_target and sampling_info.need_top_k_sampling:
-             target_probs = top_k_renorm_prob(
-                 target_probs,
-                 torch.repeat_interleave(
-@@ -796,7 +867,7 @@ def eagle_sample(
-                 ),
-             )  # (bs * num_draft_tokens, vocab_size)
-             maybe_detect_nan(target_probs, "v2 verify: target_probs after top_k_renorm")
--        if sampling_info.need_top_p_sampling:
-+        if not sparse_target and sampling_info.need_top_p_sampling:
-             target_probs = top_p_renorm_prob(
-                 target_probs,
-                 torch.repeat_interleave(
++            target_probs = _apply_joint_top_k_top_p(
++                target_probs,
++                sampling_info,
++                verify_input.draft_token_num,
++                top_k_renorm_prob,
++                top_p_renorm_prob,
++            )
+         target_probs = target_probs.reshape(bs, verify_input.draft_token_num, -1)
+         draft_probs = (
+             verify_input.draft_probs
 diff --git a/python/sglang/srt/speculative/uno_utils.py b/python/sglang/srt/speculative/uno_utils.py
-index 2b2b2f17fe..030cf9a679 100644
+index 968a7456c8..7ac7a6e927 100644
 --- a/python/sglang/srt/speculative/uno_utils.py
 +++ b/python/sglang/srt/speculative/uno_utils.py
 @@ -4,7 +4,6 @@ from dataclasses import dataclass
@@ -147,12 +150,12 @@ index 2b2b2f17fe..030cf9a679 100644
  
  from sglang.kernels.ops.speculative.reject_sampling import (
      chain_speculative_sampling_triton,
-@@ -135,6 +134,8 @@ def _build_sparse_target_support_tensors(
-     max_top_k: int,
- ) -> tuple[torch.Tensor, torch.Tensor]:
+@@ -142,6 +141,8 @@ def _build_sparse_target_support_tensors(
      """Build compact support using the fastest available top-k primitive."""
+     # Runs outside torch.compile: Dynamo cannot trace FlashInfer's stream-keyed
+     # scratch-buffer lookup, which calls torch._C._cuda_getCurrentRawStream since 0.7.4.
 +    from flashinfer import top_k as _flashinfer_top_k
 +
-     rows = batch_size * forward_width
      topk_logits, topk_ids = _flashinfer_top_k(
          next_token_logits.contiguous(),
+         max_top_k,

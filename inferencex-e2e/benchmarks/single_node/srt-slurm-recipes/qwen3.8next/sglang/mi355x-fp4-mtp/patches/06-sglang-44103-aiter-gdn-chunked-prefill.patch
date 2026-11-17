@@ -1,13 +1,13 @@
 # [Perf] [AMD] Qwen3.8-flash-next: Opt-in AITER GDN chunked prefill (opt_vk stages and fused FlyDSL)
 # https://github.com/sgl-project/sglang/pull/44103  (PR head 7bd6b56d543574f4cde696585ad18b77a59b57b4)
-# Generated against the SGLang checkout of the image (1ced9a9eb0); source files only (tests, benchmarks, AOT registry and docs dropped).
+# Generated against the SGLang checkout of the image (c67db7c762, 2026-11-17); source files only (tests, benchmarks, AOT registry and docs dropped); rebased from the 1ced9a9eb0 version.
 # Adapted to the image: its GDN extend() takes **kwargs (CUDA-graph chunk tables), so the new _extend() receives them too, and the AITER prefill is skipped for a captured prefill graph.
 
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index f09344c04a..8b33f92f3b 100644
+index e5dfe15f8c..e2005a6985 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -1025,6 +1025,16 @@ class Envs:
+@@ -1096,6 +1096,16 @@ class Envs:
      # insertion. Requires an AITER build with the fp8_e4m3_unit cache contract.
      # Enabled by default for supported configurations; set to 0 to disable.
      SGLANG_M3_USE_AITER_FUSED_QKNORM = EnvBool(True)
@@ -22,20 +22,20 @@ index f09344c04a..8b33f92f3b 100644
 +    # (state kept on chip, l2norm and track snapshot in-kernel).
 +    SGLANG_AITER_GDN_PREFILL_H = EnvStr("triton")
      SGLANG_USE_AITER_AG = EnvBool(True)
-     # The gfx950 TP4 JIT quick all-reduce (quick_all_reduce_hip) runs an INT4 request below this
-     # many MiB in INT8, which is as fast at decode sizes with about 1/16 of INT4's error; 0 runs
+     # Run the gfx950 TP4 quick all-reduce on the JIT build (quick_all_reduce_hip) instead of
+     # sgl-kernel's; off by default, MiniMax-M3.1 turns it on at TP4 under INT4 or INT8.
 diff --git a/python/sglang/srt/layers/attention/linear/gdn_backend.py b/python/sglang/srt/layers/attention/linear/gdn_backend.py
-index 5447df4678..b2cd8698cb 100644
+index 2cf6a0f935..5baa15a77e 100644
 --- a/python/sglang/srt/layers/attention/linear/gdn_backend.py
 +++ b/python/sglang/srt/layers/attention/linear/gdn_backend.py
-@@ -1508,6 +1508,7 @@ class GDNAttnBackend(MambaAttnBackendBase):
+@@ -1718,6 +1718,7 @@ class GDNAttnBackend(MambaAttnBackendBase):
                  output=kwargs.get("linear_attn_output"),
                  layer_id=layer.layer_id,
                  extend_prefix_lens=forward_batch.extend_prefix_lens,
 +                seq_lens_cpu=forward_batch.extend_seq_lens_cpu,
                  track_state=h_track_buf,
-                 track_chunk_idx=(
-                     forward_metadata.track_chunk_idx
+                 needs_track_state=(
+                     forward_metadata.has_mamba_track_mask
 diff --git a/python/sglang/srt/layers/attention/linear/kernels/gdn_aiter_prefill.py b/python/sglang/srt/layers/attention/linear/kernels/gdn_aiter_prefill.py
 new file mode 100644
 index 0000000000..e78681a343
@@ -252,12 +252,13 @@ index 0000000000..e78681a343
 +        )
 +        return o, h
 diff --git a/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py b/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
-index 433e2704b4..a23e524373 100644
+index 90709c9b89..184264d303 100644
 --- a/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
 +++ b/python/sglang/srt/layers/attention/linear/kernels/gdn_triton.py
-@@ -1,9 +1,19 @@
+@@ -1,11 +1,20 @@
 +import logging
-+
+ from typing import Optional
+ 
  import torch
  
 +from sglang.srt.environ import envs
@@ -276,7 +277,7 @@ index 433e2704b4..a23e524373 100644
  
  if not is_cpu():
      from sglang.kernels.ops.attention.fla.chunk import chunk_gated_delta_rule
-@@ -37,12 +47,74 @@ elif is_xpu():
+@@ -39,6 +48,59 @@ elif is_xpu():
      )
  
  
@@ -336,8 +337,9 @@ index 433e2704b4..a23e524373 100644
  class TritonGDNKernel(LinearAttnKernelBase):
      """Triton-based kernel for GDN (Gated Delta Network) linear attention."""
  
-     supports_packed_decode: bool = not is_cpu() and not is_npu()
-     supports_strided_target_verify_qkv: bool = True
+@@ -47,6 +109,15 @@ class TritonGDNKernel(LinearAttnKernelBase):
+     # The chunk kernel steps slots by the pool's stride(0) in int64.
+     extend_honors_slot_pitch: bool = True
  
 +    def __init__(self):
 +        # The AITER fused prefill writes the fp32 track snapshot in-kernel; any
@@ -351,10 +353,10 @@ index 433e2704b4..a23e524373 100644
      def packed_decode(
          self,
          mixed_qkv: torch.Tensor,
-@@ -178,6 +250,45 @@ class TritonGDNKernel(LinearAttnKernelBase):
-         cache_indices: torch.Tensor,
-         query_start_loc: torch.Tensor,
-         inplace_update: bool = True,
+@@ -185,6 +256,51 @@ class TritonGDNKernel(LinearAttnKernelBase):
+         use_qk_l2norm_in_kernel: bool = True,
+         out: Optional[torch.Tensor] = None,
+         output_indices: Optional[torch.Tensor] = None,
 +        seq_lens_cpu: list[int] | None = None,
 +        track_state: torch.Tensor | None = None,
 +        track_chunk_idx: torch.Tensor | None = None,
@@ -370,6 +372,9 @@ index 433e2704b4..a23e524373 100644
 +            cache_indices=cache_indices,
 +            query_start_loc=query_start_loc,
 +            inplace_update=inplace_update,
++            use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
++            out=out,
++            output_indices=output_indices,
 +            seq_lens_cpu=seq_lens_cpu,
 +            track_state=track_state,
 +            track_chunk_idx=track_chunk_idx,
@@ -391,13 +396,16 @@ index 433e2704b4..a23e524373 100644
 +        cache_indices: torch.Tensor,
 +        query_start_loc: torch.Tensor,
 +        inplace_update: bool,
++        use_qk_l2norm_in_kernel: bool,
++        out: Optional[torch.Tensor],
++        output_indices: Optional[torch.Tensor],
 +        seq_lens_cpu: list[int] | None,
 +        track_state: torch.Tensor | None,
 +        track_chunk_idx: torch.Tensor | None,
          **kwargs,
      ) -> tuple:
          recurrent_state = ssm_states
-@@ -206,6 +317,32 @@ class TritonGDNKernel(LinearAttnKernelBase):
+@@ -222,6 +338,35 @@ class TritonGDNKernel(LinearAttnKernelBase):
              # The external NPU kernel does not expose the optional write-back
              # control. Its existing behavior is equivalent to True.
              inplace_update_args = {}
@@ -409,9 +417,12 @@ index 433e2704b4..a23e524373 100644
 +            and ssm_states.is_contiguous()
 +            # A captured prefill graph needs static metadata; AITER's is built per forward.
 +            and not graph_table_args
++            # The AITER prefill is the plain l2-normed chunk kernel with its own output.
++            and out is None
++            and use_qk_l2norm_in_kernel
 +            and _aiter_gdn_prefill() is not None
 +        ):
-+            out = _aiter_gdn_prefill().extend(
++            aiter_result = _aiter_gdn_prefill().extend(
 +                q,
 +                k,
 +                v,
@@ -424,8 +435,8 @@ index 433e2704b4..a23e524373 100644
 +                track_state=track_state,
 +                track_chunk_idx=track_chunk_idx,
 +            )
-+            if out is not None:
-+                o, h = out
++            if aiter_result is not None:
++                o, h = aiter_result
 +                return o, None, h
  
          return chunk_gated_delta_rule(

@@ -1,32 +1,30 @@
 # [Perf] [AMD] Qwen3.5/Qwen3.8: Opt-in AITER FlyDSL causal conv1d prefill
 # https://github.com/sgl-project/sglang/pull/41879  (PR head 5a2bc3760b46e6c29a2aa12c59d3e71804f930c5)
-# Generated against the SGLang checkout of the image (1ced9a9eb0); source files only (tests, benchmarks, AOT registry and docs dropped).
+# Generated against the SGLang checkout of the image (c67db7c762, 2026-11-17); source files only (tests, benchmarks, AOT registry and docs dropped); rebased from the 1ced9a9eb0 version.
 
 diff --git a/python/sglang/srt/layers/attention/linear/gdn_backend.py b/python/sglang/srt/layers/attention/linear/gdn_backend.py
-index e4e4cc01c3..5447df4678 100644
+index 24fd722665..2cf6a0f935 100644
 --- a/python/sglang/srt/layers/attention/linear/gdn_backend.py
 +++ b/python/sglang/srt/layers/attention/linear/gdn_backend.py
 @@ -1,3 +1,4 @@
 +import logging
+ import time
  from typing import Optional, Tuple, Union
  
- import msgspec
-@@ -49,7 +50,13 @@ from sglang.srt.runtime_context import (
-     mamba_cache_chunk_size,
+@@ -62,9 +63,12 @@ from sglang.srt.runtime_context import (
  )
+ from sglang.srt.speculative.ragged_verify import ragged_verify_compact_enabled
  from sglang.srt.utils import is_cpu, is_cuda, is_hip, is_npu, is_xpu
--from sglang.srt.utils.common import is_pin_memory_available, rank0_log
-+from sglang.srt.utils.common import (
-+    get_bool_env_var,
-+    is_pin_memory_available,
-+    rank0_log,
-+)
-+
-+logger = logging.getLogger(__name__)
++from sglang.srt.utils.common import get_bool_env_var
+ from sglang.srt.utils.device import is_pin_memory_available
+ from sglang.srt.utils.log_utils import rank0_log
  
++logger = logging.getLogger(__name__)
++
  _is_hip = is_hip()
  
-@@ -273,6 +280,54 @@ def _validate_gdn_linear_attn_backends(backends: LinearAttnBackends) -> None:
+ if not is_cpu():
+@@ -370,6 +374,54 @@ def _validate_gdn_target_verify_layout(model_runner: ModelRunner) -> None:
          )
  
  
@@ -81,20 +79,23 @@ index e4e4cc01c3..5447df4678 100644
  class GDNKernelDispatcher:
      """Dispatches GDN kernel calls to the appropriate backend per mode."""
  
-@@ -1085,8 +1140,14 @@ class GDNAttnBackend(MambaAttnBackendBase):
-         cache_indices: torch.Tensor,
+@@ -1298,12 +1350,13 @@ class GDNAttnBackend(MambaAttnBackendBase):
      ) -> torch.Tensor:
          block_table = self.forward_metadata.conv_block_table
--        conv_kwargs = {"block_table": block_table} if block_table is not None else {}
--        return causal_conv1d_fn(
-+        if block_table is not None:
-+            # The block-table launch is Triton-only; the AITER conv never sees it.
-+            conv_fn = causal_conv1d_fn
-+            conv_kwargs = {"block_table": block_table}
+         conv_kwargs = {"block_table": block_table} if block_table is not None else {}
+-        # The compiled CUDA conv assumes packed slots; Triton follows the strides.
+-        conv_fn = (
+-            causal_conv1d_fn_triton
+-            if not conv_states.is_contiguous() and not is_cpu()
+-            else causal_conv1d_fn
+-        )
++        strided_slots = not conv_states.is_contiguous() and not is_cpu()
++        if block_table is not None or strided_slots:
++            # The block-table launch and strided state slots are Triton-only (the compiled
++            # CUDA conv assumes packed slots); the AITER conv never sees them.
++            conv_fn = causal_conv1d_fn_triton if strided_slots else causal_conv1d_fn
 +        else:
 +            conv_fn = _prefill_causal_conv1d
-+            conv_kwargs = {}
-+        return conv_fn(
+         return conv_fn(
              mixed_qkv.transpose(0, 1),
              layer.conv_weights,
-             layer.bias,

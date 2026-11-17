@@ -1,9 +1,9 @@
 # [Perf] [AMD] Qwen3.8: Serve QSA decode with AITER's fused FlyDSL sparse decode on gfx950
 # https://github.com/sgl-project/sglang/pull/45196  (PR head d0d0e41da5fba5c314e8c4a705ab198b23386459)
-# Generated against the SGLang checkout of the image (1ced9a9eb0); source files only (tests, benchmarks, AOT registry and docs dropped).
+# Generated against the SGLang checkout of the image (c67db7c762, 2026-11-17); source files only (tests, benchmarks, AOT registry and docs dropped); rebased from the 1ced9a9eb0 version.
 
 diff --git a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
-index 9ff9ee4abc..70a40f6158 100644
+index 9407e50b01..dd373956cb 100644
 --- a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
 +++ b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
 @@ -16,6 +16,7 @@ import msgspec
@@ -12,23 +12,24 @@ index 9ff9ee4abc..70a40f6158 100644
  
 +from sglang.srt.environ import envs
  from sglang.srt.layers.attention.base_attn_backend import AttentionBackend
- from sglang.srt.layers.attention.qsa.config import (
-     is_qwen_qsa,
-@@ -54,7 +55,12 @@ from sglang.srt.mem_cache.memory_pool import HybridLinearKVPool, MHATokenToKVPoo
+ from sglang.srt.layers.attention.kv_shard_hooks import (
+     get_kv_shard_pool,
+@@ -56,7 +57,13 @@ from sglang.srt.mem_cache.page_interleave_pool import PageInterleaveKVPoolMixin
  from sglang.srt.mem_cache.qsa_kv_pool import QSATokenToKVPool
- from sglang.srt.model_executor.forward_batch_info import ForwardMode
+ from sglang.srt.model_executor.forward_mode import ForwardMode
  from sglang.srt.runtime_context import get_spec, get_stream
--from sglang.srt.utils import is_hip, is_sm100_supported, is_sm120
+-from sglang.srt.utils import is_hip, is_npu, is_sm100_supported, is_sm120
 +from sglang.srt.utils import (
 +    is_gfx95_supported,
 +    is_hip,
++    is_npu,
 +    is_sm100_supported,
 +    is_sm120,
 +)
  
  logger = logging.getLogger(__name__)
  
-@@ -78,6 +84,22 @@ def _resolve_trtllm_sparse_decode():
+@@ -114,6 +121,22 @@ def _resolve_trtllm_sparse_decode():
      return trtllm_batch_decode_with_kv_cache
  
  
@@ -51,7 +52,7 @@ index 9ff9ee4abc..70a40f6158 100644
  @lru_cache(maxsize=1)
  def _resolve_flash_attn_varlen_func():
      from sglang.srt.utils import is_hip, is_sm121
-@@ -268,6 +290,7 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -342,6 +365,7 @@ class QwenSparseAttnBackend(AttentionBackend):
          self._mtp_shared_sparse_indices = None
          self._trtllm_workspace = None
          self._trtllm_counters = {}
@@ -59,7 +60,7 @@ index 9ff9ee4abc..70a40f6158 100644
          self._graph_extend_lens = None
          self._graph_extend_lens_pin = None
          self._verify_mask = None
-@@ -1889,6 +1912,75 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -2039,6 +2063,75 @@ class QwenSparseAttnBackend(AttentionBackend):
          )
          return output.reshape(q.shape[0], -1)
  
@@ -135,7 +136,7 @@ index 9ff9ee4abc..70a40f6158 100644
      def forward_decode(
          self,
          q: torch.Tensor,
-@@ -1945,6 +2037,21 @@ class QwenSparseAttnBackend(AttentionBackend):
+@@ -2099,6 +2192,21 @@ class QwenSparseAttnBackend(AttentionBackend):
                  trtllm_decode,
              )
  
