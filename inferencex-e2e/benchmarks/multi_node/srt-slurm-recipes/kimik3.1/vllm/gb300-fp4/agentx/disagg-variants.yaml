@@ -119,7 +119,9 @@ base:
       args:
         kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"lookup_timeout_s":60,"lookup_prefetch_limit":16,"lookup_prefetch_ttl_s":30,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
         served-model-name: "moonshotai/Kimi-K3.1-Pro"
-        prefix-match-unit: 128
+        # The windowed DSpark draft's KV block is 1408 tokens here; a matching unit keeps
+        # prefix-cache hits fine-grained.
+        prefix-match-unit: 1408
         load-format: "fastsafetensors"
         kv-cache-dtype: "fp8"
         attention-config: &attn_cfg '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
@@ -144,7 +146,7 @@ base:
         enable-expert-parallel: true
         moe-backend: deep_gemm_mega_moe
         max-num-seqs: 32
-        speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 2
       workers: 1
@@ -155,7 +157,9 @@ base:
       args:
         kv-transfer-config: *kv_transfer
         served-model-name: "moonshotai/Kimi-K3.1-Pro"
-        prefix-match-unit: 128
+        # The windowed DSpark draft's KV block is 1408 tokens here; a matching unit keeps
+        # prefix-cache hits fine-grained.
+        prefix-match-unit: 1408
         load-format: "fastsafetensors"
         kv-cache-dtype: "fp8"
         attention-config: *attn_cfg
@@ -500,13 +504,16 @@ override_hyb4_2p1d_lpt4k:
         <<: *override_hyb4_3p1d_prefill_args
         long-prefill-token-threshold: 4096
         long-prefill-token-threshold-adaptive: true
+        # With six draft tokens the windowed draft's KV block is 1536 tokens.
+        prefix-match-unit: 1536
         # Six draft tokens run faster than four on this hybrid decode.
-        speculative-config: &spec_k6 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":6,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: &spec_k6 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","method":"dspark","num_speculative_tokens":6,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode: &override_hyb4_2p1d_lpt4k_decode
       <<: *override_hyb4_3p1d_decode
       args: &override_hyb4_2p1d_lpt4k_decode_args
         <<: *override_hyb4_3p1d_decode_args
         speculative-config: *spec_k6
+        prefix-match-unit: 1536
         # Decode graphs in multiples of K+1 = 7, up to max-num-seqs x 7.
         max-num-batched-tokens: 1792
         max-cudagraph-capture-size: 1792

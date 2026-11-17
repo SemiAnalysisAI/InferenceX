@@ -143,7 +143,7 @@ base:
         # next to other requests each prompt's chunk stops at 4096 tokens.
         max-num-batched-tokens: 16384
         long-prefill-token-threshold: 4096
-        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
 
   sbatch_directives:
     mem: "0"
@@ -178,7 +178,9 @@ override_agg16_c1:
         tensor-parallel-size: 16
         gpu-memory-utilization: 0.90
         decode-context-parallel-size: 16
-        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        # The windowed DSpark draft's KV block is 768 tokens at TP16/DCP16.
+        prefix-match-unit: 768
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         max-num-seqs: 1
         max-cudagraph-capture-size: 2048
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,8,14,16,28,32,56,64,128,256,512,1024,2048]}'
