@@ -876,6 +876,27 @@ def test_wan22_sglang_request_omits_only_the_controls_its_server_binds():
     }
 
 
+@pytest.mark.parametrize("server_argv", [None, ["sglang", "serve", "--flow-shift", "5.0"]])
+def test_wan22_sglang_run_requires_a_launch_that_sets_the_plan_flow_shift(tmp_path, server_argv):
+    identity = server_argv and {
+        "runtime_revision": RUNTIME_REVISION,
+        "image_digest": "a" * 64,
+        "server_argv": server_argv,
+        "server_environment": {"CACHE": "0"},
+        "gpu_topology": {"gpu_uuids": ["GPU-fixture"]},
+    }
+    output = tmp_path / "not-created"
+    with pytest.raises(ValueError, match="sealed server launch"):
+        execute(
+            wan22_plan(),
+            output,
+            "http://127.0.0.1:1",
+            runtime="sglang",
+            numerical_identity=identity,
+        )
+    assert not output.exists()
+
+
 def test_wan22_vllm_omni_run_sends_every_control_and_keeps_server_metrics(
     tmp_path, mocked_media, fixture_server
 ):

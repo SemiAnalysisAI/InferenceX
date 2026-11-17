@@ -19,6 +19,7 @@ from .runner import (
     SGLANG_WAN22_SERVER_CONTROLS,
     WAN22_MODEL_ID,
     run_plan,
+    sglang_flow_shift,
     validate_plan,
 )
 
@@ -217,9 +218,8 @@ def server_parallelism(runtime: str, argv: list[str]) -> dict:
 
 def sglang_wan22_server_controls(model_path: Path, command: list[str]) -> dict:
     """The Wan2.2 controls an SGLang launch would serve, read where SGLang reads them."""
-    shifts = [value for flag, value in zip(command, command[1:]) if flag == "--flow-shift"]
     return {
-        "flow_shift": float(shifts[0]) if len(shifts) == 1 else None,
+        "flow_shift": sglang_flow_shift(command),
         "boundary_ratio": read_object(model_path / "model_index.json").get("boundary_ratio"),
     }
 
