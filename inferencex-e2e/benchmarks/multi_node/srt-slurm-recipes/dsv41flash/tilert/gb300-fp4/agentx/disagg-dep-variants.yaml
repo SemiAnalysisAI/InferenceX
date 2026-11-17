@@ -23,7 +23,8 @@ base:
         set_visible_devices: true
       # The official vLLM image, unmodified; TileRT enters the prefill only as a KV connector.
       container: vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121@sha256:76a533475156ffdb3656ccc389d0c71f5cec16897c0f490ac43e4f379c4b4f0d
-      # Six DEP2 workers (DP2 + expert parallel), two per tray.
+      # Six DEP2 workers (DP2 + expert parallel), two per tray; the point at 4 sequences per
+      # decode GPU takes four (two trays) below.
       nodes: 3
       workers: 6
       gpus: 2
@@ -166,9 +167,12 @@ base:
       TRANSFORMERS_VERBOSITY: error
       TOKENIZERS_PARALLELISM: "false"
 
-override_6p1d_dep2_dep32_eb4_c1200:
-  name: dsv41flash-fp4-gb300-tilert-agentx-6p1d-dep2-dep32-eb4-c1200
+override_4p1d_dep2_dep32_eb4_c1200:
+  name: dsv41flash-fp4-gb300-tilert-agentx-4p1d-dep2-dep32-eb4-c1200
   roles:
+    prefill:
+      nodes: 2
+      workers: 4
     decode:
       env:
         TILERT_EP_BATCH: "4"

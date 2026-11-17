@@ -40,6 +40,8 @@ fi
 declare -A TILERT_WHEEL_SHA256=(
     [0.1.8]=17ae557029a14c2676e20ae5d61c895fb5658a06f0bdd232fe7b21d478f1f838
     [0.2.0]=53a7c1511308fc6932b8ab909222091ef301ca475346fb6a2f6fe4eced98e725
+    # TODO(0.2.1): the sha256 of the published tilert 0.2.1 wheel; until it is pinned here a
+    # 0.2.1 role stops below with "No pinned sha256".
 )
 want_sha=${TILERT_WHEEL_SHA256[$ROUTER_VERSION]:-}
 if [[ -z "$want_sha" ]]; then

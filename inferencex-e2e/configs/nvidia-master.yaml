@@ -7035,7 +7035,7 @@ dsv41flash-fp4-gb300-tilert-agentic-dspark-dep:
   runner: cluster:gb300-nv
   precision: fp4
   framework: tilert
-  router: { name: tilert-pd-router, version: "0.2.0" }
+  router: { name: tilert-pd-router, version: "0.2.1" }
   multinode: true
   disagg: true
   kv-p2p-transfer: nvlink
@@ -7044,10 +7044,10 @@ dsv41flash-fp4-gb300-tilert-agentic-dspark-dep:
     agentic-coding:
     - search-space:
       - spec-decoding: "mtp"
-        srt-recipe: disagg-dep-variants.yaml:override_6p1d_dep2_dep32_eb4_c1200
+        srt-recipe: disagg-dep-variants.yaml:override_4p1d_dep2_dep32_eb4_c1200
         conc-list: [1200]
         prefill:
-          num-worker: 6
+          num-worker: 4
           tp: 2
           ep: 2
           dp-attn: true
