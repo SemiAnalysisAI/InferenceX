@@ -387,7 +387,8 @@ frameworks; apply (c) only to official InferenceX (non-preview) submissions.
     infer it solely from the registry or image tag, or require the latest branch tip.
   - Allow official upstream non-default-branch images for community-based engines
     such as SGLang, vLLM, and TokenSpeed when the respective upstream community
-    maintainers explicitly approve the branch/image for the submission and the
+    maintainers (Inferact for vLLM, RadixArk for SGLang, and LightSeek for TokenSpeed)
+    explicitly approve the branch/image for the submission and the
     upstream PRs must merge in a timely manner after submission, followed by migration
     to a main-branch image. Verify the linked upstream PRs, maintainer approval, and
     image build/source provenance in the sign-off's additional detail section.

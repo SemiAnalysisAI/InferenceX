@@ -13,7 +13,7 @@ For official InferenceX (non-preview) submissions with upstream hardware support
 Coding agents can produce optimizations faster than human CODEOWNERS in projects such as vLLM and SGLang can review and merge them. To get useful optimizations onto the AgentX dashboard sooner, official upstream images built from non-main branches are also allowed when all of the following conditions are met:
 
 - The engine is community-based, such as SGLang, vLLM, or TokenSpeed.
-- The respective upstream community maintainers explicitly approve using the branch and its official image for the submission.
+- The respective upstream community maintainers explicitly approve using the branch and its official image for the submission: Inferact for vLLM, RadixArk for SGLang, and LightSeek for TokenSpeed.
 - The upstream PRs containing the submitted changes must merge into `main` (or the equivalent default development branch) in a timely manner after submission, and the submission must then move to a main-branch image.
 
 The submission must link the upstream PRs, maintainer approval, and image build/source provenance so reviewers can verify the exception. Timeliness is assessed case by case with the upstream maintainers; this is not permission to maintain a permanent out-of-tree fork.
