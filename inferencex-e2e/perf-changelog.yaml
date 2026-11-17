@@ -12981,6 +12981,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5069
 
 - config-keys:
+    - kimik3.1-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro B300 Dynamo+vLLM disaggregated AgentX configs on vllm/vllm-openai:kimi-k31-mc-dbbc9e3 (sha256:0507dd0b), with Dynamo 229be5cff1 (v1.7.0-kimi-k3.1-pro-dev.1). DSpark uses the released draft Inferact/Kimi-K3.1-Pro-DSpark (revision e4e6e626), so synthetic acceptance follows its golden AL curve (4 draft tokens 3.46, 7 draft tokens 4.16)."
+    - "Prefill and decode set prefix-match-unit to the block size of the draft's sliding-window KV group: 1408 with 4 draft tokens and 1536 at 1P1D c1 (7 draft tokens). With 128-token units vLLM turns off partial prefix-cache hits for the whole hybrid cache when this group is present, and Mooncake store hits on the next turn drop."
+    - "Every prefill and decode worker is one B300 node, TP8 x DCP8: prefill runs routed experts EP8 on MegaMoE eagerly, decode runs the low-latency decode backend. KV moves over AWS EFA: NIXL (LIBFABRIC) from prefill to decode, and a Mooncake store with a 190 GB host-DRAM segment per rank."
+    - "Sweep 1P1D c1 (7 draft tokens), 1P3D c20 and c48, 1P2D c64, 2P3D c264 and 4P5D c660 (4 draft tokens). The 2P3D and 4P5D points admit up to 128 decode requests at 0.98 of GPU memory."
+    - "At 2P3D c264 and 4P5D c660 the Mooncake store keeps the tail pages a request loaded and drops the older tails it consumed (VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL=1, VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS=1), and store lookups start before admission (lookup_prefetch_limit 16, lookup_prefetch_ttl_s 30)."
+    - "4P5D c660 also sets the sparse-attention indexer logits to BF16 explicitly on prefill and decode (attention-config indexer_logits_dtype bfloat16; BF16 is already the SM10x default, so every point runs BF16 indexer logits), selects the indexer top-k with deep_select on prefill (kernel-config sparse_indexer_topk_backend deep_select), and has the Mooncake master evict 2% of the store per round (--eviction_ratio=0.02 instead of 0.10)."
+    - "Every point keeps the model's precision policy: FP8 KV cache, an MXFP4 indexer key cache and FP32 KDA state."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5108
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
