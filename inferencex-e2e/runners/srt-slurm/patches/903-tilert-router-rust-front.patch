@@ -9,7 +9,7 @@ index 2b14aaa3..35f9776a 100644
 +# ``frontend.args.rust-front: true`` runs the router under the release's Rust front supervisor instead of passing a flag:
 +# the supervisor serves the client port with the packaged front and moves the router to 127.0.0.1 on the next port.
 +RUST_FRONT_ARG = "rust-front"
-+RUST_FRONT_SUPERVISOR = ("python", "-m", "tilert.pd_vllm.rs_front_sup")
++RUST_FRONT_SUPERVISOR = ("python", "-m", "infx_rs_front_strict")
  ROUTER_WORKERS_REQUIRED = "TileRT router requires at least one prefill worker and at least one decode worker"
  
  
@@ -87,7 +87,7 @@ index e4170f6d..7793c28c 100644
 +    frontend.rust_front = True
 +    command = frontend.build_router_command(workers, "0.0.0.0", 8000, config.backend)
 +    command.extend(frontend.get_frontend_args_list(config.frontend.args))
-+    assert command[:6] == ["python", "-m", "tilert.pd_vllm.rs_front_sup", "python", "-m", "tilert.pd_vllm.pd_router"]
++    assert command[:6] == ["python", "-m", "infx_rs_front_strict", "python", "-m", "tilert.pd_vllm.pd_router"]
 +    assert command[3:3 + len(plain)] == plain
 +    assert "--rust-front" not in command
 +    assert _flag(command, "--port") == "8000"
