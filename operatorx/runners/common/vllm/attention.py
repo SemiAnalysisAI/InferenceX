@@ -463,6 +463,12 @@ def _backends(runner) -> dict[str, str]:
             for gs in runner.attn_groups for g in gs}
 
 
+def _shapes(args: tuple, kwargs: dict) -> dict:
+    out = {f"arg{i}": list(v.shape) for i, v in enumerate(args) if isinstance(v, torch.Tensor)}
+    out.update({k: list(v.shape) for k, v in kwargs.items() if isinstance(v, torch.Tensor)})
+    return out
+
+
 def _prepare(op: Op) -> dict:
     a = op.args
     if a.get("selection", "natural") != "natural":
@@ -494,6 +500,9 @@ def _prepare(op: Op) -> dict:
            "meta": {"vllm_engine": vllm_engine.meta(), "vllm_family": b.family, "vllm_repo": _MODELS[b.family]["repo"], "vllm_module": b.module,
                     "vllm_backends": _backends(eng.runner),
                     "vllm_attn_metadata": {k: type(v).__name__ for k, v in (seen["fc"].attn_metadata or {}).items()},
+                    # the tensors the module was called with on this rank (tokens it computes)
+                    "module_inputs": _shapes(seen["args"], seen["kwargs"]),
+                    "scheduled_tokens": sum(r.num_tokens - r.num_computed_tokens for r in eng.reqs),
                     "kv_cache_groups": [
                         {"spec": type(g.kv_cache_spec).__name__, "block_size": g.kv_cache_spec.block_size,
                          "dtype": str(getattr(g.kv_cache_spec, "dtype", "")).removeprefix("torch.")}
