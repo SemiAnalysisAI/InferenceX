@@ -12957,7 +12957,7 @@
     - wan22-bf16-h100-sglang-video
   scenario-type: [video-generation]
   description:
-    - "Add an H100 Wan2.2-T2V-A14B baseline on SGLang v0.5.23, by the digest the H3 SGLang rows use: wan22.yaml release-v1, C1 on 2, 4 and 8 GPUs, conditioning cache disabled. --flow-shift 12.0 is a server flag and boundary_ratio 0.875 comes from the checkpoint; the server refuses to start when either differs from the spec."
-    - "Deployment per count, the vLLM-Omni rows' layout: 2 GPUs CFG parallel 2 x Ulysses 1; 4 GPUs CFG parallel 2 x Ulysses 2; 8 GPUs CFG parallel 2 x Ulysses 4. TP 1, performance mode speed, no torch.compile, no DiT offload."
-    - "No 1-GPU point: with every component resident, one 80 GB H100 ran out of memory loading the FP32 UMT5 encoder (21.2 GiB) after both BF16 experts (26.62 GiB each)."
+    - "Add an H100 Wan2.2-T2V-A14B baseline on SGLang v0.5.23, by the digest the H3 SGLang rows use: wan22.yaml release-v1, C1 on 4 and 8 GPUs, conditioning cache disabled. --flow-shift 12.0 is a server flag and boundary_ratio 0.875 comes from the checkpoint; the server refuses to start when either differs from the spec."
+    - "Deployment per count, the vLLM-Omni rows' layout: 4 GPUs CFG parallel 2 x Ulysses 2; 8 GPUs CFG parallel 2 x Ulysses 4. TP 1, performance mode speed, no torch.compile, no DiT offload."
+    - "No 1-GPU or 2-GPU point: with every component resident, 80 GB H100s ran out of memory. On 1 GPU the FP32 UMT5 encoder (21.2 GiB) did not load after both BF16 experts (26.62 GiB each). On 2 GPUs at CFG parallel 2 x Ulysses 1 the weights left 6.8 GB free per GPU and the first denoising step failed."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5114
