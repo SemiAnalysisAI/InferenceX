@@ -12964,3 +12964,14 @@
     - "TP2 concurrency 32: enable the AMD monokernel (8 running requests x 6 rows fit its 48-row launch), drop SGLANG_HIP_DSV41_INDEX_K_PAGE8 which the monokernel refuses, lower prefill-decode-interval from 32 to 8, and use the fastokens tokenizer backend (DeepSeek-V4.1 segmented prompt encoding)."
     - "Search space and every other flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5029
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch the draft from Inferact/Kimi-K3.1-Pro-DSpark-preview to the released Inferact/Kimi-K3.1-Pro-DSpark (revision e4e6e626, the revision of its golden acceptance table). The released draft uses GQA sliding-window layers instead of MLA, so the draft attention backend changes from ROCM_AITER_MLA (rejects non-MLA and sliding window) to TRITON_ATTN."
+    - "prefix-match-unit 64 -> 1152 on every point: the draft's sliding-window KV group only matches whole 1152-token blocks, so with 64 vLLM disables fine-grained prefix-cache hits for the whole model and rounds every hit down to the 9216-token scheduler block."
+    - "Concurrency 32 and 48: num_speculative_tokens 3 -> 4, capture sizes regenerated as multiples of 5."
+    - "Same image (kimi-k31-5c14fe8); no other server argument or environment change."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
