@@ -12966,6 +12966,21 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5029
 
 - config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep32-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the Kimi-K3.1-Pro GB300 Dynamo+vLLM AgentX dcp8-disagg and agg configs to vllm/vllm-openai:kimi-k31-mc-dbbc9e3 (vLLM 0.1.dev25356+gdbbc9e310) with Dynamo 229be5cff1 (v1.7.0-kimi-k3.1-pro-dev.1), and add the dep32-disagg config on the same image and Dynamo."
+    - "DEP32 2P1D at concurrency 960: two DEP16 prefill workers and one DEP32 decode, Mooncake scheduler lookups started on arrival (lookup_prefetch_limit 16, lookup_prefetch_ttl_s 30), Mooncake store tail pruning (VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL=1, VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS=1), a 97.7 GB decode KV pool per rank, and the benchmark client on its own node."
+    - "TP8/DCP8: 1P5D at concurrency 44 and 56 replaces 1P3D at 20 and 32; 1P3D stays at 56. Hybrid decode: 2P1D moves from concurrency 192 to 256 and 3P1D moves from concurrency 384 to 448; both run the MegaMoE layers on the DEP EpMoeLayer schedule (VLLM_KIMI_K3_HYBRID_EP_MOE=1) and prune Mooncake store tails."
+    - "Every dcp8-disagg and dep32-disagg worker runs the sparse indexer logits in bfloat16 and their prefill engines use the deep_select top-k backend; dcp8-disagg Mooncake store lookups time out after 60 s and, as on dep32-disagg, start on arrival (lookup_prefetch_limit 16, lookup_prefetch_ttl_s 30)."
+    - "The dcp8-disagg and agg frontends drop router-session-affinity-ttl-secs 1: with one-second session affinity a share of 1P5D decode picks stayed on an engine that was already busy."
+    - "Aggregated TP16/DCP16 at concurrency 1 moves to the new image and Dynamo with no other change."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5069
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp
   scenario-type:
     - agentic-coding
