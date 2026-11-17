@@ -858,9 +858,22 @@ def test_wan22_requires_every_control():
         runner.validate_plan(plan)
 
 
-def test_wan22_has_no_sglang_request_contract():
-    with pytest.raises(ValueError, match="vllm-omni"):
-        runner.preview_plan(wan22_plan(), runtime="sglang")
+def test_wan22_sglang_request_omits_only_the_controls_its_server_binds():
+    plan = wan22_plan()
+    assert runner.preview_plan(plan, runtime="sglang")["slots"][0]["request"] == {
+        "model": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+        "prompt": plan["cases"][0]["prompt"],
+        "seed": 11,
+        "width": 832,
+        "height": 480,
+        "fps": 16,
+        "num_frames": 81,
+        "num_inference_steps": 40,
+        "guidance_scale": 4.0,
+        "guidance_scale_2": 3.0,
+        "negative_prompt": "",
+        "num_outputs_per_prompt": 1,
+    }
 
 
 def test_wan22_vllm_omni_run_sends_every_control_and_keeps_server_metrics(

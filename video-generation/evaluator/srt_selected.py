@@ -14,7 +14,13 @@ from pathlib import Path
 from infx.bench.video import CREDENTIAL_ENV, cell_dir, read_object, window_file, write_json
 from specs import video_spec
 
-from .runner import RUNTIMES, run_plan, validate_plan
+from .runner import (
+    RUNTIMES,
+    SGLANG_WAN22_SERVER_CONTROLS,
+    WAN22_MODEL_ID,
+    run_plan,
+    validate_plan,
+)
 
 RECORDED_ENGINE_ENV = (
     "PYTHONPATH",
@@ -209,6 +215,15 @@ def server_parallelism(runtime: str, argv: list[str]) -> dict:
     }
 
 
+def sglang_wan22_server_controls(model_path: Path, command: list[str]) -> dict:
+    """The Wan2.2 controls an SGLang launch would serve, read where SGLang reads them."""
+    shifts = [value for flag, value in zip(command, command[1:]) if flag == "--flow-shift"]
+    return {
+        "flow_shift": float(shifts[0]) if len(shifts) == 1 else None,
+        "boundary_ratio": read_object(model_path / "model_index.json").get("boundary_ratio"),
+    }
+
+
 def serve(
     plan: dict,
     *,
@@ -233,6 +248,14 @@ def serve(
     snapshot = str(model_path)
     if command.count(snapshot) != 1:
         raise ValueError("the engine command must contain the model snapshot path exactly once")
+    if runtime == "sglang" and plan["model_id"] == WAN22_MODEL_ID:
+        served = sglang_wan22_server_controls(model_path, command)
+        for control in SGLANG_WAN22_SERVER_CONTROLS:
+            if served[control] != plan["generation"][control]:
+                raise ValueError(
+                    f"SGLang would serve {control} {served[control]!r}, "
+                    f"not the plan's {plan['generation'][control]!r}"
+                )
 
     uuids = gpu_devices()
     if len(uuids) != gpus:

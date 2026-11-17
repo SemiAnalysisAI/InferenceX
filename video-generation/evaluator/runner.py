@@ -95,6 +95,9 @@ _WAN22_CONTROLS = {
     "negative_prompt",
 }
 _WAN22_CELL = {"width": 832, "height": 480, "frame_count": 81, "fps": 16}
+# SGLang 297e54fd accepts both as request fields, but its Wan pipeline reads the shift from
+# --flow-shift and the boundary from the checkpoint's model_index.json, so the launch binds them.
+SGLANG_WAN22_SERVER_CONTROLS = ("boundary_ratio", "flow_shift")
 # SGLang has no crf field; it encodes with crf = int((1 - output_compression / 100) * 51).
 SGLANG_OUTPUT_COMPRESSION = {18: 63}
 
@@ -304,10 +307,8 @@ def _slots(plan: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _wan22_payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[str, Any]:
-    if runtime != "vllm-omni":
-        raise ValueError("Wan2.2 plans have a vllm-omni request contract only")
     generation = plan["generation"]
-    return {
+    request = {
         "model": plan["model_id"],
         "prompt": slot["prompt"],
         "seed": slot["seed"],
@@ -323,6 +324,10 @@ def _wan22_payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> 
         "negative_prompt": generation["negative_prompt"],
         "num_outputs_per_prompt": 1,
     }
+    if runtime == "sglang":
+        for control in SGLANG_WAN22_SERVER_CONTROLS:
+            del request[control]
+    return request
 
 
 def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[str, Any]:
