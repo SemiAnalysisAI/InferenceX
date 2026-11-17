@@ -7,6 +7,7 @@ sequence-parallel chunking follow DeepseekV2MLP / DeepseekV2MoE.
 """
 from __future__ import annotations
 
+import json
 import os
 
 import torch
@@ -23,6 +24,8 @@ __all__ = ["IMPLS", "versions"]
 _DTYPES = {"bf16": torch.bfloat16, "fp32": torch.float32}
 _MAX_TOKENS = 65536  # the largest token count in the testlists
 _LAYER = 0
+# the last built layer, reused by the next case of its ladder (same args but tokens)
+_BUILT: dict = {}
 
 
 def _quant(x: dict, w: dict, where: str):
@@ -79,6 +82,18 @@ def _dp_tokens(cache: dict, T: int):
     return cache[T]
 
 
+def _dp_rank() -> int:
+    """This rank's data-parallel group: each group brings its own batch."""
+    from vllm.distributed import get_dp_group
+    return get_dp_group().rank_in_group
+
+
+def _dp_generator(seed: int, device=None):
+    """Generator for this data-parallel group's token draws. Group 0 returns None (draw as before)."""
+    r = _dp_rank()
+    return None if r == 0 else torch.Generator(device=device).manual_seed(seed * 1000 + r)
+
+
 class _SharedMLP(torch.nn.Module):
 
     def __init__(self, hidden: int, inter: int, act: dict, qc, prefix: str, expert_gate=None,
@@ -123,19 +138,21 @@ def _scores(logits: torch.Tensor, scoring: str) -> torch.Tensor:
     return torch.sqrt(torch.nn.functional.softplus(logits))  # sqrtsoftplus
 
 
-def _forced_ids(dist, tokens: int, experts: int, top_k: int, seed: int) -> torch.Tensor:
-    """[tokens, top_k] expert ids with the requested expert-load distribution."""
+def _forced_ids(dist, tokens: int, experts: int, top_k: int, seed: int, dp_rank: int = 0) -> torch.Tensor:
+    """[tokens, top_k] expert ids with the requested expert-load distribution. Data-parallel groups
+    draw their own tokens from the same distribution (group 0 draws as a single group does)."""
     g = torch.Generator().manual_seed(seed)
-    if dist == "balanced":  # round-robin: every expert gets tokens*top_k/experts slots
-        base = torch.arange(tokens * top_k) % experts
+    gr = g if dp_rank == 0 else torch.Generator().manual_seed(seed * 1000 + dp_rank)
+    if dist == "balanced":  # round-robin over all groups' slots: every expert gets tokens*top_k*dp/experts
+        base = (torch.arange(tokens * top_k) + dp_rank * tokens * top_k) % experts
         ids = base.view(tokens, top_k)
-        return ids[:, torch.randperm(top_k, generator=g)]
-    if dist == "single_hot":
-        rest = torch.stack([torch.randperm(experts - 1, generator=g)[: top_k - 1] + 1 for _ in range(tokens)])
+        return ids[:, torch.randperm(top_k, generator=gr)]
+    if dist == "single_hot":  # expert 0 is hot in every group
+        rest = torch.stack([torch.randperm(experts - 1, generator=gr)[: top_k - 1] + 1 for _ in range(tokens)])
         return torch.cat([torch.zeros(tokens, 1, dtype=torch.long), rest], dim=1)
     p = 1.0 / torch.arange(1, experts + 1, dtype=torch.float64) ** dist["s"]  # zipf over expert rank
-    ranked = torch.randperm(experts, generator=g)
-    return ranked[torch.multinomial(p.expand(tokens, -1), top_k, replacement=False, generator=g)]
+    ranked = torch.randperm(experts, generator=g)  # the same expert ranking in every group
+    return ranked[torch.multinomial(p.expand(tokens, -1), top_k, replacement=False, generator=gr)]
 
 
 def _kimi_latent():
@@ -200,12 +217,14 @@ class _MoeBlock(torch.nn.Module):
             g = torch.Generator().manual_seed(routing["seed"])
             self.gate.tid2eid = torch.nn.Parameter(
                 torch.randint(0, E, (sel["vocab"], K), generator=g, dtype=torch.int32), requires_grad=False)
-            self.register_buffer("input_ids", torch.randint(0, sel["vocab"], (_MAX_TOKENS,), generator=g))
+            # tid2eid is the model's table, the same in every group; the token ids are each group's own
+            self.register_buffer("input_ids", torch.randint(0, sel["vocab"], (_MAX_TOKENS,),
+                                                            generator=_dp_generator(routing["seed"]) or g))
         custom = None
         if routing["distribution"] != "natural":
             if sel["kind"] == "hash":
                 raise UnsupportedOpError("a forced expert-load distribution conflicts with hash routing")
-            ids = _forced_ids(routing["distribution"], _MAX_TOKENS, E, K, routing["seed"])
+            ids = _forced_ids(routing["distribution"], _MAX_TOKENS, E, K, routing["seed"], _dp_rank())
             self.register_buffer("forced_ids", ids.to(torch.int32))
             custom = _ForcedRouting(self, rt["scoring"])
         shared, shared_gate, fused_shared = None, None, False
@@ -306,8 +325,8 @@ class _ModelBlock(torch.nn.Module):
         self.fused_shared = None
         self._dp_tokens: dict[int, torch.Tensor | None] = {}
         self.takes_ids = "input_ids" in inspect.signature(module.forward).parameters
-        vocab = get_current_vllm_config().model_config.hf_text_config.vocab_size
-        self.register_buffer("input_ids", torch.randint(0, vocab, (_MAX_TOKENS,), device=device()))
+        self.vocab = get_current_vllm_config().model_config.hf_text_config.vocab_size
+        self.register_buffer("input_ids", torch.randint(0, self.vocab, (_MAX_TOKENS,), device=device()))
 
     def dp_tokens(self, T: int):
         return _dp_tokens(self._dp_tokens, T)
@@ -384,19 +403,24 @@ def _generic_block(a: dict, prefix: str) -> _MoeBlock:
     return block
 
 
-def _prepare_moe(op: Op) -> dict:
+def resident() -> bool:
+    return "block" in _BUILT
+
+
+def forget() -> None:
+    """Drop the cached MoE layer (another op's layer is being built)."""
+    if _BUILT:
+        _BUILT.clear()
+        _release_previous()
+
+
+def _build_moe(a: dict) -> dict:
+    """Build the layer once per ladder: weights, quantization and kernel choice do not depend
+    on the token count (the routing buffers cover the largest)."""
     global _LAYER
-    a = op.args
-    if a.get("out", "bf16") != "bf16":
-        raise UnsupportedOpError("vLLM MoE layers return bf16")
-    if a["tokens"] > _MAX_TOKENS:
-        raise UnsupportedOpError(f"tokens > {_MAX_TOKENS} is not wired")
     routing = a.get("routing") or {"distribution": "natural", "seed": 0}
-    engine.context(a.get("parallel"))
-    _release_previous()
-    import vllm.envs as envs
     torch.manual_seed(routing["seed"])
-    _LAYER += 1  # vLLM registers layers by name; each op builds a fresh one
+    _LAYER += 1  # vLLM registers layers by name; each layer is built fresh
     prefix = f"model.layers.{_LAYER}.mlp"
     with ranks.together("build this layer"):
         prev = torch.get_default_dtype()
@@ -416,11 +440,37 @@ def _prepare_moe(op: Op) -> dict:
         kernels = _describe(block)
         if any("Emulation" in str(v) for e in kernels.values() for v in e.values()):
             raise UnsupportedOpError(f"vLLM has only an emulation kernel for this MoE layer here: {kernels}")
+    return {"block": block, "kernels": kernels}
+
+
+def _prepare_moe(op: Op) -> dict:
+    a = op.args
+    if a.get("out", "bf16") != "bf16":
+        raise UnsupportedOpError("vLLM MoE layers return bf16")
+    if a["tokens"] > _MAX_TOKENS:
+        raise UnsupportedOpError(f"tokens > {_MAX_TOKENS} is not wired")
+    routing = a.get("routing") or {"distribution": "natural", "seed": 0}
+    engine.context(a.get("parallel"))
+    import vllm.envs as envs
+    key = json.dumps({k: v for k, v in a.items() if k != "tokens"}, sort_keys=True)
+    if _BUILT.get("key") != key:
+        vllm_linear.BUILT.clear()
+        _BUILT.clear()
+        _release_previous()
+        try:
+            _BUILT.update(key=key, **_build_moe(a))
+        except UnsupportedOpError as e:  # the rest of the ladder is unsupported for the same reason
+            _BUILT.update(key=key, unsupported=str(e))
+            raise
+    if "unsupported" in _BUILT:
+        raise UnsupportedOpError(_BUILT["unsupported"])
+    block, kernels = _BUILT["block"], _BUILT["kernels"]
     # the tokens of one data-parallel group, identical on its tensor-parallel ranks
-    from vllm.distributed import get_dp_group
-    g = torch.Generator(device=device()).manual_seed(routing["seed"] * 1000 + get_dp_group().rank_in_group)
+    g = torch.Generator(device=device()).manual_seed(routing["seed"] * 1000 + _dp_rank())
     x = torch.randn(a["tokens"], a["hidden"], device=device(), dtype=torch.bfloat16, generator=g)
-    ctx = {"layer": block, "x": x,
+    if isinstance(block, _ModelBlock) and _dp_rank():  # and their own token ids
+        block.input_ids.random_(0, block.vocab, generator=_dp_generator(routing["seed"], device()))
+    ctx = {"layer": block, "x": x, "generator": g,
            "meta": {"vllm_modules": kernels, "fused_shared_experts": block.fused_shared,
                     "sequence_parallel_moe": block.sequence_parallel,
                     "model_module": type(block.module).__name__ if isinstance(block, _ModelBlock) else None,

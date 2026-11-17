@@ -15,16 +15,16 @@ on:
           - cluster:gb200-nv
           - cluster:gb300-nv
           - cluster:mi300x-amd
-          - cluster:mi325x-amds
+          - cluster:mi325x-amd
           - cluster:mi355x-amds
       backends:
         description: Comma-separated backends (vllm GEMM; AMD also torch GEMM)
         type: string
         default: vllm
       testlists:
-        description: Comma-separated testlist stems
+        description: Comma-separated testlist stems (a run is ingested only if every list is in testlists/official/)
         type: string
-        default: gemm
+        default: gemm_perf
       mode:
         description: timing (latency, telemetry, profiler replay) or counters (per-kernel ncu / rocprofv3 counters; latencies perturbed)
         type: choice
@@ -35,9 +35,9 @@ on:
         type: string
         default: '1'
       chunk_size:
-        description: Maximum shapes per shard (1-500)
+        description: Maximum shapes per shard (1-4000; shards also stop at about 30 min of estimated work)
         type: number
-        default: 500
+        default: 4000
       recovery_run_id:
         description: Optional recent OperatorX run on this runner whose failed cleanup should be retried
         type: string
@@ -70,6 +70,7 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       priority: ${{ steps.plan.outputs.priority }}
+      ingestable: ${{ steps.plan.outputs.ingestable }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -80,11 +81,11 @@ jobs:
         env:
           OPERATORX_RUNNER: ${{ inputs.runner || 'cluster:h100-dsxe' }}
           OPERATORX_BACKENDS: ${{ inputs.backends || 'vllm' }}
-          OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm' }}
+          OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm_perf' }}
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
           OPERATORX_MODE: ${{ inputs.mode || 'timing' }}
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
-          OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '500' }}
+          OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '4000' }}
           PYTHONPATH: .:inferencex-e2e
         run: |
           set -eo pipefail
@@ -105,6 +106,16 @@ jobs:
               || { echo 'Recovery requires a numeric run ID and a single-shard selection' >&2; exit 1; }
           fi
           echo "matrix=$(cat operatorx-matrix.json)" >> "$GITHUB_OUTPUT"
+          # only runs whose every testlist is in testlists/official/ are ingested
+          ingestable=true
+          IFS=, read -ra lists <<<"$OPERATORX_TESTLISTS"
+          for t in "${lists[@]}"; do
+            if [ ! -f "operatorx/testlists/official/$t.json" ]; then
+              ingestable=false
+              echo "::notice::$t is not an official testlist; this run's results will not be ingested"
+            fi
+          done
+          echo "ingestable=$ingestable" >> "$GITHUB_OUTPUT"
           scored=$(printf '%s' '[{"runner":"operatorx","framework":"operatorx"}]' |
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml python -m infx.workflows.ci_priority)
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
@@ -255,9 +266,10 @@ jobs:
   trigger-ingest:
     name: Trigger OperatorX database ingest
     if: >-
-      always() && github.event_name == 'workflow_dispatch' && inputs.ingest &&
+      !cancelled() && github.event_name == 'workflow_dispatch' && inputs.ingest &&
+      needs.setup.outputs.ingestable == 'true' &&
       (needs.summarize.result == 'success' || needs.summarize.result == 'failure')
-    needs: [summarize]
+    needs: [setup, summarize]
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch ingest to the app repository
