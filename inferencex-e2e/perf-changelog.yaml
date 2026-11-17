@@ -12643,3 +12643,10 @@
   description:
     - Run the MINI-validated K3 AL2.88 SimpleCPU and MoRIIO WRITE 1P1D c144 contract on SA with decode max sequences 144, a 576-token full graph, GMU 0.92, and disabled decode Torch allocator headroom. Preserve the SA model cache, tokenizer, verbs library, and setup paths while keeping the image, topology, compute settings, warmup, error threshold, and 3600-second profiling contract aligned.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-sa-1p2d-c128-dcap64
+    - kimik31-sa-1p2d-c24-dcap16
+  description:
+    - Add two SA 1P2D decode-admission candidates while preserving each point's existing image, Router, SimpleCPU/MoRIIO WRITE, topology, K3 AL2.88 and formal AgentX contract. At global c128 cap each decode at 64 sequences with full graphs through 256 verification tokens; at global c24 cap each decode at 16 sequences with full graphs through 64 tokens. Both retain a 32-step prefill scheduling cadence and no-escape behavior.
+  pr-link: XXX

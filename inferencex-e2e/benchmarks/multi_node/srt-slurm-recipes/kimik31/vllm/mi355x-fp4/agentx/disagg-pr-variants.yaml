@@ -325,6 +325,23 @@ override_1p2d_c24_router:
         max-num-seqs: 32
         max-num-batched-tokens: 128
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":128,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64,72,80,88,96,104,112,120,128]}'
+
+override_1p2d_c24_cap16_cadence32_router:
+  name: k31-pr-1p2d-c24-cap16-cadence32
+  setup_script: k31-pr-router-image.sh
+  frontend:
+    container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:3325e71ce47fb1829b2ace830883e54dd1ef89c4529dc43be7045f2621fe55c1
+  roles:
+    decode:
+      nodes: 2
+      workers: 2
+      args:
+        max-num-seqs: 16
+        max-num-batched-tokens: 64
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":64,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64]}'
+        prefill-schedule-interval: 32
+      env:
+        VLLM_PREFILL_CADENCE_NO_ESCAPE: '1'
 override_1p2d_c48_router:
   name: k31-pr-1p2d-c48
   setup_script: k31-pr-router-image.sh

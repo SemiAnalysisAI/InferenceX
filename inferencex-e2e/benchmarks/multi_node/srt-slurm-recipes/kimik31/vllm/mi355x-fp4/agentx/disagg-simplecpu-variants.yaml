@@ -338,3 +338,17 @@ override_1p2d_c128:
         max-num-seqs: 80
         max-num-batched-tokens: 320
         compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":320,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64,72,80,88,96,104,112,120,128,160,176,192,208,224,240,256,288,320]}'
+
+override_1p2d_c128_cap64_cadence32:
+  name: k31-1p2d-c128-cap64-cadence32
+  roles:
+    decode:
+      nodes: 2
+      workers: 2
+      args:
+        max-num-seqs: 64
+        max-num-batched-tokens: 256
+        compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":256,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64,72,80,88,96,104,112,120,128,160,176,192,208,224,240,256]}'
+        prefill-schedule-interval: 32
+      env:
+        VLLM_PREFILL_CADENCE_NO_ESCAPE: '1'
