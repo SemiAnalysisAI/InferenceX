@@ -12964,3 +12964,13 @@
     - "TP2 concurrency 32: enable the AMD monokernel (8 running requests x 6 rows fit its 48-row launch), drop SGLANG_HIP_DSV41_INDEX_K_PAGE8 which the monokernel refuses, lower prefill-decode-interval from 32 to 8, and use the fastokens tokenizer backend (DeepSeek-V4.1 segmented prompt encoding)."
     - "Search space and every other flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5029
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Add c24 with the KV cache on the GPUs: DSpark 7, max-num-seqs 48, batch-sharded sampling."
+    - "Add c48, c56, c68 and c72 on the SimpleCPUOffloadConnector tier (1349 GB, LRU eviction). c68 and c72 run DSpark 3 at 0.90 GPU memory utilization, as c64. c48 and c56 run twice: DSpark 7 at 0.85 (as c32) and DSpark 3 at 0.90 (as c64). Admission stays 2x CONC."
+    - "The image and the existing c1-c16, c32 and c64 points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  append-only: true

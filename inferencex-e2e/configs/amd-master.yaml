@@ -970,8 +970,13 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.90
       search-space:
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 24], srt-recipe: agentic.yaml }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64, 68, 72], srt-recipe: agentic.yaml }
+      # c48 and c56 run with both DSpark 7 and DSpark 3; each row selects one variant.
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [48], srt-recipe: "agentic.yaml:zip_override_tp4_offload_dspark7[0]" }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [56], srt-recipe: "agentic.yaml:zip_override_tp4_offload_dspark7[1]" }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [48], srt-recipe: "agentic.yaml:zip_override_tp4_offload_dspark3[0]" }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [56], srt-recipe: "agentic.yaml:zip_override_tp4_offload_dspark3[1]" }
 
 kimik3.1-fp4-mi355x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:kimi-k31-5c14fe8@sha256:a61996b4c270ec09111802f62b44f5c20ad4cb73068be022b2804a287b924b9a
