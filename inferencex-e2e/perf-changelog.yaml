@@ -12953,4 +12953,4 @@
     - "Sweep 1P1D c1 (7 draft tokens), 1P3D c20 and c48, 1P2D c64, 2P3D c264 and 4P5D c660 (4 draft tokens). The 2P3D and 4P5D points admit up to 128 decode requests at 0.98 of GPU memory."
     - "At 2P3D c264 and 4P5D c660 the Mooncake store keeps the tail pages a request loaded and drops the older tails it consumed (VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL=1, VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS=1), and store lookups start before admission (lookup_prefetch_limit 16, lookup_prefetch_ttl_s 30)."
     - "4P5D c660 also computes the sparse-attention indexer logits in BF16 on prefill and decode (attention-config indexer_logits_dtype bfloat16), selects the indexer top-k with deep_select on prefill (kernel-config sparse_indexer_topk_backend deep_select), and has the Mooncake master evict 2% of the store per round (--eviction_ratio=0.02 instead of 0.10)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5108
