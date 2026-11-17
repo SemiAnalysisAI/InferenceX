@@ -163,11 +163,13 @@ def test_selected_server_requires_the_recipe_gpus_and_runtime(tmp_path, monkeypa
 @pytest.mark.parametrize(
     ("runtime", "flow_shift", "boundary_ratio", "message"),
     [
-        ("sglang", "12.0", 0.875, None),
-        ("sglang", "5.0", 0.875, "flow_shift 5.0"),
-        ("sglang", None, 0.875, "flow_shift None"),
-        ("sglang", "12.0", 0.9, "boundary_ratio 0.9"),
-        ("vllm-omni", None, 0.9, None),
+        ("sglang", ["--flow-shift", "12.0"], 0.875, None),
+        ("sglang", ["--flow_shift=12.0"], 0.875, None),
+        ("sglang", ["--flow-shift", "5.0"], 0.875, "flow_shift 5.0"),
+        ("sglang", [], 0.875, "flow_shift None"),
+        ("sglang", ["--flow-shift", "12.0", "--flow_shift", "5.0"], 0.875, "flow_shift None"),
+        ("sglang", ["--flow-shift", "12.0"], 0.9, "boundary_ratio 0.9"),
+        ("vllm-omni", [], 0.9, None),
     ],
 )
 def test_sglang_wan22_launch_must_serve_the_controls_its_requests_omit(
@@ -182,7 +184,7 @@ def test_sglang_wan22_launch_must_serve_the_controls_its_requests_omit(
     executed = []
     monkeypatch.setattr(srt_selected.os, "execvpe", lambda file, argv, env: executed.append(argv))
     monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/engine:v1@sha256:" + "b" * 64)
-    command = ["engine", "serve", str(model)] + (["--flow-shift", flow_shift] if flow_shift else [])
+    command = ["engine", "serve", str(model), *flow_shift]
 
     def serve():
         srt_selected.serve(

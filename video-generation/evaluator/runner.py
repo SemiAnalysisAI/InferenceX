@@ -160,6 +160,20 @@ def valid_numerical_identity(identity: Any, runtime_revision: str) -> bool:
     )
 
 
+def sglang_flow_shift(argv: list[str]) -> float | None:
+    """The UniPC shift an SGLang command sets, or None unless exactly one flag sets it.
+
+    SGLang's parser reads `_` as `-` in a flag name, takes `--flag value` or `--flag=value`,
+    and lets a repeated flag override, so every spelling counts.
+    """
+    values = []
+    for part, following in zip(argv, [*argv[1:], ""]):
+        flag, equals, value = part.partition("=")
+        if flag.startswith("--") and flag[2:].replace("_", "-") == "flow-shift":
+            values.append(value if equals else following)
+    return float(values[0]) if len(values) == 1 else None
+
+
 def requested_encoding(plan: dict[str, Any]) -> dict[str, Any] | None:
     return plan["fairness"]["encoding"] if schema_version(plan) == 2 else None
 
@@ -784,6 +798,15 @@ def run_plan(
                 "numerical_identity must contain a complete matching server configuration"
             )
         canonical_json_bytes(numerical_identity)
+    if runtime == "sglang" and frozen["model_id"] == WAN22_MODEL_ID:
+        # These requests omit the shift, so only the recorded launch shows which one was served.
+        if numerical_identity is None or (
+            sglang_flow_shift(numerical_identity["server_argv"])
+            != frozen["generation"]["flow_shift"]
+        ):
+            raise ValueError(
+                "SGLang Wan2.2 runs need a sealed server launch whose --flow-shift equals the plan"
+            )
     _positive(timeout_seconds, "timeout_seconds", maximum=86400)
     safe_endpoint, parts, api_path = _endpoint(endpoint)
     credential = None
