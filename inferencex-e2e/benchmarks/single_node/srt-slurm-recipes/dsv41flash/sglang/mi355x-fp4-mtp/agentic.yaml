@@ -31,11 +31,9 @@ base:
         cuda-graph-backend-prefill: disabled
         reasoning-parser: auto
         tool-call-parser: auto
-        # Same token ids as the Hugging Face backend; a 170k-token prompt tokenizes in a few ms
-        # instead of ~0.3 s on the tokenizer manager's event loop.
+        # Same token ids as Hugging Face, ~0.3 s less TTFT on a 170k-token prompt.
         tokenizer-backend: fastokens
-        # AgentX sends text only; PIL skips the V4.1 Rust image processor, whose build
-        # lock on the shared cache hung one DP rank at startup in CI.
+        # Text-only load; the Rust image processor's build lock hung a DP rank in CI.
         image-processor-backend: pil
         # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
@@ -66,9 +64,8 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
-# One variant per point; the saturation point gets a longer warmup drain. A longer
-# prefill-decode interval trades TTFT for P90 ITL. amd-master.yaml runs TP2 through c64,
-# TP4 through c16; DP2 covers c64 and c128, DP2 EP2 c128 and DP4 EP4 c128 and c256.
+# One variant per point; a longer prefill-decode interval trades TTFT for P90 ITL. TP2 runs
+# through c64, TP4 through c16; DP2 covers c64 and c128, DP2 EP2 c128, DP4 EP4 c128 and c256.
 override_tp2_c1:
   roles:
     agg:
@@ -114,8 +111,7 @@ override_tp2_c4:
         prefill-decode-interval: 192
         schedule-policy: lpm
         swa-prefix-tails: 256
-        # AgentX lanes idle between turns and decode in bursts; queueing a burst past
-        # the cap keeps every stream at small-batch step time.
+        # Decode bursts past the cap queue instead of widening the step.
         max-running-requests: 1
         monokernel-backend: amd
   benchmark:
@@ -313,7 +309,6 @@ override_tp2_c128_dp_ep:
         max-running-requests: 128
       env:
         SGLANG_SHARED_EXPERT_TP1: '1'
-        # The replicated shared expert runs on the local rows before the DP gather.
         SGLANG_DP_SHARED_EXPERT_LOCAL: '1'
         SGLANG_DP_USE_GATHERV: '1'
         SGLANG_DP_USE_REDUCE_SCATTER: '1'
@@ -403,8 +398,7 @@ override_tp4_c256_dp_ep:
         chunked-prefill-size: 65536
         prefill-decode-interval: 40
         schedule-policy: shortest-prefill-first
-        # Idle AgentX sessions outlive 4096 SWA tails per rank; their prefixes were then
-        # recomputed whole, about a fifth of c256's prefill work.
+        # 4096 tails evicted idle sessions' prefixes, ~20% of prefill was recompute.
         swa-prefix-tails: 12288
         max-running-requests: 256
         cuda-graph-max-bs-decode: 128
