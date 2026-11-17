@@ -12964,3 +12964,13 @@
     - "TP2 concurrency 32: enable the AMD monokernel (8 running requests x 6 rows fit its 48-row launch), drop SGLANG_HIP_DSV41_INDEX_K_PAGE8 which the monokernel refuses, lower prefill-decode-interval from 32 to 8, and use the fastokens tokenizer backend (DeepSeek-V4.1 segmented prompt encoding)."
     - "Search space and every other flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5029
+
+- config-keys:
+    - musespark-fp4-mi355x-tokenspeed-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open MXFP4 MI355X AgentX on TokenSpeed with the DFlash2 draft as it ships (BF16, seven draft tokens), FP8 KV cache, 1M context and 8K prefill chunks. Attention TP8 with MoE TP8/EP1 and decode-monokernel on, no host KV store: running-request cap 1 at concurrency 1; cap 2 with prefill/decode interval 384 at 2, 4, 8, 10 and 16; cap 1 with interval 384 at 6; cap 8 with interval 256 at 28; stream interval 50, 40 and 20 at 6, 10 and 28. Attention TP4 with EP4 on four GPUs at concurrency 28, 36 and 40: regular decode path, running-request caps 56, 72 and 80, prefill/decode interval 96 with minimum interval 48, short-prefill-first, a 250 GB per GPU host KV store and stream interval 20."
+    - "Pin the TokenSpeed 0.1.1.post20261117, ROCm 7.2 kernel 0.1.5.post20261117, kernel-amd 0.1.4.post20261117 and engine 0.1.1.post20261117 wheels by release URL and SHA256, scheduler 0.1.58, tokenspeed-smg 1.16.0.post20261115, the runner image by digest, and the checkpoint and DFlash2 draft revisions. Add tokenspeed-nightly-rocm.sh, which keeps the image's ROCm torch."
+    - "Select golden DFlash2 acceptance and the greedy sampler for TokenSpeed DFLASH throughput; evals verify for real with the triton sampler and speculative sampling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5103
