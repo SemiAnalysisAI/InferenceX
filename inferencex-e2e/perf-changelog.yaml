@@ -13114,4 +13114,4 @@
     - "Every monokernel point (c1 at TP1, TP2 and TP4, c2) sets SGLANG_AMD_MONO_QWEN38_DRAFT_HEAD_FP8=0: patch 10 otherwise runs the MTP draft's lm_head on an FP8 copy, and the draft runs at its shipped precision. No patch lowers the dtype of a weight or an activation."
     - "Remove default-chat-template-kwargs (enable_thinking false): the server applies the chat template's default, the thinking mode of the acceptance length the harness injects."
     - "Search space and every other flag are unchanged: TP1 concurrency 1, 2, 12 and 24 from GPU KV, c1 at TP2 and TP4, TP1 48 and 80 with HiCache DRAM KV offload (299 GB share, hicache-size 298)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
