@@ -28,6 +28,13 @@
 #   - 10 amd-asalykov/sgl-amd-mono asalykov/qfn-mono-tp (afbb25a457009d): the updated Qwen3.8-Flash-Next
 #                      monokernel (QSA index chain, stage placement, TP 1 / 2 / 4 launches), the
 #                      qwen38_flash_next package and the common/ops.py and common/sync.py it needs
+#   Opt-in kernels (each off unless the recipe sets its SGLANG_AMD_* variable; the header of each
+#   file names its upstream PR and head commit, and how the patch differs)
+#   - 11 sglang#48625  grouped QSA verify scoring (carries sglang#46631), SGLANG_AMD_QSA_GROUPED_VERIFY
+#   - 12 aiter#7556    FlyDSL QSA sparse prefill kernels, written into the installed AITER wheel
+#   - 13 sglang#51179  their SGLang wiring, SGLANG_AMD_QSA_FLYDSL_PREFILL
+#   - 14 sglang#49852  MXFP4 MoE intermediate kept 128-aligned at MoE TP 1, SGLANG_AMD_MXFP4_PAD128
+#   - 15 sglang#50863  Triton HC prefill path, SGLANG_AMD_HC_PREFILL
 # The image already has the original monokernel (--enable-amd-monokernel; patch 10 updates it), the AITER topk_gating router
 # (sglang#40708), ratio-3 GDN packing (sglang#44302) and the 128-row hc_mix (sglang#41880), so
 # none of them is patched. All Python. A wheel that does not install, or a patch that no longer
@@ -89,6 +96,8 @@ for module in (
         sys.exit(f"qwen3.8next: {module} is missing from amd-aiter {have}")
 print(f"qwen3.8next aiter wheel installed: amd-aiter {have}, flydsl {metadata.version('flydsl')}, from {spec.origin}")
 PY
+# Patch 12 changes files of the installed wheel, under the site-packages directory that holds aiter.
+site="$(python3 -c 'import aiter, pathlib; print(pathlib.Path(aiter.__file__).resolve().parents[1])')"
 
 apply() {
     git -c safe.directory="*" -C "$1" apply "$patches/$2"
@@ -105,6 +114,11 @@ apply /sgl-workspace/sglang 07-sglang-44103-aiter-gdn-chunked-prefill.patch
 apply /sgl-workspace/sglang 08-sglang-48090-mtp-sparse-rejection-target-probs.patch
 apply /sgl-workspace/sglang 09-sglang-50024-qwen4-packed-fp8-gdn-in-proj.patch
 apply /sgl-workspace/sgl-amd-mono 10-sgl-amd-mono-qfn-mono-tp-afbb25a.patch
+apply /sgl-workspace/sglang 11-sglang-48625-qsa-grouped-verify.patch
+apply "$site" 12-aiter-7556-qsa-flydsl-sparse-prefill.patch
+apply /sgl-workspace/sglang 13-sglang-51179-qsa-flydsl-prefill.patch
+apply /sgl-workspace/sglang 14-sglang-49852-mxfp4-moe-pad128.patch
+apply /sgl-workspace/sglang 15-sglang-50863-hc-prefill-triton.patch
 
 # The monokernel patch must be the code python imports (an editable install of the checkout).
 python3 - <<'PY'

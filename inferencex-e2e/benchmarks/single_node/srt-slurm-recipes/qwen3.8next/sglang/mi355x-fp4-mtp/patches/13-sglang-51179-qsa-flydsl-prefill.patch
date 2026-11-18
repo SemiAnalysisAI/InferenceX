@@ -1,0 +1,234 @@
+# QSA sparse prefill (extend) attention on ROCm/aiter#7556's FlyDSL kernels (gfx950)
+# https://github.com/sgl-project/sglang/pull/51179  (PR head 0b07ed821f: the scheme rebuilt on main;
+# its switch is SGLANG_ROCM_QSA_FLYDSL_PREFILL)
+# Generated against the image's SGLang checkout (1ced9a9eb0) with patches 01-12 applied; source files only (tests dropped).
+# Opt-in SGLANG_AMD_QSA_FLYDSL_PREFILL: 0 (default) keeps Triton, 1 makes one call over all KV heads, perhead one call
+# per KV head. The backend warm-up compiles the kernels for the model's geometry at start-up; any unsupported case stays
+# on Triton and is logged once.
+# Apply in /sgl-workspace/sglang with git apply.
+
+diff --git a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
+index 70a40f6..eaf8c4d 100644
+--- a/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
++++ b/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py
+@@ -8,6 +8,7 @@ from __future__ import annotations
+ 
+ import logging
+ import math
++import os
+ from copy import copy
+ from functools import lru_cache
+ from typing import Dict, Optional, Tuple
+@@ -67,6 +68,16 @@ logger = logging.getLogger(__name__)
+ 
+ _TRTLLM_SPARSE_PAGE_SIZE = 64
+ 
++# The non-CP extend attention through aiter#7556's FlyDSL sparse
++# prefill (gfx950), opt-in: 0 keeps Triton, 1 makes one call over all KV heads,
++# perhead one call per KV head.
++_AMD_QSA_FLYDSL_PREFILL = os.environ.get("SGLANG_AMD_QSA_FLYDSL_PREFILL", "0")
++_FLYDSL_PREFILL_MODES = ("0", "1", "perhead")
++# Reasons a FlyDSL prefill stayed on Triton, each logged once.
++_FLYDSL_PREFILL_FALLBACKS: set = set()
++# Attention geometries whose FlyDSL prefill kernels this process has warmed.
++_FLYDSL_PREFILL_WARMED: set = set()
++
+ 
+ @lru_cache(maxsize=1)
+ def _resolve_trtllm_sparse_decode():
+@@ -100,6 +111,28 @@ def _resolve_flydsl_sparse_decode():
+     return qsa_flydsl
+ 
+ 
++@lru_cache(maxsize=1)
++def _resolve_flydsl_sparse_prefill():
++    """aiter#7556's gfx950 FlyDSL sparse prefill module, or None when unavailable."""
++    if not is_gfx95_supported():
++        return None
++    try:
++        from aiter.ops.flydsl import qsa_sparse_prefill
++    except ImportError:
++        logger.warning(
++            "SGLANG_AMD_QSA_FLYDSL_PREFILL is set but "
++            "aiter.ops.flydsl.qsa_sparse_prefill is unavailable"
++        )
++        return None
++    return qsa_sparse_prefill
++
++
++def _log_flydsl_prefill_fallback(reason: str) -> None:
++    if reason not in _FLYDSL_PREFILL_FALLBACKS:
++        _FLYDSL_PREFILL_FALLBACKS.add(reason)
++        logger.warning("amd qsa flydsl prefill: stays on Triton: %s", reason)
++
++
+ @lru_cache(maxsize=1)
+ def _resolve_flash_attn_varlen_func():
+     from sglang.srt.utils import is_hip, is_sm121
+@@ -297,6 +330,13 @@ class QwenSparseAttnBackend(AttentionBackend):
+         # (layer_id, k_full, v_full) of the prefill-CP K/V gather prefetch_cp_kv
+         # started; that layer's _forward_extend_cp joins it.
+         self._cp_kv_pending: Optional[Tuple[int, torch.Tensor, torch.Tensor]] = None
++        if _AMD_QSA_FLYDSL_PREFILL not in _FLYDSL_PREFILL_MODES:
++            raise ValueError(
++                f"SGLANG_AMD_QSA_FLYDSL_PREFILL must be one of "
++                f"{_FLYDSL_PREFILL_MODES}, got {_AMD_QSA_FLYDSL_PREFILL!r}"
++            )
++        if _AMD_QSA_FLYDSL_PREFILL != "0":
++            self._warm_flydsl_prefill()
+ 
+     @staticmethod
+     def _is_speculative_paged_mode(forward_mode) -> bool:
+@@ -1479,6 +1519,114 @@ class QwenSparseAttnBackend(AttentionBackend):
+             new_kv=(k, v, loc, width),
+         )
+ 
++    def _try_flydsl_prefill(
++        self, q, k, v, indices, query_lens, prefix_lens, scale
++    ) -> Optional[torch.Tensor]:
++        """aiter#7556's sparse prefill of the operands the Triton path takes, or None
++        to keep Triton: the op unavailable, an operand rule it names, or a stream
++        capture (the op refuses to plan a new layout while capturing)."""
++        op = _resolve_flydsl_sparse_prefill()
++        if op is None:
++            return None
++        kwargs = dict(
++            query_lens=tuple(query_lens),
++            prefix_lens=tuple(prefix_lens),
++            softmax_scale=scale,
++        )
++        calls = [(q, k, v)]
++        kv_heads = k.shape[1]
++        if _AMD_QSA_FLYDSL_PREFILL == "perhead" and kv_heads > 1:
++            if q.shape[1] % kv_heads:
++                _log_flydsl_prefill_fallback(
++                    "the per-head split needs whole Q head groups per KV head"
++                )
++                return None
++            # Q's head group copied contiguous; K/V as strided one-head views.
++            group = q.shape[1] // kv_heads
++            calls = [
++                (
++                    q[:, h * group : (h + 1) * group].contiguous(),
++                    k[:, h : h + 1],
++                    v[:, h : h + 1],
++                )
++                for h in range(kv_heads)
++            ]
++        for call in calls:
++            problem = op.qsa_sparse_prefill_problem(*call, indices, **kwargs)
++            if problem is not None:
++                _log_flydsl_prefill_fallback(problem)
++                return None
++        if torch.cuda.is_current_stream_capturing():
++            _log_flydsl_prefill_fallback("stream capture")
++            return None
++        outputs = [
++            op.flydsl_qsa_sparse_prefill(*call, indices, **kwargs) for call in calls
++        ]
++        return outputs[0] if len(outputs) == 1 else torch.cat(outputs, dim=1)
++
++    def _warm_flydsl_prefill(self) -> None:
++        """Compile the FlyDSL prefill kernels of each attention geometry of the model
++        once per process, so that no served prefill compiles them."""
++        from sglang.srt.layers.radix_attention import RadixAttention
++
++        op = _resolve_flydsl_sparse_prefill()
++        model = getattr(self.runner, "model", None)
++        if (
++            op is None
++            or model is None
++            or self.qsa_profile is None
++            or self.device is None
++        ):
++            logger.warning(
++                "amd qsa flydsl prefill: no warm-up (op %s, model %s, QSA profile "
++                "%s, device %s); a served prefill compiles each kernel it first uses",
++                op is not None,
++                model is not None,
++                self.qsa_profile is not None,
++                self.device,
++            )
++            return
++        width = self.qsa_profile.budget + self.qsa_profile.compress_ratio - 1
++        geometries = {
++            (m.tp_q_head_num, m.tp_k_head_num, m.qk_head_dim, m.scaling)
++            for m in model.modules()
++            if isinstance(m, RadixAttention)
++        }
++        for heads, kv_heads, head_dim, scale in sorted(geometries):
++            key = (_AMD_QSA_FLYDSL_PREFILL, heads, kv_heads, head_dim, scale, width)
++            if key in _FLYDSL_PREFILL_WARMED:
++                continue
++            _FLYDSL_PREFILL_WARMED.add(key)
++            # The op's warm-up plans for the head counts of one call.
++            split = kv_heads if _AMD_QSA_FLYDSL_PREFILL == "perhead" else 1
++
++            def run(q, indices, query_lens, prefix_lens):
++                q = q.repeat(1, split, 1)
++                k = q.new_zeros(q.shape[0], kv_heads, head_dim)
++                output = self._try_flydsl_prefill(
++                    q, k, torch.zeros_like(k), indices, query_lens, prefix_lens, scale
++                )
++                return output is not None
++
++            warmed = op.qsa_sparse_prefill_warmup(
++                run,
++                num_q_heads=heads // split,
++                num_kv_heads=kv_heads // split,
++                selection_width=width,
++                device=self.device,
++            )
++            logger.info(
++                "amd qsa flydsl prefill %s: warmed q_heads=%d kv_heads=%d "
++                "head_dim=%d scale=%s width=%d layouts=%s",
++                _AMD_QSA_FLYDSL_PREFILL,
++                heads,
++                kv_heads,
++                head_dim,
++                scale,
++                width,
++                warmed,
++            )
++
+     def forward_extend(
+         self,
+         q: torch.Tensor,
+@@ -1547,6 +1695,18 @@ class QwenSparseAttnBackend(AttentionBackend):
+             (1, 0),
+         ).contiguous()
+         if not any(prefix_lens):
++            if _AMD_QSA_FLYDSL_PREFILL != "0":
++                output = self._try_flydsl_prefill(
++                    q.contiguous(),
++                    k[:num_valid_rows].contiguous(),
++                    v[:num_valid_rows].contiguous(),
++                    topk_indices,
++                    extend_lens,
++                    prefix_lens,
++                    layer.scaling,
++                )
++                if output is not None:
++                    return self._pad_extend_output(output, num_output_rows)
+             output = sparse_gqa_fwd_interface_triton(
+                 q.contiguous(),
+                 k[:num_valid_rows].contiguous(),
+@@ -1574,6 +1734,18 @@ class QwenSparseAttnBackend(AttentionBackend):
+             max_k=max(sequence_lens, default=1),
+             output_dtype=q.dtype,
+         )
++        if _AMD_QSA_FLYDSL_PREFILL != "0":
++            output = self._try_flydsl_prefill(
++                q.contiguous(),
++                packed_k,
++                packed_v,
++                topk_indices,
++                extend_lens,
++                prefix_lens,
++                layer.scaling,
++            )
++            if output is not None:
++                return self._pad_extend_output(output, num_output_rows)
+         output = sparse_gqa_fwd_interface_triton_ck(
+             q.contiguous(),
+             packed_k,

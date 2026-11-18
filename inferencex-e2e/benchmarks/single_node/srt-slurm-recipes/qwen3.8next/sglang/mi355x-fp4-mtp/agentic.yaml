@@ -23,6 +23,12 @@ base:
   # the image's sgl-amd-mono (the monokernel, an editable install at /sgl-workspace/sgl-amd-mono)
   # with the updated Qwen3.8-Flash-Next monokernel of amd-asalykov/sgl-amd-mono, branch
   # asalykov/qfn-mono-tp (afbb25a457009d), which serves TP 1, 2 and 4.
+  # Patches 11-15 add opt-in kernels that the points below turn on with SGLANG_AMD_*
+  # variables; each patch's header names its upstream PR: 11 grouped QSA verify scoring
+  # (sgl-project/sglang#48625), 12 and 13 the FlyDSL QSA sparse prefill (ROCm/aiter#7556's
+  # kernels, which patch 12 writes into the installed wheel, and their SGLang wiring,
+  # sgl-project/sglang#51179), 14 the MXFP4 MoE 128-column padding (sgl-project/sglang#49852)
+  # and 15 the Triton HC prefill path (sgl-project/sglang#50863).
   # The patch files are in patches/ next to this recipe.
   setup_script: qwen3.8next-rocm10-patches.sh
   environment:
@@ -56,7 +62,6 @@ base:
         scheduler-recv-interval: 10
         stream-interval: 50
         reasoning-parser: qwen3
-        default-chat-template-kwargs: '{"enable_thinking": false}'
         tool-call-parser: qwen3_coder
         speculative-algorithm: NEXTN
         speculative-num-steps: 3
@@ -100,7 +105,9 @@ base:
 # tensor-parallel-size. SGLANG_QWEN35_PACKED_IN_PROJ=0 turns off the packed GDN input
 # projection of sglang#50024 (patch 09) at the monokernel points: the monokernel runs the
 # decode-sized steps it packs, and it builds a second copy of the projections. Every
-# other point keeps it on.
+# other point keeps it on. SGLANG_AMD_MONO_QWEN38_DRAFT_HEAD_FP8=0 at every monokernel
+# point: patch 10 runs the MTP draft's lm_head as an FP8 copy unless it is 0, and the draft
+# runs at its shipped precision.
 override_c1:
   roles:
     agg:
@@ -114,6 +121,7 @@ override_c1:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_USE_AITER: '1'
         SGLANG_QWEN35_PACKED_IN_PROJ: '0'
+        SGLANG_AMD_MONO_QWEN38_DRAFT_HEAD_FP8: '0'
   benchmark:
     env:
       CONC: '1'
@@ -134,6 +142,7 @@ override_tp2_c1:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_USE_AITER: '1'
         SGLANG_QWEN35_PACKED_IN_PROJ: '0'
+        SGLANG_AMD_MONO_QWEN38_DRAFT_HEAD_FP8: '0'
   benchmark:
     env:
       CONC: '1'
@@ -154,6 +163,7 @@ override_tp4_c1:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_USE_AITER: '1'
         SGLANG_QWEN35_PACKED_IN_PROJ: '0'
+        SGLANG_AMD_MONO_QWEN38_DRAFT_HEAD_FP8: '0'
   benchmark:
     env:
       CONC: '1'
@@ -172,6 +182,7 @@ override_c2:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_USE_AITER: '1'
         SGLANG_QWEN35_PACKED_IN_PROJ: '0'
+        SGLANG_AMD_MONO_QWEN38_DRAFT_HEAD_FP8: '0'
   benchmark:
     env:
       CONC: '2'
@@ -188,7 +199,8 @@ override_c2:
 # reference recipes get it from an SGLang default change that this image lacks), which
 # captures the GDN prefill on static per-bucket tables; a batch outside the captured
 # buckets runs eagerly through the AITER fused prefill. c80 caches only the prompt on
-# finish and keeps at most two Mamba states per path.
+# finish and keeps at most two Mamba states per path. These four points turn on the four
+# opt-in kernels of patches 11-15.
 override_c12:
   roles:
     agg:
@@ -207,6 +219,14 @@ override_c12:
         SGLANG_USE_AITER_UNIFIED_ATTN: '1'
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_OPT_QWEN4_FUSED_HC: '1'
+        # Patch 11: the 4 draft rows of a request share their compressed-key reads in QSA verify.
+        SGLANG_AMD_QSA_GROUPED_VERIFY: '1'
+        # Patches 12-13: QSA sparse prefill attention on the FlyDSL kernels.
+        SGLANG_AMD_QSA_FLYDSL_PREFILL: '1'
+        # Patch 14: the MoE intermediate padded to 640, so AITER's tuned MXFP4 rows apply.
+        SGLANG_AMD_MXFP4_PAD128: '1'
+        # Patch 15: prefill-sized HC sites as one folded-norm GEMM plus Triton kernels.
+        SGLANG_AMD_HC_PREFILL: '1'
   benchmark:
     env:
       KV_OFFLOADING: none
