@@ -705,6 +705,113 @@ override_10p_tep2_dep16_linker:
       workers: 10
     decode: *linker-dep16-decode
 
+override_1p_dep8_dep16_linker_d1115:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep16-linker-d1115
+  # The 1P DEP8 + DEP16 linker point on the 2026-11-17 staging nightly with
+  # the Dynamo it bundles (1.7.0.dev20261115), so the decode applies the
+  # model's sampling defaults (top_p 0.95) as vLLM does. This SGLang keeps
+  # Engine.async_generate's data_parallel_rank for that Dynamo, caps linker
+  # prefetch admission and resumes parked continuations first, so the
+  # prefetch OOM of the 1P DEP8 + DEP16 c280 warmup should not recur.
+  # The infra node also runs the benchmark client, etcd and the frontend:
+  # with four 190 GB stores resident the client's post-run processing ran
+  # the node out of host memory, so the infra stores are 150 GB here.
+  # L3 = 8 x 190 GB (prefill) + 4 x 4 x 190 GB (decode) + 4 x 150 GB (infra).
+  identity:
+    frameworks:
+      dynamo: "1.7.0.dev20261115"
+      sglang: "0.0.0.dev1+g209741ec5"
+  services: &linker-services-infra150
+    - *l3-etcd
+    - *l3-master
+    - *big-decode-store
+    - <<: *big-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *big-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    - &infra-store-150
+      <<: *infra-store
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 150gb
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node_ip}"
+    - <<: *infra-store-150
+      name: store-infra-1
+      args: ["--port", "8811"]
+      readiness:
+        port: 8811
+        timeout_seconds: 600
+    - <<: *infra-store-150
+      name: store-infra-2
+      args: ["--port", "8812"]
+      readiness:
+        port: 8812
+        timeout_seconds: 600
+    - <<: *infra-store-150
+      name: store-infra-3
+      args: ["--port", "8813"]
+      readiness:
+        port: 8813
+        timeout_seconds: 600
+    - *l3-otel
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env: &linker-env-d1115
+        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+      args: *linker-prefill-args
+    decode: &linker-dep16-decode-d1115
+      nodes: 4
+      gpus: 16
+      args:
+        tensor-parallel-size: 16
+        data-parallel-size: 16
+        expert-parallel-size: 16
+        # 48 per DP rank, as on DEP8.
+        max-running-requests: 768
+        mem-fraction-static: 0.85
+
+override_2p_dep8_dep16_linker_d1115:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-2p-dep8-dep16-linker-d1115
+  # The d1115 point with two DEP8 prefill workers sharing the linker pool,
+  # for conc 416-480.
+  # L3 = 16 x 190 GB (prefill) + 4 x 4 x 190 GB (decode) + 4 x 150 GB (infra).
+  identity:
+    frameworks:
+      dynamo: "1.7.0.dev20261115"
+      sglang: "0.0.0.dev1+g209741ec5"
+  services: *linker-services-infra150
+  roles:
+    prefill:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      env: *linker-env-d1115
+      args: *linker-prefill-args
+    decode: *linker-dep16-decode-d1115
+
 override_3p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
   roles:
