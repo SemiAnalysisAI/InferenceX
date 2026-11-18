@@ -13027,3 +13027,12 @@
     - "Drop the TP8/EP1 concurrency 4 point; concurrency 4 runs on the TP4/EP4 HiCache arm, which delivers more throughput per GPU."
     - "Keep TP4/EP4 HiCache and DCP4 settings unchanged and run GSM8K on every eval-selected point, including the Gluon path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4748
+
+- config-keys:
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep16-disagg
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep32-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add Kimi-K3.1-Pro FP4/FP8-KV AgentX disaggregated recipes on GB300 behind llm-d-router v1.0.0 (llmd-vllm) with load-aware and session-affinity routing, NIXL P/D transfer, embedded Mooncake RDMA prefix-cache sharing (4 GB local buffer, 160 GB segment), and DSpark speculative decoding across DCP8 (1P5D at c44 and c56, 1P3D at c56, 2P1D hybrid DP4xTP8xDCP8 at c256, and 3P1D hybrid DP4xTP8xDCP8 at c448), DEP16 (1P1D external-LB at c352), and DEP32 (2P1D external-LB at c960) topologies."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4961
