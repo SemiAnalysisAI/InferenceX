@@ -12925,6 +12925,7 @@
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-linker
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-tep2
     - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-linker-d1115
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-agg-monokernel-n1117
   scenario-type: [agentic-coding]
   description:
     - "Add disaggregated SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB200 with lmsysorg/sglang:nightly-cu134-20261030-e371881 (Dynamo 1.7.0.dev20261030, Mooncake transfer, minimax-msa kernels)."
@@ -12935,4 +12936,5 @@
     - "TP2 attention + MegaMoE EP2 prefill instances without attention DP behind the same DEP16 linker decode, on lmsysorg/sglang-staging:nightly-cu134-20261117-209741e, which transfers MiniMax NVFP4 KV between attention TP 2 and 1: 6 instances at conc 384 and 448, 8 at conc 448-640, 10 at conc 576-768. Prefill: 16384-token chunks, 128 running requests, mem-fraction-static 0.85, and layer-wise linker loads, so a hit takes device KV only when its request is scheduled. Each prefill rank contributes a 190 GB segment; Dynamo 1.7.0.dev20261030 as on the other linker points."
     - "The 1 and 2 DEP8 prefill linker points with the DEP16 decode on the same 2026-11-17 staging nightly with its bundled Dynamo 1.7.0.dev20261115: 1 prefill worker at conc 288-352, 2 at conc 416-480. The infra-node stores are 4 x 150 GB."
     - "Agg: TP4 at conc 1-16, a TP4 MSA-V1 MonoKernel point at conc 1 (page size 128, one-step DSpark with 8 draft tokens), and TP4 with HiCache 180 GB per rank at conc 32-56, behind the same Dynamo frontend."
+    - "The TP4 MonoKernel point at conc 4 and 8 on the 2026-11-17 staging nightly with its bundled Dynamo 1.7.0.dev20261115; batches above one request take the standard path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4695

@@ -4492,6 +4492,33 @@ minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-agg:
         srt-recipe: agg-variants.yaml:override_tp4_hicache_c56
         worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
 
+minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-agg-monokernel-n1117:
+  image: lmsysorg/sglang-staging:nightly-cu134-20261117-209741e@sha256:bef5d6ea6cda16763d56ad8ac6bb386aec4183646aa3e1c4160c9043a44122b7
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.7.0.dev20261115" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: minimaxm31flash/sglang/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [4]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_monokernel_c4_n1117
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp4_monokernel_c8_n1117
+        worker: { num-worker: 1, tp: 4, ep: 1, dp-attn: false }
+
 minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg:
   image: lmsysorg/sglang:nightly-cu134-20261030-e371881@sha256:a82fff791d7dc1e5cfdfde9022487c60c079286fd54684950d55b787eb2e673a
   model: MiniMaxAI/MiniMax-M3.1-Flash
