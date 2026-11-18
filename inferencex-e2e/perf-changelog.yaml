@@ -13088,3 +13088,10 @@
   description:
     - "Add an SGLang v0.5.23 Wan2.2-T2V-A14B baseline on 1, 2, 4 and 8 H200 GPUs, on the vLLM-Omni Wan2.2 rows' workload (wan22.yaml release-v1, C1) and parallel layout and the H3 SGLang rows' image digest."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5113
+
+- config-keys:
+    - wan22-bf16-h100-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Add an SGLang v0.5.23 Wan2.2-T2V-A14B baseline on 4 and 8 H100 GPUs, on the H200 SGLang row's workload (wan22.yaml release-v1, C1) and image digest, with a 21-frame server warmup on 8 GPUs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5114
