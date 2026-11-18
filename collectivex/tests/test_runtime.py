@@ -5,13 +5,20 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import fcntl
 import io
 import json
 import os
 from pathlib import Path
+import pty
+import select
+import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import termios
+import time
 import types
 import unittest
 from unittest import mock
@@ -25,6 +32,7 @@ sys.path.insert(0, str(BENCH))
 
 import probe  # noqa: E402
 import config  # noqa: E402
+import redact  # noqa: E402
 import stage  # noqa: E402
 import ep_harness  # noqa: E402  (stdlib-only at module top)
 import ep_backend  # noqa: E402  (torch is imported lazily inside its methods)
@@ -302,6 +310,26 @@ class RelaxedOrderingProfileTests(unittest.TestCase):
                     check=True,
                 ).stdout
                 self.assertEqual(stdout.strip().splitlines()[-1], expected)
+
+
+class InheritedUcclKnobTests(unittest.TestCase):
+    KNOBS = ("UCCL_RDMA_ADAPTIVE_SLEEP", "UCCL_EP_TRANSPORT",
+             "UCCL_EP_DISPATCH_CONFIG", "UCCL_EP_COMBINE_CONFIG")
+
+    def test_no_placement_hands_the_launching_shells_knobs_to_the_ranks(self) -> None:
+        # Ranks get the launcher's exported environment (srun --export=ALL), and UCCL reads these
+        # at run time: one left over in the launching shell would change the proxy's sleep policy
+        # or transport, or the dispatch and combine configs, under an unchanged label.
+        for placement, devices in (
+                ("1 nvlink", ""), ("2 mnnvl", ""), ("2 nvlink-rdma", "mlx5_0:1")):
+            with self.subTest(placement=placement):
+                exported = run_common(
+                    f"collx_apply_network_profile {placement} && env", check=True,
+                    env={"PATH": os.environ["PATH"], "COLLX_RDMA_DEVICES": devices,
+                         **dict.fromkeys(self.KNOBS, "stale")},
+                ).stdout.splitlines()
+                self.assertEqual(
+                    [line for line in exported if line.partition("=")[0] in self.KNOBS], [])
 
 
 class DeepepSourceSelectionTests(unittest.TestCase):
@@ -711,6 +739,413 @@ echo "JOB_ID=$JOB_ID"
         self.assertIn("COLLX_ALLOCATION must be salloc or sbatch", proc.stderr)
         self.assertIsNone(sbatch_args)
         self.assertFalse(salloc_called)
+
+
+def _default_signals() -> None:
+    # A parent that ignores a signal (nohup, a background shell) hands that down, and a script
+    # cannot trap a signal it was started ignoring.
+    for number in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+        signal.signal(number, signal.SIG_DFL)
+
+
+def _await(marker: Path, process: subprocess.Popen, seconds: float = 30.0) -> None:
+    deadline = time.monotonic() + seconds
+    while not marker.exists():
+        if process.poll() is not None or time.monotonic() > deadline:
+            process.kill()
+            raise AssertionError(f"{marker.name} never appeared: {process.communicate()}")
+        time.sleep(0.02)
+
+
+def _kill_group(process: subprocess.Popen) -> None:
+    if process.poll() is None:
+        with contextlib.suppress(OSError):
+            os.killpg(process.pid, signal.SIGKILL)
+
+
+def _executables(directory: Path, scripts: dict) -> None:
+    directory.mkdir()
+    for name, body in scripts.items():
+        (directory / name).write_text("#!/bin/bash\n" + body)
+        (directory / name).chmod(0o755)
+
+
+class InterruptedLaunch(unittest.TestCase):
+    """A launcher that is interrupted still releases the one job it submitted, and nothing else:
+    while its request is queued, when the grant lands with the signal, and during a case."""
+
+    # Job 4242 is listed until salloc revokes it or scancel names it.
+    SLURM = {
+        "squeue": '[ -e "$ROOT/revoked" ] || [ -e "$ROOT/cancelled" ] || echo 4242\n',
+        "scancel": 'echo "$*" >> "$ROOT/cancelled"\n',
+        "scontrol": "exit 1\n",
+    }
+    # Queued until signalled. Like salloc it then revokes its own request; with GRANT_ON_TERM the
+    # grant arrives at that same moment and it exits leaving a running job behind.
+    SALLOC = """
+if [ -n "$GRANT_ON_TERM" ]; then
+  trap 'echo "salloc: Granted job allocation 4242"; exit 0' TERM
+else
+  trap 'echo "salloc: Job allocation 4242 has been revoked."; : > "$ROOT/revoked"; exit 1' TERM
+fi
+echo "salloc: Pending job allocation 4242"
+: > "$ROOT/queued"
+for _ in $(seq 1500); do sleep 0.2; done
+"""
+    # Answers the rendezvous and backend-preparation steps, then runs a case until signalled.
+    SRUN = """
+case "$*" in
+  *"hostname -s"*) echo node-a ;;
+  *prepare_backend.sh*) ;;
+  *"enroot remove"*)
+    [ -e "$ROOT/case-stopped" ] && echo after-the-case >> "$ROOT/removals" \\
+      || echo during-the-case >> "$ROOT/removals" ;;
+  *)
+    echo case >> "$ROOT/cases"
+    trap ': > "$ROOT/case-stopped"; exit 143' TERM
+    : > "$ROOT/case-running"
+    for _ in $(seq 1500); do sleep 0.2; done ;;
+esac
+"""
+    QUEUED = """
+set -eo pipefail
+export COLLX_LOG_DIR="$ROOT/logs"
+sleep() { command sleep 0.1; }
+JOB_ID=""
+collx_install_launcher_fail_safe
+collx_salloc_jobid --nodes=2 --time=30
+"""
+    IN_A_CASE = """
+set -eo pipefail
+export COLLX_LOG_DIR="$ROOT/logs" COLLX_BENCH=swap-blocks COLLX_SHARD_FILE="$ROOT/shard.json"
+export COLLX_NODES=1 COLLX_GPUS_PER_NODE=1 COLLX_NGPUS=1
+RUNNER=test-sku NODES=1 GPN=1 NGPUS=1 SCALE_UP_DOMAIN=1 COLLX_TRANSPORT=nvlink
+JOB_ID=4242 SQUASH_FILE=/squash/image.sqsh
+MOUNT_SRC="$ROOT/stage" CONTAINER_MOUNTS="$ROOT/stage:/ix"
+collx_install_launcher_fail_safe
+collx_execute_and_collect "$MOUNT_SRC" "$ROOT/checkout"
+"""
+
+    def _interrupt(self, script: str, fakes: dict, marker: str, number: int, *,
+                   files: dict | None = None, as_run_sh_under_tee: bool = False, **env: str):
+        """Run `script` as a launcher, signal it once `marker` appears, and return its exit code,
+        the directory its fake scheduler recorded into, and its output. `as_run_sh_under_tee`
+        signals the launcher's whole process group, as run.sh does, after the pipe its output goes
+        to has lost its reader."""
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        _executables(root / "bin", {**self.SLURM, **fakes})
+        for name, content in (files or {}).items():
+            (root / name).write_text(content)
+        process = subprocess.Popen(
+            ["bash", "-c", f'source "{RUNTIME / "common.sh"}" && {script}', "collx"],
+            env={**os.environ, "PATH": f"{root / 'bin'}:{os.environ['PATH']}", "ROOT": str(root),
+                 **env},
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            start_new_session=True, preexec_fn=_default_signals,
+        )
+        self.addCleanup(_kill_group, process)
+        _await(root / marker, process)
+        if as_run_sh_under_tee:
+            process.stdout.close()
+            os.killpg(process.pid, number)
+        else:
+            process.send_signal(number)
+        # What the launcher waits on would run for five minutes; it must not wait for it.
+        output = "" if as_run_sh_under_tee else process.communicate(timeout=60)[0]
+        return process.wait(timeout=60), root, output
+
+    def test_a_queued_request_is_revoked_and_cancelled_by_its_job_id(self) -> None:
+        for number in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+            with self.subTest(signal=number.name):
+                code, root, output = self._interrupt(
+                    self.QUEUED, {"salloc": self.SALLOC, "srun": 'echo "$*" >> "$ROOT/steps"\n'},
+                    "queued", number)
+                self.assertEqual(code, 128 + number, output)
+                # salloc itself got the signal, so it could withdraw the request.
+                self.assertTrue((root / "revoked").exists(), output)
+                self.assertEqual((root / "cancelled").read_text().split(), ["4242"])
+                # No step ran in that job, so none is asked to remove a container from it.
+                self.assertFalse((root / "steps").exists())
+
+    def test_a_grant_that_lands_with_the_signal_is_still_cancelled(self) -> None:
+        code, root, output = self._interrupt(
+            self.QUEUED, {"salloc": self.SALLOC}, "queued", signal.SIGTERM, GRANT_ON_TERM="1")
+        self.assertEqual(code, 143, output)
+        self.assertEqual((root / "cancelled").read_text().split(), ["4242"])
+
+    def test_a_launcher_whose_output_has_no_reader_left_still_finishes_its_cleanup(self) -> None:
+        # Ctrl-C on `run.sh | tee` ends tee as well. The group signal then kills the command the
+        # launcher is running and bash reports that death on stderr: that write into the dead pipe
+        # must not kill the launcher, which goes on to cancel its job and exit as interrupted.
+        code, root, _ = self._interrupt(
+            self.QUEUED, {"salloc": self.SALLOC}, "queued", signal.SIGTERM,
+            as_run_sh_under_tee=True)
+        self.assertEqual(code, 143)
+        self.assertEqual((root / "cancelled").read_text().split(), ["4242"])
+
+    @unittest.skipUnless(
+        shutil.which("timeout") and subprocess.run(
+            ["bash", "-c", "mapfile -d '' -t probe </dev/null"], capture_output=True,
+        ).returncode == 0,
+        "collx_run_shard needs GNU timeout and bash >= 4.4 (mapfile -d)")
+    def test_a_running_case_is_stopped_before_its_allocation_is_released(self) -> None:
+        case = {
+            "suite": "swap-blocks", "backend": "swap-blocks", "profile": "smoke",
+            "layout": "random", "directions": "h2d d2h", "block_bytes": "4096",
+            "num_blocks": "1 4", "max_payload_bytes": 1024, "warmup": 1, "iterations": 2,
+            "seed": 0, "device": 0, "nodes": 1, "gpus_per_node": 1, "scale_up_domain": 1,
+            "case_id": "test-sku-swap-blocks-smoke-random",
+        }
+        shard = json.dumps({"version": 1, "cases": [case, {**case, "layout": "contiguous"}]})
+        for number in (signal.SIGINT, signal.SIGTERM):
+            with self.subTest(signal=number.name):
+                code, root, output = self._interrupt(
+                    self.IN_A_CASE, {"srun": self.SRUN}, "case-running", number,
+                    files={"shard.json": shard})
+                self.assertEqual(code, 128 + number, output)
+                # The step was told to stop first, so the container was idle when it was removed.
+                self.assertEqual((root / "removals").read_text().split(), ["after-the-case"])
+                self.assertEqual((root / "cancelled").read_text().split(), ["4242"])
+                self.assertEqual((root / "cases").read_text().split(), ["case"])
+
+
+class RunInterrupts(unittest.TestCase):
+    """run.sh over a pool's real shards with a stand-in launcher: an interrupt stops the shard in
+    flight and starts no further shard."""
+
+    # One fixed commit and a clean tree. With HANGUP_AT_CHECK it hangs up run.sh during that
+    # commit check, which run.sh makes before each shard, so the signal lands between two shards.
+    GIT = """
+case "$*" in
+  *rev-parse*)
+    check=$(( $(cat "$ROOT/checks" 2>/dev/null || echo 0) + 1 )); echo "$check" > "$ROOT/checks"
+    if [ "$check" = "$HANGUP_AT_CHECK" ]; then
+      while [ ! -s "$ROOT/run.pid" ]; do sleep 0.02; done
+      kill -HUP "$(cat "$ROOT/run.pid")"
+    fi
+    echo 0123456789abcdef0123456789abcdef01234567 ;;
+esac
+"""
+    # `hold` is a launcher blocked on a foreground child, as on an srun: its trap cannot run until
+    # that child is gone, so it only ever releases when run.sh stops the child as well. Like the
+    # real fail-safe it outlives the reader of its output.
+    LAUNCHER = """
+shard="$(basename "$COLLX_SHARD_FILE" .json)"
+echo "$$" > "$ROOT/launcher.pid"
+echo "$shard" >> "$ROOT/started"
+case "$FAKE_LAUNCHER" in
+  hold)
+    trap : PIPE
+    trap 'sleep 0.5; echo "$shard" >> "$ROOT/released"; exit 143' TERM
+    bash -c 'bash -c "echo \$\$ > \"$ROOT/deep.pid\"; exec sleep 300"; true' ;;
+  fail-first) [ "$(wc -l < "$ROOT/started")" -gt 1 ] || exit 3 ;;
+esac
+"""
+
+    def setUp(self) -> None:
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        source = RUNTIME.parent
+        collx = self.root / "checkout" / "collectivex"
+        collx.mkdir(parents=True)
+        for name in ("run.sh", "sweep_matrix.py"):
+            shutil.copy(source / name, collx / name)
+        shutil.copytree(source / "configs", collx / "configs")
+        for name in ("bench", "summarize.py"):
+            (collx / name).symlink_to(source / name)
+        _executables(collx / "launchers", {
+            launcher.name: self.LAUNCHER
+            for launcher in (source / "launchers").glob("launch_*.sh")})
+        _executables(self.root / "bin", {"git": self.GIT})
+        self.run_sh = collx / "run.sh"
+        # Any pool with more than one shard will do; three of its shards are enough.
+        pools = json.loads((collx / "configs" / "platform_config.json").read_text())["platforms"]
+        self.sku, self.shards = next(
+            (sku, shards) for sku in sorted(pools) if len(shards := self._listed(sku)) > 1)
+
+    def _listed(self, sku: str) -> list:
+        listed = subprocess.run(
+            ["bash", str(self.run_sh), sku, "--list-shards"], env=self._env(),
+            capture_output=True, text=True).stdout.splitlines()[1:]
+        return [line.split()[0] for line in listed][:3]
+
+    def _env(self, **extra: str) -> dict:
+        return {**os.environ, "PATH": f"{self.root / 'bin'}:{os.environ['PATH']}",
+                "ROOT": str(self.root), **extra}
+
+    def _start(self, stdout: int | None = None, preexec_fn=_default_signals,
+               **env: str) -> subprocess.Popen:
+        # Output goes to a file by default: a pipe would stay open until the launcher exits, and
+        # would hide a run.sh that returned before its launcher had released the allocation.
+        (self.root / "checks").unlink(missing_ok=True)
+        process = subprocess.Popen(
+            ["bash", str(self.run_sh), self.sku,
+             *(part for shard in self.shards for part in ("--shard", shard))],
+            env=self._env(**env),
+            stdout=stdout or self.enterContext((self.root / "output").open("w")),
+            stderr=subprocess.STDOUT, start_new_session=True, preexec_fn=preexec_fn,
+        )
+        (self.root / "run.pid").write_text(str(process.pid))
+        self.addCleanup(_kill_group, process)
+        return process
+
+    def _lines(self, name: str) -> list:
+        path = self.root / name
+        return path.read_text().split() if path.exists() else []
+
+    def test_an_interrupt_stops_the_shard_in_flight_and_starts_no_other(self) -> None:
+        # To run.sh alone, as `kill` does, and to its whole process group, as a terminal's Ctrl-C
+        # does.
+        for number, to_group in ((signal.SIGINT, False), (signal.SIGTERM, False),
+                                 (signal.SIGINT, True)):
+            with self.subTest(signal=number.name, to_group=to_group):
+                for name in ("started", "released", "launcher.pid", "deep.pid"):
+                    (self.root / name).unlink(missing_ok=True)
+                process = self._start(FAKE_LAUNCHER="hold")
+                _await(self.root / "started", process)
+                if to_group:
+                    os.killpg(process.pid, number)
+                else:
+                    process.send_signal(number)
+                code = process.wait(timeout=60)
+                output = (self.root / "output").read_text()
+                # The launcher had released by the time run.sh returned, so run.sh waited for it.
+                self.assertEqual(self._lines("released"), self.shards[:1], output)
+                self.assertEqual(code, 128 + number, output)
+                self.assertEqual(self._lines("started"), self.shards[:1], output)
+                # A process two levels under the launcher, as a login-node image import is.
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(int(self._lines("deep.pid")[0]), 0)
+
+    def test_an_interrupted_run_whose_output_has_no_reader_left_still_waits(self) -> None:
+        # Ctrl-C on `run.sh | tee` ends tee as well: what run.sh then says goes into a pipe nobody
+        # reads, and it has to outlive that to see the launcher through.
+        process = self._start(stdout=subprocess.PIPE, FAKE_LAUNCHER="hold")
+        _await(self.root / "started", process)
+        process.stdout.close()
+        process.send_signal(signal.SIGINT)
+        self.assertEqual(process.wait(timeout=60), 130)
+        self.assertEqual(self._lines("released"), self.shards[:1])
+
+    def test_a_terminal_that_stops_background_writers_does_not_stop_a_shard(self) -> None:
+        # Under `stty tostop` a background process group is stopped when it writes to the
+        # terminal, so a shard must stay in the foreground group.
+        controller, terminal = pty.openpty()
+        self.addCleanup(os.close, controller)
+        self.addCleanup(os.close, terminal)
+        modes = termios.tcgetattr(terminal)
+        modes[3] |= termios.TOSTOP
+        termios.tcsetattr(terminal, termios.TCSANOW, modes)
+
+        def take_terminal() -> None:
+            _default_signals()
+            fcntl.ioctl(1, termios.TIOCSCTTY, 0)
+
+        process = self._start(stdout=terminal, preexec_fn=take_terminal)
+        deadline = time.monotonic() + 60
+        while process.poll() is None and time.monotonic() < deadline:
+            if select.select([controller], [], [], 0.1)[0]:
+                os.read(controller, 4096)
+        self.assertEqual(process.poll(), 0)
+        self.assertEqual(self._lines("started"), self.shards)
+
+    def test_a_hangup_between_shards_starts_no_further_shard(self) -> None:
+        # Checks 1 and 2 are the start of the run and the first shard; 3 precedes the second.
+        process = self._start(HANGUP_AT_CHECK="3")
+        code = process.wait(timeout=60)
+        output = (self.root / "output").read_text()
+        self.assertEqual(code, 129, output)
+        self.assertEqual(self._lines("started"), self.shards[:1], output)
+
+    def test_an_uninterrupted_run_goes_on_past_a_failed_shard(self) -> None:
+        process = self._start(FAKE_LAUNCHER="fail-first")
+        code = process.wait(timeout=120)
+        output = (self.root / "output").read_text()
+        self.assertEqual(code, 1, output)
+        self.assertEqual(self._lines("started"), self.shards, output)
+        summary = {line.split()[0]: line.split()[1] for line in output.splitlines()
+                   if line.split()[:1] and line.split()[0] in self.shards and "rc=" in line}
+        self.assertEqual(summary, {self.shards[0]: "rc=3",
+                                   **dict.fromkeys(self.shards[1:], "rc=0")}, output)
+
+
+class LogTailRedaction(unittest.TestCase):
+    """Failure paths print a log tail into the CI job log, which is public."""
+
+    def test_addresses_are_masked_and_lookalikes_are_kept(self) -> None:
+        for text, expected in (
+            ("connect to 10.20.30.40:29551 failed", "connect to <ipv4>:29551 failed"),
+            ("addr=192.168.1.7,clientaddr=10.0.0.9", "addr=<ipv4>,clientaddr=<ipv4>"),
+            ("peer fe80::506b:4b03:a1:b2c3%ib0 down", "peer <ipv6>%ib0 down"),
+            ("listening on [2001:db8::1]:443", "listening on [<ipv6>]:443"),
+            ("GID fe80:0000:0000:0000:506b:4b03:00a1:b2c3", "GID <ipv6>"),
+            ("mapped ::ffff:10.1.2.3", "mapped ::ffff:<ipv4>"),
+            ("smac 0c:42:a1:5e:9f:10", "smac <mac>"),
+            # A C++ scope, a clock time, Python slices, and dotted versions are none of these.
+            ("std::runtime_error at 12:34:56", "std::runtime_error at 12:34:56"),
+            ("x[1::2] + y[::2] + z[::-1]", "x[1::2] + y[::2] + z[::-1]"),
+            ("torch 2.13.0, v0.7.1.2, patchelf==0.17.2.1, build 1.2.3.4.5",
+             "torch 2.13.0, v0.7.1.2, patchelf==0.17.2.1, build 1.2.3.4.5"),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(redact.redact(text), expected)
+
+    def test_host_names_are_masked_as_slurm_and_dns_spell_them(self) -> None:
+        hosts = ["login-2.cluster.example", "gpu-node07", "gpu-node08"]
+        for text, expected in (
+            ("srun: error: gpu-node07: task 3: Exited with exit code 1",
+             "srun: error: <host>: task 3: Exited with exit code 1"),
+            ("srun: error: gpu-node[07-08]: tasks 0-15: Killed",
+             "srun: error: <host>: tasks 0-15: Killed"),
+            ("gpu-node08.cluster.example:4242:4242 [0] NCCL INFO",
+             "<host>:4242:4242 [0] NCCL INFO"),
+            # Another node of the same pool, by its interface alias, and the submit host.
+            ("gpu-node12-ib0 unreachable from login-2", "<host> unreachable from <host>"),
+            # Words that only share letters with a host name stay.
+            ("gpu-nodes: 2, cpu-node07, node07, login-server, gpu-node-pool",
+             "gpu-nodes: 2, cpu-node07, node07, login-server, gpu-node-pool"),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(redact.redact(text, hosts), expected)
+
+    LOG = ("gpu-node07:4242:4242 [0] NCCL WARN connect to 10.20.30.40<29551> failed\n"
+           "srun: error: gpu-node[07-08]: tasks 0-15: Exited with exit code 1, see login-2\n"
+           "worker-a7: rank 3 lost its peer\n")
+    MASKED = ("<host>:4242:4242 [0] NCCL WARN connect to <ipv4><29551> failed\n"
+              "srun: error: <host>: tasks 0-15: Exited with exit code 1, see <host>\n"
+              "<host>: rank 3 lost its peer\n")
+    # The job's nodes are listed only while $ROOT/gone is absent. sinfo gives the kernel host
+    # names, which this pool sets apart from its node names.
+    SLURM = {
+        "squeue": '[ -e "$ROOT/gone" ] || echo "gpu-node[07-08]"\n',
+        "scontrol": 'printf "gpu-node07\\ngpu-node08\\n"\n',
+        "hostname": "echo login-2.cluster.example\n",
+        "sinfo": 'printf "worker-a7\\nworker-a8\\n"\n',
+    }
+
+    def _tail(self, script: str, **fakes: str) -> str:
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        _executables(root / "bin", {**self.SLURM, **fakes})
+        (root / "step.log").write_text(self.LOG)
+        return run_common(
+            script, str(root / "step.log"), check=True,
+            env={**os.environ, "PATH": f"{root / 'bin'}:{os.environ['PATH']}", "ROOT": str(root)},
+        ).stderr
+
+    def test_a_tail_names_neither_the_nodes_nor_the_submit_host(self) -> None:
+        # The second tail comes after the job is gone, when Slurm no longer lists its nodes.
+        printed = self._tail(
+            'JOB_ID=4242; collx_log_tail "$1"; : > "$ROOT/gone"; collx_log_tail "$1"')
+        framed = ("[collectivex] --- command log tail ---\n" + self.MASKED
+                  + "[collectivex] --- end command log tail ---\n")
+        self.assertEqual(printed, framed * 2)
+
+    def test_a_tail_that_cannot_be_masked_is_not_printed(self) -> None:
+        printed = self._tail(
+            'JOB_ID=4242; collx_log_tail "$1"',
+            python3='echo "Traceback: /home/operator/redact.py" >&2; exit 1\n')
+        self.assertIn("log tail withheld", printed)
+        for private in ("gpu-node", "worker-a", "10.20.30.40", "login-2", "/home/operator"):
+            self.assertNotIn(private, printed)
 
 
 # config.py case-args encodes each case as a null-delimited argv for the entrypoint its leading

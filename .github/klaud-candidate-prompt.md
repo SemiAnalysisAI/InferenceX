@@ -16,6 +16,9 @@ current family/image from the checkout, then independently inspect the actual bu
 source, official upstream releases and available images; stop if retired, ambiguous, updated
 or owned by another Klaud Cold PR. Open PRs on other branches never block a candidate.
 Normalize registry `/` versus enroot `#` spelling when comparing the same image.
+Pick the new image from the current image's repository and tag series first (for example,
+`lmsysorg/sglang-rocm:*-rocm720-mi35x-*` stays on that series, not `lmsysorg/sglang`). Switch
+repository or series only when it has no newer eligible image, and state why in the PR.
 When candidate.json also has `sources`, the family's keys start on different images, and
 `sources` maps each key to the curve's newest published observation of that key's image.
 `unbaselined-keys` maps each key whose current image was never published to that image. The
@@ -34,8 +37,9 @@ When KLAUD_RESUME=true, an earlier session parked, ran out or was cancelled befo
 this candidate, and recovery started this session in a new run to continue it. The branch,
 draft PR, frozen baseline (prepare-baseline returns it), attempt comments and runs are yours;
 never recreate them. Check out origin/$KLAUD_BRANCH before editing. Recover the attempt
-counter, repairs used and run IDs from your attempt comments; a commit pushed after the head
-of your last attempt comment, other than the perf-changelog entry, counts as a used repair.
+counter, repairs used and run IDs from your attempt comments. A commit pushed after the head
+of your last attempt comment counts as a used repair, unless it is the perf-changelog entry or
+a merge of main.
 Recovery starts a session only after every owned run ended, and it already reran the newest
 run if someone preempted it. Inspect those runs (finished or preempted) and continue. Repair
 budget, infrastructure-retry limits and failure rules carry over.
@@ -59,6 +63,11 @@ Recipes never set model.container or identity.container.image; the binder writes
 the master image. Preserve model, precision, topology, speculation, workload/dataset,
 duration, resources, recipe references, all points and default evals. No broad tuning,
 shared code/workflows or other-family edits (keys outside the family).
+Compatibility settings never change output semantics. Never remove or change reasoning or
+tool-call parsers, chat templates or other settings that alter what the server returns, even to
+pass a gate, except to follow an upstream rename with identical behavior. If the new image fails
+a gate with those settings preserved, finish failed with the affected points and the upstream
+cause in Next.
 The candidate.json `family` may list several comma-separated keys of one master file. Together
 they form one AgentX dashboard curve, and the newest normal run replaces that whole curve.
 The keys may start on different images. Update every listed key's master image to the same new
@@ -180,10 +189,11 @@ one essential compatibility adjustment. Do not include evidence, benchmark resul
 release summaries, rationale or limitations there; those belong in attempt comments.
 Commit/push, generate the final matrix with
 infx.matrix.plan and run `check-final --matrix-file FILE` before dispatch.
-Merge main only immediately before dispatching a final sweep, and never while an owned final run
-is queued or running unless GitHub reports a conflict. If main later appends another
-perf-changelog entry, merge main, keep your entry at the physical
-tail and dispatch the final sweep again as a `final` attempt; that merge is not a repair.
+Merge main only immediately before dispatching a new final sweep, and never while an owned final
+run is queued or running. A perf-changelog conflict with main never justifies a merge or a new
+sweep. Keep the measured head, retry infrastructure failures as reruns of the same run and finish
+on that head. Finish does not require a mergeable PR, and recovery later merges main into the
+finished PR with a `[skip-sweep]` commit.
 Keep DRAFT and apply full-sweep-fail-fast as the SOLE sweep-related label; never apply another
 sweep label. Never switch labels while owned jobs are active.
 Fail-fast cancels siblings within a matrix, not every matrix; wait for all owned jobs.
@@ -212,9 +222,12 @@ legends, boilerplate, limitations and redundant milestones. Briefly note failure
 reasons; preserve sources and uncertainty. Report observations on material changes or after
 30 minutes waiting. Improvement is best effort, but final-sweep validation (never smoke) blocks
 validated when a matched point's output tok/s/GPU falls over 30% below baseline or has no
-baseline throughput, any point's request errors exceed 5%, or an eval falls below half its
+baseline throughput, its dashboard interactivity, E2E latency or TTFT (P90 for AgentX, median otherwise) is
+over 10% worse than baseline, any point's
+profiled request errors exceed 5%, or an eval falls below half its
 baseline score or below 50% for gsm8k and the Kimi/MiniMax tool-call suites;
-repair within budget, else finish failed with the affected points.
+repair within budget, else finish failed with the affected points. A drop in E2E normalized
+interactivity only warns, however large.
 
 On terminal resolve/baseline evidence, stop investigating. Finalize attempts; the final
 attempt's Next states why you stopped, because finish shows it as the closing reason. Write
@@ -234,8 +247,8 @@ code. The fixed code appears in sanitized diagnostics and the completion report.
 For a verified `validated` outcome, finish itself posts `/use <verified-final-run-id>` once on
 this PR. Never post `/use` yourself.
 Otherwise finish reports the failure/deferral, cancels owned work, confirms every job
-terminal, removes sweep labels, drafts/closes the PR, deletes the candidate branch and releases
-the family claim so a later wave may retry it. Pending cleanup means wait and retry finish.
+terminal, drafts/closes the PR, deletes the candidate branch and releases the family claim so a
+later wave may retry it. Pending cleanup means wait and retry finish.
 Uncertainty is not incompatibility. Your open PR blocks the family until cleanup completes.
 Without an owned PR, report without a placeholder or deleting someone else's claim.
 

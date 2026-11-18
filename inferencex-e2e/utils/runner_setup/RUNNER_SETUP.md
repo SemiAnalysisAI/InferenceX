@@ -179,8 +179,9 @@ Labels can be edited later on the runners settings page without re-registering.
 
 ### Dynamic Slurm node leases
 
-The optional node-slot scheduler performs weighted admission across every job
-size in one physical Slurm cluster. A job that needs three nodes adds
+When `PRIORITY_SCHEDULER_ENABLED=true`, the priority controller performs
+weighted admission across every job size in one physical Slurm cluster. Every
+priority-scheduled job carries `nodes:N`, so a job that needs three nodes adds
 `nodes:3` to its queued `runs-on` labels. `nodes:N` is request metadata for the
 trusted priority controller, not a permanent runner capability label.
 
@@ -203,10 +204,8 @@ and periodic reconciliation remove orphaned leases. Every managed GPU workflow
 must require its unique `ci-job-*` label; a workflow that targets only a generic
 hardware label bypasses admission accounting.
 
-Set `NODE_SLOT_SCHEDULER_ENABLED=true` only after the deployed priority
-controller supports `nodes:N` and `ci-lease-*`. `PRIORITY_SCHEDULER_ENABLED`
-must also remain enabled. If either variable is disabled, workflows omit
-`nodes:N` and retain the existing unweighted behavior. The priority score also
+If `PRIORITY_SCHEDULER_ENABLED` is disabled, workflows omit `nodes:N`, `ci-job-*`,
+and `ci-attempt-*` and target the plain runner label. The priority score also
 subtracts `0.001` per additional node so otherwise equal work prefers smaller
 allocations without overriding the existing business-priority signals.
 
@@ -303,6 +302,33 @@ nodes and jobs; the MI300X collector must retain only `MI300X-UBUNTU`.
 `quanta-ccs-aus-k11-45` is included in the nine-node pool. The provider validated
 it for single-node use but had not yet qualified its multi-node fabric at
 handoff; GPU enumeration alone does not validate cross-node collectives.
+
+### CoreWeave A100 outside the priority controller
+
+`a100-cw` is a two-node CoreWeave SUNK cluster with eight A100 80 GB GPUs per node (Slurm
+partition `a100`, account `cw-sup`). Runners `a100-cw_00` and `a100-cw_01` run as `oren` on
+the login pod, under `/mnt/home/oren/gharunners/gharunnerNN/actions-runner`, in the default
+`github-actions` tmux session. Provision with `setup.sh` and tags
+`slurm,a100,a100-cw,cluster:a100-cw`. The login node is a Kubernetes pod without systemd, so
+start the listeners again after a pod restart:
+
+```sh
+bash ~/gharunners/start_runners.sh 0 1 ~/gharunners
+```
+
+Caches live on the shared `/mnt/data` volume: `hf-hub-cache`, `aiperf-cache` and `squash`.
+A video job downloads a missing model snapshot into `hf-hub-cache` from the login pod before it
+submits; H3 takes about 355 GB.
+Image imports run on a compute node; the login pod cannot write enroot's default paths.
+
+The cluster runs no Slurm collector, so the priority controller has no telemetry for it and
+fences both runners with `ci-slurm-unavailable`. Its benchmark jobs skip admission instead:
+`benchmark-tmpl.yml` requests the job's runner label alone (`a100`, `cluster:a100-cw` or a
+node name) and GitHub dispatches each job to an idle runner. Every single-node job takes a
+whole node, so two runners match the two nodes and Slurm queues anything beyond that. The
+other workflows (profiling, SpeedBench, multi-node) keep their admission labels and cannot
+run here. Deploy a collector and remove that exception before the cluster shares capacity
+with multi-node or externally submitted work.
 
 The login node (where the runners live) and the Slurm compute nodes (where benchmarks
 run) exchange everything through the filesystem, so every path the CI touches must be
