@@ -1,0 +1,150 @@
+# [Perf] [AMD] quark: Pad W4A4 MXFP4 MoE to 128 columns for AITER FlyDSL
+# https://github.com/sgl-project/sglang/pull/49852  (PR head cfc5974f72; this is its commit 1, 624fa95a85)
+# Generated against the image's SGLang checkout (1ced9a9eb0) with patches 01-13 applied; source files only (tests dropped).
+# Differs from the PR: behind the opt-in SGLANG_AMD_MXFP4_PAD128=1, so the TP1 MXFP4 MoE intermediate stays 640 wide
+# (a multiple of 128) and AITER's shipped tuned FlyDSL rows apply; never set at the monokernel points.
+# Apply in /sgl-workspace/sglang with git apply.
+
+diff --git a/python/sglang/srt/layers/moe/utils.py b/python/sglang/srt/layers/moe/utils.py
+index 5f96468..56fcf90 100644
+--- a/python/sglang/srt/layers/moe/utils.py
++++ b/python/sglang/srt/layers/moe/utils.py
+@@ -1145,7 +1145,9 @@ def get_moe_padding_size(is_aiter_moe):
+         )
+ 
+ 
+-def get_moe_weight_sizes(inter_dim, is_concat, is_packed, is_aiter_moe):
++def get_moe_weight_sizes(
++    inter_dim, is_concat, is_packed, is_aiter_moe, aiter_padding_size=None
++):
+     """
+     Calculate dimensions for MoE weight tensors.
+ 
+@@ -1154,13 +1156,20 @@ def get_moe_weight_sizes(inter_dim, is_concat, is_packed, is_aiter_moe):
+         is_concat: If True, fusions W1 (gate) and W3 (up) projections.
+         is_packed: If True, uses 4-bit quantization (two FP4 elements per byte).
+         is_aiter_moe: If True, applies Aiter-specific kernel padding alignment.
++        aiter_padding_size: The Aiter alignment of w2_down_dim, in parameter
++            dtype units; AITER_PADDING_SIZE if None. [a port of
++            sglang#49852, used only under SGLANG_AMD_MXFP4_PAD128=1]
+     """
+     # w2_down_dim is the packing rank, but w13_up_dim not (of matrix to matmul)
+     w13_up_dim = 2 * inter_dim if is_concat else inter_dim
+     w2_down_dim = inter_dim // 2 if is_packed else inter_dim
+ 
+     if is_aiter_moe:
+-        padding_size = get_moe_padding_size(True)
++        padding_size = (
++            get_moe_padding_size(True)
++            if aiter_padding_size is None
++            else aiter_padding_size
++        )
+         align_aiter = lambda n: ((n + padding_size - 1) // padding_size) * padding_size
+         is_padded = (w2_down_dim % padding_size) > 0
+         if is_padded:
+diff --git a/python/sglang/srt/layers/quantization/quark/schemes/quark_w4a4_mxfp4_moe.py b/python/sglang/srt/layers/quantization/quark/schemes/quark_w4a4_mxfp4_moe.py
+index a278f3e..c7cd3ad 100644
+--- a/python/sglang/srt/layers/quantization/quark/schemes/quark_w4a4_mxfp4_moe.py
++++ b/python/sglang/srt/layers/quantization/quark/schemes/quark_w4a4_mxfp4_moe.py
+@@ -2,7 +2,9 @@
+ 
+ from __future__ import annotations
+ 
++import functools
+ import logging
++import os
+ import threading
+ from typing import TYPE_CHECKING, Any
+ 
+@@ -137,6 +139,81 @@ _use_triton_w4a16 = _is_gfx1151 and envs.SGLANG_ENABLE_QUARK_MXFP4_MOE_W4A16.get
+ _TRITON_W4A16_NUM_WARPS = 8
+ 
+ 
++# Port of sglang#49852 (commit 1 of 2; commit 2 guards the
++# smallm_moe_gfx950 kernel, which serves hidden 4096 only, not Qwen3.8's 2560)
++# behind the default-off gate SGLANG_AMD_MXFP4_PAD128=1. AITER's FlyDSL W4A4 MoE
++# tiles an intermediate width that is not a multiple of 256 columns by 128, so it
++# needs 128 columns (64 packed bytes) of alignment where AITER's generic one is 256
++# (vllm#55104 pads the same way). With the gate unset nothing below is evaluated.
++FLYDSL_MXFP4_PADDING_SIZE = 64
++_AMD_PAD128_LOGGED = False
++
++
++def _amd_pad128_enabled() -> bool:
++    return os.environ.get("SGLANG_AMD_MXFP4_PAD128", "0") == "1"
++
++
++@functools.cache
++def _aiter_refuses_unaligned_cktile_mxfp4() -> bool:
++    """Whether aiter refuses its CK-Tile MXFP4 stage 2 at an intermediate width
++    that is not a multiple of 256 (ROCm/aiter#5232)."""
++    import inspect
++
++    try:
++        import aiter.fused_moe
++
++        source = inspect.getsource(aiter.fused_moe)
++    except (ImportError, OSError, TypeError):
++        return False
++    return "requires inter_dim to be a multiple of 256" in source
++
++
++@functools.cache
++def _aiter_has_flydsl() -> bool:
++    import importlib.util
++
++    return importlib.util.find_spec("flydsl") is not None
++
++
++def _pads_for_flydsl_mxfp4(layer: torch.nn.Module) -> bool:
++    """Whether AITER runs this layer's MoE on its FlyDSL W4A4 kernels (plain Silu,
++    no SwiGLU clamp, AITER_FLYDSL_FORCE "1", no AMD monokernel)."""
++    from sglang.srt.runtime_context import get_exec
++
++    cfg = layer.moe_runner_config
++    return (
++        _is_gfx95
++        and cfg.activation == "silu"
++        and not cfg.swiglu_limit
++        and cfg.gemm1_clamp_limit is None
++        and os.environ.get("AITER_FLYDSL_FORCE", "1") == "1"
++        and not get_exec().kernel.enable_amd_monokernel
++        and _aiter_has_flydsl()
++        and _aiter_refuses_unaligned_cktile_mxfp4()
++    )
++
++
++def _amd_pad128_size(layer, pad_for_aiter: bool, serialized: bool):
++    """FLYDSL_MXFP4_PADDING_SIZE when the gate is set and the layer qualifies, else
++    None (get_moe_weight_sizes' stock AITER_PADDING_SIZE)."""
++    global _AMD_PAD128_LOGGED
++    if not (
++        _amd_pad128_enabled()
++        and pad_for_aiter
++        and serialized
++        and _pads_for_flydsl_mxfp4(layer)
++    ):
++        return None
++    if not _AMD_PAD128_LOGGED:
++        _AMD_PAD128_LOGGED = True
++        logger.warning(
++            "AMD_ACTIVE s2_mxfp4_pad128: MXFP4 MoE intermediate aligned to %d "
++            "packed bytes (128 columns)",
++            FLYDSL_MXFP4_PADDING_SIZE,
++        )
++    return FLYDSL_MXFP4_PADDING_SIZE
++
++
+ class QuarkW4A4MXFp4MoE(QuarkMoEScheme):
+     def __init__(
+         self,
+@@ -279,6 +356,9 @@ class QuarkW4A4MXFp4MoE(QuarkMoEScheme):
+             is_aiter_moe=pad_for_aiter,
+             is_concat=True,
+             is_packed=True,
++            aiter_padding_size=_amd_pad128_size(
++                layer, pad_for_aiter, self.is_checkpoint_mxfp4_serialized
++            ),
+         )
+         layer.hidden_pad = 0
+         layer.intermediate_pad = w13_up_dim // 2 - intermediate_size_per_partition

@@ -1,0 +1,1016 @@
+# GDN ReplaySSM target verify: a q/k prep kernel from 11 requests, a layer-loop commit from 32, two dead compares dropped
+# https://github.com/sgl-project/sglang/pull/51180  (PR head 4704d6f94c: the prep kernel and layer-loop commit on
+# main, with thresholds in programs, no switch on gfx950; the PLE verify row masks built only when read)
+# Generated against the image's SGLang checkout (1ced9a9eb0) with patches 01-16 and 21 applied; source files only (tests dropped).
+# Differs from the PR: opt-in through SGLANG_AMD_GDN_VERIFY=1 (the image's verify and commit unless set); up to 10
+# requests it runs the image's verify kernel with one pipeline stage (the same bits). Of the two dead compares, main
+# defers the GDN layers' cache_indices >= 0 through sgl-project/sglang#48414 (merged) and the PR the PLE n-gram
+# commit's lengths != 0; this patch skips the latter only under SGLANG_AMD_GDN_VERIFY=1.
+# Apply in /sgl-workspace/sglang with git apply.
+
+diff --git a/python/sglang/kernels/ops/attention/linear/gdn_verify_amd.py b/python/sglang/kernels/ops/attention/linear/gdn_verify_amd.py
+new file mode 100644
+index 0000000..8d7e3da
+--- /dev/null
++++ b/python/sglang/kernels/ops/attention/linear/gdn_verify_amd.py
+@@ -0,0 +1,855 @@
++# SPDX-License-Identifier: Apache-2.0
++"""SGLANG_AMD_GDN_VERIFY: the GDN target-verify path of a decode step.
++
++``0`` (default) or unset: today's path. ``1``:
++
++* the verify step skips the intermediate-state mask that
++  ``select_verify_intermediate_state_indices`` only reads with PP spec stable rows on
++  (the GDN layers' ``cache_indices >= 0`` and the PLE n-gram commit's ``lengths != 0``);
++* ``gdn_verify_amd`` runs the ReplaySSM verify launch at the served gfx950 layout
++  (bf16 checkpoint with residual rings, K = V = 128, ring 16, 4 draft tokens):
++  up to ``STAGES1_MAX_BATCH`` requests the image kernel with ``num_stages=1`` (the
++  same bits), above it two launches -- a prep kernel per (request, k head) for the
++  q/k norms, the normalized bf16 q / k / k-residual tiles, the 4x4 k.k and k.q
++  products and the ring k stores, then the image kernel's per (v tile, v head) work
++  reading them;
++* ``commit_gdn_replayssm_circular_amd`` folds the 36 layers with one program per
++  (request, v head) looping over the layers (the request's indices and cursors read
++  once), loading only the live ring entries, from ``LAYER_LOOP_MIN_BATCH`` requests
++  (the same bits).
++
++Other layouts and devices keep the image calls. Any other flag value raises ValueError.
++"""
++
++from __future__ import annotations
++
++import functools
++import os
++
++import torch
++import triton
++import triton.language as tl
++
++
++ENV = "SGLANG_AMD_GDN_VERIFY"
++# Measured on MI355X at the served layout: the image kernel with num_stages=1 beats
++# its default 2 up to 10 requests and loses from 11, where the prep/main split wins.
++STAGES1_MAX_BATCH = 10
++# The layer-loop commit beats the image's at 40, 52 and 64 requests, not at 3 and 7.
++LAYER_LOOP_MIN_BATCH = 32
++
++
++@functools.lru_cache(maxsize=None)
++def gdn_verify_amd_enabled() -> bool:
++    """Read once per process (tests call ``cache_clear``); raises on values other
++    than 0 and 1, so a GDN backend built with a bad value fails at startup."""
++    mode = os.environ.get(ENV, "0")
++    if mode not in ("0", "1"):
++        raise ValueError(f"{ENV} must be 0 or 1, got {mode!r}")
++    return mode == "1"
++
++
++@triton.jit
++def _gdn_verify_prep_kernel(
++    q,
++    k,
++    k_cache,
++    rawk_cache,
++    qs,
++    ks,
++    krs,
++    kkm,
++    kqm,
++    query_start_loc,
++    ssm_state_indices,
++    replay_indices,
++    write_pos,
++    cache_base,
++    is_flush_flags,
++    scale,
++    stride_q_t: tl.constexpr,
++    stride_k_t: tl.constexpr,
++    stride_k_slot: tl.constexpr,
++    stride_rawk_slot: tl.constexpr,
++    stride_qsl: tl.constexpr,
++    stride_indices: tl.constexpr,
++    stride_replay_indices: tl.constexpr,
++    H: tl.constexpr,
++    K: tl.constexpr,
++    BS: tl.constexpr,
++    NK: tl.constexpr,
++    BKT: tl.constexpr,
++    MAX_CACHE_LEN: tl.constexpr,
++    NULL_BLOCK_ID: tl.constexpr,
++    DOT_PRECISION: tl.constexpr,
++):
++    """Per (request, k head): the image verify kernel's q/k work, done once instead of
++    once per (v tile, v head). Writes the bf16 q, k, k-residual tiles and the fp32
++    k.k / k.q products for the main kernel, and the ring k / k-residual entries."""
++    i_n = tl.program_id(0)
++    i_h = tl.program_id(1)
++    o_s = tl.arange(0, BS)
++    bos = tl.load(query_start_loc + i_n * stride_qsl).to(tl.int64)
++    eos = tl.load(query_start_loc + (i_n + 1) * stride_qsl).to(tl.int64)
++    spec_len = eos - bos
++    mask_s = o_s < spec_len
++    o_s_safe = tl.where(mask_s, o_s, 0)
++    state_idx = tl.load(ssm_state_indices + i_n * stride_indices).to(tl.int64)
++    replay_idx = tl.load(replay_indices + i_n * stride_replay_indices).to(tl.int64)
++    # Rows the image verify launch skips: padding and flush rows.
++    if state_idx <= NULL_BLOCK_ID:
++        return
++    if tl.load(is_flush_flags + replay_idx) != 0:
++        return
++    b_write_pos = tl.load(write_pos + replay_idx).to(tl.int64)
++    b_cache_base = tl.load(cache_base + replay_idx).to(tl.int32)
++    phys_spec = (b_cache_base + b_write_pos.to(tl.int32) + o_s) & (MAX_CACHE_LEN - 1)
++
++    qnorm_acc = tl.zeros([BS], dtype=tl.float32)
++    knorm_acc = tl.zeros([BS], dtype=tl.float32)
++    for kk in range(NK):
++        o_kt = kk * BKT + tl.arange(0, BKT)
++        mask_kt = o_kt < K
++        ld = mask_s[:, None] & mask_kt[None, :]
++        qn = tl.load(
++            q + (bos + o_s_safe[:, None]) * stride_q_t + i_h * K + o_kt[None, :],
++            mask=ld,
++            other=0.0,
++        ).to(tl.float32)
++        knn = tl.load(
++            k + (bos + o_s_safe[:, None]) * stride_k_t + i_h * K + o_kt[None, :],
++            mask=ld,
++            other=0.0,
++        ).to(tl.float32)
++        qnorm_acc += tl.sum(qn * qn, axis=1)
++        knorm_acc += tl.sum(knn * knn, axis=1)
++    q_rnorm = tl.where(mask_s, 1.0 / tl.sqrt(qnorm_acc + 1e-6), 0.0)
++    k_rnorm = tl.where(mask_s, 1.0 / tl.sqrt(knorm_acc + 1e-6), 0.0)
++
++    kk_mat = tl.zeros([BS, BS], dtype=tl.float32)
++    kq_mat = tl.zeros([BS, BS], dtype=tl.float32)
++    row = (i_n * H + i_h) * BS
++    for kk in range(NK):
++        o_kt = kk * BKT + tl.arange(0, BKT)
++        mask_kt = o_kt < K
++        q_tile = tl.load(
++            q + (bos + o_s_safe[:, None]) * stride_q_t + i_h * K + o_kt[None, :],
++            mask=mask_kt[None, :],
++            other=0.0,
++        ).to(tl.float32)
++        k_tile = tl.load(
++            k + (bos + o_s_safe[:, None]) * stride_k_t + i_h * K + o_kt[None, :],
++            mask=mask_kt[None, :],
++            other=0.0,
++        ).to(tl.float32)
++        q_precise = q_tile * (q_rnorm * scale)[:, None]
++        k_precise = k_tile * k_rnorm[:, None]
++        k_store_tile = k_precise.to(k_cache.dtype.element_ty)
++        k_residual_tile = (k_precise - k_store_tile.to(tl.float32)).to(
++            k.dtype.element_ty
++        )
++        q_tile = q_precise.to(q.dtype.element_ty)
++        k_tile = k_store_tile
++        qT = tl.trans(q_tile)
++        kT = tl.trans(k_tile)
++        k_residual_T = tl.trans(k_residual_tile)
++        kk_mat += tl.dot(k_tile, kT, input_precision=DOT_PRECISION)
++        kq_mat += tl.dot(k_tile, qT, input_precision=DOT_PRECISION)
++        kk_mat += tl.dot(k_tile, k_residual_T, input_precision=DOT_PRECISION)
++        kk_mat += tl.dot(k_residual_tile, kT, input_precision=DOT_PRECISION)
++        kk_mat += tl.dot(k_residual_tile, k_residual_T, input_precision=DOT_PRECISION)
++        kq_mat += tl.dot(k_residual_tile, qT, input_precision=DOT_PRECISION)
++        p_t = (row + o_s[:, None]) * K + o_kt[None, :]
++        tl.store(qs + p_t, q_tile, mask=mask_kt[None, :])
++        tl.store(ks + p_t, k_tile, mask=mask_kt[None, :])
++        tl.store(krs + p_t, k_residual_tile, mask=mask_kt[None, :])
++        spec_kt_mask = (
++            mask_s[:, None]
++            & mask_kt[None, :]
++            & ((b_write_pos + o_s[:, None]) < MAX_CACHE_LEN)
++        )
++        p_ring = (i_h * MAX_CACHE_LEN + phys_spec[:, None]) * K + o_kt[None, :]
++        tl.store(
++            rawk_cache + replay_idx * stride_rawk_slot + p_ring,
++            k_residual_tile,
++            mask=spec_kt_mask,
++        )
++        tl.store(
++            k_cache + replay_idx * stride_k_slot + p_ring, k_store_tile, mask=spec_kt_mask
++        )
++    p_m = (row + o_s[:, None]) * BS + o_s[None, :]
++    tl.store(kkm + p_m, kk_mat)
++    tl.store(kqm + p_m, kq_mat)
++
++
++@triton.jit
++def _gdn_verify_main_kernel(
++    v,
++    a,
++    b,
++    A_log,
++    dt_bias,
++    o,
++    h0,
++    d_cache,
++    k_cache,
++    g_cache,
++    rawv_cache,
++    qs,
++    ks,
++    krs,
++    kkm,
++    kqm,
++    query_start_loc,
++    ssm_state_indices,
++    replay_indices,
++    write_pos,
++    cache_base,
++    is_flush_flags,
++    stride_v_t: tl.constexpr,
++    stride_a_t: tl.constexpr,
++    stride_b_t: tl.constexpr,
++    stride_o_t: tl.constexpr,
++    stride_state_slot: tl.constexpr,
++    stride_d_slot: tl.constexpr,
++    stride_k_slot: tl.constexpr,
++    stride_g_slot: tl.constexpr,
++    stride_rawv_slot: tl.constexpr,
++    stride_qsl: tl.constexpr,
++    stride_indices: tl.constexpr,
++    stride_replay_indices: tl.constexpr,
++    H: tl.constexpr,
++    HV: tl.constexpr,
++    K: tl.constexpr,
++    V: tl.constexpr,
++    BV: tl.constexpr,
++    BS: tl.constexpr,
++    BC: tl.constexpr,
++    NK: tl.constexpr,
++    BKT: tl.constexpr,
++    MAX_CACHE_LEN: tl.constexpr,
++    SOFTPLUS_THRESHOLD: tl.constexpr,
++    NULL_BLOCK_ID: tl.constexpr,
++    DOT_PRECISION: tl.constexpr,
++):
++    """The image verify kernel (non-flush rows, bf16 checkpoint, residual rings) on the
++    prep kernel's tiles; the history term follows the K loop and runs only when the
++    ring holds history (fold-every-commit leaves it empty at every verify)."""
++    i_v = tl.program_id(0)
++    i_n = tl.program_id(1)
++    i_hv = tl.program_id(2)
++    i_h = i_hv // (HV // H)
++    o_v = i_v * BV + tl.arange(0, BV)
++    o_s = tl.arange(0, BS)
++    o_c = tl.arange(0, BC)
++    mask_v = o_v < V
++    bos = tl.load(query_start_loc + i_n * stride_qsl).to(tl.int64)
++    eos = tl.load(query_start_loc + (i_n + 1) * stride_qsl).to(tl.int64)
++    spec_len = eos - bos
++    mask_s = o_s < spec_len
++    o_s_safe = tl.where(mask_s, o_s, 0)
++    state_idx = tl.load(ssm_state_indices + i_n * stride_indices).to(tl.int64)
++    replay_idx = tl.load(replay_indices + i_n * stride_replay_indices).to(tl.int64)
++    p_o = o + (bos + o_s_safe[:, None]) * stride_o_t + i_hv * V + o_v[None, :]
++    if state_idx <= NULL_BLOCK_ID:
++        full_mask = (o_s < spec_len)[:, None] & mask_v[None, :]
++        tl.store(
++            p_o,
++            tl.zeros([BS, BV], dtype=tl.float32).to(p_o.dtype.element_ty),
++            mask=full_mask,
++        )
++        return
++    if tl.load(is_flush_flags + replay_idx) != 0:
++        return
++    b_write_pos = tl.load(write_pos + replay_idx).to(tl.int64)
++    b_cache_base = tl.load(cache_base + replay_idx).to(tl.int32)
++    out_mask = mask_s[:, None] & mask_v[None, :]
++    cache_valid = o_c < b_write_pos
++    phys_c = (b_cache_base + o_c) & (MAX_CACHE_LEN - 1)
++    phys_spec = (b_cache_base + b_write_pos.to(tl.int32) + o_s) & (MAX_CACHE_LEN - 1)
++
++    A_log_val = tl.load(A_log + i_hv).to(tl.float32)
++    dt_bias_val = tl.load(dt_bias + i_hv).to(tl.float32)
++    a_s = tl.load(
++        a + (bos + o_s_safe) * stride_a_t + i_hv, mask=mask_s, other=0.0
++    ).to(tl.float32)
++    b_s = tl.load(
++        b + (bos + o_s_safe) * stride_b_t + i_hv, mask=mask_s, other=0.0
++    ).to(tl.float32)
++    x = a_s + dt_bias_val
++    softplus_x = tl.where(x <= SOFTPLUS_THRESHOLD, tl.log(1.0 + tl.exp(x)), x)
++    g_s = tl.where(mask_s, -tl.exp(A_log_val) * softplus_x, 0.0)
++    beta_s = tl.where(mask_s, 1.0 / (1.0 + tl.exp(-b_s)), 0.0)
++    G_s = tl.cumsum(g_s, axis=0)
++    expG_s = tl.exp(G_s)
++
++    row = (i_n * H + i_h) * BS
++    hw_q = tl.zeros([BV, BS], dtype=tl.float32)
++    hw_k = tl.zeros([BV, BS], dtype=tl.float32)
++    for kk in range(NK):
++        o_kt = kk * BKT + tl.arange(0, BKT)
++        mask_kt = o_kt < K
++        p_t = (row + o_s[:, None]) * K + o_kt[None, :]
++        q_tile = tl.load(qs + p_t, mask=mask_kt[None, :], other=0.0)
++        k_tile = tl.load(ks + p_t, mask=mask_kt[None, :], other=0.0)
++        k_residual_tile = tl.load(krs + p_t, mask=mask_kt[None, :], other=0.0)
++        p_h0 = (
++            h0
++            + state_idx * stride_state_slot
++            + i_hv * V * K
++            + o_v[:, None] * K
++            + o_kt[None, :]
++        )
++        sc_tile = tl.load(p_h0, mask=mask_v[:, None] & mask_kt[None, :], other=0.0)
++        qT = tl.trans(q_tile)
++        kT = tl.trans(k_tile)
++        k_residual_T = tl.trans(k_residual_tile)
++        sc_tile = sc_tile.to(k_tile.dtype)
++        hw_q += tl.dot(sc_tile, qT)
++        hw_k += tl.dot(sc_tile, kT)
++        hw_k += tl.dot(sc_tile, k_residual_T)
++
++    if b_write_pos > 0:
++        p_g_main = g_cache + replay_idx * stride_g_slot + i_hv * MAX_CACHE_LEN + phys_c
++        b_g_all = tl.load(p_g_main, mask=cache_valid, other=0.0).to(tl.float32)
++        b_g_prefix = tl.cumsum(b_g_all, axis=0)
++        b_g_total = tl.sum(b_g_all, axis=0)
++        b_replay_decay = tl.where(cache_valid, tl.exp(b_g_total - b_g_prefix), 0.0)
++        b_total_decay = tl.exp(b_g_total)
++        p_d_main = d_cache + (
++            replay_idx * stride_d_slot
++            + (i_hv * MAX_CACHE_LEN + phys_c[None, :]) * V
++            + o_v[:, None]
++        )
++        b_d_all = tl.load(
++            p_d_main, mask=mask_v[:, None] & cache_valid[None, :], other=0.0
++        ).to(tl.float32)
++        b_d_scaled = (b_d_all * b_replay_decay[None, :]).to(d_cache.dtype.element_ty)
++        scores_q = tl.zeros([BC, BS], dtype=tl.float32)
++        scores_k = tl.zeros([BC, BS], dtype=tl.float32)
++        for kk in range(NK):
++            o_kt = kk * BKT + tl.arange(0, BKT)
++            mask_kt = o_kt < K
++            p_t = (row + o_s[:, None]) * K + o_kt[None, :]
++            qT = tl.trans(tl.load(qs + p_t, mask=mask_kt[None, :], other=0.0))
++            kT = tl.trans(tl.load(ks + p_t, mask=mask_kt[None, :], other=0.0))
++            p_k = k_cache + (
++                replay_idx * stride_k_slot
++                + (i_h * MAX_CACHE_LEN + phys_c[:, None]) * K
++                + o_kt[None, :]
++            )
++            khist_tile = tl.load(
++                p_k, mask=cache_valid[:, None] & mask_kt[None, :], other=0.0
++            )
++            scores_q += tl.dot(khist_tile, qT, input_precision=DOT_PRECISION)
++            scores_k += tl.dot(khist_tile, kT, input_precision=DOT_PRECISION)
++        hw_q = b_total_decay * hw_q + tl.dot(
++            b_d_scaled, scores_q.to(b_d_scaled.dtype), input_precision=DOT_PRECISION
++        )
++        hw_k = b_total_decay * hw_k + tl.dot(
++            b_d_scaled, scores_k.to(b_d_scaled.dtype), input_precision=DOT_PRECISION
++        )
++
++    p_m = (row + o_s[:, None]) * BS + o_s[None, :]
++    kk_mat = tl.load(kkm + p_m)
++    kq_mat = tl.load(kqm + p_m)
++    lower = (o_s[:, None] > o_s[None, :]) & mask_s[:, None] & mask_s[None, :]
++    diff_ij = G_s[:, None] - G_s[None, :]
++    A_mat = tl.where(lower, beta_s[:, None] * tl.exp(diff_ij) * kk_mat, 0.0)
++    b_Ai = -A_mat
++    for ii in range(2, BS):
++        r = tl.sum(tl.where((o_s == ii)[:, None], -A_mat, 0.0), axis=0)
++        r = tl.where(o_s < ii, r, 0.0)
++        r = r + tl.sum(r[:, None] * b_Ai, axis=0)
++        b_Ai = tl.where((o_s == ii)[:, None], r, b_Ai)
++    T_mat = b_Ai + (o_s[:, None] == o_s[None, :]).to(tl.float32)
++
++    p_v = v + (bos + o_s_safe[None, :]) * stride_v_t + i_hv * V + o_v[:, None]
++    v_tile = tl.load(p_v, mask=mask_v[:, None] & mask_s[None, :], other=0.0).to(
++        tl.float32
++    )
++    R_mat = beta_s[None, :] * (v_tile - expG_s[None, :] * hw_k)
++    D_spec = tl.zeros([BV, BS], dtype=tl.float32)
++    for j in tl.static_range(BS):
++        Rj = tl.sum(tl.where((o_s == j)[None, :], R_mat, 0.0), axis=1)
++        Tj = tl.sum(tl.where((o_s == j)[None, :], T_mat, 0.0), axis=1)
++        D_spec += Rj[:, None] * Tj[None, :]
++    causalF = (o_s[:, None] <= o_s[None, :]) & mask_s[:, None] & mask_s[None, :]
++    diff_ji = G_s[None, :] - G_s[:, None]
++    F_mat = tl.where(causalF, tl.exp(diff_ji) * kq_mat, 0.0)
++    DF = tl.zeros([BV, BS], dtype=tl.float32)
++    for j in tl.static_range(BS):
++        Dj = tl.sum(tl.where((o_s == j)[None, :], D_spec, 0.0), axis=1)
++        Fj = tl.sum(tl.where((o_s == j)[:, None], F_mat, 0.0), axis=0)
++        DF += Dj[:, None] * Fj[None, :]
++    O_tile = expG_s[None, :] * hw_q + DF
++    tl.store(p_o, tl.trans(O_tile).to(p_o.dtype.element_ty), mask=out_mask)
++
++    spec_store_mask = mask_s & ((b_write_pos + o_s) < MAX_CACHE_LEN)
++    p_cur_d = d_cache + (
++        replay_idx * stride_d_slot
++        + (i_hv * MAX_CACHE_LEN + phys_spec[None, :]) * V
++        + o_v[:, None]
++    )
++    d_hi = D_spec.to(p_cur_d.dtype.element_ty)
++    tl.store(p_cur_d, d_hi, mask=mask_v[:, None] & spec_store_mask[None, :])
++    p_cur_v = rawv_cache + (
++        replay_idx * stride_rawv_slot
++        + (i_hv * MAX_CACHE_LEN + phys_spec[None, :]) * V
++        + o_v[:, None]
++    )
++    tl.store(
++        p_cur_v,
++        (D_spec - d_hi.to(tl.float32)).to(p_cur_v.dtype.element_ty),
++        mask=mask_v[:, None] & spec_store_mask[None, :],
++    )
++    if i_v == 0:
++        p_cur_g = g_cache + replay_idx * stride_g_slot + i_hv * MAX_CACHE_LEN + phys_spec
++        tl.store(p_cur_g, g_s, mask=spec_store_mask)
++
++
++@functools.lru_cache(maxsize=None)
++def _is_gfx95() -> bool:
++    from sglang.srt.utils import is_gfx95_supported
++
++    return is_gfx95_supported()
++
++
++def _served_layout(q, v, checkpoint_state, rawv_cache, rawk_cache, beta_cache,
++                   max_cache_len, max_spec_len, use_qk_l2norm_in_kernel) -> bool:
++    return (
++        _is_gfx95()
++        and checkpoint_state.dtype == torch.bfloat16
++        and rawv_cache is not None
++        and rawk_cache is not None
++        and beta_cache is None
++        and max_cache_len == 16
++        and max_spec_len == 4
++        and q.shape[-1] == 128
++        and v.shape[-1] == 128
++        and use_qk_l2norm_in_kernel
++    )
++
++
++def gdn_verify_split(
++    *,
++    q,
++    k,
++    v,
++    a,
++    b,
++    A_log,
++    dt_bias,
++    checkpoint_state,
++    d_cache,
++    k_cache,
++    g_cache,
++    rawv_cache,
++    rawk_cache,
++    out,
++    query_start_loc,
++    ssm_state_indices,
++    replay_indices,
++    write_pos,
++    cache_base,
++    is_flush,
++    max_cache_len,
++    max_spec_len,
++    scale,
++    null_block_id=0,
++    dot_precision="ieee",
++):
++    """The verify launch as prep + main kernels (served layout only)."""
++    _, HV, V, K = checkpoint_state.shape
++    H = k.shape[1]
++    B = query_start_loc.shape[0] - 1
++    BS = max(4, triton.next_power_of_2(max_spec_len))
++    BC = max(16, triton.next_power_of_2(max_cache_len))
++    nk = 2
++    BKT = triton.next_power_of_2(K) // nk
++    block_v = 64
++    qs = torch.empty((B, H, BS, K), device=q.device, dtype=q.dtype)
++    ks = torch.empty_like(qs)
++    krs = torch.empty_like(qs)
++    kkm = torch.empty((B, H, BS, BS), device=q.device, dtype=torch.float32)
++    kqm = torch.empty_like(kkm)
++    _gdn_verify_prep_kernel[(B, H)](
++        q,
++        k,
++        k_cache,
++        rawk_cache,
++        qs,
++        ks,
++        krs,
++        kkm,
++        kqm,
++        query_start_loc,
++        ssm_state_indices,
++        replay_indices,
++        write_pos,
++        cache_base,
++        is_flush,
++        scale,
++        q.stride(0),
++        k.stride(0),
++        k_cache.stride(0),
++        rawk_cache.stride(0),
++        query_start_loc.stride(0),
++        ssm_state_indices.stride(0),
++        replay_indices.stride(0),
++        H=H,
++        K=K,
++        BS=BS,
++        NK=nk,
++        BKT=BKT,
++        MAX_CACHE_LEN=max_cache_len,
++        NULL_BLOCK_ID=null_block_id,
++        DOT_PRECISION=dot_precision,
++        num_warps=1,
++        num_stages=1,
++    )
++    _gdn_verify_main_kernel[(triton.cdiv(V, block_v), B, HV)](
++        v,
++        a,
++        b,
++        A_log,
++        dt_bias,
++        out,
++        checkpoint_state,
++        d_cache,
++        k_cache,
++        g_cache,
++        rawv_cache,
++        qs,
++        ks,
++        krs,
++        kkm,
++        kqm,
++        query_start_loc,
++        ssm_state_indices,
++        replay_indices,
++        write_pos,
++        cache_base,
++        is_flush,
++        v.stride(0),
++        a.stride(0),
++        b.stride(0),
++        out.stride(0),
++        checkpoint_state.stride(0),
++        d_cache.stride(0),
++        k_cache.stride(0),
++        g_cache.stride(0),
++        rawv_cache.stride(0),
++        query_start_loc.stride(0),
++        ssm_state_indices.stride(0),
++        replay_indices.stride(0),
++        H=H,
++        HV=HV,
++        K=K,
++        V=V,
++        BV=block_v,
++        BS=BS,
++        BC=BC,
++        NK=nk,
++        BKT=BKT,
++        MAX_CACHE_LEN=max_cache_len,
++        SOFTPLUS_THRESHOLD=20.0,
++        NULL_BLOCK_ID=null_block_id,
++        DOT_PRECISION=dot_precision,
++        num_warps=1,
++        num_stages=1,
++    )
++    return out
++
++
++def gdn_verify_amd(*, launch_mode: str, **kw):
++    """``gdn_replayssm_spec_decode`` with the flag's verify launch at the served layout;
++    the image call for other layouts and launch modes."""
++    from sglang.kernels.ops.attention.linear.gdn_replayssm_spec_decode import (
++        gdn_replayssm_spec_decode,
++    )
++
++    if launch_mode != "verify" or not _served_layout(
++        kw["q"],
++        kw["v"],
++        kw["checkpoint_state"],
++        kw["rawv_cache"],
++        kw["rawk_cache"],
++        kw["beta_cache"],
++        kw["max_cache_len"],
++        kw["max_spec_len"],
++        kw.get("use_qk_l2norm_in_kernel", True),
++    ):
++        return gdn_replayssm_spec_decode(**kw, launch_mode=launch_mode)
++    if kw["query_start_loc"].shape[0] - 1 <= STAGES1_MAX_BATCH:
++        return gdn_replayssm_spec_decode(**kw, launch_mode=launch_mode, num_stages=1)
++    kw.pop("beta_cache")
++    kw.pop("use_qk_l2norm_in_kernel", None)
++    return gdn_verify_split(**kw)
++
++
++@triton.jit
++def _gdn_commit_layer_loop_kernel(
++    h0,
++    d_cache,
++    k_cache,
++    g_cache,
++    d_residual_cache,
++    k_residual_cache,
++    ssm_state_indices,
++    replay_indices,
++    write_pos,
++    cache_base,
++    is_flush_flags,
++    accept_lens,
++    mamba_track_indices,
++    mamba_steps_to_track,
++    num_layers,
++    stride_state_slot: tl.constexpr,
++    stride_d_slot: tl.constexpr,
++    stride_k_slot: tl.constexpr,
++    stride_g_slot: tl.constexpr,
++    stride_d_residual_slot: tl.constexpr,
++    stride_k_residual_slot: tl.constexpr,
++    stride_state_layer: tl.constexpr,
++    stride_d_layer: tl.constexpr,
++    stride_k_layer: tl.constexpr,
++    stride_g_layer: tl.constexpr,
++    stride_d_residual_layer: tl.constexpr,
++    stride_k_residual_layer: tl.constexpr,
++    stride_indices: tl.constexpr,
++    stride_replay_indices: tl.constexpr,
++    stride_accept: tl.constexpr,
++    stride_track: tl.constexpr,
++    stride_steps: tl.constexpr,
++    H: tl.constexpr,
++    HV: tl.constexpr,
++    K: tl.constexpr,
++    V: tl.constexpr,
++    BV: tl.constexpr,
++    MAX_CACHE_LEN: tl.constexpr,
++    NULL_BLOCK_ID: tl.constexpr,
++    HAS_TRACK: tl.constexpr,
++):
++    """gdn_replayssm_compact_commit_kernel (residual rings) for all layers of one
++    (v tile, request, v head): the per-layer arithmetic is the image kernel's; ring
++    entries past max(write_pos, track length) are not loaded (the image multiplies
++    them by a zero decay)."""
++    i_v = tl.program_id(0)
++    i_n = tl.program_id(1)
++    i_hv = tl.program_id(2)
++    i_h = i_hv // (HV // H)
++
++    state_idx = tl.load(ssm_state_indices + i_n * stride_indices).to(tl.int64)
++    replay_idx = tl.load(replay_indices + i_n * stride_replay_indices).to(tl.int64)
++    if state_idx <= NULL_BLOCK_ID:
++        return
++    n_history = tl.load(write_pos + replay_idx).to(tl.int32)
++    fold_active = tl.load(is_flush_flags + replay_idx) != 0
++    if HAS_TRACK:
++        track_idx = tl.load(mamba_track_indices + i_n * stride_track).to(tl.int64)
++        track_step = tl.load(mamba_steps_to_track + i_n * stride_steps).to(tl.int32)
++        has_track = (track_idx > NULL_BLOCK_ID) & (track_step >= 0)
++        n_accepted = tl.load(accept_lens + i_n * stride_accept).to(tl.int32)
++        track_len = n_history - n_accepted + track_step + 1
++    else:
++        track_idx = NULL_BLOCK_ID
++        has_track = False
++        track_len = 0
++    if (not fold_active) and (not has_track):
++        return
++
++    base = tl.load(cache_base + replay_idx).to(tl.int32)
++    o_t = tl.arange(0, MAX_CACHE_LEN)
++    phys = (base + o_t) & (MAX_CACHE_LEN - 1)
++    o_k = tl.arange(0, K)
++    o_v = i_v * BV + tl.arange(0, BV)
++    mask_v = o_v < V
++    live = o_t < tl.maximum(n_history, track_len)
++    off_h0 = state_idx * stride_state_slot + i_hv * V * K + o_v[None, :] * K + o_k[:, None]
++    off_track = (
++        track_idx * stride_state_slot + i_hv * V * K + o_v[None, :] * K + o_k[:, None]
++    )
++    off_keys = (
++        replay_idx * stride_k_slot + (i_h * MAX_CACHE_LEN + phys[:, None]) * K + o_k[None, :]
++    )
++    off_kres = (
++        replay_idx * stride_k_residual_slot
++        + (i_h * MAX_CACHE_LEN + phys[:, None]) * K
++        + o_k[None, :]
++    )
++    off_upd = (
++        replay_idx * stride_d_slot
++        + (i_hv * MAX_CACHE_LEN + phys[:, None]) * V
++        + o_v[None, :]
++    )
++    off_ures = (
++        replay_idx * stride_d_residual_slot
++        + (i_hv * MAX_CACHE_LEN + phys[:, None]) * V
++        + o_v[None, :]
++    )
++    off_g = replay_idx * stride_g_slot + i_hv * MAX_CACHE_LEN + phys
++
++    for i_layer in tl.range(0, num_layers, num_stages=2):
++        lyr = i_layer.to(tl.int64)
++        p_h0 = h0 + lyr * stride_state_layer + off_h0
++        old_state = tl.load(p_h0, mask=mask_v[None, :], other=0.0).to(tl.float32)
++        keys = tl.load(k_cache + lyr * stride_k_layer + off_keys, mask=live[:, None], other=0.0)
++        key_residual = tl.load(
++            k_residual_cache + lyr * stride_k_residual_layer + off_kres,
++            mask=live[:, None],
++            other=0.0,
++        )
++        upd_mask = live[:, None] & mask_v[None, :]
++        updates = tl.load(
++            d_cache + lyr * stride_d_layer + off_upd, mask=upd_mask, other=0.0
++        ).to(tl.float32)
++        updates += tl.load(
++            d_residual_cache + lyr * stride_d_residual_layer + off_ures,
++            mask=upd_mask,
++            other=0.0,
++        ).to(tl.float32)
++        gates = tl.load(g_cache + lyr * stride_g_layer + off_g).to(tl.float32)
++
++        if fold_active:
++            active_mask = o_t < n_history
++            active_g = tl.where(active_mask, gates, 0.0)
++            active_prefix = tl.cumsum(active_g, axis=0)
++            active_total = tl.sum(active_g, axis=0)
++            active_decay = tl.where(active_mask, tl.exp(active_total - active_prefix), 0.0)
++            active_updates = updates * active_decay[:, None]
++            active_hi = active_updates.to(k_cache.dtype.element_ty)
++            active_lo = (active_updates - active_hi.to(tl.float32)).to(
++                k_cache.dtype.element_ty
++            )
++            active_delta = tl.dot(tl.trans(keys), active_hi)
++            active_delta += tl.dot(tl.trans(keys), active_lo)
++            active_delta += tl.dot(tl.trans(key_residual), active_hi)
++            active_delta += tl.dot(tl.trans(key_residual), active_lo)
++            tl.store(
++                p_h0,
++                (old_state * tl.exp(active_total) + active_delta).to(p_h0.dtype.element_ty),
++                mask=mask_v[None, :],
++            )
++
++        if HAS_TRACK:
++            if has_track:
++                track_mask = o_t < track_len
++                track_g = tl.where(track_mask, gates, 0.0)
++                track_prefix = tl.cumsum(track_g, axis=0)
++                track_total = tl.sum(track_g, axis=0)
++                track_decay = tl.where(track_mask, tl.exp(track_total - track_prefix), 0.0)
++                track_updates = updates * track_decay[:, None]
++                track_hi = track_updates.to(k_cache.dtype.element_ty)
++                track_lo = (track_updates - track_hi.to(tl.float32)).to(
++                    k_cache.dtype.element_ty
++                )
++                track_delta = tl.dot(tl.trans(keys), track_hi)
++                track_delta += tl.dot(tl.trans(keys), track_lo)
++                track_delta += tl.dot(tl.trans(key_residual), track_hi)
++                track_delta += tl.dot(tl.trans(key_residual), track_lo)
++                tl.store(
++                    h0 + lyr * stride_state_layer + off_track,
++                    (old_state * tl.exp(track_total) + track_delta).to(
++                        h0.dtype.element_ty
++                    ),
++                    mask=mask_v[None, :],
++                )
++
++
++def commit_gdn_replayssm_circular_amd(**kw) -> None:
++    """``commit_gdn_replayssm_circular`` with the layer-loop fold at the served layout
++    from ``LAYER_LOOP_MIN_BATCH`` requests; the image call otherwise."""
++    from sglang.kernels.ops.attention.linear.gdn_replayssm_spec_decode import (
++        _finish_gdn_replayssm_circular_fold_kernel,
++        commit_gdn_replayssm_circular,
++    )
++
++    checkpoint_state = kw["checkpoint_state"]
++    d_cache, k_cache = kw["d_cache"], kw["k_cache"]
++    d_residual_cache = kw["d_residual_cache"]
++    k_residual_cache = kw["k_residual_cache"]
++    state_batch_indices = kw["state_batch_indices"]
++    num_layers, _, HV, V, K = checkpoint_state.shape
++    B = state_batch_indices.shape[0]
++    max_cache_len = d_cache.shape[-2]
++    if not (
++        _is_gfx95()
++        and checkpoint_state.dtype == torch.bfloat16
++        and d_residual_cache is not None
++        and k_residual_cache is not None
++        and max_cache_len == 16
++        and K == 128
++        and V == 128
++        and B >= LAYER_LOOP_MIN_BATCH
++    ):
++        return commit_gdn_replayssm_circular(**kw)
++    replay_indices = kw["replay_indices"]
++    accept_lens = kw["accept_lens"]
++    null_block_id = kw.get("null_block_id", -1)
++    track_indices = kw.get("mamba_track_indices")
++    track_steps = kw.get("mamba_steps_to_track")
++    has_track = track_indices is not None and track_steps is not None
++    if has_track:
++        stride_track, stride_steps = track_indices.stride(0), track_steps.stride(0)
++    else:
++        track_indices, track_steps = state_batch_indices, accept_lens
++        stride_track = stride_steps = 0
++    block_v = 128
++    _gdn_commit_layer_loop_kernel[(triton.cdiv(V, block_v), B, HV)](
++        checkpoint_state,
++        d_cache,
++        k_cache,
++        kw["g_cache"],
++        d_residual_cache,
++        k_residual_cache,
++        state_batch_indices,
++        replay_indices,
++        kw["write_pos"],
++        kw["cache_base"],
++        kw["is_flush"],
++        accept_lens,
++        track_indices,
++        track_steps,
++        num_layers,
++        checkpoint_state.stride(1),
++        d_cache.stride(1),
++        k_cache.stride(1),
++        kw["g_cache"].stride(1),
++        d_residual_cache.stride(1),
++        k_residual_cache.stride(1),
++        checkpoint_state.stride(0),
++        d_cache.stride(0),
++        k_cache.stride(0),
++        kw["g_cache"].stride(0),
++        d_residual_cache.stride(0),
++        k_residual_cache.stride(0),
++        state_batch_indices.stride(0),
++        replay_indices.stride(0),
++        accept_lens.stride(0),
++        stride_track,
++        stride_steps,
++        H=k_cache.shape[2],
++        HV=HV,
++        K=K,
++        V=V,
++        BV=block_v,
++        MAX_CACHE_LEN=max_cache_len,
++        NULL_BLOCK_ID=null_block_id,
++        HAS_TRACK=has_track,
++        num_warps=8,
++        num_stages=2,
++    )
++    _finish_gdn_replayssm_circular_fold_kernel[(1,)](
++        kw["write_pos"],
++        kw["cache_base"],
++        kw["is_flush"],
++        state_batch_indices,
++        replay_indices,
++        B,
++        stride_indices=state_batch_indices.stride(0),
++        stride_replay_indices=replay_indices.stride(0),
++        MAX_CACHE_LEN=max_cache_len,
++        BLOCK=triton.next_power_of_2(max(1, B)),
++        NULL_BLOCK_ID=null_block_id,
++    )
+diff --git a/python/sglang/srt/layers/attention/linear/gdn_backend.py b/python/sglang/srt/layers/attention/linear/gdn_backend.py
+index b2cd869..248e101 100644
+--- a/python/sglang/srt/layers/attention/linear/gdn_backend.py
++++ b/python/sglang/srt/layers/attention/linear/gdn_backend.py
+@@ -5,6 +5,7 @@ import msgspec
+ import torch
+ 
+ from sglang.kernels.ops.attention.linear.fused_gdn_gating import fused_gdn_gating
++from sglang.kernels.ops.attention.linear.gdn_verify_amd import gdn_verify_amd_enabled
+ from sglang.kernels.ops.mamba.causal_conv1d_triton import (
+     CAUSAL_CONV1D_FWD_BLOCK_M,
+ )
+@@ -603,6 +604,10 @@ class GDNAttnBackend(MambaAttnBackendBase):
+     # forward_extend then runs the graph-safe chain on these static tables.
+     prefill_graph_metadata: Optional[GDNPrefillGraphMetadata] = None
+ 
++    # SGLANG_AMD_GDN_VERIFY, read in __init__; the default covers backends
++    # built without it.
++    _amd_gdn_verify: bool = False
++
+     def _create_kernel_dispatcher(self, backends):
+         return GDNKernelDispatcher(backends.decode, backends.prefill, backends.verify)
+ 
+@@ -629,6 +634,7 @@ class GDNAttnBackend(MambaAttnBackendBase):
+             )
+         )
+         self._use_strided_target_verify_qkv = False
++        self._amd_gdn_verify = gdn_verify_amd_enabled()
+         # A prefill batch never holds more requests than the pool.
+         self.prefill_graph_max_seqs = min(
+             self.req_to_token_pool.size, envs.SGLANG_GDN_PREFILL_GRAPH_MAX_SEQS.get()
+@@ -1253,6 +1259,20 @@ class GDNAttnBackend(MambaAttnBackendBase):
+             )
+         return core_attn_out
+ 
++    def _verify_intermediate_state_indices(
++        self, forward_batch: ForwardBatch, cache_indices: torch.Tensor, num_requests: int
++    ) -> torch.Tensor:
++        if self._amd_gdn_verify and not pp_spec_stable_rows_enabled():
++            # The selector returns this table unless PP spec stable rows are on;
++            # skip building its mask (one compare kernel a layer).
++            return self.verify_intermediate_state_indices
++        return select_verify_intermediate_state_indices(
++            self.verify_intermediate_state_indices,
++            forward_batch.req_pool_indices,
++            cache_indices[:num_requests] >= 0,
++            self.req_to_token_pool.size,
++        )
++
+     def forward_extend(
+         self,
+         layer: RadixLinearAttention,
+@@ -1302,11 +1322,8 @@ class GDNAttnBackend(MambaAttnBackendBase):
+             intermediate_conv_window_cache = (
+                 mamba_cache_params.intermediate_conv_window[0]
+             )
+-            intermediate_state_indices = select_verify_intermediate_state_indices(
+-                self.verify_intermediate_state_indices,
+-                forward_batch.req_pool_indices,
+-                cache_indices[: query_start_loc.shape[0] - 1] >= 0,
+-                self.req_to_token_pool.size,
++            intermediate_state_indices = self._verify_intermediate_state_indices(
++                forward_batch, cache_indices, query_start_loc.shape[0] - 1
+             )
+             mamba_pool = self.state_pool
+             use_replayssm_fold = (
+@@ -1785,6 +1802,11 @@ class GDNAttnBackend(MambaAttnBackendBase):
+             gdn_replayssm_spec_decode,
+         )
+ 
++        if self._amd_gdn_verify:
++            from sglang.kernels.ops.attention.linear.gdn_verify_amd import (
++                gdn_verify_amd as gdn_replayssm_spec_decode,
++            )
++
+         H, K = layer.num_k_heads, layer.head_k_dim
+         HV, V = layer.num_v_heads, layer.head_v_dim
+         # q/k/v may be [1, seq, *] (fallback split) or [seq, *] (fused split);
+diff --git a/python/sglang/srt/models/qwen4_exp.py b/python/sglang/srt/models/qwen4_exp.py
+index ae4c285..0ad8a06 100644
+--- a/python/sglang/srt/models/qwen4_exp.py
++++ b/python/sglang/srt/models/qwen4_exp.py
+@@ -14,6 +14,7 @@ import triton
+ import triton.language as tl
+ from torch import nn
+ 
++from sglang.kernels.ops.attention.linear.gdn_verify_amd import gdn_verify_amd_enabled
+ from sglang.kernels.ops.elementwise.elementwise import fused_sigmoid_mul
+ from sglang.srt.configs.qwen4_exp import Qwen4ExpConfig, Qwen4ExpTextConfig
+ from sglang.srt.distributed import tensor_model_parallel_all_reduce
+@@ -24,6 +25,7 @@ from sglang.srt.environ import envs
+ from sglang.srt.eplb.expert_distribution import get_global_expert_distribution_recorder
+ from sglang.srt.eplb.expert_location import ModelConfigForExpertLocation
+ from sglang.srt.layers.attention.linear.utils import (
++    pp_spec_stable_rows_enabled,
+     select_verify_intermediate_state_indices,
+ )
+ from sglang.srt.layers.aux_hidden_states import AuxHiddenStateList
+@@ -429,12 +431,17 @@ def _commit_ple_batch(batch: Optional[_PLEBatch], forward_batch: ForwardBatch) -
+         valid_steps = batch.valid_tokens.reshape(
+             batch.lengths.shape[0], batch.row_width
+         )
+-        dst_indices_raw = select_verify_intermediate_state_indices(
+-            None,
+-            forward_batch.req_pool_indices,
+-            batch.lengths.ne(0),
+-            pool.size,
+-        )
++        if gdn_verify_amd_enabled() and not pp_spec_stable_rows_enabled():
++            # The selector returns its None default without PP spec stable
++            # rows; skip building its mask (one compare kernel a step).
++            dst_indices_raw = None
++        else:
++            dst_indices_raw = select_verify_intermediate_state_indices(
++                None,
++                forward_batch.req_pool_indices,
++                batch.lengths.ne(0),
++                pool.size,
++            )
+         ngram.set_intermediate_context(
+             torch.where(
+                 valid_steps.unsqueeze(-1),
+diff --git a/python/sglang/srt/speculative/spec_utils.py b/python/sglang/srt/speculative/spec_utils.py
+index ea72e60..1a37948 100644
+--- a/python/sglang/srt/speculative/spec_utils.py
++++ b/python/sglang/srt/speculative/spec_utils.py
+@@ -1248,10 +1248,18 @@ def commit_mamba_states_after_verify(
+             commit_gdn_replayssm_circular,
+             commit_gdn_replayssm_spec,
+         )
++        from sglang.kernels.ops.attention.linear.gdn_verify_amd import (
++            gdn_verify_amd_enabled,
++        )
+         from sglang.kernels.ops.mamba.mamba_state_scatter_triton import (
+             fused_conv_window_scatter_with_mask,
+         )
+ 
++        if gdn_verify_amd_enabled():
++            from sglang.kernels.ops.attention.linear.gdn_verify_amd import (
++                commit_gdn_replayssm_circular_amd as commit_gdn_replayssm_circular,
++            )
++
+         spec_state = mamba_pool.get_speculative_mamba2_params_all_layers()
+         state_batch_indices = req_pool.get_mamba_indices(batch.req_pool_indices)
+         replay_indices = batch.req_pool_indices

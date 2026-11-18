@@ -1,0 +1,189 @@
+# QSA indexer prefill selection on gfx95: the exact topk_v2 on unscaled scores, scored with one pipeline stage
+# https://github.com/sgl-project/sglang/pull/50871  (PR head 1fbe3b8b2e: topk_v2 for the relative prefill selection
+# on gfx95, no switch)
+# https://github.com/sgl-project/sglang/pull/51263  (PR head 68b2d4fcf3: one pipeline stage for relative prefill
+# scoring on gfx95, no switch)
+# Generated against the image's SGLang checkout (1ced9a9eb0) with patches 01-15 applied; source files only (tests dropped).
+# Differs from the PRs: both behind the opt-in SGLANG_AMD_QSA_PREFILL_TOPK_V2=1 (fast_topk on scaled scores and three
+# stages unless set); in batch-invariant mode the selection keeps fast_topk, where sgl-project/sglang#50871 runs
+# topk_v2 in its deterministic mode.
+# Apply in /sgl-workspace/sglang with git apply.
+
+diff --git a/python/sglang/srt/layers/attention/qsa/mqa.py b/python/sglang/srt/layers/attention/qsa/mqa.py
+index 393b3dc..74612f0 100644
+--- a/python/sglang/srt/layers/attention/qsa/mqa.py
++++ b/python/sglang/srt/layers/attention/qsa/mqa.py
+@@ -596,6 +596,30 @@ def _prefill_key_splits(row_blocks: int, width: int, block_n: int, device) -> in
+     return _PREFILL_KEY_SPLIT_LEVELS[-1]
+ 
+ 
++@functools.lru_cache(maxsize=None)
++def amd_prefill_topk_v2_enabled() -> bool:
++    """SGLANG_AMD_QSA_PREFILL_TOPK_V2: 0 (default) or 1, read once per process (the QSA
++    indexer's construction reads it first, so another value fails at startup).
++
++    1 serves the QSA indexer's request-relative prefill selection as
++    sgl-project/sglang#50871 does on gfx95 (topk_v2 on unscaled scores) and scores those
++    rows with one pipeline stage (_prefill_relative_num_stages); 0 keeps today's path."""
++    value = os.environ.get("SGLANG_AMD_QSA_PREFILL_TOPK_V2", "0")
++    if value not in ("0", "1"):
++        raise ValueError(
++            f"SGLANG_AMD_QSA_PREFILL_TOPK_V2 must be 0 or 1, got {value!r}"
++        )
++    return value == "1"
++
++
++def _prefill_relative_num_stages() -> int:
++    """K-tile pipeline stages of the relative prefill kernel. On gfx95 one stage keeps a
++    CTA's shared memory at 48 KB (bf16) instead of 80 KB, so three CTAs fit a CU's
++    160 KB instead of two; the scores are the same. AMD: one stage only with
++    SGLANG_AMD_QSA_PREFILL_TOPK_V2=1."""
++    return 1 if amd_prefill_topk_v2_enabled() and is_gfx95_supported() else 3
++
++
+ def torch_qsa_mqa_prefill_relative(
+     q: torch.Tensor,
+     k: torch.Tensor,
+@@ -631,7 +655,9 @@ def tilelang_qsa_mqa_prefill_relative(
+     ``[r, row_starts[r]:row_ends[r]]``. Columns past a row's length are left
+     undefined: callers must read only each row's own section (the fast top-k
+     reads ``[start, start + length)``). ``width`` must cover the longest row
+-    and comes from host lengths, so no device sync is needed to size it."""
++    and comes from host lengths, so no device sync is needed to size it. A
++    ``score_scale`` of 1 skips the division pass: the scores come back unscaled,
++    for callers that only order them."""
+ 
+     if not HAS_TILELANG:
+         raise RuntimeError("TileLang is unavailable")
+@@ -663,6 +689,7 @@ def tilelang_qsa_mqa_prefill_relative(
+         head_dim=head_dim,
+         block_n=block_n,
+         block_q=block_q,
++        num_stages=_prefill_relative_num_stages(),
+         key_splits=_prefill_key_splits(
+             padded_rows // block_q, width, block_n, q.device
+         ),
+@@ -675,7 +702,9 @@ def tilelang_qsa_mqa_prefill_relative(
+         ends,
+     )
+     logits = logits[:rows]
+-    logits.div_(score_scale or math.sqrt(head_dim))
++    scale = score_scale or math.sqrt(head_dim)
++    if scale != 1.0:
++        logits.div_(scale)
+     return logits
+ 
+ 
+diff --git a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
+index 67cb861..9115fda 100644
+--- a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
++++ b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
+@@ -20,6 +20,7 @@ from sglang.srt.layers.attention.qsa.metadata import (
+ from sglang.srt.layers.attention.qsa.mqa import (
+     HAS_TILELANG,
+     QSA_DECODE_HEAD_ALIGNMENT,
++    amd_prefill_topk_v2_enabled,
+     qsa_mqa_decode,
+     qsa_mqa_prefill,
+     qsa_mqa_prefill_relative,
+@@ -36,6 +37,7 @@ from sglang.srt.layers.linear import ReplicatedLinear
+ from sglang.srt.layers.rotary_embedding.utils import apply_rotary_emb
+ from sglang.srt.layers.utils.multi_platform import MultiPlatformOp
+ from sglang.srt.model_executor.runner import get_is_capture_mode
++from sglang.srt.utils.common import is_gfx95_supported
+ 
+ # Cap on the fp32 [query_rows, compressed_keys] prefill logits workspace;
+ # top-k is per row, so tiling rows does not change the selection.
+@@ -52,6 +54,27 @@ def _qsa_prefill_row_chunk_size(rows: int, keys: int, heads: int) -> int:
+     return min(rows, max_padded_rows)
+ 
+ 
++# topk_v2 loads 16-byte vectors of fp32 scores: a logits row stride must be a
++# multiple of this many columns.
++_TOPK_V2_ROW_ALIGNMENT = 4
++
++
++def _exact_block_topk(
++    logits: torch.Tensor, lengths: torch.Tensor, topk: int
++) -> torch.Tensor:
++    """Top-k blocks of each request-relative logits row (-1 padded), from topk_v2."""
++    from sglang.kernels.ops.attention.dsv4.topk import topk_transform_ragged_v2
++
++    block_indices = logits.new_empty((logits.shape[0], topk), dtype=torch.int32)
++    topk_transform_ragged_v2(
++        logits,
++        lengths,
++        out_offsets=torch.zeros_like(lengths),
++        out_indices=block_indices,
++    )
++    return block_indices
++
++
+ class QSAIndexer(MultiPlatformOp):
+     """Config-driven fused-QK, weight-free sparse-attention indexer."""
+ 
+@@ -94,6 +117,9 @@ class QSAIndexer(MultiPlatformOp):
+             self.index_head_dim, eps=getattr(config, "rms_norm_eps", 1e-6)
+         )
+         self._rope_axis_map_cache = None
++        self.amd_prefill_topk_v2 = (
++            amd_prefill_topk_v2_enabled() and is_gfx95_supported()
++        )
+ 
+     @staticmethod
+     def _validate_config(config) -> None:
+@@ -480,9 +506,25 @@ class QSAIndexer(MultiPlatformOp):
+         relative = (
+             max_row_keys is not None and max_row_keys > 0 and q.is_cuda and HAS_TILELANG
+         )
++        # AMD (SGLANG_AMD_QSA_PREFILL_TOPK_V2, sgl-project/sglang#50871): on gfx95 the
++        # blocks come from topk_v2, which is exact where fast_topk drops members of an
++        # overfull threshold bin (as in sgl-project/sglang#36807). It only reads the order
++        # of the scores, so they stay unscaled, and it needs the logits row stride to be a
++        # multiple of _TOPK_V2_ROW_ALIGNMENT. This image's topk_v2 has no deterministic
++        # build, so batch-invariant mode keeps fast_topk.
++        use_topk_v2 = (
++            relative
++            and getattr(self, "amd_prefill_topk_v2", False)
++            and not is_batch_invariant_mode_enabled()
++        )
++        score_scale = 1.0 if use_topk_v2 else None
++        logits_width = max_row_keys
++        if use_topk_v2:
++            logits_width = -(-max_row_keys // _TOPK_V2_ROW_ALIGNMENT)
++            logits_width *= _TOPK_V2_ROW_ALIGNMENT
+         row_chunk_size = _qsa_prefill_row_chunk_size(
+             rows,
+-            max_row_keys if relative else compressed_keys.shape[0],
++            logits_width if relative else compressed_keys.shape[0],
+             q.shape[1],
+         )
+         for row_start in range(0, rows, row_chunk_size):
+@@ -504,14 +546,20 @@ class QSAIndexer(MultiPlatformOp):
+                     compressed_keys,
+                     chunk_starts,
+                     row_ends[chunk_slice],
+-                    max_row_keys,
+-                )
+-                block_indices = qsa_fast_topk(
+-                    logits,
+-                    torch.zeros_like(chunk_starts),
+-                    chunk_lengths,
+-                    topk=self.block_topk,
++                    logits_width,
++                    score_scale,
+                 )
++                if use_topk_v2:
++                    block_indices = _exact_block_topk(
++                        logits, chunk_lengths, self.block_topk
++                    )
++                else:
++                    block_indices = qsa_fast_topk(
++                        logits,
++                        torch.zeros_like(chunk_starts),
++                        chunk_lengths,
++                        topk=self.block_topk,
++                    )
+             else:
+                 logits = qsa_mqa_prefill(
+                     q[chunk_slice],

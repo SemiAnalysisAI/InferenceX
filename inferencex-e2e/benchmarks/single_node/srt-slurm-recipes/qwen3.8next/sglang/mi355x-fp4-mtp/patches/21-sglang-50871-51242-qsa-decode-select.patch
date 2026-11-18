@@ -1,0 +1,135 @@
+# QSA decode, verify and draft-extend blocks selected by the exact topk_v2, and draft-extend rows scored grouped
+# https://github.com/sgl-project/sglang/pull/50871  (PR head 1fbe3b8b2e: its commit 0e30623971 carries the decode
+# and verify topk_v2 selection, reworked; no switch on gfx95)
+# https://github.com/sgl-project/sglang/pull/51242  (PR head 96ae27c95f: draft-extend rows scored with the grouped
+# verify kernel of sgl-project/sglang#48625, no switch)
+# Generated against the image's SGLang checkout (1ced9a9eb0) with patches 01-16 applied; source files only (tests dropped).
+# Differs from the PRs: opt-in through SGLANG_AMD_QSA_DECODE_TOPK_V2=1 (fast_topk unless set) and
+# SGLANG_AMD_QSA_GROUPED_DRAFT_EXTEND=1 (per-row draft-extend scoring unless set; it takes effect with patch 11's
+# SGLANG_AMD_QSA_GROUPED_VERIFY=1).
+# Apply in /sgl-workspace/sglang with git apply.
+
+diff --git a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
+index 9115fda..98ac764 100644
+--- a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
++++ b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import os
+ from typing import Optional, Tuple
+ 
+ import torch
+@@ -75,6 +76,66 @@ def _exact_block_topk(
+     return block_indices
+ 
+ 
++def _amd_decode_flag(name: str) -> bool:
++    """SGLANG_AMD_QSA_GROUPED_DRAFT_EXTEND / SGLANG_AMD_QSA_DECODE_TOPK_V2: 0 (default) or 1,
++    read at indexer construction.
++
++    SGLANG_AMD_QSA_GROUPED_DRAFT_EXTEND=1 passes the draft-extend graph's window width
++    as rows_per_request, so with SGLANG_AMD_QSA_GROUPED_VERIFY=1 the MTP layer's scoring call
++    runs the grouped kernel that call already runs for target verify (bit for bit the per-row
++    kernel's scores). SGLANG_AMD_QSA_DECODE_TOPK_V2=1 selects the decode, verify and
++    draft-extend rows' blocks with the DeepSeek-V4 top-k v2 kernel (gfx950): an exact top-k,
++    where fast_topk's candidate cap can drop above-threshold blocks; ties at the k-th score are
++    resolved either way, so rows with such ties may select other tied blocks than today.
++    """
++    value = os.environ.get(name, "0")
++    if value not in ("0", "1"):
++        raise ValueError(f"{name} must be 0 or 1, got {value!r}")
++    return value == "1"
++
++
++def _decode_rows_per_request(
++    indexer, forward_batch, indexer_metadata, is_target_verify, is_draft_extend, rows
++) -> int:
++    """Consecutive decode rows of one request that share its page-table row, for the
++    scoring call's grouped kernel; 1 when the layout is not known to be uniform."""
++    if is_target_verify:
++        return (
++            int(forward_batch.spec_info.draft_token_num)
++            if indexer_metadata.is_cuda_graph
++            else 1
++        )
++    # A draft-extend v2 graph lays each request's num_tokens_per_req window rows out back to
++    # back over the request's page-table row, padding rows last (graph_metadata MODE 2); a
++    # window widened by num_front_tokens (multi-layer EAGLE) keeps one row per group.
++    if (
++        is_draft_extend
++        and getattr(indexer, "amd_grouped_draft_extend", False)
++        and indexer_metadata.is_cuda_graph
++    ):
++        spec_info = forward_batch.spec_info
++        width = int(getattr(spec_info, "num_tokens_per_req", 0) or 0)
++        front = int(getattr(spec_info, "num_front_tokens", 0) or 0)
++        if width > 1 and front == 0 and rows % width == 0:
++            return width
++    return 1
++
++
++def _amd_decode_topk(logits: torch.Tensor, lengths: torch.Tensor, topk: int) -> torch.Tensor:
++    """SGLANG_AMD_QSA_DECODE_TOPK_V2: fast_topk's contract (row b's top-k of its first
++    lengths[b] scores, unordered, -1 padded; a row that fits k gets 0..length-1 without its
++    scores being read) from the DeepSeek-V4 top-k v2 kernel without a page table."""
++    from sglang.kernels.ops.attention.dsv4.topk import (
++        plan_topk_v2,
++        topk_transform_paged_v2,
++    )
++
++    lengths = lengths.to(torch.int32)
++    out = logits.new_empty((logits.shape[0], topk), dtype=torch.int32)
++    topk_transform_paged_v2(logits, lengths, None, out, 1, plan_topk_v2(lengths))
++    return out
++
++
+ class QSAIndexer(MultiPlatformOp):
+     """Config-driven fused-QK, weight-free sparse-attention indexer."""
+ 
+@@ -120,6 +181,13 @@ class QSAIndexer(MultiPlatformOp):
+         self.amd_prefill_topk_v2 = (
+             amd_prefill_topk_v2_enabled() and is_gfx95_supported()
+         )
++        self.amd_grouped_draft_extend = _amd_decode_flag(
++            "SGLANG_AMD_QSA_GROUPED_DRAFT_EXTEND"
++        )
++        self.amd_decode_topk_v2 = (
++            _amd_decode_flag("SGLANG_AMD_QSA_DECODE_TOPK_V2")
++            and is_gfx95_supported()
++        )
+ 
+     @staticmethod
+     def _validate_config(config) -> None:
+@@ -613,7 +681,11 @@ class QSAIndexer(MultiPlatformOp):
+             rows_per_request=rows_per_request,
+             num_query_heads=self.index_n_heads,
+         )
+-        if use_fast_topk:
++        if use_fast_topk and getattr(self, "amd_decode_topk_v2", False):
++            block_indices = _amd_decode_topk(
++                logits, compressed_lengths, self.block_topk
++            )
++        elif use_fast_topk:
+             # Decode rows start at zero, so compressed lengths double as row lengths;
+             # skip the generic zero-fill + subtract.
+             from sglang.kernels.ops.attention.fast_topk import fast_topk
+@@ -838,10 +910,13 @@ class QSAIndexer(MultiPlatformOp):
+                 logical_positions,
+                 indexer_metadata.get_seqlens_int32(),
+                 defer_expansion=q.is_cuda and indexer_metadata.defer_block_expansion,
+-                rows_per_request=(
+-                    int(forward_batch.spec_info.draft_token_num)
+-                    if is_target_verify and indexer_metadata.is_cuda_graph
+-                    else 1
++                rows_per_request=_decode_rows_per_request(
++                    self,
++                    forward_batch,
++                    indexer_metadata,
++                    is_target_verify,
++                    is_draft_extend,
++                    num_valid_tokens,
+                 ),
+             )
+ 
