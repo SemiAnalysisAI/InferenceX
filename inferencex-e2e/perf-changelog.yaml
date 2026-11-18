@@ -13049,3 +13049,10 @@
     - "kv-cache-dtype fp8_e4m3 (vllm-project/vllm#66036) at every point: plain per-tensor fp8 KV rows read by the AITER sparse MLA kernel, instead of the default block-scaled fp8_ds_mla record."
     - "Draft weights unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped. Its attention layers share the target's KV cache dtype, so target and draft both use the per-tensor fp8_e4m3 KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5036
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  description:
+    - "Update image and points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5021
+  scenario-type: [agentic-coding]
