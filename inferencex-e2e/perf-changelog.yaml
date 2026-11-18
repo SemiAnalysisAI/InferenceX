@@ -13014,3 +13014,15 @@
     - "Drop the TP8/EP1 concurrency 4 point; concurrency 4 runs on the TP4/EP4 HiCache arm, which delivers more throughput per GPU."
     - "Keep TP4/EP4 HiCache and DCP4 settings unchanged and run GSM8K on every eval-selected point, including the Gluon path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4748
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+    - glm5.2-fp8-mi355x-sglang-agentic-mtp
+    - glm5.3-fp4-mi355x-sglang-agentic-mtp
+    - glm5.3-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use the SGLang ROCm 7.2.0 MI35x 20261117 daily image (lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261117) for every GLM-5.2 and GLM-5.3 MI355X SGLang AgentX config; it carries sgl-project/sglang#45205, which lets a DCP decode group run on the hierarchical cache."
+    - "GLM-5.3 moves off its two digest-pinned images: the MXFP4 checkpoint loads on this tag, which is past sgl-project/sglang#40776."
+  pr-link: TBD
