@@ -13006,6 +13006,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4593
 
 - config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Use the SGLang ROCm 7.2.0 MI35x 20261113 daily image (lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261113, SGLang 0.5.23.dev20261113+g5792cf6e5e) for GLM-5.2 MXFP4 MI355X AgentX MTP."
+    - "Use Gluon target MoE only for TP8/EP1 at concurrency 1 and 2; preserve the checkpoint BF16 draft experts with the auto speculative MoE backend."
+    - "TP8/EP1 keeps 32k prefill chunks; the image includes the Gluon FP32 partial-store fix from sgl-project/sglang#48397."
+    - "Drop the TP8/EP1 concurrency 4 point; concurrency 4 runs on the TP4/EP4 HiCache arm, which delivers more throughput per GPU."
+    - "Keep TP4/EP4 HiCache and DCP4 settings unchanged and run GSM8K on every eval-selected point, including the Gluon path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4748
+
+- config-keys:
     - qwen3.5-fp8-mi325x-sglang-agentic-mtp
   description:
     - "Update SGLang image from lmsysorg/sglang:v0.5.22-rocm720-mi30x to v0.5.23-rocm720-mi30x."
