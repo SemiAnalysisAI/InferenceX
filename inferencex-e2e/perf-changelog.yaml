@@ -12637,3 +12637,12 @@
     - Run two full 1P1D points on the same validated k31-pd-1115r2 image. The c144 arm restores decode GMU 0.92 with max sequences 144 and a 576-token full graph. The c8 arm uses latency-specialized decode with K7 block rejection, max sequences 1, FULL_DECODE_ONLY graphs at 1 and 8 rows, no ReplaySSM, and no DRAM offload. Preserve prefix matching at 512 tokens and use the SA model cache mount.
     - Add a c8-only point with the complete node-local tokenizer repository. Reduce prefill GMU from 0.91 to 0.89 because the single-request prefill KV pool was overprovisioned and left no physical memory for a late-loaded Triton kernel on an SA node; keep the decode command, image, topology, and full workload unchanged.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-unified-umbp-2p3d
+  scenario-type: [agentic-coding]
+  description:
+    - Run Kimi-K3.1-Pro at global concurrency 240 on two prefill and three decode MI355X nodes with the unified mum-tracking image and the compatible standalone UMBP overlay.
+    - Route prefill with cache-aware placement and decode with sticky least-loaded placement. Keep K3 golden acceptance, prefill shortest-prefill-first, sequence parallelism and packed-query preparation, plus decode ReplaySSM, replicated query, VUP-RS, multistream and native96 CPRR.
+    - Allocate 1799 GB of distributed DRAM on each prefill node and 2399 GB on each decode node, backed by 2 MiB HugeTLB pages and 128 GiB MR segments. Preserve full-NIC MoRIIO WRITE at TC104 and fail closed on pool or registration errors.
+  pr-link: XXX
