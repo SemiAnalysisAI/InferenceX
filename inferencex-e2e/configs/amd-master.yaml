@@ -755,13 +755,13 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
 # (2) TP4/EP4 with DCP4 at concurrency [16, 24, 40, 48]; striping the latent KV
 #     across the four ranks holds the working set on device without HiCache,
 #     which DSA DCP rejects.
-# (3) TP8/EP1 without KV offloading, concurrency sweep [1, 2, 4];
-#     EP=1 eliminates the MoE all-to-all collective, reducing ITL at low-to-mid
+# (3) TP8/EP1 with Gluon target MoE and no KV offloading, concurrency [1, 2];
+#     EP=1 eliminates the MoE all-to-all collective, reducing ITL at low
 #     concurrency; GPU-resident KV keeps latency independent of DRAM bandwidth.
-#     c4 intentionally overlaps arms (1) and (3) to compare the topology crossover.
+#     Concurrency 4 runs on arm (1), where TP4/EP4 gives more throughput per GPU.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp4-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261028
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261113
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
@@ -775,7 +775,7 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
       search-space:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12, 14, 16], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, dcp-size: 4, kv-offloading: none, conc-list: [16, 24, 40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 # GLM-5.2 FP8 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding: the FP8 precision sibling of glm5.2-fp4-mi355x-sglang-agentic-mtp,
@@ -1036,6 +1036,23 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
       - { tp: 2, ep: 2, dp-attn: true, kv-offloading: none, spec-decoding: draft_model, conc-list: [128, 256], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 32], srt-recipe: agentic.yaml }
 
+glm5.3-fp4-mi355x-sglang-agentic-mtp:
+  # Dated nightly: this Quark checkpoint needs sgl-project/sglang#40776, which v0.5.22 predates.
+  image: lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261025@sha256:bb3370918fb7fc4adce40d4192e61ad7dbccbc8159e2f6063318120d0bc0e949
+  model: amd/GLM-5.3-Quark-MXFP4-AttnFP8
+  model-prefix: glm5.3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: glm5.3/sglang/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.85
+      search-space:
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12, 14, 16, 20], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp, srt-recipe: agentic.yaml }
+
 # The golden acceptance curve is the GLM-5.3 NVFP4 SGLang curve in
 # infx/golden_al_distribution/glm-5.3-nvfp4__mtp__native__default-default.yaml.
 glm5.3-fp8-mi355x-sglang-agentic-mtp:
@@ -1137,7 +1154,7 @@ glm5.3flash-fp8-mi355x-sglang-agentic-mtp:
 # SGLang ROCm 10 MI35X release image. TP2/EP1 up to c32, TP4/EP1 up to c16,
 # DP2 attention with TP MoE at c32 and c64 (c32 overlaps TP2). Host Engram on all.
 dsv41flash-fp4-mi355x-sglang-agentic-dspark:
-  image: lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261021
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261111
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
