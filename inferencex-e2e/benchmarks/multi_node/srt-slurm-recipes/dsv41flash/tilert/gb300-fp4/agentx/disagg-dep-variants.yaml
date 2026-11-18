@@ -1,0 +1,213 @@
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb300-tilert-agentx-dep
+  # Installs the pinned tilert release from PyPI; the prefill takes only its KV connector.
+  setup_script: dsv41flash-tilert-nv.sh
+  slurm:
+    # A cold prefill start with the Rust front end takes about 15 minutes; the replay runs one hour
+    # after a warm-up of up to 30 minutes.
+    time_limit: "06:00:00"
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  environment:
+    PYTHONHASHSEED: "0"
+  health_check:
+    max_attempts: 2160
+    interval_seconds: 10
+  roles:
+    prefill:
+      engine:
+        type: vllm
+        set_visible_devices: true
+      # The official vLLM image, unmodified; TileRT enters the prefill only as a KV connector.
+      container: vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121@sha256:76a533475156ffdb3656ccc389d0c71f5cec16897c0f490ac43e4f379c4b4f0d
+      # Six DEP2 workers (DP2 + expert parallel), two per tray; the point at 4 sequences per
+      # decode GPU takes four (two trays) below.
+      nodes: 3
+      workers: 6
+      gpus: 2
+      env:
+        TILERT_ROLE: prefill
+        HF_HUB_CACHE: "/hf_hub_cache"
+        HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+        TRANSFORMERS_CACHE: "/hf_hub_cache"
+        VLLM_USE_V2_MODEL_RUNNER: "1"
+        # The router takes the first token id from the request itself, so the prefill serves with
+        # vLLM's Rust front end and does not return token ids as logprobs.
+        VLLM_USE_RUST_FRONTEND: "1"
+        VLLM_ENGINE_READY_TIMEOUT_S: "7200"
+        VLLM_RPC_TIMEOUT: "600000"
+        VLLM_LOG_STATS_INTERVAL: "1"
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+        VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        # The FlashInfer autotune results vLLM saved for this prefill on GB300 in this image, under
+        # its config hash; the setup script copies them into the cache directory, so a cold start
+        # loads them instead of re-tuning. A cold tune's temporary buffers otherwise leave the
+        # prefill a KV cache of about 60 GiB per GPU instead of about 88 GiB.
+        VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR: /tmp/flashinfer-autotune
+        AUTOTUNE_CACHE_SEED: /configs/dsv41flash-tilert-gb300-flashinfer-autotune
+      args:
+        served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
+        tokenizer-mode: deepseek_v41
+        language-model-only: true
+        max-model-len: 1048576
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        enable-expert-parallel: true
+        enable-ep-weight-filter: true
+        enable-cumem-allocator: true
+        numa-bind: true
+        gpu-memory-utilization: 0.95
+        kv-cache-dtype: fp8
+        attention-config: '{"backend":"FLASHMLA_MEGA_ATTN_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+        kernel-config: '{"enable_flashinfer_autotune":true,"moe_backend":"deep_gemm_mega_moe","sparse_indexer_topk_backend":"deep_select"}'
+        engram-config: '{"cpu_offload":true,"embedding_across_dp":true,"use_thp":false}'
+        # The DSpark draft runs on the prefill too, so the decode receives its window state.
+        speculative-config: '{"method":"dspark","num_speculative_tokens":5}'
+        max-num-seqs: 64
+        max-num-batched-tokens: 32768
+        long-prefill-token-threshold: 8192
+        prefill-schedule-interval: 1
+        prefix-cache-retention-interval: 32768
+        compilation-config: '{"mode":"VLLM_COMPILE","cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2046],"decoder_replay_cudagraph_capture_sizes":[6,12,18,24,30,36,48,60,72,96,120,144,192,240,288,384,480,576,768,1020,1536,2048],"max_cudagraph_capture_size":2046}'
+        # The release's connector sends each prompt's KV to the decode over NVLink; vLLM's own
+        # SimpleCPUOffloadConnector keeps a lazy CPU DRAM KV tier of 64 GiB per DP rank (128 GiB
+        # per worker, 256 GiB per tray).
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"TileRTOfficialConnector","kv_connector_module_path":"tilert.pd_vllm.official_connector","kv_role":"kv_producer","kv_connector_extra_config":{"tilert_model":"dsv41","tilert_max_seq_len":1048576,"tilert_transport":"nvlink"}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":68719476736,"lazy_offload":true}}]}}'
+    decode:
+      engine:
+        type: tilert
+        # One decode instance spans 8 nodes: each node starts one decode_server, which starts its 4
+        # ranks (TILERT_PD_NNODES / _NODE_RANK / _RDZV); only the first node serves HTTP and
+        # receives the KV.
+        multi_node_launch: node-env
+      container: nvidia/cuda:13.2.0-runtime-ubuntu24.04@sha256:5f070a8f89e13ce9247188d7ed71a77119ed44e8be360e53c9ae1719e3089ea0
+      nodes: 8
+      workers: 1
+      gpus: 32
+      env:
+        TILERT_ROLE: decode
+        # The CUDA runtime image (arm64) carries no Python stack: the setup script installs the
+        # official Torch wheel the release library is built against, then the pinned serving stack.
+        BOOTSTRAP_TORCH: "torch==2.13.0+cu132"
+        # GB300: 152 SMs; the setup script refuses another part.
+        DECODE_EXPECTED_SMS: "152"
+        SERVE_DEPS: "fastapi==0.162.0 uvicorn==0.54.0 starlette==1.10.0 pydantic==2.14.2 pydantic_core==2.50.2 anyio==4.16.0 h11==0.16.0 httpx==0.28.1 httpcore==1.0.9 requests==2.34.2 pillow==13.0.0 transformers==5.20.2 tokenizers==0.23.3"
+        CUDA_MODULE_LOADING: EAGER
+        CUDA_CACHE_MAXSIZE: "4294967296"
+        # Sequences per decode GPU and the decode graph sizes (sequences per GPU each extra
+        # graph is captured for); both set per point below. The release reads only these, the
+        # simulated-acceptance pair InferenceX sets, and the multi-node rendezvous from the
+        # environment; every other setting is fixed in the release (at 16 sequences per GPU it
+        # also gives each tray's decode leader a core of its own, with no setting).
+        TILERT_EP_BATCH: "4"
+        TILERT_WEP_GRAPH_LANES: "1,2"
+        # The setup script fills in the checkpoint's inference/config.json if the cache lacks it.
+        TILERT_CKPT_DIR: /hf_hub_cache/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
+      args:
+        model: dsv41
+        # TileRT reads the Hugging Face checkpoint directly; no converted weights.
+        model-weights-dir: /hf_hub_cache/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
+        max-seq-len: 1048576
+        transport: nvlink
+        # DSpark with five drafts, simulated acceptance at the golden AL 3.51 (thinking_on):
+        # InferenceX sets TILERT_SIMULATE_ACC_LEN / TILERT_SIMULATE_ACC_METHOD from these two keys.
+        with-mtp: true
+        num-mtp: 5
+  frontend:
+    type: tilert-router
+    # The router renders and tokenizes each request with the release's Rust port of vLLM's
+    # DeepSeek-V4.1 encoder and splits reasoning with vLLM's parser, so it runs in the prefill image
+    # with tilert/pd_vllm added the way the prefill adds it. It has a node of its own (16 router
+    # processes and the Rust front), shared only with the benchmark client. srtctl gives it every
+    # prefill worker (--vllm-url and TILERT_ROUTER_P_URLS); it sends each prefill straight to a
+    # worker and one of its two DP ranks, keeping a conversation on one of them for its prefix cache.
+    container_image: vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121@sha256:76a533475156ffdb3656ccc389d0c71f5cec16897c0f490ac43e4f379c4b4f0d
+    placement:
+      node: dedicated
+    enable_multiple_frontends: false
+    env:
+      TILERT_ROLE: router
+    args:
+      # Serve the client port with the release's Rust front (pd_stream); the router moves to
+      # 127.0.0.1 on the next port. If the front is not up, the client port falls back to the
+      # router (rs_front_sup logs "FALLBACK"); InferenceX's infx_rs_front_strict wrapper turns that
+      # fallback into a failed run, so every published run was served by pd_stream.
+      rust-front: true
+      model: dsv41
+      # Splits reasoning from content; public builds parse no tool calls.
+      parser: deepseek_v41
+      model-path: /hf_hub_cache/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
+      # The checkpoint has no generation_config.json: sampling defaults are explicit.
+      generation-config: vllm
+      default-temperature: 1.0
+      default-top-p: 1.0
+      default-top-k: 0
+      queue-timeout: 1800
+      # Requests the decode admits at once: 32 GPUs x sequences per GPU; set per point below.
+      decode-capacity: 128
+  sbatch_directives:
+    cpus-per-task: "144"
+    mem: "0"
+  srun_options:
+    mem: "0"
+    container-writable: ""
+    container-remap-root: ""
+  post_eval:
+    container_image: vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121@sha256:76a533475156ffdb3656ccc389d0c71f5cec16897c0f490ac43e4f379c4b4f0d
+  benchmark:
+    # The client needs Python; the decode container is the bare CUDA runtime image.
+    container_image: vllm/vllm-openai:cu134-nightly-a2bcb5657a881a002e79d0adab3c6b5e39436121@sha256:76a533475156ffdb3656ccc389d0c71f5cec16897c0f490ac43e4f379c4b4f0d
+    env:
+      TOKENIZER: /hf_hub_cache/models--deepseek-ai--DeepSeek-V4.1-Flash/snapshots/314113f8a7dadb388215396ba5fbee2c610a04d6
+      SERVED_MODEL_NAME: deepseek-ai/DeepSeek-V4.1-Flash
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+      # Thinking on with high effort, the regime of the golden acceptance curve.
+      AIPERF_EXTRA_INPUTS: '{"chat_template_kwargs":{"reasoning_effort":"high","thinking":true},"temperature":1}'
+      # Up to 30 minutes for the warm-up requests of thousands of lanes to finish.
+      AGENTIC_WARMUP_GRACE_PERIOD: "1800"
+      HF_HOME: /logs/hf_cache
+      HF_HUB_OFFLINE: ""
+      TRANSFORMERS_VERBOSITY: error
+      TOKENIZERS_PARALLELISM: "false"
+
+override_4p1d_dep2_dep32_eb4_c1200:
+  name: dsv41flash-fp4-gb300-tilert-agentx-4p1d-dep2-dep32-eb4-c1200
+  roles:
+    prefill:
+      nodes: 2
+      workers: 4
+    decode:
+      env:
+        TILERT_EP_BATCH: "4"
+        TILERT_WEP_GRAPH_LANES: "1,2"
+  frontend:
+    args:
+      decode-capacity: 128
+
+override_6p1d_dep2_dep32_eb8_c2000:
+  name: dsv41flash-fp4-gb300-tilert-agentx-6p1d-dep2-dep32-eb8-c2000
+  roles:
+    decode:
+      env:
+        TILERT_EP_BATCH: "8"
+        TILERT_WEP_GRAPH_LANES: "1,2,4"
+  frontend:
+    args:
+      decode-capacity: 256
+
+override_6p1d_dep2_dep32_eb16_c3200:
+  name: dsv41flash-fp4-gb300-tilert-agentx-6p1d-dep2-dep32-eb16-c3200
+  roles:
+    decode:
+      env:
+        TILERT_EP_BATCH: "16"
+        TILERT_WEP_GRAPH_LANES: "1,2,4,8"
+  frontend:
+    args:
+      decode-capacity: 512

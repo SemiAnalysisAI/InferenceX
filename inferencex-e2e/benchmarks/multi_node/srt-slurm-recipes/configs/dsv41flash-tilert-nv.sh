@@ -39,6 +39,7 @@ fi
 # check its sha256, then use that file.
 declare -A TILERT_WHEEL_SHA256=(
     [0.1.8]=17ae557029a14c2676e20ae5d61c895fb5658a06f0bdd232fe7b21d478f1f838
+    [0.2.1]=afefcca46370eb98fddbebd5b12d8fa538dda074a2c4afdb7cbd7c2e9dfd443c
 )
 want_sha=${TILERT_WHEEL_SHA256[$ROUTER_VERSION]:-}
 if [[ -z "$want_sha" ]]; then
@@ -74,6 +75,35 @@ PY
     python3 -c 'import importlib.util as u; assert u.find_spec("tilert.pd_vllm.prefill_connector"), "no tilert.pd_vllm.prefill_connector"'
     if [[ "$TILERT_ROLE" == router ]]; then
         python3 -c 'import tilert.pd_vllm.pd_router, vllm.tokenizers.deepseek_v41'
+        # A release that parses output splits reasoning with vLLM's parser engine; a release with
+        # the Rust front must carry the front binary its supervisor runs, or every request would
+        # take the Python fallback.
+        python3 - <<'PY'
+import importlib, importlib.util as u
+if u.find_spec("tilert.pd_vllm.oai_parser"):
+    for name in ("vllm.parser.deepseek_v41", "vllm.parser.engine.streaming_parser_engine", "vllm.parser.engine.events"):
+        importlib.import_module(name)
+if u.find_spec("tilert.pd_vllm.rs_front_sup"):
+    from tilert.pd_vllm import rs_front_sup
+    if rs_front_sup.install_packaged() is None:
+        raise SystemExit("the tilert release's Rust front binary is missing or fails its sha256")
+PY
+        # srt-slurm starts the supervisor as `python -m infx_rs_front_strict`: the release
+        # supervisor with its Python-router fallback turned into a failure, so a run whose Rust
+        # front never comes up, or dies mid-run, fails instead of publishing Python-router numbers.
+        cat > "$pd_root/pkg/infx_rs_front_strict.py" <<'PY'
+import os, sys
+from tilert.pd_vllm import rs_front_sup
+
+def _refuse(self, why):
+    rs_front_sup._log(f"FALLBACK refused: {why}; failing the run")
+    self.stop_all()
+    os._exit(1)
+
+rs_front_sup.Sup.fallback = _refuse
+sys.exit(rs_front_sup.main())
+PY
+        python3 -c 'import importlib.util as u; assert u.find_spec("infx_rs_front_strict")'
     fi
 else
     # The tilert release carries the serving layer (PD code and its engine API).
@@ -98,6 +128,52 @@ if [[ "$TILERT_ROLE" == decode ]]; then
     if ! python3 -c 'import transformers' >/dev/null 2>&1; then
         pip_retry install --quiet --no-cache-dir 'transformers>=4.56'
     fi
+fi
+
+# TILERT_CKPT_DIR=<HF snapshot>: the wide-EP decode reads the model shape from the checkpoint's
+# inference/config.json (the top-level config.json is the multimodal wrapper it rejects). The
+# cluster's cache was filled without that file, so place the release's packaged copy (identical
+# to the Hub file at the pinned revision) when it is missing. Write-then-rename, since every
+# decode node runs this against the shared cache at once.
+if [[ "$TILERT_ROLE" == decode && -n "${TILERT_CKPT_DIR:-}" ]]; then
+    python3 - "$TILERT_CKPT_DIR" <<'PY'
+import importlib.util, os, pathlib, shutil, sys
+ckpt = pathlib.Path(sys.argv[1])
+if (ckpt / "inference_config.json").exists() or (ckpt / "inference" / "config.json").exists():
+    raise SystemExit(0)
+spec = importlib.util.find_spec("tilert.models.dsv41_ep")
+src = pathlib.Path(spec.submodule_search_locations[0]) / "configs" / "inference_config.json"
+dst = ckpt / "inference" / "config.json"
+dst.parent.mkdir(exist_ok=True)
+tmp = dst.with_name(f".config.json.{os.uname().nodename}.{os.getpid()}")
+shutil.copyfile(src, tmp)
+os.replace(tmp, dst)
+print(f"placed {src} at {dst}")
+PY
+fi
+
+# AUTOTUNE_CACHE_SEED=<directory under /configs>: the FlashInfer autotune results vLLM saved for this
+# exact prefill (same image, flags and GPU), in vLLM's own layout under its config hash. A cold start
+# then loads them instead of re-tuning, as a warm deployment does. vLLM reads them only under the
+# same config hash and FlashInfer only with the same library versions and GPU; otherwise the prefill
+# tunes as before. Copy them into the writable VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR, where vLLM saves
+# after a re-tune; write-then-rename, since the two prefill workers on a tray may copy at once.
+if [[ "$TILERT_ROLE" == prefill && -n "${AUTOTUNE_CACHE_SEED:-}" ]]; then
+    check_env_vars VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR
+    python3 - "$AUTOTUNE_CACHE_SEED" "$VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR" <<'PY'
+import os, pathlib, shutil, sys
+src, dst = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+files = sorted(p for p in src.rglob("*.json") if p.is_file())
+if not files:
+    raise SystemExit(f"no autotune results under {src}")
+for f in files:
+    out = dst / f.relative_to(src)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(f".{out.name}.{os.uname().nodename}.{os.getpid()}")
+    shutil.copyfile(f, tmp)
+    os.replace(tmp, out)
+    print(f"seeded {out}")
+PY
 fi
 
 # The decode library is built against one Torch / CUDA pair; fail early on a mismatch instead of
