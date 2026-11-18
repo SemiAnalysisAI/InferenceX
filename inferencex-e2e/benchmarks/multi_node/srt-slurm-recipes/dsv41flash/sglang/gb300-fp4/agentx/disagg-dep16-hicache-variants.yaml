@@ -11,6 +11,14 @@ base:
     install: false
     request_plane: tcp
     event_plane: zmq
+    sidecar: true
+    sidecar_args:
+      - --grpc-startup-deadline-secs
+      - "3600"
+      - --dyn-tool-call-parser
+      - deepseek_v41
+      - --dyn-reasoning-parser
+      - deepseek_v41
   # gb300-nv serves this model from the Hub; read it from the shared mounted cache.
   environment:
     HF_HUB_CACHE: /hf_hub_cache
@@ -92,8 +100,6 @@ base:
         trust-remote-code: true
         tensor-parallel-size: 2
         tokenizer-backend: fastokens
-        router-mode: kv
-        router-session-affinity-ttl-secs: "14400"
         data-parallel-size: 2
         expert-parallel-size: 2
         enable-dp-attention: true
@@ -134,8 +140,6 @@ base:
         PYTHONUNBUFFERED: "1"
         SGLANG_OPT_DSV41_ENGRAM_PEER_SHARDS: "1"
         SGLANG_DSV4_KV_LAYOUT: v41_new
-        # One gateway process saturates a CPU core serving 16 DP ranks.
-        DYN_SGL_GATEWAY_WORKERS: "16"
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
@@ -159,7 +163,6 @@ base:
         trust-remote-code: true
         tensor-parallel-size: 16
         tokenizer-backend: fastokens
-        router-mode: round-robin
         load-balance-method: total_tokens
         data-parallel-size: 16
         expert-parallel-size: 16

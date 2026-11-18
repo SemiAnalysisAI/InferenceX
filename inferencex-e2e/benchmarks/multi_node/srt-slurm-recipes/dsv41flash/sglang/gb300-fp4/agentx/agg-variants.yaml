@@ -10,6 +10,14 @@ base:
   dynamo:
     install: false
     request_plane: tcp
+    sidecar: true
+    sidecar_args:
+      - --grpc-startup-deadline-secs
+      - "3600"
+      - --dyn-tool-call-parser
+      - deepseek_v41
+      - --dyn-reasoning-parser
+      - deepseek_v41
   # gb300-nv serves this model from the Hub; read it from the shared mounted cache.
   environment:
     HF_HUB_CACHE: /hf_hub_cache
