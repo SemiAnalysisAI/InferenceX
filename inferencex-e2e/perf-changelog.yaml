@@ -13029,11 +13029,69 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4748
 
 - config-keys:
+    - h3-bf16-a100-sglang-video
+    - h3-bf16-a100-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add the H3 video workload (h3-v2.yaml release-v1, C1) on 2, 4 and 8 A100-SXM4-80GB GPUs of the a100-cw cluster for SGLang v0.5.23 and vLLM-Omni v0.32.0, with each engine's H100 flags and parallelism: DiT TP2 with Ulysses 1, 2 and 4, since H3 does not fit one 80 GB GPU."
+    - "No one stages H3 on a100-cw, so its launcher downloads the pinned snapshot without the Ref2VA weights (355 GB) into the shared hub cache before it submits a video job; a complete snapshot costs one Hub listing."
+    - "A100 video jobs get a 240-minute Slurm limit and a 255-minute job timeout instead of 150 and 165: an A100 pair serves one H3 request in about 400 s, so the 21-request set holds the node for about 150 minutes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5018
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "New key on vllm/vllm-openai-rocm:nightly-60bd6dd2edd175a1c55fd3488f871e4c3d2ef27d (2026-11-16, digest sha256:67a3a0fb79893fc5a0fcff5f9b739ba8fec7e920875a12e0574c2e9f50cd814c), which carries vllm-project/vllm#64715 (UMBP standalone mode for DeepSeek-V4.1-Flash on ROCm), #66036 (per-tensor fp8_e4m3 KV cache for sparse MLA on ROCm) and #67377 (AITER FlyDSL dense MXFP8 GEMMs and a faster MXFP8 activation quant for DeepSeek-V4.1-Flash). Its MORI v1.2.3.post1 is built with UMBP. The TP4/TP2 key dsv41flash-fp4-mi355x-vllm-agentic-dspark and the TP8 c1 key are unchanged and are not rerun."
+    - "Add concurrency 128, 256 and 384 on two GPUs with attention DP2 and the MoE tensor-parallel across both ranks (tensor-parallel-size 1, data-parallel-size 2, no expert parallelism), fronted by vllm-router 0.1.14 with consistent_hash: prefill cadence (prefill-schedule-interval 11), no --monokernel, five-token DSpark, block size 128, the MXFP4 sparse-logits indexer, Engram tables in host memory, max-num-batched-tokens 16384 and cudagraph capture up to 1024. Concurrency 128 runs without KV offloading, as in the closed https://github.com/SemiAnalysisAI/InferenceX/pull/4992, because the GPU KV cache holds its working set; 256 and 384 add UMBP."
+    - "At 256 and 384, KV offloading to host DRAM through UMBPStoreConnector in standalone mode: a node-local umbp_standalone_server, launched as a critical srt-slurm service before the workers, owns one 449 GB pool (dram-utilization 0.60 of the two-GPU share, 4 KiB pages) shared by both DP ranks; failed loads are recomputed."
+    - "kv-cache-dtype fp8_e4m3 (vllm-project/vllm#66036) at every point: plain per-tensor fp8 KV rows read by the AITER sparse MLA kernel, instead of the default block-scaled fp8_ds_mla record."
+    - "Draft weights unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped. Its attention layers share the target's KV cache dtype, so target and draft both use the per-tensor fp8_e4m3 KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5036
+
+- config-keys:
+    - minimaxm31flash-fp4-h200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to vllm/vllm-openai:nightly-8ca766326652caf4b8e50d1b9118d8a22f6adc73, which selects FlashInfer's SM90 MSA kernels for the indexer and sparse attention."
+    - "Serve flags, DSpark speculation and the search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5122
+
+- config-keys:
+    - minimaxm31flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to vllm/vllm-openai:nightly-8ca766326652caf4b8e50d1b9118d8a22f6adc73, which selects FlashInfer's SM90 MSA kernels for the indexer and sparse attention."
+    - "Serve flags, DSpark speculation and the search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5124
+
+- config-keys:
+    - wan22-bf16-h200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add a vLLM-Omni v0.32.0 Wan2.2-T2V-A14B baseline on 1, 2, 4 and 8 H200 GPUs, on the B200 row's workload (wan22.yaml release-v1, C1) and image digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5110
+
+- config-keys:
+    - wan22-bf16-h100-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add a vLLM-Omni v0.32.0 Wan2.2-T2V-A14B baseline on 1, 2, 4 and 8 H100 GPUs, on the B200 row's workload (wan22.yaml release-v1, C1) and image digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5111
+
+- config-keys:
+    - wan22-bf16-h200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Add an SGLang v0.5.23 Wan2.2-T2V-A14B baseline on 1, 2, 4 and 8 H200 GPUs, on the vLLM-Omni Wan2.2 rows' workload (wan22.yaml release-v1, C1) and parallel layout and the H3 SGLang rows' image digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5113
+
+- config-keys:
     - wan22-bf16-h100-sglang-video
   scenario-type: [video-generation]
   description:
-    - "Add an H100 Wan2.2-T2V-A14B baseline on SGLang v0.5.23, by the digest the H3 SGLang rows use: wan22.yaml release-v1, C1 on 4 and 8 GPUs, conditioning cache disabled. --flow-shift 12.0 is a server flag and boundary_ratio 0.875 comes from the checkpoint; the server refuses to start when either differs from the spec."
-    - "Deployment per count, the vLLM-Omni rows' layout: 4 GPUs CFG parallel 2 x Ulysses 2; 8 GPUs CFG parallel 2 x Ulysses 4. TP 1, performance mode speed, no torch.compile, no DiT offload."
-    - "No 1-GPU or 2-GPU point: with every component resident, 80 GB H100s ran out of memory. On 1 GPU the FP32 UMT5 encoder (21.2 GiB) did not load after both BF16 experts (26.62 GiB each). On 2 GPUs at CFG parallel 2 x Ulysses 1 the weights left 6.8 GB free per GPU and the first denoising step failed."
-    - "The 8-GPU recipe sets --warmup-num-frames 21. The default 17-frame warmup stays under Wan's sharded-decode threshold on 8 decode ranks, so the decode group's NCCL buffers were first allocated in the first 81-frame decode, with under 0.5 GiB free on six of the eight GPUs, and that decode failed. With 21 frames at least 6.8 GiB stays free on every GPU."
+    - "Add an SGLang v0.5.23 Wan2.2-T2V-A14B baseline on 4 and 8 H100 GPUs, on the H200 SGLang row's workload (wan22.yaml release-v1, C1) and image digest, with a 21-frame server warmup on 8 GPUs."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5114
