@@ -3,8 +3,11 @@ name: "disagg-h200-2p2d-pcp8-tp8-dp8-mtp"
 
 
 dynamo:
-  # The nightly image bundles the Dynamo build matching its SGLang commit.
-  install: false
+  # The bundled Dynamo passes data_parallel_rank, which this SGLang commit
+  # renamed to routed_dp_rank; ai-dynamo/dynamo#18929 adapts to both.
+  install: true
+  source:
+    rev: "d567f17e72997745c3ca60d3d36c7130a965785a"
 
 slurm:
   time_limit: "8:00:00"

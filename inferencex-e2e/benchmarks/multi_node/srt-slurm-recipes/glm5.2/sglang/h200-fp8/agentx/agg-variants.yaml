@@ -7,13 +7,15 @@ base:
       revision: f33c6dc501ee5a2c7e35155653b1b1abbc320951
     container: {}
     frameworks:
-      dynamo: 1.8.0.dev20261117
+      dynamo: d567f17e72997745c3ca60d3d36c7130a965785a
       sglang: 0.0.0.dev1+gecd3d75a2
 
   dynamo:
-    # This nightly includes the matching Dynamo adapter. Reinstalling an older
-    # wheel removes compatibility with this SGLang commit.
-    install: false
+    # The bundled Dynamo passes data_parallel_rank, which this SGLang commit
+    # renamed to routed_dp_rank; ai-dynamo/dynamo#18929 adapts to both.
+    install: true
+    source:
+      rev: d567f17e72997745c3ca60d3d36c7130a965785a
 
   resources:
     gpu_type: h200
