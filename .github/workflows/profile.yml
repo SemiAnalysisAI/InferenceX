@@ -119,7 +119,8 @@ jobs:
             --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
             --event-name "${GITHUB_EVENT_NAME}" \
             --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
-            --criteria-json "${PRIORITY_CRITERIA}")
+            --criteria-json "${PRIORITY_CRITERIA}" \
+            --facts-file "${RUNNER_TEMP}/scheduling-facts.json")
           echo "raw=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
 
         env:
@@ -127,6 +128,15 @@ jobs:
           INPUTS_CONFIG_FILE: ${{ inputs.config-file }}
           INPUTS_CONFIG_KEY: ${{ inputs.config-key }}
           INPUTS_CONC: ${{ inputs.conc }}
+
+      - name: Upload scheduling facts
+        if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ runner.temp }}/scheduling-facts.json
+          archive: false
+          overwrite: true
+          if-no-files-found: error
 
       - id: filter
         name: Take first generated job
