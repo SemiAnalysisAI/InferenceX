@@ -917,10 +917,10 @@ glm5.2-fp4-mi355x-atom-disagg-agentic-mtp:
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  # ROCm 10.0 nightly carrying vllm-project/vllm#59039 (decoder SWA bounded
-  # replay on ROCm), #61082 (mono decode on all 40 backbone layers) and #62131
-  # (mono decode on the DSpark draft layers), all switched by --monokernel.
-  image: vllm/vllm-openai-rocm:nightly-4fab5a07475822c6eaa971dceb2e2220d0446808@sha256:6f126f27a3b58959da3c16076248fc99eb31e26d0a3ae9f8563bda7317d6a7e6
+  # ROCm 10.0 nightly of 2026-11-17. --monokernel switches the mono decode
+  # kernels (vllm-project/vllm#61082, #62131), with the tuned TP4 paths of
+  # #63893 and #64883.
+  image: vllm/vllm-openai-rocm:nightly-rocm100-8ca766326652caf4b8e50d1b9118d8a22f6adc73@sha256:a1af8126c4c244b44c6425a3bf3232605566d505e271af93ecfdca7e034bcc57
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -932,10 +932,10 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # TP4 runs c1 and c2 only; TP2 covers concurrency 1-64. c128 and c192
-      # are excluded: c128 did not raise the scored metric at TP=2 (150,683
-      # against 151,896 tok/s/chip at c64).
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2], srt-recipe: agentic.yaml }
+      # TP4 covers concurrency 1-48 for interactivity, TP2 1-64 for throughput
+      # per GPU. c128 and c192 are excluded: c128 did not raise the scored
+      # metric at TP=2 (150,683 against 151,896 tok/s/chip at c64).
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 24, 32, 48], srt-recipe: agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
 # Single-point TP8 c1 scan of DeepSeek-V4.1-Flash on MI355X with mono decode
