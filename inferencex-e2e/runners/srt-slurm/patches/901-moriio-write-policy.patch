@@ -18,3 +18,28 @@
          }
  
      def get_process_environment(self, process: Process) -> dict[str, str]:
+--- a/tests/test_discovery_connector_templates.py
++++ b/tests/test_discovery_connector_templates.py
+@@ -125,3 +125,14 @@
++@pytest.mark.parametrize("read_mode", [False, True])
++def test_discovery_transfer_mode_is_preserved(read_mode: bool) -> None:
++    template = {
++        "kv_connector": "MoRIIOConnector",
++        "kv_connector_extra_config": {"read_mode": read_mode},
++    }
++    command = _command(template)
++    result = json.loads(command[command.index("--kv-transfer-config") + 1])
++    assert result["kv_connector_extra_config"]["read_mode"] is read_mode
++
++
+ @pytest.mark.parametrize(
+     "field,value",
+     [
+@@ -131,7 +143,6 @@
+         ("http_port", 6102),
+         ("http_port", 6101.0),
+         ("http_port", True),
+-        ("read_mode", False),
+     ],
+ )
+ def test_conflicting_discovery_bindings_fail_before_launch(field: str, value: Any) -> None:

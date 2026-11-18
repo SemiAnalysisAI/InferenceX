@@ -6,7 +6,7 @@
              )
 +        proxy = (
 +            {}
-+            if runtime.environment.get("SRT_MORIIO_EXPLICIT_REGISTRATION") == "1"
++            if getattr(runtime, "environment", {}).get("SRT_MORIIO_EXPLICIT_REGISTRATION") == "1"
 +            else {
 +                "proxy_ip": runtime.head_node_ip,
 +                "proxy_ping_port": str(VLLM_DISCOVERY_PORT),
