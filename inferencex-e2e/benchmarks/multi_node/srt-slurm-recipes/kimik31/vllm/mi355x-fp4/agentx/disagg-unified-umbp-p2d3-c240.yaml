@@ -69,15 +69,14 @@ roles:
       max-num-seqs: 48
       max-num-batched-tokens: 16384
       compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":4096,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[256,512,768,1024,1536,2048,3072,4096]}'
-      speculative-config: '{"model": "/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94",
-        "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "ROCM_AITER_MLA", "kv_cache_dtype":
-        "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method": "synthetic", "synthetic_acceptance_length":
-        2.88}'
+      speculative-config: '{"model": "Inferact/Kimi-K3.1-Pro-DSpark", "revision": "e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f",
+        "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "TRITON_ATTN",
+        "draft_sample_method": "probabilistic", "rejection_sample_method": "block"}'
       additional-config: '{"kda_prefill_backend":"fused","k31_pd_preparation":true,"k31_moe_front_pair":false}'
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false,"defer_timeout":300}},{"kv_connector":"UMBPStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"mode":"standalone","endpoint":"/run/k31-umbp/pool.sock","timeout_ms":60000,"lazy_offload":false}}]}}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":true,"defer_timeout":300}},{"kv_connector":"UMBPStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"mode":"standalone","endpoint":"/run/k31-umbp/pool.sock","timeout_ms":60000,"lazy_offload":false}}]}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
-      prefix-match-unit: 512
+      prefix-match-unit: 128
       cp-kv-cache-interleave-size: 1
       quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
       mamba-ssm-cache-dtype: float32
@@ -201,15 +200,14 @@ roles:
       max-num-seqs: 128
       max-num-batched-tokens: 512
       compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":512,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64,72,80,88,96,104,112,120,128,160,176,192,208,224,240,256,288,320,352,384,416,448,480,512]}'
-      speculative-config: '{"model": "/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94",
-        "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "ROCM_AITER_MLA", "kv_cache_dtype":
-        "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method": "synthetic", "synthetic_acceptance_length":
-        2.88}'
+      speculative-config: '{"model": "Inferact/Kimi-K3.1-Pro-DSpark", "revision": "e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f",
+        "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "TRITON_ATTN",
+        "draft_sample_method": "probabilistic", "rejection_sample_method": "block"}'
       additional-config: '{"kda_prefill_backend":"fused","k31_moe_front_pair":true,"k31_pd_preparation":true}'
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false}},{"kv_connector":"UMBPStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"mode":"standalone","endpoint":"/run/k31-umbp/pool.sock","timeout_ms":60000,"enable_lookup":false,"save_decode_cache":false}}]}}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":true}},{"kv_connector":"UMBPStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"mode":"standalone","endpoint":"/run/k31-umbp/pool.sock","timeout_ms":60000,"enable_lookup":false,"save_decode_cache":false}}]}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
-      prefix-match-unit: 512
+      prefix-match-unit: 128
       cp-kv-cache-interleave-size: 1
       quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
       mamba-ssm-cache-dtype: float32
