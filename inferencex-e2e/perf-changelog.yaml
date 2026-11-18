@@ -13024,4 +13024,4 @@
     - "TP4 at concurrency 4, 8 and 16 and TP4 + 180 GB/rank HiCache at the new concurrency 20 run shortest-prefill-first scheduling with prefill-decode interval 32, stream interval 20, 8k prefill chunks and 0.90 of GPU memory. Concurrency 4 and 16 replace their rows; concurrency 8 adds a row beside the 32k-chunk one."
     - "From concurrency 16 up, Dynamo parses reasoning and tool calls (dyn-reasoning-parser and dyn-tool-call-parser minimax_m3) in place of SGLang's tool-call parser."
     - "TP2 + HiCache moves from concurrency 40, 40 and 44 to 44, 48 and 50, with a 340 GB/rank write-back host tier, shortest-prefill-first scheduling, stream interval 20, 8k prefill chunks, prefill-decode interval 32 at 0.92 of GPU memory (44, 48) and 20 at 0.93 (50). The worker's two ranks sit on GPUs 0 and 2 (gpu_indices), one per Grace socket: SGLang binds each rank's host memory to its GPU's NUMA node, and one socket cannot hold two 340 GB pools."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5127
