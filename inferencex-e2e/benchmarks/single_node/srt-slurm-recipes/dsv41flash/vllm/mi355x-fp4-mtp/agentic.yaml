@@ -68,20 +68,12 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
-# One variant per point. TP4 runs c1-c48 for interactivity and TP2 c1-c64 for
-# throughput per GPU (c128 and c192 excluded). Engram tables move to pinned
-# host memory at TP2, where resident tables leave too little KV.
-#
-# For p90 interactivity every point up to c48 caps the running sequences, so
-# the decode batch stays inside the mono decode kernels (at most 8 requests x
-# 6 rows) and the rest of the sessions queue: TP4 runs 1 / 1 / 1 / 2 / 2 / 4 /
-# 6 / 8 sequences at c1 / c2 / c4 / c8 / c16 / c24 / c32 / c48; TP2 runs one
-# sequence at c1-c4, 2 at c8-c16 and 8 at c32. Points with one running
-# sequence use 32768-token prefill chunks, the other capped points 8192, and
-# c64 the upstream 16384. TP4 c1-c2 and TP2 c1-c8 capture graphs up to
-# max-num-seqs x (1 + 5 drafts), rounded up to vLLM's capture grid (8, 16);
-# a size off the grid is truncated and larger steps run eagerly. Every other
-# point captures up to 1024.
+# Engram tables move to pinned host memory at TP2, where resident tables leave
+# too little KV. max-num-seqs keeps every decode step of the points up to c48
+# inside the mono decode kernels (at most 8 requests x 6 rows) and queues the
+# other sessions. TP4 c1-c2 and TP2 c1-c8 capture graphs up to max-num-seqs x
+# (1 + 5 drafts), rounded up to vLLM's capture grid (8, 16); a size off the
+# grid is truncated and larger steps run eagerly.
 override_tp4_c1:
   roles:
     agg:

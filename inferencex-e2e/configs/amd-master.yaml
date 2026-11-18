@@ -917,9 +917,8 @@ glm5.2-fp4-mi355x-atom-disagg-agentic-mtp:
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  # ROCm 10.0 nightly of 2026-11-17. --monokernel switches the mono decode
-  # kernels (vllm-project/vllm#61082, #62131), with the tuned TP4 paths of
-  # #63893 and #64883.
+  # --monokernel needs the tuned TP4 mono decode paths (vllm-project/vllm#63893,
+  # #64883).
   image: vllm/vllm-openai-rocm:nightly-rocm100-8ca766326652caf4b8e50d1b9118d8a22f6adc73@sha256:a1af8126c4c244b44c6425a3bf3232605566d505e271af93ecfdca7e034bcc57
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
@@ -932,9 +931,8 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      # TP4 covers concurrency 1-48 for interactivity, TP2 1-64 for throughput
-      # per GPU. c128 and c192 are excluded: c128 did not raise the scored
-      # metric at TP=2 (150,683 against 151,896 tok/s/chip at c64).
+      # TP4 covers the interactivity end and TP2 the throughput end. c128 and
+      # c192 are excluded: c128 does not raise the scored metric at TP2.
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 24, 32, 48], srt-recipe: agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
