@@ -1,11 +1,11 @@
 # GDN ReplaySSM target verify: a q/k prep kernel from 11 requests, a layer-loop commit from 32, two dead compares dropped
-# https://github.com/sgl-project/sglang/pull/51180  (PR head 5f7fc4c696: the prep kernel and layer-loop commit on
-# main, with thresholds in programs, no switch on gfx950)
+# https://github.com/sgl-project/sglang/pull/51180  (PR head 4704d6f94c: the prep kernel and layer-loop commit on
+# main, with thresholds in programs, no switch on gfx950; the PLE verify row masks built only when read)
 # Generated against the image's SGLang checkout (1ced9a9eb0) with patches 01-16 and 21 applied; source files only (tests dropped).
 # Differs from the PR: opt-in through SGLANG_AMD_GDN_VERIFY=1 (the image's verify and commit unless set); up to 10
 # requests it runs the image's verify kernel with one pipeline stage (the same bits). Of the two dead compares, main
-# defers the GDN layers' cache_indices >= 0 through sgl-project/sglang#48414 (merged); the PLE n-gram commit's
-# lengths != 0 is in no PR.
+# defers the GDN layers' cache_indices >= 0 through sgl-project/sglang#48414 (merged) and the PR the PLE n-gram
+# commit's lengths != 0; this patch skips the latter only under SGLANG_AMD_GDN_VERIFY=1.
 # Apply in /sgl-workspace/sglang with git apply.
 
 diff --git a/python/sglang/kernels/ops/attention/linear/gdn_verify_amd.py b/python/sglang/kernels/ops/attention/linear/gdn_verify_amd.py
