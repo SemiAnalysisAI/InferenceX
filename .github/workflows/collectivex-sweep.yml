@@ -86,10 +86,19 @@ jobs:
                              framework: "collectivex", "node-count": .nodes}]' matrix-full.json |
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
               python -m infx.workflows.ci_priority \
-              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" > scored.json
+              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+              --facts-file "${RUNNER_TEMP}/scheduling-facts.json" > scored.json
           [ "$(jq length scored.json)" -gt 0 ] || { echo 'No runnable shards' >&2; exit 1; }
           echo "matrix=$(jq -c '{include: .}' scored.json)" >> "$GITHUB_OUTPUT"
           jq -r '.[] | "p\(.priority) \(.runner) \(.runner_partition) nodes:\(.nodes) \(.id)"' scored.json
+      - name: Upload scheduling facts
+        if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ runner.temp }}/scheduling-facts.json
+          archive: false
+          overwrite: true
+          if-no-files-found: error
 
   sweep:
     if: github.event_name == 'workflow_dispatch'
