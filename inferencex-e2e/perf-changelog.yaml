@@ -13039,6 +13039,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5018
 
 - config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "New key on vllm/vllm-openai-rocm:nightly-60bd6dd2edd175a1c55fd3488f871e4c3d2ef27d (2026-11-16, digest sha256:67a3a0fb79893fc5a0fcff5f9b739ba8fec7e920875a12e0574c2e9f50cd814c), which carries vllm-project/vllm#64715 (UMBP standalone mode for DeepSeek-V4.1-Flash on ROCm), #66036 (per-tensor fp8_e4m3 KV cache for sparse MLA on ROCm) and #67377 (AITER FlyDSL dense MXFP8 GEMMs and a faster MXFP8 activation quant for DeepSeek-V4.1-Flash). Its MORI v1.2.3.post1 is built with UMBP. The TP4/TP2 key dsv41flash-fp4-mi355x-vllm-agentic-dspark and the TP8 c1 key are unchanged and are not rerun."
+    - "Add concurrency 128, 256 and 384 on two GPUs with attention DP2 and the MoE tensor-parallel across both ranks (tensor-parallel-size 1, data-parallel-size 2, no expert parallelism), fronted by vllm-router 0.1.14 with consistent_hash: prefill cadence (prefill-schedule-interval 11), no --monokernel, five-token DSpark, block size 128, the MXFP4 sparse-logits indexer, Engram tables in host memory, max-num-batched-tokens 16384 and cudagraph capture up to 1024. Concurrency 128 runs without KV offloading, as in the closed https://github.com/SemiAnalysisAI/InferenceX/pull/4992, because the GPU KV cache holds its working set; 256 and 384 add UMBP."
+    - "At 256 and 384, KV offloading to host DRAM through UMBPStoreConnector in standalone mode: a node-local umbp_standalone_server, launched as a critical srt-slurm service before the workers, owns one 449 GB pool (dram-utilization 0.60 of the two-GPU share, 4 KiB pages) shared by both DP ranks; failed loads are recomputed."
+    - "kv-cache-dtype fp8_e4m3 (vllm-project/vllm#66036) at every point: plain per-tensor fp8 KV rows read by the AITER sparse MLA kernel, instead of the default block-scaled fp8_ds_mla record."
+    - "Draft weights unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) loads with the checkpoint's FP8 config, as shipped. Its attention layers share the target's KV cache dtype, so target and draft both use the per-tensor fp8_e4m3 KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5036
+
+- config-keys:
     - wan22-bf16-h200-vllm-omni-video
   scenario-type: [video-generation]
   description:
