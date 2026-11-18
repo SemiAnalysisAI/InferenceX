@@ -3368,7 +3368,7 @@ qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg:
           dp-attn: true
 
 qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-20261116-0b098e12@sha256:cb103171bf538adcb26d35e299200b3de38479780bf8d0031c1c7ee18d93ac48
+  image: lmsysorg/sglang:nightly-dev-20261118-ecd3d75a@sha256:2a7e6d43ada9311fcb7d7dd5781bda10aee1a24c40186a956c223f2036212514
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: cluster:gb300-nv
@@ -3487,7 +3487,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
 
 qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-20261116-0b098e12@sha256:cb103171bf538adcb26d35e299200b3de38479780bf8d0031c1c7ee18d93ac48
+  image: lmsysorg/sglang:nightly-dev-20261118-ecd3d75a@sha256:2a7e6d43ada9311fcb7d7dd5781bda10aee1a24c40186a956c223f2036212514
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: cluster:gb300-nv
