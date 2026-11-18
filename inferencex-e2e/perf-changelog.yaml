@@ -12966,6 +12966,56 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5029
 
 - config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep32-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the Kimi-K3.1-Pro GB300 Dynamo+vLLM AgentX dcp8-disagg and agg configs to vllm/vllm-openai:kimi-k31-mc-dbbc9e3 (vLLM 0.1.dev25356+gdbbc9e310) with Dynamo 229be5cff1 (v1.7.0-kimi-k3.1-pro-dev.1), and add the dep32-disagg config on the same image and Dynamo."
+    - "DEP32 2P1D at concurrency 960: two DEP16 prefill workers and one DEP32 decode, Mooncake scheduler lookups started on arrival (lookup_prefetch_limit 16, lookup_prefetch_ttl_s 30), Mooncake store tail pruning (VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL=1, VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS=1), a 97.7 GB decode KV pool per rank, and the benchmark client on its own node."
+    - "TP8/DCP8: 1P5D at concurrency 44 and 56 replaces 1P3D at 20 and 32; 1P3D stays at 56. Hybrid decode: 2P1D moves from concurrency 192 to 256 and 3P1D moves from concurrency 384 to 448; both run the MegaMoE layers on the DEP EpMoeLayer schedule (VLLM_KIMI_K3_HYBRID_EP_MOE=1) and prune Mooncake store tails."
+    - "Every dcp8-disagg and dep32-disagg worker runs the sparse indexer logits in bfloat16 and their prefill engines use the deep_select top-k backend; dcp8-disagg Mooncake store lookups time out after 60 s and, as on dep32-disagg, start on arrival (lookup_prefetch_limit 16, lookup_prefetch_ttl_s 30)."
+    - "The dcp8-disagg and agg frontends drop router-session-affinity-ttl-secs 1: with one-second session affinity a share of 1P5D decode picks stayed on an engine that was already busy."
+    - "Aggregated TP16/DCP16 at concurrency 1 moves to the new image and Dynamo with no other change."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5069
+
+- config-keys:
+    - kimik3.1-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3.1-Pro B300 Dynamo+vLLM disaggregated AgentX configs on vllm/vllm-openai:kimi-k31-mc-dbbc9e3 (sha256:0507dd0b), with Dynamo 229be5cff1 (v1.7.0-kimi-k3.1-pro-dev.1). DSpark uses the released draft Inferact/Kimi-K3.1-Pro-DSpark (revision e4e6e626), so synthetic acceptance follows its golden AL curve (4 draft tokens 3.46, 7 draft tokens 4.16)."
+    - "Prefill and decode set prefix-match-unit to the block size of the draft's sliding-window KV group: 1408 with 4 draft tokens and 1536 at 1P1D c1 (7 draft tokens). With 128-token units vLLM turns off partial prefix-cache hits for the whole hybrid cache when this group is present, and Mooncake store hits on the next turn drop."
+    - "Every prefill and decode worker is one B300 node, TP8 x DCP8: prefill runs routed experts EP8 on MegaMoE eagerly, decode runs the low-latency decode backend. KV moves over AWS EFA: NIXL (LIBFABRIC) from prefill to decode, and a Mooncake store with a 190 GB host-DRAM segment per rank."
+    - "Sweep 1P1D c1 (7 draft tokens), 1P3D c20 and c48, 1P2D c64, 2P3D c264 and 4P5D c660 (4 draft tokens). The 2P3D and 4P5D points admit up to 128 decode requests at 0.98 of GPU memory."
+    - "At 2P3D c264 and 4P5D c660 the Mooncake store keeps the tail pages a request loaded and drops the older tails it consumed (VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL=1, VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS=1), and store lookups start before admission (lookup_prefetch_limit 16, lookup_prefetch_ttl_s 30)."
+    - "4P5D c660 also sets the sparse-attention indexer logits to BF16 explicitly on prefill and decode (attention-config indexer_logits_dtype bfloat16; BF16 is already the SM10x default, so every point runs BF16 indexer logits), selects the indexer top-k with deep_select on prefill (kernel-config sparse_indexer_topk_backend deep_select), and has the Mooncake master evict 2% of the store per round (--eviction_ratio=0.02 instead of 0.10)."
+    - "Every point keeps the model's precision policy: FP8 KV cache, an MXFP4 indexer key cache and FP32 KDA state."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5108
+
+- config-keys:
+    - glm5.3-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3 MXFP4 MI355X AgentX on SGLang (amd/GLM-5.3-Quark-MXFP4-AttnFP8) with EAGLE MTP K5 and golden AL 3.48, on lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261025 pinned by digest; the v0.5.22 release lacks sgl-project/sglang#40776, which this checkpoint needs to load."
+    - "TP4/EP4 with a 180 GB/rank write-back HiCache host tier and breakable prefill CUDA graphs at concurrency 4, 8, 10, 12, 14, 16 and 20; TP8/EP1 without KV offloading at concurrency 1, 2 and 4. On both arms, max-running-requests and the decode CUDA graph limit are twice the concurrency."
+    - "Every rank runs the Python TreeCore (SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND=python): ranks otherwise pick the Rust or Python core on their own, and mixed cores fail the write-back HiCache sync assertion (sgl-project/sglang#48112)."
+    - "Draft data types: the NextN layer shipped in the checkpoint loads with its Quark config, as shipped (MXFP4 routed and shared experts, FP8 per-block attention and indexer wq_b/wk, BF16 eh_proj, router gate and indexer weights_proj)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4593
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Use the SGLang ROCm 7.2.0 MI35x 20261113 daily image (lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261113, SGLang 0.5.23.dev20261113+g5792cf6e5e) for GLM-5.2 MXFP4 MI355X AgentX MTP."
+    - "Use Gluon target MoE only for TP8/EP1 at concurrency 1 and 2; preserve the checkpoint BF16 draft experts with the auto speculative MoE backend."
+    - "TP8/EP1 keeps 32k prefill chunks; the image includes the Gluon FP32 partial-store fix from sgl-project/sglang#48397."
+    - "Drop the TP8/EP1 concurrency 4 point; concurrency 4 runs on the TP4/EP4 HiCache arm, which delivers more throughput per GPU."
+    - "Keep TP4/EP4 HiCache and DCP4 settings unchanged and run GSM8K on every eval-selected point, including the Gluon path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4748
+
+- config-keys:
     - minimaxm31flash-fp4-h100-vllm-agentic-dspark
   scenario-type: [agentic-coding]
   description:
