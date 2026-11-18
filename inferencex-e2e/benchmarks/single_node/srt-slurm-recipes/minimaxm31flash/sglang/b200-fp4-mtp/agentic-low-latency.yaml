@@ -37,7 +37,7 @@ base:
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 8
         speculative-dspark-block-size: 7
-        monokernel-backend: msa
+        enable-nvidia-megakernel: true
         disable-attn-tp-gather: true
         max-running-requests: 8
         mem-fraction-static: 0.8

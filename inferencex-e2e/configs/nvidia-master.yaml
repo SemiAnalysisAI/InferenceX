@@ -4318,7 +4318,7 @@ minimaxm31flash-fp4-b200-vllm-agentic-dspark:
 # Seven-token DSpark (bundled draft); synthetic acceptance follows
 # infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-b200-sglang-agentic-dspark:
-  image: lmsysorg/sglang:dev-minimax-m31-flash@sha256:614b1509bcb729c653528d448bff9850f8977fcad9d12ba56bd6dbe3d7985e87
+  image: lmsysorg/sglang:nightly-cu134-20261118-f04d886@sha256:6d7ad43d6f8663b1feb84f524fbabdde13ce0b48a3c5b3c783c9105513f783ba
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:b200-nscale
