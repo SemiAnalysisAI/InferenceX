@@ -127,6 +127,7 @@ base:
         reasoning-parser: auto
         tool-call-parser: auto
         watchdog-timeout: 3600
+        grpc-response-timeout-secs: 3600
         enable-metrics: true
         weight-loader-prefetch-checkpoints: true
         weight-loader-drop-cache-after-load: false
@@ -188,6 +189,7 @@ base:
         reasoning-parser: auto
         tool-call-parser: auto
         watchdog-timeout: 3600
+        grpc-response-timeout-secs: 3600
         enable-metrics: true
         weight-loader-prefetch-checkpoints: true
         weight-loader-drop-cache-after-load: false
