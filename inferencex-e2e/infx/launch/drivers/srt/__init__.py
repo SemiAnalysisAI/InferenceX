@@ -45,7 +45,7 @@ from infx.launch.request import (
     SingleNodeRequest,
     VideoRequest,
 )
-from infx.srt_slurm.video import PACKAGE_MOUNT, video_package
+from infx.srt_slurm.video import PACKAGE_MOUNT, load_spec, video_package
 from infx.srt_slurm.workload import BOUND_RECIPE, selects_dedicated_discovery
 
 if TYPE_CHECKING:
@@ -137,6 +137,10 @@ def run_video(launch: Launch) -> int:
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
         event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
         collect.stage_video_identity(run, Path(bound))
+        spec = load_spec(request.video_spec, root=run.workspace, set_id=request.video_set)
+        models.download_video_model(
+            run.cluster, run.env, hf_cache, request.model, spec["plan"]["model_revision"]
+        )
         fetched = root / "fetched-outputs"
         submitted = submit.Submitted(manifest=run.workspace / submit.VIDEO_SUBMISSION)
         run.life.callback(collect.finish_video, run, submitted, fetched)
@@ -385,6 +389,9 @@ def table_problems(clusters: Mapping[str, Cluster], only: str | None = None) -> 
     for cluster_id in filter(scoped, models.SHARED_HF_CACHE_LANES):
         if profile("SHARED_HF_CACHE_LANES", cluster_id) is not None:
             volume(f"SHARED_HF_CACHE_LANES[{cluster_id!r}]", cluster_id, "shared-hf-hub-cache")
+    for cluster_id in filter(scoped, models.HUB_DOWNLOAD_CLUSTERS):
+        if profile("HUB_DOWNLOAD_CLUSTERS", cluster_id) is not None:
+            volume(f"HUB_DOWNLOAD_CLUSTERS[{cluster_id!r}]", cluster_id, "hf-hub-cache")
     for cluster_id in filter(scoped, policy.SALLOC_TIME_BUMPS):
         srt = _srt_settings(clusters.get(cluster_id))
         if srt is not None and (srt.default_time_limit or srt.single_node_time_limit):
