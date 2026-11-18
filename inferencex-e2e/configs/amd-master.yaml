@@ -1265,11 +1265,11 @@ kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark:
   srt-recipe-dir: kimik3.1/tokenspeed/mi355x-fp4
   scenarios:
     agentic-coding:
-    # The recipe's Host L2 pins up to 8 x 294.86 GB = 2358.88 GB (c1, c4); 0.787 resolves to 2360 GB.
+    # The recipe's Host L2 (concurrency 8 to 48) pins up to 8 x 254.94 GB = 2039.52 GB; 0.787 resolves to 2360 GB.
     - dram-utilization: 0.787
       search-space:
-      - { tp: 8, ep: 1, dcp-size: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [1], srt-recipe: agentic.yaml:override_tp8_c1 }
-      - { tp: 8, ep: 1, dcp-size: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [4], srt-recipe: agentic.yaml:override_tp8_c4 }
+      - { tp: 8, ep: 1, dcp-size: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1], srt-recipe: agentic.yaml:override_tp8_c1 }
+      - { tp: 8, ep: 1, dcp-size: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [4], srt-recipe: agentic.yaml:override_tp8_c4 }
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [8], srt-recipe: agentic.yaml:override_tp8_dcp8_c8 }
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [16], srt-recipe: agentic.yaml:override_tp8_dcp8_c16 }
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [24], srt-recipe: agentic.yaml:override_tp8_dcp8_c24 }

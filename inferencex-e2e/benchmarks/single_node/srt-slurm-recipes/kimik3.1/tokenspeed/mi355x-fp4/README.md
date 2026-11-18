@@ -8,16 +8,18 @@ stack attended through TokenSpeed's MHA drafter backend, proposes five or seven
 tokens per step and is served as it ships, in BF16. The KV cache is FP8
 with the MXFP4 DSA indexer key cache, and the KDA recurrent state stays in
 TokenSpeed's default FP32, as the K3.1 week-1 precision policy requires. The
-context is 1,048,560 tokens, prefill runs in 8K chunks, and the Host L2 KV
-store holds eight times the GPU KV blocks (`kvstore-ratio: 8`), up to 294.86 GB
-per GPU.
+context is 1,048,560 tokens and prefill runs in 8K chunks. From concurrency 8,
+the Host L2 KV store holds eight times the GPU KV blocks (`kvstore-ratio: 8`),
+up to 254.94 GB per GPU; concurrency 1 and 4 run without it
+(`disable-kvstore`), since their GPU KV pool already holds the sessions'
+prefixes.
 
 Each concurrency has its own override:
 
 | Concurrency | KVP / DCP | `max-num-seqs` | DSpark drafts | `prefill-decode-interval` | `prefill-decode-min-interval` | Other |
 | ----------- | --------- | -------------- | ------------- | ------------------------- | ----------------------------- | ----- |
-| 1           | 1         | 1              | 7             | 0                         | 0                             | no prefill graphs |
-| 4           | 1         | 2              | 7             | 0                         | 0                             | no prefill graphs |
+| 1           | 1         | 1              | 7             | 0                         | 0                             | no prefill graphs, no Host L2 |
+| 4           | 1         | 2              | 7             | 0                         | 0                             | no prefill graphs, no Host L2 |
 | 8           | 8         | 8              | 7             | 64                        | 0                             |       |
 | 16          | 8         | 8              | 5             | 80                        | 8                             |       |
 | 24          | 8         | 12             | 5             | 64                        | 24                            | short prefill first |

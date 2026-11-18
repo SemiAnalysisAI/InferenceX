@@ -71,8 +71,7 @@ base:
         max-prefill-tokens: 8192
         gpu-memory-utilization: 0.95
         enable-prefix-caching: true
-        # Host L2 holds eight times the GPU KV blocks: 294.86 GB per GPU without KV
-        # parallelism, 217.95 GB with KVP8.
+        # Host L2 holds eight times the GPU KV blocks, up to 254.94 GB per GPU with KVP8.
         kvstore-ratio: 8
         reasoning-parser: passthrough
         drafter-attention-backend: mha
@@ -106,11 +105,13 @@ override_tp8_c1:
         disable-prefill-graph: true
         speculative-num-steps: 7
         speculative-num-draft-tokens: 8
+        # No Host L2: the GPU KV pool already holds the sessions' prefixes.
+        disable-kvstore: true
+        kvstore-ratio: null
   benchmark:
     env:
       CONC: '1'
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2360'
+      KV_OFFLOADING: none
 
 override_tp8_c4:
   roles:
@@ -123,11 +124,12 @@ override_tp8_c4:
         disable-prefill-graph: true
         speculative-num-steps: 7
         speculative-num-draft-tokens: 8
+        disable-kvstore: true
+        kvstore-ratio: null
   benchmark:
     env:
       CONC: '4'
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2360'
+      KV_OFFLOADING: none
 
 override_tp8_dcp8_c8:
   roles:
