@@ -52,7 +52,7 @@ def test_jobs_without_a_record_get_one_and_recorded_jobs_gain_their_conclusion(t
             "x 3D (TP8) mtp   c6x12", "failure",
             [("Set up job", "success"), ("Run actions/checkout@3d3c", "failure"),
              ("Retry checkout", "failure")], runner_name="gb200-nv_02"),
-        job(4, "eval / (img...) / dsr1 fp8 mi355x atom TP8    c64 | eval-only", "cancelled",
+        job(4, "eval / (img...) / p0.500 | dsr1 fp8 mi355x atom TP8    c64 | eval-only", "cancelled",
             [], runner_name=None),
         job(5, "agentic / (img...) / kimik3 fp4 b200 vllm TP8   c16", "skipped", []),
     ]  # fmt: skip
@@ -87,6 +87,7 @@ def test_jobs_without_a_record_get_one_and_recorded_jobs_gain_their_conclusion(t
         "message": "job concluded failure at step 'Run actions/checkout@3d3c' and left no job_event.json",
         "exit_code": None, "retriable": None, "evidence": f"{RUN}/job/3",
     }  # fmt: skip
-    assert (cancelled["conc"], cancelled["eval_only"], cancelled["error"]["stage"]) == (64, True, "runner")
+    assert (cancelled["model_prefix"], cancelled["precision"], cancelled["conc"], cancelled["eval_only"],
+            cancelled["error"]["stage"]) == ("dsr1", "fp8", 64, True, "runner")
     for record in (checkout, cancelled):
         assert JobEvent.model_validate(record).github.run_url == RUN
