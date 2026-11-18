@@ -69,7 +69,6 @@ jobs:
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
-      priority: ${{ steps.plan.outputs.priority }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -104,10 +103,20 @@ jobs:
             [[ "$OPERATORX_RECOVERY_RUN" =~ ^[1-9][0-9]*$ ]] && [ "$(jq '.include | length' operatorx-matrix.json)" = 1 ] \
               || { echo 'Recovery requires a numeric run ID and a single-shard selection' >&2; exit 1; }
           fi
-          echo "matrix=$(cat operatorx-matrix.json)" >> "$GITHUB_OUTPUT"
-          scored=$(printf '%s' '[{"runner":"operatorx","framework":"operatorx"}]' |
-            uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml python -m infx.workflows.ci_priority)
-          echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
+          jq '[.include[] | . + {framework: "operatorx"}]' operatorx-matrix.json |
+            uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+              python -m infx.workflows.ci_priority \
+              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+              --facts-file "${RUNNER_TEMP}/scheduling-facts.json" > scored.json
+          echo "matrix=$(jq -c '{include: .}' scored.json)" >> "$GITHUB_OUTPUT"
+      - name: Upload scheduling facts
+        if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ runner.temp }}/scheduling-facts.json
+          archive: false
+          overwrite: true
+          if-no-files-found: error
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: operatorx-manifest-${{ github.run_id }}
@@ -127,10 +136,10 @@ jobs:
       ${{ fromJSON(vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format('["self-hosted",{0},"nodes:1",{1},{2}]',
           toJSON(matrix.runner),
-          toJSON(format('ci-job-{0}-{1}', needs.setup.outputs.priority, matrix.queue-token)),
+          toJSON(format('ci-job-{0}-{1}', matrix.priority, matrix.queue-token)),
           toJSON(format('ci-attempt-{0}', github.run_attempt))) ||
         format('["self-hosted",{0}]', toJSON(matrix.runner))) }}
-    name: p${{ needs.setup.outputs.priority }} | OperatorX ${{ matrix.id }}
+    name: p${{ matrix.priority }} | OperatorX ${{ matrix.id }}
     env:
       OPERATORX_SHARD: ${{ matrix.id }}
       OPERATORX_OUTPUT: ${{ github.workspace }}/operatorx-output-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
