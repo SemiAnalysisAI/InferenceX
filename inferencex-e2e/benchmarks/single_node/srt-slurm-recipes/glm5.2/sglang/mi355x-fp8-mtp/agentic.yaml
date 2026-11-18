@@ -146,7 +146,8 @@ override_tp8_c12_hicache:
 
 # DCP8 stripes the latent KV across the TP8 ranks; sgl-project/sglang#45205 lets
 # the host tier sit under it. ROCm DSA DCP runs only on the triton backends.
-# 256 GB a rank keeps the node's host tier at the FP4 DCP4 arm's 2 TB.
+# The replicated index-K host mirror adds about half of hicache-size a rank, so
+# 192 GB keeps eight ranks inside the 2399 GB DRAM budget; 256 GB runs out of host memory.
 override_tp8_dcp8_c16:
   roles:
     agg:
@@ -160,7 +161,7 @@ override_tp8_dcp8_c16:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
         enable-hierarchical-cache: true
-        hicache-size: 256
+        hicache-size: 192
         hicache-write-policy: write_through
   benchmark:
     env:
@@ -180,7 +181,7 @@ override_tp8_dcp8_c20:
         max-running-requests: 40
         cuda-graph-max-bs-decode: 40
         enable-hierarchical-cache: true
-        hicache-size: 256
+        hicache-size: 192
         hicache-write-policy: write_through
   benchmark:
     env:
@@ -200,7 +201,7 @@ override_tp8_dcp8_c24:
         max-running-requests: 48
         cuda-graph-max-bs-decode: 48
         enable-hierarchical-cache: true
-        hicache-size: 256
+        hicache-size: 192
         hicache-write-policy: write_through
   benchmark:
     env:

@@ -13036,7 +13036,7 @@
   description:
     - "Run the GLM-5.2 MXFP4 MI355X DCP4 arm on the hierarchical cache: a 256 GB/rank write-through host tier, matching the ATOM ladder, at concurrency 16, 24, 32, 40 and 48 (32 is new)."
     - "Move concurrency 16 from the dense TP4/EP4 HiCache arm to the DCP4 arm; the dense arm now stops at 14."
-    - "Add a TP8/EP1 DCP8 arm on the hierarchical cache to GLM-5.2 FP8 and GLM-5.3 FP8 MI355X SGLang at concurrency 16, 20 and 24: a 256 GB/rank write-through host tier on the triton DSA backends, the only ones with a ROCm DCP path."
+    - "Add a TP8/EP1 DCP8 arm on the hierarchical cache to GLM-5.2 FP8 and GLM-5.3 FP8 MI355X SGLang at concurrency 16, 20 and 24: a 192 GB/rank write-through host tier on the triton DSA backends, the only ones with a ROCm DCP path. The replicated DSA index-K host mirror adds about half again per rank, so eight ranks fit the 2399 GB DRAM budget."
     - "Move GLM-5.2 FP8 concurrency 16 from the dense TP8/EP1 HiCache arm to the DCP8 arm; the dense arm now stops at 12."
     - "GLM-5.3 FP8 turns the AMD monokernel off on the DCP8 arm, since it refuses context parallelism and KV offload, and gains dram-utilization 0.8 for the host tier."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5128

@@ -792,7 +792,7 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
 # (2) TP8/EP1 with HiCache KV offloading to DRAM, conc [8, 12] -- the
 #     throughput-dominant regime where the working set outgrows the device pool.
 # (3) TP8/EP1 with DCP8 on HiCache, conc [16, 20, 24]; striping the latent KV
-#     across the eight ranks widens the device pool, and a 256 GB/rank host
+#     across the eight ranks widens the device pool, and a 192 GB/rank host
 #     tier carries the rest.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp8-mi355x-sglang-agentic-mtp:
