@@ -6,7 +6,12 @@ across all GPUs) and on 2, 4 and 8 H100 GPUs (TP2, since the model does not fit
 one 80 GB GPU), and vLLM-Omni the same four B200 deployments, all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
-124/24 seconds of video. Config presence is not GPU or quality qualification.
+124/24 seconds of video. Wan2.2-T2V-A14B runs vLLM-Omni on 1, 2, 4 and 8
+B200 or B300 GPUs (CFG parallel 1 x Ulysses 1 on one GPU, then CFG parallel 2 x
+Ulysses 1, 2 and 4) using `wan22.yaml` `release-v1`: four
+prompts by five seeds, one warmup, 40 UniPC steps, and 81 silent frames at 16 fps
+and 832×480; its `smoke` set sends the same request controls for one case.
+Config presence is not GPU or quality qualification.
 Each deployment's image pin is its `*-video` entry in
 [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml) or
 [`configs/amd-master.yaml`](../configs/amd-master.yaml).
