@@ -1,5 +1,5 @@
 # [FlyDSL] [QSA] Sparse prefill attention on gfx950: union and packed-direct ports, strided K/V rows
-# https://github.com/ROCm/aiter/pull/7556  (files at e6a31510c9, the PR's last own commit; its head 98c9335b8a only merges main)
+# https://github.com/ROCm/aiter/pull/7556  (files at e6a31510c9, the PR's last own commit; its later commits only merge main)
 # Replaces aiter/ops/flydsl/qsa_sparse_prefill.py and aiter/ops/flydsl/kernels/qsa/ of the AITER v0.1.29 wheel that the
 # setup script installs. Nothing calls these kernels unless patch 13 is applied and SGLANG_AMD_QSA_FLYDSL_PREFILL is set.
 # Apply in /opt/venv/lib/python3.12/site-packages (site-packages; not a git checkout).
