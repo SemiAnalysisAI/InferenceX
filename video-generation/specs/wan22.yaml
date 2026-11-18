@@ -16,7 +16,7 @@ generation:
   guidance_scale_2: 3.0
   # The A14B expert switch, equal to the checkpoint's model_index.json value.
   boundary_ratio: 0.875
-  # UniPC sigma shift for the 480p cell; every engine must receive it per request.
+  # UniPC sigma shift for the 480p cell; no engine default may stand in for it.
   flow_shift: 12.0
   negative_prompt: ""
 
