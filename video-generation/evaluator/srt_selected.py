@@ -24,6 +24,9 @@ RECORDED_ENGINE_ENV = (
     "VLLM_WORKER_MULTIPROC_METHOD",
     "VLLM_OMNI_VIDEO_SYNC_TIMEOUT",
     "VLLM_OMNI_SERVER_STORAGE__PATH",
+    "VIDEO_DEVICE_BACKEND",
+    "ASCEND_RT_VISIBLE_DEVICES",
+    "ASCEND_VISIBLE_DEVICES",
     "VGBENCH_GPU_UUIDS",
 )
 _BOOLEAN = {"true": True, "false": False}
@@ -84,8 +87,66 @@ def rocm_devices() -> list[str]:
     return values
 
 
+def ascend_devices() -> list[str]:
+    """Resolve visible runtime ordinals to AscendCL device UUIDs."""
+    mask = os.environ.get("ASCEND_RT_VISIBLE_DEVICES")
+    if mask is None or not mask.strip():
+        raise ValueError("Ascend inventory requires a scheduler-supplied ASCEND_RT_VISIBLE_DEVICES")
+    try:
+        acl = ctypes.CDLL("libascendcl.so")
+    except OSError as error:
+        raise RuntimeError("Ascend device inventory requires libascendcl.so") from error
+    uuid_bytes = ctypes.c_ubyte * 16
+    signatures = {
+        "aclInit": [ctypes.c_char_p],
+        "aclFinalize": [],
+        "aclrtGetDeviceCount": [ctypes.POINTER(ctypes.c_uint32)],
+        "aclrtDeviceGetUuid": [ctypes.c_int32, ctypes.POINTER(uuid_bytes)],
+    }
+    for name, arguments in signatures.items():
+        try:
+            function = getattr(acl, name)
+        except AttributeError as error:
+            raise RuntimeError(f"Ascend device inventory requires CANN API {name}") from error
+        function.argtypes = arguments
+        function.restype = ctypes.c_int32
+
+    def ok(code: int, operation: str) -> None:
+        if code != 0:
+            raise RuntimeError(f"Ascend device inventory {operation} failed: {code}")
+
+    ok(acl.aclInit(None), "aclInit")
+    try:
+        count = ctypes.c_uint32()
+        ok(acl.aclrtGetDeviceCount(ctypes.byref(count)), "aclrtGetDeviceCount")
+        if count.value == 0:
+            raise RuntimeError("Ascend device inventory found no visible NPUs")
+        values = []
+        for ordinal in range(count.value):
+            raw = uuid_bytes()
+            # AscendCL applies ASCEND_RT_VISIBLE_DEVICES to these runtime ordinals.
+            ok(acl.aclrtDeviceGetUuid(ordinal, ctypes.byref(raw)), "aclrtDeviceGetUuid")
+            if not any(raw):
+                raise RuntimeError(f"Ascend device {ordinal} returned an empty UUID")
+            identity = "NPU-" + str(uuid.UUID(bytes=bytes(raw)))
+            if identity in values:
+                raise RuntimeError(f"Ascend device {ordinal} returned a duplicate UUID")
+            values.append(identity)
+    finally:
+        status = acl.aclFinalize()
+        if sys.exc_info()[0] is None:
+            ok(status, "aclFinalize")
+    return values
+
+
 def gpu_devices() -> list[str]:
     """The visible GPUs in engine order, named as the cluster's power exporter labels them."""
+    backend = os.environ.get("VIDEO_DEVICE_BACKEND")
+    if backend is not None:
+        inventories = {"ascend": ascend_devices, "cuda": cuda_devices, "rocm": rocm_devices}
+        if backend not in inventories:
+            raise ValueError("VIDEO_DEVICE_BACKEND must be ascend, cuda, or rocm")
+        return inventories[backend]()
     return rocm_devices() if KFD.exists() else cuda_devices()
 
 

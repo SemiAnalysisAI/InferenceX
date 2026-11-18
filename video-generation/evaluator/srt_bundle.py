@@ -1,15 +1,3 @@
-"""Assemble the app-facing video result bundle from one srt-slurm video job.
-
-The job leaves the client's per-concurrency run bundles under ``<logs>/video/gpu/c<N>``
-and the server's bound spec under ``<logs>/video/server``; InferenceX validates each
-cell's measured window against the native power package and leaves the aggregate and
-validation sidecar in the runner workspace. This module joins them into the matrix
-layout the dashboard ingests (``serving-smoke.json``, ``gpu/c<N>/{spec,gpu-job,power}.json``,
-``manifest.json``, ``ci.json``, ``SHA256SUMS``) with evidence kind
-``srt_slurm_h3_service``: power comes from srt-slurm's DCGM telemetry, re-validated by
-InferenceX, never from the video supervisor's own sampler.
-"""
-
 from __future__ import annotations
 
 import csv
@@ -19,7 +7,7 @@ import os
 import shutil
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,9 +38,7 @@ def _hash(path: Path) -> str:
 
 def _iso(unix: float) -> str:
     return (
-        datetime.fromtimestamp(unix, timezone.utc)
-        .isoformat(timespec="microseconds")
-        .replace("+00:00", "Z")
+        datetime.fromtimestamp(unix, UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
     )
 
 
@@ -197,11 +183,12 @@ def _power(
         else None,
     }
     producer = validation.get("producer") or {}
+    telemetry = validation.get("telemetry") or {}
     return {
         "schema_version": POWER_SCHEMA,
         "bundle_type": "h3_native_power",
         "evidence_kind": EVIDENCE_KIND,
-        "source": "srt-slurm.dcgm-power",
+        "source": telemetry.get("producer"),
         "status": "valid" if valid else "invalid",
         "valid": valid,
         "invalid_reasons": list(validation.get("reasons") or []),
@@ -212,7 +199,7 @@ def _power(
             "start_unix": start,
             "end_unix": end,
             "duration_seconds": duration,
-            "clock_source": "head_node_unix_clock",
+            "clock_source": telemetry.get("timestamp_source"),
             "utc_minus_monotonic_seconds": (bench.get("clock") or {}).get(
                 "utc_minus_monotonic_seconds"
             ),
@@ -224,13 +211,14 @@ def _power(
             "power_percentile_method": validation.get("power_percentile_method"),
         },
         "semantics": {
-            "scope": "job GPUs sampled by srt-slurm's DCGM exporter; excludes host and unsampled devices",
-            "sensor": "DCGM_FI_DEV_POWER_USAGE board power, head-node Unix clock",
+            "scope": telemetry.get("power_scope"),
+            "sensor": telemetry.get("source_metric"),
+            "sampled_devices": "job devices; excludes host and unsampled devices",
             "integration": validation.get("integration_method"),
             "generation_window": "client measured block: first measurement submit to last downloaded media",
             "energy_per_valid_clip": "whole-window GPU energy divided by technically valid clips",
             "energy_unit": "J",
-            "power_unit": "W",
+            "power_unit": telemetry.get("unit"),
             "time_unit": "s",
         },
         "metrics": dict(metrics),

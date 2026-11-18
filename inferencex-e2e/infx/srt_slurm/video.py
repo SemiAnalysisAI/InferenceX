@@ -78,6 +78,8 @@ _RESERVED_ENV = (
     | {
         _RECIPE_ENV_KEYS,
         "CUDA_VISIBLE_DEVICES",
+        "ASCEND_RT_VISIBLE_DEVICES",
+        "ASCEND_VISIBLE_DEVICES",
         "VGBENCH_GPU_UUIDS",
         "SRT_MEASUREMENT_WINDOW_DIR",
     }
@@ -365,13 +367,34 @@ def bind_video(
     return bound
 
 
-def runtime_arguments(environment: Mapping[str, str]) -> list[str]:
-    """Bind only runtime-owned srun values after the recipe is bound."""
+def runtime_arguments(environment: Mapping[str, str], *, gres: str | None = None) -> list[str]:
+    """Bind the selected device request and runtime-owned step options."""
     gpus = _positive(_required(environment, "GPU_COUNT"), "GPU_COUNT")
+    overrides = srun_overrides(environment)
+    if gres is not None:
+        if not gres.strip():
+            raise ValueError("video GRES must be nonempty")
+        for assignment in overrides[1::2]:
+            name, _, value = assignment.partition("=")
+            if name in {
+                "srun_options.gpus",
+                "srun_options.gpus-per-node",
+                "srun_options.gpus-per-task",
+            } or (name == "srun_options.gres" and json.loads(value) != gres):
+                raise ValueError("SRT_SRUN_OPTIONS conflicts with the video GRES allocation")
+        return [
+            "--unset",
+            "srun_options.gpus-per-node",
+            "--set",
+            f"sbatch_directives.gres={json.dumps(gres)}",
+            "--set",
+            f"srun_options.gres={json.dumps(gres)}",
+            *overrides,
+        ]
     return [
         "--set",
         f"srun_options.gpus-per-node={json.dumps(str(gpus))}",
-        *srun_overrides(environment),
+        *overrides,
     ]
 
 
@@ -386,6 +409,7 @@ def main() -> None:
     command = commands.add_parser("prepare")
     command.add_argument("recipe", type=Path)
     command.add_argument("output", type=Path)
+    command.add_argument("--gres", help="Explicit Slurm GRES request for the selected devices")
     add_fabric_argument(command)
     parsed = parser.parse_args()
     try:
@@ -393,7 +417,7 @@ def main() -> None:
         recipe = resolve_fabric(prepare(parsed.recipe, os.environ, root=root), parsed.fabric)
         config = parsed.output.with_name(BOUND_RECIPE)
         config.write_text(yaml.safe_dump(recipe, sort_keys=False))
-        arguments = runtime_arguments(os.environ)
+        arguments = runtime_arguments(os.environ, gres=parsed.gres)
         parsed.output.write_bytes(
             "\0".join([str(parsed.recipe), str(config), *arguments, ""]).encode()
         )

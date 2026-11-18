@@ -64,6 +64,31 @@ def test_server_port_must_be_a_tcp_port_before_submission(native_fragment):
         video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
 
 
+@pytest.mark.parametrize("mask", ["ASCEND_RT_VISIBLE_DEVICES", "ASCEND_VISIBLE_DEVICES"])
+def test_recipe_cannot_override_the_scheduler_ascend_device_mask(native_fragment, mask):
+    raw, write = native_fragment
+    raw["services"][0]["env"][mask] = "0,1"
+    with pytest.raises(ValueError, match=f"{mask} is owned by the launcher"):
+        video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"gpus-per-node": "2"},
+        {"gres": "npu:8"},
+    ],
+)
+def test_gres_allocation_rejects_conflicting_step_resources(options):
+    with pytest.raises(ValueError, match="conflicts with the video GRES allocation"):
+        video.runtime_arguments({**ENV, "SRT_SRUN_OPTIONS": json.dumps(options)}, gres="npu:2")
+
+
+def test_gres_allocation_rejects_an_empty_request():
+    with pytest.raises(ValueError, match="GRES must be nonempty"):
+        video.runtime_arguments(ENV, gres="")
+
+
 @pytest.fixture
 def native_fragment(tmp_path):
     """A small recipe whose engine settings remain owned by the recipe."""

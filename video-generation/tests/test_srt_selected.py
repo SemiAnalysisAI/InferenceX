@@ -3,6 +3,7 @@
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -246,6 +247,144 @@ def test_rocm_server_names_hip_devices_by_board_serial(tmp_path, monkeypatch):
     launch = json.loads((output / "launch.json").read_text())
     assert spec["gpu_uuids"] == launch["gpu_uuids"] == ["PCB-F5", "PCB-05"]
     assert executed[0][1]["VGBENCH_GPU_UUIDS"] == "PCB-F5,PCB-05"
+
+
+def _ascend_driver(monkeypatch, uuids, *, failure=None):
+    finalized = []
+
+    def initialize(config):
+        return 507000 if failure == "aclInit" else 0
+
+    def finalize():
+        finalized.append(True)
+        return 507001 if failure == "aclFinalize" else 0
+
+    def count_devices(count):
+        count._obj.value = len(uuids)
+        return 507002 if failure == "aclrtGetDeviceCount" else 0
+
+    def device_uuid(ordinal, raw):
+        raw._obj[:] = uuids[ordinal]
+        return 507003 if failure == "aclrtDeviceGetUuid" else 0
+
+    driver = SimpleNamespace(
+        aclInit=initialize,
+        aclFinalize=finalize,
+        aclrtGetDeviceCount=count_devices,
+        aclrtDeviceGetUuid=device_uuid,
+    )
+    monkeypatch.setattr(srt_selected.ctypes, "CDLL", {"libascendcl.so": driver}.__getitem__)
+    monkeypatch.setenv("VIDEO_DEVICE_BACKEND", "ascend")
+    monkeypatch.setenv("ASCEND_RT_VISIBLE_DEVICES", "6,2")
+    return finalized
+
+
+@pytest.mark.parametrize("requested_devices", [2, 4])
+def test_ascend_server_seals_runtime_uuid_order_and_requires_matching_device_count(
+    tmp_path, monkeypatch, requested_devices
+):
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v2.yaml"), "release-v1")
+    model = _snapshot(tmp_path / "model")
+    finalized = _ascend_driver(monkeypatch, [bytes(range(16, 32)), bytes(range(16))])
+    monkeypatch.setenv("ASCEND_RT_VISIBLE_DEVICES", "6,2")
+    monkeypatch.setenv("VIDEO_RECIPE_ENV_KEYS", '["VIDEO_DEVICE_BACKEND"]')
+    monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/engine:ascend@sha256:" + "d" * 64)
+    monkeypatch.setenv("VLLM_OMNI_SERVER_STORAGE__PATH", str(tmp_path / "storage"))
+    executed = []
+    monkeypatch.setattr(
+        srt_selected.os, "execvpe", lambda file, argv, env: executed.append((argv, env))
+    )
+    output = tmp_path / "server"
+    kwargs = {
+        "runtime": "vllm-omni",
+        "runtime_revision": "a" * 40,
+        "model_path": model,
+        "gpus": requested_devices,
+        "output": output,
+        "command": ["vllm", "serve", str(model), "--omni"],
+        "model_view": "h3-fl2va",
+    }
+    if requested_devices != 2:
+        with pytest.raises(RuntimeError, match="visible GPU count"):
+            srt_selected.serve(plan, **kwargs)
+        assert not output.exists()
+        assert executed == []
+    else:
+        srt_selected.serve(plan, **kwargs)
+        expected = [
+            "NPU-10111213-1415-1617-1819-1a1b1c1d1e1f",
+            "NPU-00010203-0405-0607-0809-0a0b0c0d0e0f",
+        ]
+        spec = json.loads((output / "spec.json").read_text())
+        launch = json.loads((output / "launch.json").read_text())
+        assert spec["gpu_uuids"] == launch["gpu_uuids"] == expected
+        assert launch["environment"]["VIDEO_DEVICE_BACKEND"] == "ascend"
+        assert launch["environment"]["ASCEND_RT_VISIBLE_DEVICES"] == "6,2"
+        assert executed[0][1]["VGBENCH_GPU_UUIDS"] == ",".join(expected)
+        assert executed[0][1]["ASCEND_RT_VISIBLE_DEVICES"] == "6,2"
+        assert Path(executed[0][0][2], "FL2VA").resolve() == model / "FL2VA"
+    assert finalized == [True]
+
+
+@pytest.mark.parametrize(
+    ("uuids", "failure", "message", "finalizations"),
+    [
+        ([], None, "no visible NPUs", 1),
+        ([bytes(16)], None, "empty UUID", 1),
+        ([bytes(range(16))] * 2, None, "duplicate UUID", 1),
+        ([bytes(range(16))], "aclInit", "aclInit failed: 507000", 0),
+        ([bytes(range(16))], "aclFinalize", "aclFinalize failed: 507001", 1),
+        ([bytes(range(16))], "aclrtGetDeviceCount", "aclrtGetDeviceCount failed: 507002", 1),
+        ([bytes(range(16))], "aclrtDeviceGetUuid", "aclrtDeviceGetUuid failed: 507003", 1),
+    ],
+)
+def test_ascend_inventory_rejects_missing_identity_and_driver_errors(
+    monkeypatch, uuids, failure, message, finalizations
+):
+    finalized = _ascend_driver(monkeypatch, uuids, failure=failure)
+    with pytest.raises(RuntimeError, match=message):
+        srt_selected.gpu_devices()
+    assert len(finalized) == finalizations
+
+
+@pytest.mark.parametrize("missing", ["library", "aclrtDeviceGetUuid"])
+def test_ascend_inventory_explains_missing_runtime_requirements(monkeypatch, missing):
+    monkeypatch.setenv("VIDEO_DEVICE_BACKEND", "ascend")
+    monkeypatch.setenv("ASCEND_RT_VISIBLE_DEVICES", "0")
+
+    def library(name):
+        if missing == "library":
+            raise OSError("shared object unavailable")
+        return SimpleNamespace(
+            aclInit=lambda config: 0, aclFinalize=lambda: 0, aclrtGetDeviceCount=lambda count: 0
+        )
+
+    monkeypatch.setattr(srt_selected.ctypes, "CDLL", library)
+    expected = (
+        "requires libascendcl.so"
+        if missing == "library"
+        else "requires CANN API aclrtDeviceGetUuid"
+    )
+    with pytest.raises(RuntimeError, match=expected):
+        srt_selected.gpu_devices()
+
+
+@pytest.mark.parametrize("mask", [None, "", "  "])
+def test_ascend_inventory_requires_a_scheduler_device_mask(monkeypatch, mask):
+    monkeypatch.setenv("VIDEO_DEVICE_BACKEND", "ascend")
+    if mask is None:
+        monkeypatch.delenv("ASCEND_RT_VISIBLE_DEVICES", raising=False)
+    else:
+        monkeypatch.setenv("ASCEND_RT_VISIBLE_DEVICES", mask)
+    with pytest.raises(ValueError, match="scheduler-supplied ASCEND_RT_VISIBLE_DEVICES"):
+        srt_selected.gpu_devices()
+
+
+@pytest.mark.parametrize("backend", ["", "unknown"])
+def test_explicit_device_backend_rejects_invalid_names(monkeypatch, backend):
+    monkeypatch.setenv("VIDEO_DEVICE_BACKEND", backend)
+    with pytest.raises(ValueError, match="VIDEO_DEVICE_BACKEND must be"):
+        srt_selected.gpu_devices()
 
 
 def test_prefetch_reads_every_snapshot_file_through_links(tmp_path):

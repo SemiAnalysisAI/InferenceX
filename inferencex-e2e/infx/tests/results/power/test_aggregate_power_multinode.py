@@ -379,6 +379,13 @@ class TestValidPackage:
         sidecar = pkg.sidecar()
         assert sidecar["power_valid"] is True
         assert sidecar["reasons"] == []
+        assert sidecar["telemetry"] == {
+            "producer": "srt-slurm.dcgm-power",
+            "source_metric": "DCGM_FI_DEV_POWER_USAGE",
+            "power_scope": "gpu_device_board_as_reported_by_dcgm",
+            "timestamp_source": "head_node_unix_clock",
+            "unit": "W",
+        }
         assert sidecar["producer"]["stored_publication_valid"] is True
         assert sidecar["producer"]["recomputed_publication_valid"] is True
         assert sidecar["selected_window"]["window_file"] == f"windows/{RESULT_STEM}.json"

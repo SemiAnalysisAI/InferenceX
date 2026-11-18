@@ -18,6 +18,11 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 产物身份、复用校验与合并后发布见
 [原生视频交付](../inferencex-e2e/docs/video-generation.md)。
 
+Ascend 950DT 的 vLLM-Omni 候选配置覆盖 1、2、4、8 个 NPU 设备，均为 C1。
+在提供实际集群和原生功耗 exporter、完成各部署验证之前，该配置不进入自动 sweep。
+具体配置与接入条件见
+[950DT 候选配置](../inferencex-e2e/docs/video-generation.md#ascend-950dt-candidate)。
+
 ## 入口
 
 原生入口 `python3 -m infx.bench video` 直接调用 `evaluator.srt_selected`。
