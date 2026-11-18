@@ -112,6 +112,9 @@ apply "$site" 12-aiter-7556-qsa-flydsl-sparse-prefill.patch
 apply /sgl-workspace/sglang 13-sglang-51179-qsa-flydsl-prefill.patch
 apply /sgl-workspace/sglang 14-sglang-49852-mxfp4-moe-pad128.patch
 apply /sgl-workspace/sglang 15-sglang-50863-hc-prefill-triton.patch
+apply /sgl-workspace/sglang 16-sglang-50871-51263-qsa-prefill-topk-v2.patch
+apply /sgl-workspace/sglang 21-sglang-50871-51242-qsa-decode-select.patch
+apply /sgl-workspace/sglang 24-sglang-51180-gdn-verify.patch
 
 # The monokernel patch must be the code python imports (an editable install of the checkout).
 python3 - <<'PY'

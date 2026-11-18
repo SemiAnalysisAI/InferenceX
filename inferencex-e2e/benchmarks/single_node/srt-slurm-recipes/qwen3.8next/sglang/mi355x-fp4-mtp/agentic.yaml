@@ -219,6 +219,14 @@ override_c12:
         SGLANG_AMD_MXFP4_PAD128: '1'
         # Patch 15: prefill-sized HC sites as one folded-norm GEMM plus Triton kernels.
         SGLANG_AMD_HC_PREFILL: '1'
+        # Patch 16: QSA indexer prefill blocks selected by the exact topk_v2, scored in one pipeline stage.
+        SGLANG_AMD_QSA_PREFILL_TOPK_V2: '1'
+        # Patch 21: QSA decode, verify and draft-extend blocks selected by the exact topk_v2,
+        # and draft-extend rows scored grouped as in verify.
+        SGLANG_AMD_QSA_DECODE_TOPK_V2: '1'
+        SGLANG_AMD_QSA_GROUPED_DRAFT_EXTEND: '1'
+        # Patch 24: GDN ReplaySSM verify and commit kernels.
+        SGLANG_AMD_GDN_VERIFY: '1'
   benchmark:
     env:
       KV_OFFLOADING: none
