@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 import pytest
@@ -8,7 +9,10 @@ from infx.workflows.ci_priority import (
     annotate_jobs,
     calculate_priority,
     load_policy,
+    merge_facts,
     queue_token,
+    scheduling_facts,
+    supported_criteria,
 )
 
 
@@ -226,3 +230,89 @@ def test_queue_tokens_are_stable_for_reordered_keys_but_distinct_for_duplicate_j
 @pytest.mark.parametrize("framework,expected", [("vllm", "15"), ("vllm-disagg", "15"), ("vllmish", "10")])
 def test_framework_prefix_matching_requires_a_separator(policy, framework, expected):
     assert calculate_priority({"framework": framework}, policy) == Decimal(expected)
+
+
+def _score_from_facts(run, job, policy):
+    """Score a matrix entry rebuilt from facts alone with the real scorer."""
+    entry = {
+        "framework": job["framework"],
+        "model-prefix": job["model-prefix"],
+        "precision": job["precision"],
+        "spec-decoding": job["spec-decoding"],
+        "scenario-type": "agentic-coding" if job["agentic"] else "",
+        "eval-only": job["eval-only"],
+        "prefill": {} if job["multi-node"] else None,
+        "node-count": job["node-count"],
+    }
+    if run["patchwork"]:
+        criteria = frozenset({"patchwork"})
+    else:
+        criteria = supported_criteria(policy) - {"patchwork", "checklist-complete"}
+        if run["checklist-complete"]:
+            criteria |= {"checklist-complete"}
+    return calculate_priority(entry, policy, PriorityContext(run["event"], criteria=criteria))
+
+
+@pytest.mark.parametrize("criteria", [
+    None,
+    frozenset(),
+    frozenset({"vllm", "fp4"}),
+    frozenset({"multi-node", "agentic", "eval-only", "fp4", "mtp", "sglang", "dsv4",
+               "checklist-complete"}),
+    frozenset({"patchwork"}),
+    frozenset({"patchwork", "criterion-unknown-to-this-policy"}),
+])
+@pytest.mark.parametrize("event", ["", "push"])
+def test_scheduling_facts_reproduce_every_annotated_priority(policy, criteria, event):
+    payload = [
+        {"runner": "b200", "framework": "vllm", "model-prefix": "dsr1", "precision": "fp4",
+         "spec-decoding": "none", "node-count": 3, "prefill": {"tp": 4}},
+        {"runner": "h100", "framework": "sglang-disagg", "model-prefix": "dsv4",
+         "precision": "fp4", "spec-decoding": "mtp", "scenario-type": "agentic-coding",
+         "eval-only": True},
+        {"runner": "mi355x", "framework": "trt", "model-prefix": "other"},
+    ]
+    context = PriorityContext(event_name=event, queue_namespace="7:1", criteria=criteria)
+    annotated = annotate_jobs(payload, policy, context)
+
+    facts = scheduling_facts(annotated, policy, context)
+
+    assert set(facts["jobs"]) == {job["queue-token"] for job in annotated}
+    for job in annotated:
+        assert _score_from_facts(facts, facts["jobs"][job["queue-token"]], policy) == Decimal(
+            job["priority"]
+        )
+
+
+def test_scheduling_facts_omit_values_the_classifier_did_not_credit(policy):
+    entry = {"runner": "b200", "framework": "vllm", "model-prefix": "dsv4", "precision": "fp4",
+             "spec-decoding": "mtp", "node-count": 2, "prefill": {"tp": 4}}
+    context = PriorityContext(criteria=frozenset({"vllm"}))
+
+    facts = scheduling_facts(annotate_jobs([entry], policy, context), policy, context)
+
+    assert list(facts["jobs"].values()) == [{
+        "framework": "vllm", "model-prefix": "", "precision": "", "spec-decoding": "",
+        "agentic": False, "eval-only": False, "multi-node": False, "node-count": 2,
+    }]
+
+
+def test_merge_facts_combines_one_runs_matrices_and_rejects_conflicts(policy, tmp_path):
+    path = tmp_path / "scheduling-facts.json"
+    context = PriorityContext(event_name="pull_request")
+    for family, framework in (("single", "vllm"), ("multi", "sglang")):
+        family_context = PriorityContext(event_name="pull_request", queue_namespace=family)
+        annotated = annotate_jobs([{"runner": "b200", "framework": framework}], policy,
+                                  family_context)
+        merge_facts(path, scheduling_facts(annotated, policy, family_context))
+
+    merged = json.loads(path.read_text())
+    assert sorted(job["framework"] for job in merged["jobs"].values()) == ["sglang", "vllm"]
+
+    with pytest.raises(ValueError, match="different run facts: event"):
+        merge_facts(path, scheduling_facts([], policy, PriorityContext(event_name="push")))
+    token = next(iter(merged["jobs"]))
+    conflicting = {**scheduling_facts([], policy, context),
+                   "jobs": {token: {**merged["jobs"][token], "node-count": 9}}}
+    with pytest.raises(ValueError, match="different facts for queue tokens"):
+        merge_facts(path, conflicting)

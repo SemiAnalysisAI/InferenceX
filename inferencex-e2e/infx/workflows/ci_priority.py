@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Assign deterministic CI priority scores to generated benchmark jobs."""
+"""Assign deterministic CI priority scores to generated benchmark jobs.
+
+With --facts-file it also records each job's scheduling facts, keyed by queue
+token, for the priority scheduler to score.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +22,8 @@ from infx.config import repository_root
 
 SCORE_QUANTUM = Decimal("0.001")
 POLICY_KEYS = frozenset({"version", "base-score", "adjustments", "patchwork-score"})
+FACTS_VERSION = 1
+RUN_FACT_KEYS = ("version", "event", "patchwork", "checklist-complete")
 ADJUSTMENT_KEYS = frozenset(
     {
         "additional-node",
@@ -225,6 +231,88 @@ def annotate_jobs(
     return annotated
 
 
+def job_facts(
+    entry: dict[str, Any],
+    policy: dict[str, Any],
+    criteria: frozenset[str] | None,
+) -> dict[str, Any]:
+    """Return the facts calculate_priority credits for entry under criteria.
+
+    Patchwork runs score patchwork-score regardless of their facts, so like
+    calculate_priority this never rejects them.
+    """
+    patchwork = criteria is not None and "patchwork" in criteria
+    if criteria is not None and not patchwork:
+        entry = _entry_from_criteria(criteria, policy, entry)
+    node_count = entry.get("node-count", 1)
+    if not isinstance(node_count, int) or isinstance(node_count, bool) or node_count < 1:
+        if not patchwork:
+            raise ValueError(f"node-count must be a positive integer, got {node_count!r}")
+        node_count = 1
+    return {
+        "framework": str(entry.get("framework", "")),
+        "model-prefix": str(entry.get("model-prefix", "")),
+        "precision": str(entry.get("precision", "")),
+        "spec-decoding": str(entry.get("spec-decoding", "")),
+        "agentic": entry.get("scenario-type") == "agentic-coding",
+        "eval-only": entry.get("eval-only") is True,
+        "multi-node": entry.get("prefill") is not None,
+        "node-count": node_count,
+    }
+
+
+def scheduling_facts(
+    annotated: Any,
+    policy: dict[str, Any],
+    context: PriorityContext = PriorityContext(),
+) -> dict[str, Any]:
+    """Return the facts document for every job annotate_jobs labelled in annotated."""
+    jobs: dict[str, dict[str, Any]] = {}
+
+    def collect(node: Any) -> None:
+        if isinstance(node, list):
+            for item in node:
+                collect(item)
+        elif isinstance(node, dict):
+            if "queue-token" in node:
+                jobs[node["queue-token"]] = job_facts(node, policy, context.criteria)
+            for item in node.values():
+                collect(item)
+
+    collect(annotated)
+    criteria = context.criteria or frozenset()
+    return {
+        "version": FACTS_VERSION,
+        "event": context.event_name,
+        "patchwork": "patchwork" in criteria,
+        "checklist-complete": "checklist-complete" in criteria,
+        "jobs": jobs,
+    }
+
+
+def merge_facts(path: Path, facts: dict[str, Any]) -> None:
+    """Write facts to path, merging with the jobs of an earlier invocation in the same run.
+
+    Raises ValueError when the existing file disagrees on a run-level fact or
+    records different facts for the same queue token.
+    """
+    if path.exists():
+        existing = json.loads(path.read_text())
+        mismatched = [key for key in RUN_FACT_KEYS if existing.get(key) != facts[key]]
+        if mismatched:
+            raise ValueError(
+                f"{path} was written with different run facts: {', '.join(mismatched)}"
+            )
+        jobs = existing["jobs"]
+        conflicting = sorted(
+            token for token, job in facts["jobs"].items() if jobs.get(token, job) != job
+        )
+        if conflicting:
+            raise ValueError(f"{path} records different facts for queue tokens: {conflicting}")
+        facts = {**facts, "jobs": {**jobs, **facts["jobs"]}}
+    path.write_text(json.dumps(facts, separators=(",", ":")) + "\n")
+
+
 def _criteria_from_json(raw_criteria: str) -> frozenset[str] | None:
     """Parse --criteria-json into a set of names, or None when empty or null.
 
@@ -253,6 +341,11 @@ def main() -> int:
         help="Read matrix JSON from this file instead of stdin",
     )
     parser.add_argument(
+        "--facts-file",
+        type=Path,
+        help="Merge every job's scheduling facts into this JSON file",
+    )
+    parser.add_argument(
         "--list-criteria",
         action="store_true",
         help="Print the policy's supported criteria as a JSON array and exit",
@@ -270,7 +363,10 @@ def main() -> int:
     )
     source = args.input.read_text() if args.input else sys.stdin.read()
     payload = json.loads(source)
-    json.dump(annotate_jobs(payload, policy, context), sys.stdout, separators=(",", ":"))
+    annotated = annotate_jobs(payload, policy, context)
+    if args.facts_file:
+        merge_facts(args.facts_file, scheduling_facts(annotated, policy, context))
+    json.dump(annotated, sys.stdout, separators=(",", ":"))
     sys.stdout.write("\n")
     return 0
 
