@@ -41,8 +41,9 @@ base:
   engine:
     type: vllm
     # Runs the Router in Mooncake mode once every worker is healthy and opens each prefill's
-    # bootstrap server on the port the Router queries (patches/669-vllm-router-mooncake.patch).
-    # Each role's kv-transfer-config replaces the connector preset.
+    # bootstrap server on a separately allocated port shared by its TP/PP nodes
+    # (patches/669-vllm-router-mooncake.patch, upstream 1f40300).
+    # Each role's effective kv-transfer-config selects both the worker and Router connector.
     connector: mooncake
     # Each engine sees only its own four GPUs instead of all eight plus --device-ids.
     set_visible_devices: true
