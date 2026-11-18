@@ -39,7 +39,6 @@ fi
 # check its sha256, then use that file.
 declare -A TILERT_WHEEL_SHA256=(
     [0.1.8]=17ae557029a14c2676e20ae5d61c895fb5658a06f0bdd232fe7b21d478f1f838
-    [0.2.0]=53a7c1511308fc6932b8ab909222091ef301ca475346fb6a2f6fe4eced98e725
     [0.2.1]=afefcca46370eb98fddbebd5b12d8fa538dda074a2c4afdb7cbd7c2e9dfd443c
 )
 want_sha=${TILERT_WHEEL_SHA256[$ROUTER_VERSION]:-}
@@ -88,27 +87,6 @@ if u.find_spec("tilert.pd_vllm.rs_front_sup"):
     from tilert.pd_vllm import rs_front_sup
     if rs_front_sup.install_packaged() is None:
         raise SystemExit("the tilert release's Rust front binary is missing or fails its sha256")
-PY
-        # tilert 0.2.0's rs_spec reads parser-config fields (tool_call_body_array, ...) that the
-        # pinned vLLM nightly's ParserEngineConfig does not have yet, so the router's /rs_spec
-        # raises AttributeError and pd_stream never comes up. A field this vLLM lacks is a
-        # feature it lacks: read each one with a False default. 0.2.1 already reads
-        # tool_call_body_array with that default; a field read neither way fails the setup.
-        python3 - "$pd_root/pkg/tilert/pd_vllm/rs_spec.py" <<'PY'
-import pathlib, sys
-p = pathlib.Path(sys.argv[1])
-src = p.read_text()
-for old, new in (
-    ("cfg.tool_args_json", "getattr(cfg, 'tool_args_json', False)"),
-    ("cfg.tool_call_body_array", "getattr(cfg, 'tool_call_body_array', False)"),
-    ("tr.skip_in_token_id_mode", "getattr(tr, 'skip_in_token_id_mode', False)"),
-):
-    if src.count(old) == 0 and src.count(new) == 1:
-        continue
-    if src.count(old) != 1:
-        raise SystemExit(f"{p}: expected one {old!r}, found {src.count(old)}; recheck the rs_spec shim")
-    src = src.replace(old, new)
-p.write_text(src)
 PY
         # srt-slurm starts the supervisor as `python -m infx_rs_front_strict`: the release
         # supervisor with its Python-router fallback turned into a failure, so a run whose Rust
