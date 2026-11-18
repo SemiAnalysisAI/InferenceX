@@ -83,7 +83,9 @@ roles:
       mamba-ssm-cache-dtype: float32
       mamba-cache-mode: align
       block-size: 64
-      scheduling-policy: shortest-prefill-first
+      # SPF is a SimpleCPU read-only preview policy and fatally rejects this
+      # standalone UMBP + MoRIIO WRITE path on the first request.
+      scheduling-policy: fcfs
       enable-prompt-tokens-details: true
     env:
       PATH: /configs/k31-worker-bin:/opt/runtime-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
