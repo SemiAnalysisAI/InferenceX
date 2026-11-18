@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path, PurePosixPath
 
-from infx.bench.video import read_object
+from infx.bench.video import read_object, write_json
 
 VIDEO_ARTIFACT = re.compile(r"h3-results-([0-9]+)-([0-9]+)-([0-9a-f]{64})")
 
@@ -56,6 +56,7 @@ def validate_video_artifacts(
     run_id: str | None = None,
     run_attempt: str | None = None,
     head_sha: str | None = None,
+    selection_output: Path | None = None,
 ) -> int:
     """Return the deployment count; reject missing rows, cells, provenance or sealed files.
 
@@ -97,7 +98,8 @@ def validate_video_artifacts(
         raise ValueError(
             f"video deployment coverage mismatch: missing={sorted(expected.keys() - newest.keys())}, extra={sorted(newest.keys() - expected.keys())}"
         )
-    for fingerprint, row in expected.items():
+    selected = []
+    for fingerprint, row in sorted(expected.items()):
         bundle_attempt = newest[fingerprint]
         name = f"h3-results-{source_run}-{bundle_attempt}-{fingerprint}"
         bundle = root / name
@@ -224,7 +226,19 @@ def validate_video_artifacts(
                 or len(matrix.get("gpu_uuids", [])) != row["gpus"]
             ):
                 raise ValueError(f"{name}: selected engine or GPU count mismatch")
-    return len(expected)
+        selected.append({"name": name, "manifest_sha256": inventory["manifest.json"]})
+    if selection_output is not None:
+        write_json(
+            selection_output,
+            {
+                "version": 1,
+                "source_run_id": source_run,
+                "source_run_attempt": attempt,
+                "source_head_sha": head,
+                "artifacts": selected,
+            },
+        )
+    return len(selected)
 
 
 def main() -> None:
@@ -233,6 +247,9 @@ def main() -> None:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--run-attempt", required=True)
     parser.add_argument("--head-sha", required=True)
+    parser.add_argument(
+        "--selection-output", type=Path, help="Write the validated publication selection"
+    )
     args = parser.parse_args()
     try:
         count = validate_video_artifacts(
@@ -240,6 +257,7 @@ def main() -> None:
             run_id=args.run_id,
             run_attempt=args.run_attempt,
             head_sha=args.head_sha,
+            selection_output=args.selection_output,
         )
     except (OSError, KeyError, TypeError, ValueError) as error:
         parser.exit(1, f"Video sweep artifact validation failed: {error}\n")
