@@ -165,9 +165,18 @@ jobs:
           scored=$(printf '%s' "$entry" |
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
               python -m infx.workflows.ci_priority \
-              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}")
+              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+              --facts-file "${RUNNER_TEMP}/scheduling-facts.json")
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
           echo "queue-token=$(jq -r '.[0]["queue-token"]' <<<"$scored")" >> "$GITHUB_OUTPUT"
+      - name: Upload scheduling facts
+        if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ runner.temp }}/scheduling-facts.json
+          archive: false
+          overwrite: true
+          if-no-files-found: error
 
   collect-al:
     needs: setup
