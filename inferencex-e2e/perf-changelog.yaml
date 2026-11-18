@@ -12993,3 +12993,13 @@
     - "4P5D c660 also sets the sparse-attention indexer logits to BF16 explicitly on prefill and decode (attention-config indexer_logits_dtype bfloat16; BF16 is already the SM10x default, so every point runs BF16 indexer logits), selects the indexer top-k with deep_select on prefill (kernel-config sparse_indexer_topk_backend deep_select), and has the Mooncake master evict 2% of the store per round (--eviction_ratio=0.02 instead of 0.10)."
     - "Every point keeps the model's precision policy: FP8 KV cache, an MXFP4 indexer key cache and FP32 KDA state."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5108
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Move MiniMax-M3.1-Flash B300 vLLM AgentX to vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-6a4e881 (vLLM 6a4e881: the lazy SimpleCPUOffload load-window fix from vllm-project/vllm#66766 plus --prefill-schedule-backlog-interval from vllm-project/vllm#67089; the image links only cuBLAS headers into CUDA_HOME, so the MSA prefill kernel JIT builds against the CUDA 13.4 toolkit headers)."
+    - "Launch the server with vllm-rs, vLLM's Rust OpenAI frontend, instead of vllm serve."
+    - "Run the DSpark drafter on FLASHINFER_TS at every point; the TP4 points used FLASH_ATTN."
+    - "TP2 points: max-num-batched-tokens 32768 to 8192, prefill-schedule-interval 24, prefill-schedule-backlog-interval 4, cache-aware-admission-window 96, and VLLM_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS=8192 to chunk SimpleCPUOffload batch copies."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4930
+  scenario-type: [agentic-coding]
