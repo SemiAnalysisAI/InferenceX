@@ -12968,7 +12968,7 @@
 - config-keys:
     - minimaxm31flash-fp4-b300-vllm-agentic-dspark
   description:
-    - "Move MiniMax-M3.1-Flash B300 vLLM AgentX to vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-b08a3b4 (vLLM b08a3b4: the lazy SimpleCPUOffload load-window fix from vllm-project/vllm#66766 plus --prefill-schedule-backlog-interval from vllm-project/vllm#67089)."
+    - "Move MiniMax-M3.1-Flash B300 vLLM AgentX to vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-6a4e881 (vLLM 6a4e881: the lazy SimpleCPUOffload load-window fix from vllm-project/vllm#66766 plus --prefill-schedule-backlog-interval from vllm-project/vllm#67089; the image links only cuBLAS headers into CUDA_HOME, so the MSA prefill kernel JIT builds against the CUDA 13.4 toolkit headers)."
     - "Launch the server with vllm-rs, vLLM's Rust OpenAI frontend, instead of vllm serve."
     - "Run the DSpark drafter on FLASHINFER_TS at every point; the TP4 points used FLASH_ATTN."
     - "TP2 points: max-num-batched-tokens 32768 to 8192, prefill-schedule-interval 24, prefill-schedule-backlog-interval 4, cache-aware-admission-window 96, and VLLM_KV_OFFLOAD_MAX_BATCH_DESCRIPTORS=8192 to chunk SimpleCPUOffload batch copies."

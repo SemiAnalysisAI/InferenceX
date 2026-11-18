@@ -4363,7 +4363,7 @@ minimaxm31flash-fp4-gb200-vllm-agentic-dspark:
 minimaxm31flash-fp4-b300-vllm-agentic-dspark:
   # DSpark uses the checkpoint's built-in drafter; synthetic acceptance follows
   # infx/golden_al_distribution/minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
-  image: vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-b08a3b4@sha256:64cc0bd99add653f5d1c7abf3c2f1a040c3330e8cfaf262bff45b92539d0dc6b
+  image: vllm/vllm-openai:minimax-m31-flash-x86_64-cu134-6a4e881@sha256:60c4203c4886da0cc725180967bbeca3e4d28882536d74de363a906bf3244d76
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:b300-dsxe
