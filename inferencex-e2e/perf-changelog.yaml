@@ -13051,6 +13051,31 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5036
 
 - config-keys:
+    - minimaxm31flash-fp4-h200-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to vllm/vllm-openai:nightly-8ca766326652caf4b8e50d1b9118d8a22f6adc73, which selects FlashInfer's SM90 MSA kernels for the indexer and sparse attention."
+    - "Serve flags, DSpark speculation and the search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5122
+
+- config-keys:
+    - minimaxm31flash-fp4-h100-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update to vllm/vllm-openai:nightly-8ca766326652caf4b8e50d1b9118d8a22f6adc73, which selects FlashInfer's SM90 MSA kernels for the indexer and sparse attention."
+    - "Serve flags, DSpark speculation and the search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5124
+
+- config-keys:
+    - wan22-bf16-h200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add a vLLM-Omni v0.32.0 Wan2.2-T2V-A14B baseline on 1, 2, 4 and 8 H200 GPUs, on the B200 row's workload (wan22.yaml release-v1, C1) and image digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5110
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
