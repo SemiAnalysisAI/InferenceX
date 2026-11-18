@@ -6,7 +6,7 @@
 
 `h3-v2.yaml` is a separate proposed 5-second H3 workload. Its `release-v1` set contains 20 distinct measured prompts with fixed seeds and a disjoint warmup prompt. The expected delivered clip is 124 frames at 24 fps (124/24 seconds), 1344×768, with 32 kHz stereo audio. The request uses 49 denoising updates; the frozen schedule identity records 50 sigma points and video/audio shifts 12/3.
 
-`wan22.yaml` defines the silent Wan2.2-T2V-A14B text-to-video workload: 832×480, 81 frames at 16 fps, 40 steps, guidance 4.0 for the high-noise expert and 3.0 for the low-noise expert, boundary 0.875, flow shift 12 and an empty negative prompt, all sent per request. `release-v1` crosses four prompts with five seeds (one warmup); `smoke` runs the first case with the same request controls. Only vLLM-Omni has a Wan2.2 request contract.
+`wan22.yaml` defines the silent Wan2.2-T2V-A14B text-to-video workload: 832×480, 81 frames at 16 fps, 40 steps, guidance 4.0 for the high-noise expert and 3.0 for the low-noise expert, boundary 0.875, flow shift 12 and an empty negative prompt. vLLM-Omni takes every control per request. SGLang does not read the flow shift or the boundary from a request, so its server refuses to start unless `--flow-shift` and the checkpoint's `model_index.json` `boundary_ratio` equal the spec. SGLang's requests also set `x264_preset: ultrafast` and `output_compression: 63` (CRF 18), the libx264 encoding vLLM-Omni v0.32.0 delivers by default, because SGLang's own default is `fast` at CRF 25. `release-v1` crosses four prompts with five seeds (one warmup); `smoke` runs the first case with the same controls.
 
 `h3.yaml` and `wan22.yaml` use schema version 1 and `h3-v2.yaml` uses schema version 2.
 Version 2 adds a `warmup_case` to every set and a `fairness` block that seals the schedule, the requested libx264 ultrafast/CRF 18/yuv420p plus AAC encoding, the disabled cross-request conditioning cache, and the official Diffusers source, model and RNG candidate.
@@ -20,7 +20,7 @@ Code that needs the version calls `schema_version(plan)` instead of testing whic
 
 - `model` names the checkpoint and its 40-character revision.
 - `generation` holds the request and clip values.
-  SGLang rejects caller-set fps and frame counts and derives them from its `target`; only vLLM-Omni receives fps, frame count, width, and height.
+  For H3, SGLang rejects caller-set fps and frame counts and derives them from its `target`; only vLLM-Omni receives fps, frame count, width, and height.
   The runner checks the clip's duration against `frame_count / fps` (107 / 24 = 4.458 s), not `duration_seconds`.
 - `prompts` defines each prompt once with its motion and sound requirements.
   Each entry in `sets` lists cases that pair a prompt with a seed; no two cases repeat both prompt text and seed.
