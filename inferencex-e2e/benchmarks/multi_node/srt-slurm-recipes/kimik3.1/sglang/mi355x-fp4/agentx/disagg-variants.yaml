@@ -1,0 +1,187 @@
+schema: 2
+
+base:
+  name: kimik3.1-fp4-mi355x-sglang-agentic-dflash-disagg
+  slurm:
+    time_limit: '08:00:00'
+  sbatch_directives:
+    mem: '0'
+  srun_options:
+    container-remap-root: ''
+    container-writable: ''
+    mem: '0'
+  container_mounts:
+    /dev/infiniband: /dev/infiniband
+  extra_mount:
+    # The image has no Ionic verbs provider; libibverbs loads the host's only through its driver entry.
+    - /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
+    - /etc/libibverbs.d/ionic.driver:/etc/libibverbs.d/ionic.driver:ro
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang-router
+    enable_multiple_frontends: false
+    placement:
+      node: head
+    args:
+      request-timeout-secs: 3600
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  # Loading the 1.56 TB checkpoint plus decode and prefill graph capture.
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+  engine: sglang
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        kv-cache-dtype: fp8_e4m3
+        enable-dsa-fp4-indexer: true
+        mem-fraction-static: 0.85
+        # 32k chunks put the long-prefill sparse MLA on a Triton path that hangs below ~34 GB of free VRAM.
+        chunked-prefill-size: 16384
+        max-prefill-tokens: 16384
+        schedule-policy: shortest-prefill-first
+        mamba-radix-cache-strategy: extra_buffer
+        mamba-full-memory-ratio: 0.65
+        mamba-max-states-per-path: 1
+        # Checkpoints a KDA state every 64 tokens, so a resumed turn misses at most 63 cached tokens.
+        mamba-track-interval: 64
+        enable-hierarchical-cache: true
+        hicache-write-policy: write_back
+        hicache-ratio: 4.0
+        cuda-graph-backend-prefill: breakable
+        cuda-graph-bs-prefill: [256, 512, 768, 1024, 1536, 2048, 3072, 4096]
+        disaggregation-transfer-backend: mooncake
+        disaggregation-ib-device: '@fabric.rdma-devices'
+        disaggregation-decode-allocation-policy: early
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        reasoning-parser: kimi_k3
+        tool-call-parser: kimi_k3
+        enable-metrics: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-draft-model-revision: d0d8bc2e3c6d0a195d2e00a49017e71ca8d881f1
+        speculative-draft-attention-backend: triton
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        # The golden AL curve was collected with block verification.
+        speculative-use-block-verification: true
+        # The current token plus 4 drafts; the prefill writes the draft KV ring the decode reads.
+        speculative-num-draft-tokens: 5
+        random-seed: 42
+      env: &common_env
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        HF_HOME: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache/hub
+        HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub
+        NCCL_SOCKET_IFNAME: '@fabric.socket-ifname'
+        GLOO_SOCKET_IFNAME: '@fabric.socket-ifname'
+        MC_GID_INDEX: '@fabric.rdma-gid-index'
+        MC_MAX_CONCURRENT_REG_MR: '8'
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '3600'
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '3600'
+        # Outlasts the router's pooled connections, idle through the warmup's long tail.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '7200'
+        SGLANG_USE_AITER: '1'
+        SGLANG_AITER_K3_OPT: '1'
+        AITER_FLYDSL_FORCE: '1'
+        AITER_SITUV2_A8W4: '1'
+        # BF16 MoE combine and all-reduce.
+        AITER_OPUS_STAGE2_FP8: '0'
+        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+        PYTORCH_HIP_ALLOC_CONF: garbage_collection_threshold:0.95
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        # Split-K HIP sparse MLA decode and verify for 16 to 512 rows.
+        SGLANG_ROCM_SPARSE_MLA_DECODE_HIP: '1'
+        SGLANG_ROCM_RUNTIME_RESERVE_GB: '10'
+        # MoE front and residual stream on row shards in prefill (no extra memory).
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_ROUTED_FRONT: '1'
+        SGLANG_ENABLE_ROCM_K3_ROW_SHARDED_STREAM: '1'
+        # A draft block's ring locations in one launch.
+        SGLANG_OPT_DFLASH_RING_LOCS_FUSED: '1'
+        # Every rank commits rank 0's greedy accept; a rank that diverges hangs the batch.
+        SGLANG_SPEC_TP_SYNC: init,dflash-accept-greedy
+        # Keeps every rank on the Rust TreeCore; write-back asserts on a mix with the Python one.
+        RUSTUP_TOOLCHAIN: stable
+        # Pinned host pools; registered pageable pools stall every GPU queue on page migration.
+        HSA_USERPTR_FOR_PAGED_MEM: '0'
+        # The MI355X nodes report MEC firmware 38, below the 177 that fixes the
+        # RCCL memory reclaim issue.
+        HSA_NO_SCRATCH_RECLAIM: '1'
+    decode:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        dcp-size: 8
+        dcp-comm-backend: a2a
+        kv-cache-dtype: fp8_e4m3
+        enable-dsa-fp4-indexer: true
+        mem-fraction-static: 0.92
+        mamba-radix-cache-strategy: extra_buffer
+        disaggregation-transfer-backend: mooncake
+        disaggregation-ib-device: '@fabric.rdma-devices'
+        disaggregation-decode-extra-slots: 16
+        disaggregation-decode-enable-radix-cache: true
+        weight-loader-prefetch-checkpoints: true
+        model-loader-extra-config: '{"enable_multithread_load": true}'
+        reasoning-parser: kimi_k3
+        tool-call-parser: kimi_k3
+        enable-metrics: true
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
+        speculative-draft-model-revision: d0d8bc2e3c6d0a195d2e00a49017e71ca8d881f1
+        speculative-draft-attention-backend: triton
+        speculative-draft-kv-cache-dtype: fp8_e4m3
+        speculative-use-block-verification: true
+        speculative-num-draft-tokens: 5
+        # Without ReplaySSM, DFLASH keeps one KDA state per draft token and the KV pool collapses.
+        enable-linear-replayssm-spec: true
+        random-seed: 42
+      env:
+        <<: *common_env
+        # Decode graphs past ~96 at mem 0.92 abort when the allocator collects during capture.
+        PYTORCH_HIP_ALLOC_CONF: garbage_collection_threshold:0.99
+  benchmark:
+    placement:
+      node: head
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_1p1d_c128:
+  roles:
+    prefill: &prefill_1p1d
+      env:
+        # 190 GB of pinned host pools per GPU (KV, KDA states, indexer keys) under the node's 1511 GiB GTT.
+        SGLANG_HICACHE_MAMBA_HOST_RATIO: '5'
+        SGLANG_DSA_MQA_LOGITS_FREE_MEM_FRACTION: '0.1'
+    decode:
+      args:
+        max-running-requests: 144
+        cuda-graph-max-bs-decode: 144
+
+override_1p1d_c144:
+  roles:
+    prefill: *prefill_1p1d
+    decode:
+      args:
+        max-running-requests: 160
+        cuda-graph-max-bs-decode: 160
