@@ -1,8 +1,8 @@
 schema: 2
-name: h3-vllm-omni-serving-client
+name: h3-vllm-omni-agg-ulysses
 
 resources:
-  gpu_type: a100
+  gpu_type: b200
 
 services:
   - name: video-server
@@ -30,11 +30,10 @@ services:
       - fl2va
       - --num-gpus
       - "{gpus_per_node}"
-      # H3 does not fit one 80 GB GPU, and Ulysses replicates the DiT on every rank.
       - --tensor-parallel-size
-      - "2"
+      - "1"
       - --usp
-      - "2"
+      - "{gpus_per_node}"
       - --ring
       - "1"
       - --text-encoder-tp-size

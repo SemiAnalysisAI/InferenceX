@@ -1,5 +1,5 @@
 schema: 2
-name: wan22-vllm-omni-serving-client-g4
+name: wan22-vllm-omni-agg-cfg2
 
 resources:
   gpu_type: b200
@@ -27,13 +27,13 @@ services:
       - "30283"
       - --num-gpus
       - "{gpus_per_node}"
-      # Deployment only: CFG branches on two GPU groups, Ulysses sequence parallelism within each.
+      # Deployment only: CFG branches on two GPUs, no sequence parallelism.
       - --tensor-parallel-size
       - "1"
       - --cfg-parallel-size
       - "2"
       - --usp
-      - "2"
+      - "1"
       - --ring
       - "1"
       - --vae-patch-parallel-size

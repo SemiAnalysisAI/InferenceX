@@ -1,8 +1,8 @@
 schema: 2
-name: h3-sglang-serving-client
+name: h3-sglang-agg-tp2
 
 resources:
-  gpu_type: h100
+  gpu_type: a100
 
 services:
   - name: video-server
@@ -32,7 +32,7 @@ services:
       - --num-gpus
       - "{gpus_per_node}"
       - --ulysses-degree
-      - "2"
+      - "1"
       - --tp-size
       - "2"
       - --encoder-parallel

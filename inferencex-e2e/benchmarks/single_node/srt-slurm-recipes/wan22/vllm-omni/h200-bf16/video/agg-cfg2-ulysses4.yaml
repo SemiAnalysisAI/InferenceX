@@ -1,8 +1,8 @@
 schema: 2
-name: wan22-vllm-omni-serving-client
+name: wan22-vllm-omni-agg-cfg2-ulysses4
 
 resources:
-  gpu_type: b300
+  gpu_type: h200
 
 services:
   - name: video-server
@@ -51,10 +51,6 @@ services:
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
       VLLM_WORKER_MULTIPROC_METHOD: spawn
-      # b300-dsxe serves Wan from the runner-home HF cache on a network filesystem, where the
-      # engine's multi-thread mmap shard loader reads at ~10 MB/s; one sequential pass first fills
-      # the page cache (the text encoder alone already streams at ~240 MB/s from the same cache).
-      VIDEO_PREFETCH_MODEL: "1"
       # The release set reuses each prompt across five seeds; cached text embeddings would skip work.
       OMNI_DIFFUSION_PROMPT_EMBED_CACHE: "0"
       VLLM_OMNI_VIDEO_SYNC_TIMEOUT: "14400"

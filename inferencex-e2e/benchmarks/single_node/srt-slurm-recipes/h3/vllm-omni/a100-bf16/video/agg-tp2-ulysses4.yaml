@@ -1,5 +1,5 @@
 schema: 2
-name: h3-vllm-omni-serving-client
+name: h3-vllm-omni-agg-tp2-ulysses4
 
 resources:
   gpu_type: a100

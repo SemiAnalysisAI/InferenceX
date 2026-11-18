@@ -1,8 +1,8 @@
 schema: 2
-name: h3-vllm-omni-serving-client
+name: wan22-vllm-omni-agg-cfg2-ulysses4
 
 resources:
-  gpu_type: a100
+  gpu_type: b300
 
 services:
   - name: video-server
@@ -13,7 +13,7 @@ services:
     command: [python3, -m, infx.bench, video, serve]
     args:
       - --model-view
-      - h3-fl2va
+      - snapshot
       - --
       - vllm
       - serve
@@ -25,29 +25,24 @@ services:
       - 0.0.0.0
       - --port
       - "30283"
-      - --trust-remote-code
-      - --task-type
-      - fl2va
       - --num-gpus
       - "{gpus_per_node}"
-      # H3 does not fit one 80 GB GPU, and Ulysses replicates the DiT on every rank.
+      # Deployment only: CFG branches on two GPU groups, Ulysses sequence parallelism within each.
       - --tensor-parallel-size
+      - "1"
+      - --cfg-parallel-size
       - "2"
       - --usp
-      - "1"
+      - "4"
       - --ring
       - "1"
-      - --text-encoder-tp-size
-      - "{gpus_per_node}"
       - --vae-patch-parallel-size
       - "{gpus_per_node}"
-      - --vae-parallel-mode
-      - tile
       - --vae-use-tiling
-      # H3 reuses AdaLN projection outputs across requests by default; the plan disables
-      # cross-request conditioning reuse.
-      - --cache-config
-      - '{"minimax_h3_adaln_cache": false}'
+      - --init-timeout
+      - "3600"
+      - --stage-init-timeout
+      - "3600"
     env:
       PYTHONPATH: /video-package:/infmax-workspace
       PYTHONUNBUFFERED: "1"
@@ -56,6 +51,11 @@ services:
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
       VLLM_WORKER_MULTIPROC_METHOD: spawn
+      # b300-dsxe serves Wan from the runner-home HF cache on a network filesystem, where the
+      # engine's multi-thread mmap shard loader reads at ~10 MB/s; one sequential pass first fills
+      # the page cache (the text encoder alone already streams at ~240 MB/s from the same cache).
+      VIDEO_PREFETCH_MODEL: "1"
+      # The release set reuses each prompt across five seeds; cached text embeddings would skip work.
       OMNI_DIFFUSION_PROMPT_EMBED_CACHE: "0"
       VLLM_OMNI_VIDEO_SYNC_TIMEOUT: "14400"
       VLLM_OMNI_SERVER_STORAGE__PATH: /logs/video/server/storage
@@ -63,5 +63,5 @@ services:
       http:
         port: 30283
         path: /health
-      timeout_seconds: 1800
+      timeout_seconds: 3600
       interval_seconds: 5
