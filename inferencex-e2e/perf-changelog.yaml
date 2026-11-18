@@ -12995,6 +12995,27 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5108
 
 - config-keys:
+    - glm5.3-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.3 MXFP4 MI355X AgentX on SGLang (amd/GLM-5.3-Quark-MXFP4-AttnFP8) with EAGLE MTP K5 and golden AL 3.48, on lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261025 pinned by digest; the v0.5.22 release lacks sgl-project/sglang#40776, which this checkpoint needs to load."
+    - "TP4/EP4 with a 180 GB/rank write-back HiCache host tier and breakable prefill CUDA graphs at concurrency 4, 8, 10, 12, 14, 16 and 20; TP8/EP1 without KV offloading at concurrency 1, 2 and 4. On both arms, max-running-requests and the decode CUDA graph limit are twice the concurrency."
+    - "Every rank runs the Python TreeCore (SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND=python): ranks otherwise pick the Rust or Python core on their own, and mixed cores fail the write-back HiCache sync assertion (sgl-project/sglang#48112)."
+    - "Draft data types: the NextN layer shipped in the checkpoint loads with its Quark config, as shipped (MXFP4 routed and shared experts, FP8 per-block attention and indexer wq_b/wk, BF16 eh_proj, router gate and indexer weights_proj)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4593
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Use the SGLang ROCm 7.2.0 MI35x 20261113 daily image (lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261113, SGLang 0.5.23.dev20261113+g5792cf6e5e) for GLM-5.2 MXFP4 MI355X AgentX MTP."
+    - "Use Gluon target MoE only for TP8/EP1 at concurrency 1 and 2; preserve the checkpoint BF16 draft experts with the auto speculative MoE backend."
+    - "TP8/EP1 keeps 32k prefill chunks; the image includes the Gluon FP32 partial-store fix from sgl-project/sglang#48397."
+    - "Drop the TP8/EP1 concurrency 4 point; concurrency 4 runs on the TP4/EP4 HiCache arm, which delivers more throughput per GPU."
+    - "Keep TP4/EP4 HiCache and DCP4 settings unchanged and run GSM8K on every eval-selected point, including the Gluon path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4748
+
+- config-keys:
     - minimaxm31flash-fp4-gb200-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
