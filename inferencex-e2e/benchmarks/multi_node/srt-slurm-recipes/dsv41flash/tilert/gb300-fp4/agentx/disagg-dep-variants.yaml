@@ -45,6 +45,12 @@ base:
         NCCL_CUMEM_ENABLE: "1"
         NCCL_MNNVL_ENABLE: "1"
         NCCL_NVLS_ENABLE: "1"
+        # The FlashInfer autotune results vLLM saved for this prefill on GB300 in this image, under
+        # its config hash; the setup script copies them into the cache directory, so a cold start
+        # loads them instead of re-tuning. A cold tune's temporary buffers otherwise leave the
+        # prefill a KV cache of about 60 GiB per GPU instead of about 88 GiB.
+        VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR: /tmp/flashinfer-autotune
+        AUTOTUNE_CACHE_SEED: /configs/dsv41flash-tilert-gb300-flashinfer-autotune
       args:
         served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
         tokenizer-mode: deepseek_v41
