@@ -75,10 +75,10 @@ base:
         # parallelism, 217.95 GB with KVP8.
         kvstore-ratio: 8
         reasoning-parser: passthrough
-        drafter-attention-backend: gluon
+        drafter-attention-backend: mha
         speculative-algorithm: DSPARK
-        speculative-draft-model-path: Inferact/Kimi-K3.1-Pro-DSpark-preview
-        speculative-draft-model-revision: 6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94
+        speculative-draft-model-path: Inferact/Kimi-K3.1-Pro-DSpark
+        speculative-draft-model-revision: e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f
         # Drafts per step (overrides change it); the verify window adds the current token.
         speculative-num-steps: 5
         speculative-num-draft-tokens: 6
@@ -121,6 +121,8 @@ override_tp8_c4:
         max-cudagraph-capture-size: 2
         cudagraph-capture-sizes: [1, 2]
         disable-prefill-graph: true
+        speculative-num-steps: 7
+        speculative-num-draft-tokens: 8
   benchmark:
     env:
       CONC: '4'
@@ -141,6 +143,8 @@ override_tp8_dcp8_c8:
         prefill-graph-max-tokens: 3072
         # Up to 64 decode rounds run after each prefill chunk before the next prefill round.
         prefill-decode-interval: 64
+        speculative-num-steps: 7
+        speculative-num-draft-tokens: 8
   benchmark:
     env:
       CONC: '8'
@@ -181,8 +185,6 @@ override_tp8_dcp8_c24:
         prefill-decode-interval: 64
         prefill-decode-min-interval: 24
         enable-short-prefill-first: true
-        speculative-num-steps: 4
-        speculative-num-draft-tokens: 5
   benchmark:
     env:
       CONC: '24'
@@ -204,8 +206,6 @@ override_tp8_dcp8_c32:
         prefill-decode-min-interval: 24
         enable-short-prefill-first: true
         enable-mixed-batch: true
-        speculative-num-steps: 3
-        speculative-num-draft-tokens: 4
   benchmark:
     env:
       CONC: '32'
@@ -226,8 +226,6 @@ override_tp8_dcp8_c48:
         prefill-decode-interval: 80
         prefill-decode-min-interval: 4
         enable-mixed-batch: true
-        speculative-num-steps: 3
-        speculative-num-draft-tokens: 4
   benchmark:
     env:
       CONC: '48'

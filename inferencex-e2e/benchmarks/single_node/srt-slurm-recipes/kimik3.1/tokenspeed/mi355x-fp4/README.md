@@ -3,8 +3,9 @@
 The `agentic.yaml` recipe backs the
 `kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark` matrix: one TokenSpeed worker
 on eight MI355X GPUs with attention and MoE TP8 and EP1, so every GPU holds all
-experts. The `Inferact/Kimi-K3.1-Pro-DSpark-preview` draft proposes three to
-seven tokens per step and is served as it ships, in BF16. The KV cache is FP8
+experts. The released `Inferact/Kimi-K3.1-Pro-DSpark` draft, a five-layer GQA
+stack attended through TokenSpeed's MHA drafter backend, proposes five or seven
+tokens per step and is served as it ships, in BF16. The KV cache is FP8
 with the MXFP4 DSA indexer key cache, and the KDA recurrent state stays in
 TokenSpeed's default FP32, as the K3.1 week-1 precision policy requires. The
 context is 1,048,560 tokens, prefill runs in 8K chunks, and the Host L2 KV
@@ -16,12 +17,12 @@ Each concurrency has its own override:
 | Concurrency | KVP / DCP | `max-num-seqs` | DSpark drafts | `prefill-decode-interval` | `prefill-decode-min-interval` | Other |
 | ----------- | --------- | -------------- | ------------- | ------------------------- | ----------------------------- | ----- |
 | 1           | 1         | 1              | 7             | 0                         | 0                             | no prefill graphs |
-| 4           | 1         | 2              | 5             | 0                         | 0                             | no prefill graphs |
-| 8           | 8         | 8              | 5             | 64                        | 0                             |       |
+| 4           | 1         | 2              | 7             | 0                         | 0                             | no prefill graphs |
+| 8           | 8         | 8              | 7             | 64                        | 0                             |       |
 | 16          | 8         | 8              | 5             | 80                        | 8                             |       |
-| 24          | 8         | 12             | 4             | 64                        | 24                            | short prefill first |
-| 32          | 8         | 16             | 3             | 64                        | 24                            | short prefill first, mixed batches |
-| 48          | 8         | 48             | 3             | 80                        | 4                             | mixed batches |
+| 24          | 8         | 12             | 5             | 64                        | 24                            | short prefill first |
+| 32          | 8         | 16             | 5             | 64                        | 24                            | short prefill first, mixed batches |
+| 48          | 8         | 48             | 5             | 80                        | 4                             | mixed batches |
 
 Decode graphs are captured up to `max-num-seqs`, and a cap below the
 concurrency queues the extra sessions. From concurrency 8, each GPU stores one
