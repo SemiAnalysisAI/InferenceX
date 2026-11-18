@@ -1224,7 +1224,7 @@ kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark:
   precision: fp4
   framework: tokenspeed
   multinode: false
-  router: { name: smg, version: 1.16.0.post20261115 }
+  router: { name: smg, version: 1.16.0.post20261117 }
   srt-recipe-dir: kimik3.1/tokenspeed/mi355x-fp4
   scenarios:
     agentic-coding:

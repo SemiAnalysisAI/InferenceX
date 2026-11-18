@@ -6,11 +6,11 @@ base:
       revision: d9e99b0792a5e93b78ea9bea62a68167e36ddd9e
     container: {}
     frameworks:
-      tokenspeed: 0.1.1.post20261116
-      tokenspeed-kernel: 0.1.5.post20261116
-      tokenspeed-kernel-amd: 0.1.4.post20261116
-      tokenspeed-scheduler: 0.1.57
-      tokenspeed-engine: 0.1.0.post20261118
+      tokenspeed: 0.1.1.post20261118
+      tokenspeed-kernel: 0.1.5.post20261118
+      tokenspeed-kernel-amd: 0.1.4.post20261118
+      tokenspeed-scheduler: 0.1.58
+      tokenspeed-engine: 0.1.1.post20261118
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -39,11 +39,11 @@ base:
   engine: tokenspeed
   setup_script: tokenspeed-nightly-rocm.sh
   environment:
-    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261116/tokenspeed-0.1.1.post20261116-py3-none-any.whl#sha256=de862f270b2c92590e3c8226b027c3fc0de9a271842e4a28ab96155c56e4a683
-    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261116-rocm72/tokenspeed_kernel-0.1.5.post20261116-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=8cb0329bbe85ce10042b172c685a6144557357be83eed042ea2db55b717fd584
-    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261116/tokenspeed_kernel_amd-0.1.4.post20261116-py3-none-any.whl#sha256=1c0ec9eb8e5d2635ff69c36332149177ff486a1d74b2efd5ddf961ac42edcd69
-    TOKENSPEED_SCHEDULER_VERSION: 0.1.57
-    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.0.post20261118/tokenspeed_engine-0.1.0.post20261118-cp312-abi3-manylinux_2_28_x86_64.whl#sha256=b1e817b8008d06835698b7d95f1a9d10b9ae4787f6d4d3b47781ebf1087b30b3
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261118/tokenspeed-0.1.1.post20261118-py3-none-any.whl#sha256=c0fe4fe9dc7096fa0a4b0933a827540f48d913a570bc0151e6dba90166e44a0e
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261118-rocm72/tokenspeed_kernel-0.1.5.post20261118-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=dc1ab4ff90674e246befcf3932d6d012848059d92861dac0bf9659b95f9dd570
+    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261118/tokenspeed_kernel_amd-0.1.4.post20261118-py3-none-any.whl#sha256=0a54bdf2bb34bf84b9fda83683556ef6923026098753dee8ff54aabd54870b40
+    TOKENSPEED_SCHEDULER_VERSION: 0.1.58
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.1.post20261118/tokenspeed_engine-0.1.1.post20261118-cp312-abi3-manylinux_2_28_x86_64.whl#sha256=48d933c4423b3ccb08ae336bf78f5bf14849a6ea3fa4932154805a1570338fbf
   roles:
     agg:
       nodes: 1

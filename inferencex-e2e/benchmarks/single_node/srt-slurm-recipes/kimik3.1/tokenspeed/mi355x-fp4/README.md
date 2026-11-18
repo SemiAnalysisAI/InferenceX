@@ -38,20 +38,15 @@ let prefill and decode share an iteration. The caps keep decode batches small
 and the intervals keep prefill from interrupting decode; both lower TPOT at the
 cost of time to first token.
 
-The recipe installs the November 16 TokenSpeed, kernel, kernel-amd and engine
-wheels by release URL and SHA256, `tokenspeed-scheduler` `0.1.57` from PyPI,
-and `tokenspeed-smg` `1.16.0.post20261115`, the gateway that TokenSpeed
-revision pins. The runner image, pinned by digest in the master config,
+The recipe installs the November 18 TokenSpeed, kernel, kernel-amd and engine
+wheels by release URL and SHA256, `tokenspeed-scheduler` `0.1.58` from PyPI,
+and `tokenspeed-smg` `1.16.0.post20261117`, the gateway that TokenSpeed
+revision pins. The November 18 nightly is the first to serve the released
+draft. The runner image, pinned by digest in the master config,
 provides ROCm torch; `tokenspeed-nightly-rocm.sh` installs the pinned packages
 without replacing it and checks that torch is still a ROCm build. The worker
 pins the checkpoint with `revision` and the draft with
 `speculative-draft-model-revision`.
-
-The independent November 16 nightly jobs captured different source revisions:
-TokenSpeed was built from `919f49c0`, while the ROCm kernel was built from
-`f92e94c6`, two commits later, so the upstream ROCm index coherence check did
-not publish this pair. Re-pin to a coherent nightly before marking the
-submission ready.
 
 Workers launch through `python3 -m tokenspeed.cli serve --headless` with SMG's
 ZMQ transport. srtctl runs SMG directly, so the recipe passes the gateway
