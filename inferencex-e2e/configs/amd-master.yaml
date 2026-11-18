@@ -750,11 +750,11 @@ dsv41flash-fp4-mi325x-vllm-agentic-dspark:
 
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via SGLang with MTP speculative
 # decoding. Three arms:
-# (1) TP4/EP4 with HiCache KV offloading to DRAM at concurrency [4, 8, 10, 12, 14, 16];
-#     serves the high-concurrency, throughput-dominant regime.
-# (2) TP4/EP4 with DCP4 at concurrency [16, 24, 40, 48]; striping the latent KV
-#     across the four ranks holds the working set on device without HiCache,
-#     which DSA DCP rejects.
+# (1) TP4/EP4 with HiCache KV offloading to DRAM at concurrency [4, 8, 10, 12, 14];
+#     serves the mid-concurrency, throughput-dominant regime.
+# (2) TP4/EP4 with DCP4 on HiCache at concurrency [16, 24, 32, 40, 48]; striping
+#     the latent KV across the four ranks keeps the device pool ahead of the
+#     working set, and the 256 GB/rank host tier carries the rest.
 # (3) TP8/EP1 with Gluon target MoE and no KV offloading, concurrency [1, 2];
 #     EP=1 eliminates the MoE all-to-all collective, reducing ITL at low
 #     concurrency; GPU-resident KV keeps latency independent of DRAM bandwidth.
@@ -773,8 +773,8 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.85
       search-space:
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12, 14, 16], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 4, ep: 4, dcp-size: 4, kv-offloading: none, conc-list: [16, 24, 40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12, 14], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 4, ep: 4, dcp-size: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 24, 32, 40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
 # GLM-5.2 FP8 agentic-coding benchmark on MI355X via SGLang with MTP speculative
