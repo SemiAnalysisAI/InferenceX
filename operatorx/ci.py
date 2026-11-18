@@ -913,16 +913,13 @@ def main() -> None:
         for cell in result["include"]:
             # InferenceX's import URI: a digest-pinned image imports by digest
             cell["import_uri"] = enroot_uri(cell["image"])
-            cell["queue-token"] = hashlib.sha256(
-                f"{args.run_id}:{args.attempt}:{cell['id']}".encode()
-            ).hexdigest()[:32]
         result.update(
             source_sha=args.source_sha, run_id=args.run_id, attempt=args.attempt
         )
         write_json(args.out, result)
         slim = {
             "include": [
-                {k: c[k] for k in ("id", "runner", "nodes", "queue-token")}
+                {k: c[k] for k in ("id", "runner", "nodes")}
                 for c in result["include"]
             ]
         }
