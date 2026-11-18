@@ -28,18 +28,11 @@
 #   - 10 amd-asalykov/sgl-amd-mono asalykov/qfn-mono-tp (afbb25a457009d): the updated Qwen3.8-Flash-Next
 #                      monokernel (QSA index chain, stage placement, TP 1 / 2 / 4 launches), the
 #                      qwen38_flash_next package and the common/ops.py and common/sync.py it needs
-#   Opt-in kernels (each off unless the recipe sets its SGLANG_AMD_* variable; the header of each
-#   file names its upstream PR and head commit, and how the patch differs)
-#   - 11 sglang#48625  grouped QSA verify scoring (carries sglang#46631), SGLANG_AMD_QSA_GROUPED_VERIFY
-#   - 12 aiter#7556    FlyDSL QSA sparse prefill kernels, written into the installed AITER wheel
-#   - 13 sglang#51179  their SGLang wiring, SGLANG_AMD_QSA_FLYDSL_PREFILL
-#   - 14 sglang#49852  MXFP4 MoE intermediate kept 128-aligned at MoE TP 1, SGLANG_AMD_MXFP4_PAD128
-#   - 15 sglang#50863  Triton HC prefill path, SGLANG_AMD_HC_PREFILL
 # The image already has the original monokernel (--enable-amd-monokernel; patch 10 updates it), the AITER topk_gating router
 # (sglang#40708), ratio-3 GDN packing (sglang#44302) and the 128-row hc_mix (sglang#41880), so
 # none of them is patched. All Python. A wheel that does not install, or a patch that no longer
 # applies, fails the worker.
-set -euo pipefail
+set -eo pipefail
 source /infmax-workspace/benchmarks/check_env.sh
 check_env_vars AITER_WHEEL_URL AITER_FLYDSL_VERSION
 # srtctl only looks up setup_script here; the patches live with the single-node
