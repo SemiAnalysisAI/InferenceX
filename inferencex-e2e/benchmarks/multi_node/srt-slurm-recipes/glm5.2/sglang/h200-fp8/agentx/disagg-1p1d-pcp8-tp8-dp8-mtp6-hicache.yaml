@@ -3,9 +3,8 @@ name: "disagg-h200-1p1d-pcp8-tp8-dp8-mtp6-hicache"
 
 
 dynamo:
-  install: true
-  source:
-    wheel: "1.3.0.dev1"
+  # The nightly image bundles the Dynamo build matching its SGLang commit.
+  install: false
 
 resources:
   gpu_type: h200
