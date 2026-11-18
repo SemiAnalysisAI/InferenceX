@@ -344,7 +344,8 @@ jobs:
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${GITHUB_EVENT_NAME}" \
                       --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${family}" \
-                      --criteria-json "$PRIORITY_CRITERIA"
+                      --criteria-json "$PRIORITY_CRITERIA" \
+                      --facts-file "${RUNNER_TEMP}/scheduling-facts.json"
                   }
                   AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and not x.get('eval-only', False)]))" | score_matrix agentic)
                   AGENTIC_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x and x.get('run-eval', False)]))" | score_matrix agentic-eval)
@@ -366,6 +367,15 @@ jobs:
                     echo "multi-node-eval-config=$MULTI_EVAL"
                     echo "video-config=$VIDEO"
                   } >> "$GITHUB_OUTPUT"
+
+            - name: Upload scheduling facts
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  path: ${{ runner.temp }}/scheduling-facts.json
+                  archive: false
+                  overwrite: true
+                  if-no-files-found: error
 
             - name: Record source identity
               id: source-identity
