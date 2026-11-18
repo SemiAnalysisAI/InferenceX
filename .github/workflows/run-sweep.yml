@@ -262,11 +262,21 @@ jobs:
                     python -m infx.workflows.ci_priority \
                     --event-name "${GITHUB_EVENT_NAME}" \
                     --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
-                    --criteria-json "$PRIORITY_CRITERIA")
+                    --criteria-json "$PRIORITY_CRITERIA" \
+                    --facts-file "${RUNNER_TEMP}/scheduling-facts.json")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
                   has_benchmark_results=$(jq '[.single_node | to_entries[] | select(.key != "video") | .value[]] + [.multi_node | .[][]] | length > 0' <<<"$CONFIG_JSON")
                   echo "has-benchmark-results=$has_benchmark_results" >> "$GITHUB_OUTPUT"
+
+            - name: Upload scheduling facts
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  path: ${{ runner.temp }}/scheduling-facts.json
+                  archive: false
+                  overwrite: true
+                  if-no-files-found: error
 
     canary-select:
         name: canary-select
