@@ -104,3 +104,69 @@ override_tp8_c10:
     env:
       CONC: '10'
       KV_OFFLOADING: none
+
+# DCP8 stripes the latent KV across the TP8 ranks; sgl-project/sglang#45205 lets
+# the host tier sit under it. ROCm DSA DCP runs only on the triton backends, and
+# the monokernel refuses context parallelism and KV offload.
+override_tp8_dcp8_c16:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        decode-context-parallel-size: 8
+        dsa-prefill-backend: triton
+        dsa-decode-backend: triton
+        enable-amd-monokernel: false
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        enable-hierarchical-cache: true
+        hicache-size: 256
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c20:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        decode-context-parallel-size: 8
+        dsa-prefill-backend: triton
+        dsa-decode-backend: triton
+        enable-amd-monokernel: false
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+        enable-hierarchical-cache: true
+        hicache-size: 256
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c24:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        decode-context-parallel-size: 8
+        dsa-prefill-backend: triton
+        dsa-decode-backend: triton
+        enable-amd-monokernel: false
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        enable-hierarchical-cache: true
+        hicache-size: 256
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram

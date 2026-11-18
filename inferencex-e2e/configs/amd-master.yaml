@@ -785,12 +785,15 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
 # measured on glm-5.2-fp8). TP8-only: ~94.5 GB/rank of weights leaves a ~150
 # GB/rank fp8 KV pool at --mem-fraction-static 0.85; TP4 would leave ~56 GB/rank
 # and is not attempted on day zero (the MI325X FP8 sibling is TP8-only too).
-# Two arms, steps of at least 2 and a hard stop at 16:
+# Three arms:
 # (1) TP8/EP1 without KV offloading, conc [1, 2, 4, 10] -- mirrors the MXFP4
 #     sibling's TP8 arm exactly; GPU-resident KV keeps latency independent of
 #     DRAM bandwidth.
-# (2) TP8/EP1 with HiCache KV offloading to DRAM, conc [8, 12, 16] -- the
+# (2) TP8/EP1 with HiCache KV offloading to DRAM, conc [8, 12] -- the
 #     throughput-dominant regime where the working set outgrows the device pool.
+# (3) TP8/EP1 with DCP8 on HiCache, conc [16, 20, 24]; striping the latent KV
+#     across the eight ranks widens the device pool, and a 256 GB/rank host
+#     tier carries the rest.
 # SA selects the Pareto-optimal arm per concurrency point.
 glm5.2-fp8-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261117
@@ -806,7 +809,8 @@ glm5.2-fp8-mi355x-sglang-agentic-mtp:
     - dram-utilization: 0.8
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 10], spec-decoding: mtp, srt-recipe: agentic.yaml }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 12, 16], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 12], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 20, 24], spec-decoding: mtp, srt-recipe: agentic.yaml }
 # GLM-5.2 FP4 agentic-coding benchmark on MI355X via ATOM with MTP speculative
 # decoding, matching the standalone recipe (ROCm/ATOM PR 2632). Small
 # concurrency (C1-C10) is TP4-only on the GPU prefix cache with no KV offload;
@@ -1065,8 +1069,10 @@ glm5.3-fp8-mi355x-sglang-agentic-mtp:
   srt-recipe-dir: glm5.3/sglang/mi355x-fp8-mtp
   scenarios:
     agentic-coding:
-    - search-space:
+    - dram-utilization: 0.8
+      search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 10], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 20, 24], spec-decoding: mtp, srt-recipe: agentic.yaml }
 glm5.3-fp8-mi355x-tilert-agentic:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
   model: zai-org/GLM-5.3
