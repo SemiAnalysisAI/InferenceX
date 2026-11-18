@@ -658,7 +658,8 @@ clusters:
       exclusive: false
       # 2026-11-05: c003's local NVMe extracted containers with zero-filled blocks (libcuda stub),
       # and c008 twice read back empty Triton cache files. Remove after ops checks both disks.
-      exclude: [im-gb300-r01-c003, im-gb300-r01-c008]
+      # 2026-11-17: r03-c013 failed to start containers (enroot-switchroot: /bin/bash Exec format error).
+      exclude: [im-gb300-r01-c003, im-gb300-r01-c008, im-gb300-r03-c013]
       volumes:
         hf-hub-cache: {path: /data/home/sa-shared/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-shared/gharunners/ai-perf-cache}
