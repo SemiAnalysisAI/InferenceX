@@ -5916,6 +5916,134 @@ dsv41flash-fp4-b300-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 10, 16, 24, 32, 48], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [224, 256, 384, 544, 768, 1024, 1280], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
+dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-agg:
+  image: vllm/vllm-openai:cu134-nightly-96710245ece8fe57a0df3ea18cdc79cbb8ce93cf@sha256:674371934305e99c6957c7b74f604cc7a2ab3b7750f24e6ecbf04af0f4ece4d2
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.6.0.dev20261010" }
+  multinode: true
+  disagg: false
+  srt-recipe-dir: dsv41flash/vllm/b300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        srt-recipe: agg-variants.yaml:override_tp4_c1
+        conc-list: [1]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: none
+        srt-recipe: agg-variants.yaml:override_tp4_c16
+        conc-list: [16]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+dsv41flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg:
+  image: vllm/vllm-openai:cu134-nightly-96710245ece8fe57a0df3ea18cdc79cbb8ce93cf@sha256:674371934305e99c6957c7b74f604cc7a2ab3b7750f24e6ecbf04af0f4ece4d2
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.6.0.dev20261010" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: dsv41flash/vllm/b300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.144
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep2_dep8_c256
+        conc-list: [256]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        srt-recipe: disagg-variants.yaml:override_2p1d_dep2_dep8_c768
+        conc-list: [768]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        srt-recipe: disagg-variants.yaml:override_3p1d_dep2_dep8_c1280
+        conc-list: [1280]
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        srt-recipe: disagg-variants.yaml:override_4p1d_dep2_dep8_c2048
+        conc-list: [2048]
+        prefill:
+          num-worker: 4
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        srt-recipe: disagg-variants.yaml:override_5p1d_dep2_dep8_c3584
+        conc-list: [3584]
+        prefill:
+          num-worker: 5
+          tp: 2
+          ep: 2
+          dp-attn: true
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
 kimik3.1-fp4-b300-vllm-agentic-dspark:
   image: vllm/vllm-openai:kimi-k31-mc@sha256:f81998764e8594d71b40788c5285ae112acf9230129d5d0d238b5df83da5acf6
   model: moonshotai/Kimi-K3.1-Pro
@@ -5941,6 +6069,74 @@ kimik3.1-fp4-b300-vllm-agentic-dspark:
       # Routed experts EP8 on MegaMoE keep the fused decode at every batch size; DSpark drafts 4 tokens and prefill is
       # admitted once every 8 engine steps.
       - { tp: 8, ep: 8, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [48, 64], srt-recipe: agentic-ep.yaml }
+
+kimik3.1-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
+  image: vllm/vllm-openai:kimi-k31-mc-dbbc9e3@sha256:0507dd0ba274bdb5bb8223f3248c0772db2a9517cfd1c06f132ec2989713635e
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: 229be5cff1156859b0e3e43b598ee800b2f81ccc }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: kimik3.1/vllm/b300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    # 0.5441 resolves to 1632 GB of host DRAM per node, the Mooncake store segments of its eight TP ranks.
+    - dram-utilization: 0.5441
+      search-space:
+      # Each worker is one B300 node: TP8 x DCP8, prefill with routed experts EP8 on MegaMoE, decode on the
+      # low-latency decode backend. Concurrency 1: DSpark drafts 7 tokens.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [1]
+        srt-recipe: disagg-variants.yaml:override_1p1d
+        eval-srt-recipe: disagg-variants.yaml:override_1p1d_eval
+        power: true
+        prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      # DSpark drafts 4 tokens from here on.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [20, 48]
+        srt-recipe: disagg-variants.yaml:override_1p3d
+        eval-srt-recipe: disagg-variants.yaml:override_1p3d_eval
+        power: true
+        prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [64]
+        srt-recipe: disagg-variants.yaml:override_1p2d
+        eval-srt-recipe: disagg-variants.yaml:override_1p2d_eval
+        power: true
+        prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      # Decode admits up to 128 requests at 0.98 of GPU memory; Mooncake store tail cleanup and lookup prefetch.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [264]
+        srt-recipe: disagg-variants.yaml:override_2p3d_kv98
+        eval-srt-recipe: disagg-variants.yaml:override_2p3d_kv98_eval
+        power: true
+        prefill: { num-worker: 2, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+      # 2P3D settings plus BF16 indexer logits, deep_select indexer top-k on prefill and 2% Mooncake store eviction.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [660]
+        srt-recipe: disagg-variants.yaml:override_4p5d_kv98
+        eval-srt-recipe: disagg-variants.yaml:override_4p5d_kv98_eval
+        power: true
+        prefill: { num-worker: 4, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
+        decode: { num-worker: 5, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
 
 dsv41flash-fp4-b200-vllm-agentic-dspark:
   image: vllm/vllm-openai:cu134-nightly-40941f2c4ba96fba0a7e282a5355e89cd74d9ac5@sha256:13e92fcd97268013d13d07fb97d80803227cf0beae0161f8dce95a8200eaafb0
@@ -7590,6 +7786,112 @@ kimik3.1-fp4-b300-sglang-agentic-dflash:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 2, dcp-size: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [24, 32, 40, 48, 56, 70], srt-recipe: agentic.yaml }
 
+kimik3.1-fp4-b300-dynamo-sglang-agentic-dflash-agg:
+  image: lmsysorg/sglang:dev-kimi-k31-pro@sha256:67fc77d1cbe67de27ca54d874c82757a4844743fea899ea7d0df547e30c2c391
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: false
+  srt-recipe-dir: kimik3.1/sglang/b300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    # 8 x 230 GB of HiCache per aggregated or prefill node.
+    - dram-utilization: 0.75
+      search-space:
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [1]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp8_c1
+        power: true
+        worker: { num-worker: 1, tp: 8, ep: 1, dp-attn: false }
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [4]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp8_c4
+        power: true
+        worker: { num-worker: 1, tp: 8, ep: 1, dp-attn: false }
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [32]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp8_ep2_dcp8_c32
+        power: true
+        worker: { num-worker: 1, tp: 8, dcp-size: 8, ep: 2, dp-attn: false }
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [40]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp8_ep2_dcp8_c40
+        power: true
+        worker: { num-worker: 1, tp: 8, dcp-size: 8, ep: 2, dp-attn: false }
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [48]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp8_ep2_dcp8_c48
+        power: true
+        worker: { num-worker: 1, tp: 8, dcp-size: 8, ep: 2, dp-attn: false }
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [56]
+        num-nodes: 1
+        srt-recipe: agg-variants.yaml:override_tp8_ep2_dcp8_c56
+        power: true
+        worker: { num-worker: 1, tp: 8, dcp-size: 8, ep: 2, dp-attn: false }
+
+kimik3.1-fp4-b300-dynamo-sglang-agentic-dflash-disagg:
+  image: lmsysorg/sglang:dev-kimi-k31-pro@sha256:67fc77d1cbe67de27ca54d874c82757a4844743fea899ea7d0df547e30c2c391
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:b300-dsxe
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.6.0" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  srt-recipe-dir: kimik3.1/sglang/b300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    # 8 x 230 GB of HiCache per aggregated or prefill node.
+    - dram-utilization: 0.75
+      search-space:
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [24]
+        srt-recipe: disagg-variants.yaml:override_1p2d_tp8_c24
+        power: true
+        prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 2, dp-attn: false }
+        decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 2, dp-attn: false }
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [48]
+        srt-recipe: disagg-variants.yaml:override_1p1d_tp8_c48
+        power: true
+        prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 2, dp-attn: false }
+        decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 2, dp-attn: false }
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [56]
+        srt-recipe: disagg-variants.yaml:override_1p2d_tp8_c56
+        power: true
+        prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 2, dp-attn: false }
+        decode: { num-worker: 2, tp: 8, dcp-size: 8, ep: 2, dp-attn: false }
+
 musespark-fp4-h100-sglang-agentic-dflash:
   image: lmsysorg/sglang:dev-muse-spark-open@sha256:8cfc5a72cb296771f5f8a4a4688cb6d05685610a830cbb616fa4ab0eb7bb2b0a
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
@@ -7692,6 +7994,54 @@ glm5.3flash-fp4-gb200-sglang-agentic-mtp:
     - dram-utilization: 0.652
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [24, 32, 40, 48], srt-recipe: agentic.yaml }
+
+h3-bf16-a100-sglang-video:
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:a100-cw
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: h3/sglang/a100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 2
+            srt-recipe: serving-client-tp2.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client-tp2-ulysses4.yaml
+            conc-list: [1]
+
+h3-bf16-a100-vllm-omni-video:
+  image: vllm/vllm-omni:v0.32.0@sha256:6b44ee504a0dc3a21eacf72e7dc5da318b7bcc8ed0e349dc928e67278414430c
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:a100-cw
+  precision: bf16
+  framework: vllm-omni
+  multinode: false
+  srt-recipe-dir: h3/vllm-omni/a100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 2
+            srt-recipe: serving-client-tp2.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client-tp2-ulysses4.yaml
+            conc-list: [1]
 
 h3-bf16-h100-sglang-video:
   image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
@@ -7812,6 +8162,42 @@ wan22-bf16-b200-vllm-omni-video:
       - spec: wan22.yaml
         set: release-v1
         search-space:
+          - gpus: 1
+            srt-recipe: serving-client-g1.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: serving-client-g2.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client-g4.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
+wan22-bf16-b300-vllm-omni-video:
+  image: vllm/vllm-omni:v0.32.0@sha256:6b44ee504a0dc3a21eacf72e7dc5da318b7bcc8ed0e349dc928e67278414430c
+  model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+  model-prefix: wan22
+  runner: cluster:b300-dsxe
+  precision: bf16
+  framework: vllm-omni
+  multinode: false
+  srt-recipe-dir: wan22/vllm-omni/b300-bf16
+  scenarios:
+    video-generation:
+      - spec: wan22.yaml
+        set: release-v1
+        search-space:
+          - gpus: 1
+            srt-recipe: serving-client-g1.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: serving-client-g2.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client-g4.yaml
+            conc-list: [1]
           - gpus: 8
             srt-recipe: serving-client.yaml
             conc-list: [1]
@@ -8277,6 +8663,13 @@ kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg:
         prefill: { num-worker: 3, tp: 8, ep: 2, dp-attn: false, dcp-size: 8 }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false, dcp-size: 8 }
       - spec-decoding: draft_model
+        conc-list: [224]
+        srt-recipe: disagg-tp16-variants.yaml:override_3p1d_tp32_c224
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill: { num-worker: 3, tp: 8, ep: 2, dp-attn: false, dcp-size: 8 }
+        decode: { num-worker: 1, tp: 32, ep: 32, dp-attn: false, dcp-size: 8 }
+      - spec-decoding: draft_model
         conc-list: [180]
         srt-recipe: disagg-tp16-variants.yaml:override_2p1d_c180
         kv-offloading: dram
@@ -8284,15 +8677,8 @@ kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg:
         prefill: { num-worker: 2, tp: 8, ep: 2, dp-attn: false, dcp-size: 8 }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false, dcp-size: 8 }
       - spec-decoding: draft_model
-        conc-list: [60]
-        srt-recipe: disagg-tp16-variants.yaml:override_1p1d_c60
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill: { num-worker: 1, tp: 8, ep: 2, dp-attn: false, dcp-size: 8 }
-        decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: false, dcp-size: 8 }
-      - spec-decoding: draft_model
-        conc-list: [50]
-        srt-recipe: disagg-tp8-variants.yaml:override_1p3d_c50
+        conc-list: [58]
+        srt-recipe: disagg-tp8-variants.yaml:override_1p3d_c58
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill: { num-worker: 1, tp: 8, ep: 2, dp-attn: false, dcp-size: 8 }
@@ -8340,13 +8726,13 @@ kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg-mk:
         worker: { num-worker: 1, tp: 16, ep: 1, dp-attn: false }
 
 kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
-  image: vllm/vllm-openai:kimi-k31-mc@sha256:f29efae15f9cb47f6215add0cba70b4b7d3596e6f3990d8b46c7cad0f8fbbc8b
+  image: vllm/vllm-openai:kimi-k31-mc-dbbc9e3@sha256:0507dd0ba274bdb5bb8223f3248c0772db2a9517cfd1c06f132ec2989713635e
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: 3dd0744eb72c707d76d4c520ae4dea9e286a4ab6 }
+  router: { name: dynamo-router, version: 229be5cff1156859b0e3e43b598ee800b2f81ccc }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -8358,12 +8744,12 @@ kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
-        conc-list: [20, 32]
-        srt-recipe: disagg-variants.yaml:override_1p3d
-        eval-srt-recipe: disagg-variants.yaml:override_1p3d_eval
+        conc-list: [44, 56]
+        srt-recipe: disagg-variants.yaml:override_1p5d
+        eval-srt-recipe: disagg-variants.yaml:override_1p5d_eval
         power: true
         prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
-        decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
+        decode: { num-worker: 5, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
@@ -8376,7 +8762,7 @@ kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
-        conc-list: [384]
+        conc-list: [448]
         srt-recipe: disagg-variants.yaml:override_hyb4_3p1d
         eval-srt-recipe: disagg-variants.yaml:override_hyb4_3p1d_eval
         power: true
@@ -8385,7 +8771,7 @@ kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
-        conc-list: [192]
+        conc-list: [256]
         srt-recipe: disagg-variants.yaml:override_hyb4_2p1d_lpt4k
         eval-srt-recipe: disagg-variants.yaml:override_hyb4_2p1d_lpt4k_eval
         power: true
@@ -8418,14 +8804,40 @@ kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep16-disagg:
         prefill: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
         decode: { num-worker: 1, tp: 16, ep: 16, dp-attn: true }
 
-kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg:
-  image: vllm/vllm-openai:kimi-k31-mc@sha256:5c243ce00d2d289a295065e3d794d5beb783e9c9a85eba3d2eef7024f822a531
+kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep32-disagg:
+  image: vllm/vllm-openai:kimi-k31-mc-dbbc9e3@sha256:0507dd0ba274bdb5bb8223f3248c0772db2a9517cfd1c06f132ec2989713635e
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: 3dd0744eb72c707d76d4c520ae4dea9e286a4ab6 }
+  router: { name: dynamo-router, version: 229be5cff1156859b0e3e43b598ee800b2f81ccc }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: kimik3.1/vllm/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.1775
+      search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.14 }
+        conc-list: [960]
+        srt-recipe: disagg-dep32.yaml:override_2p1d_dep32
+        eval-srt-recipe: disagg-dep32.yaml:override_2p1d_dep32_eval
+        power: true
+        prefill: { num-worker: 2, tp: 16, ep: 16, dp-attn: true }
+        decode: { num-worker: 1, tp: 32, ep: 32, dp-attn: true }
+
+kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg:
+  image: vllm/vllm-openai:kimi-k31-mc-dbbc9e3@sha256:0507dd0ba274bdb5bb8223f3248c0772db2a9517cfd1c06f132ec2989713635e
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: 229be5cff1156859b0e3e43b598ee800b2f81ccc }
   multinode: true
   disagg: false
   srt-recipe-dir: kimik3.1/vllm/gb300-fp4/agentx
