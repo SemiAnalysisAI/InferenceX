@@ -448,6 +448,27 @@ def _video_spec_path(value: str) -> str:
 
 VideoSpec = Annotated[str, AfterValidator(_video_spec_path)]
 
+VIDEO_PARALLEL_DEGREES = ("tp", "pp", "ep", "dp", "pcp", "cfg", "ulysses", "ring")
+# A degree without a number takes the row's GPU count; a degree of 1 is left out.
+VIDEO_RECIPE = re.compile(
+    r"video/agg(?:-tp1|(?=-)"
+    + "".join(rf"(?:-{degree}(?:[2-9]|[1-9][0-9]+)?)?" for degree in VIDEO_PARALLEL_DEGREES)
+    + r")\.yaml"
+)
+
+
+def _video_recipe_reference(value: str) -> str:
+    """A video recipe reference named by its GPU split, such as video/agg-cfg2-ulysses4.yaml."""
+    if not VIDEO_RECIPE.fullmatch(value):
+        raise ValueError(
+            f"{value!r} must be video/agg-<layout>.yaml, where <layout> lists each parallel "
+            f"degree above 1 in the order {' '.join(VIDEO_PARALLEL_DEGREES)}, or is tp1"
+        )
+    return value
+
+
+VideoRecipeReference = Annotated[str, AfterValidator(_video_recipe_reference)]
+
 
 class VideoMatrixEntry(BaseModel):
     """One video-generation job: every concurrency of ``conc`` against one server."""
@@ -863,7 +884,7 @@ class VideoGenerationSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     gpus: int = Field(gt=0, strict=True)
-    srt_recipe: RecipeReference = Field(alias=Fields.SRT_RECIPE.value)
+    srt_recipe: VideoRecipeReference = Field(alias=Fields.SRT_RECIPE.value)
     conc_list: list[int] = Field(alias=Fields.CONC_LIST.value, min_length=1)
 
     @model_validator(mode="after")
