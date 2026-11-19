@@ -1,0 +1,275 @@
+# [MoE] Add fused_moe(stage2_fp8=True): per-call FP8 stage-2 route output
+# https://github.com/ROCm/aiter/pull/8174  (PR head 286cda38b8, on AITER main 1f1e0ec525)
+# Generated against the 20261117 image's AITER checkout (581579ab5); source files only (tests dropped).
+# fused_moe(stage2_fp8=True) makes one call's FlyDSL layout reduce stage 2 write FP8 route rows summed in fp32 (what
+# AITER_FLYDSL_STAGE2_FP8=1 does for every call); after an MXMOE stage 1, an MXFP4 scatter stage 2 with bf16 output runs
+# as the reduce stage 2 of the same tile. Without the argument every call is unchanged. Patch 23 passes it.
+# Port onto 581579ab5 (the PR builds on aiter#7135 and other main commits 581579ab5 lacks): the PR's hunks re-anchored;
+# two have no counterpart and are left out: the deterministic=True refusal (581579ab5's fused_moe takes no
+# deterministic argument) and main's AITER_MXFP4_INTERMEDIATE term in fused_moe_2stages' route-weight condition.
+# Apply in /sgl-workspace/aiter with git apply.
+
+diff --git a/aiter/fused_moe.py b/aiter/fused_moe.py
+index d486b33678..1de9c16ed5 100644
+--- a/aiter/fused_moe.py
++++ b/aiter/fused_moe.py
+@@ -1190,9 +1190,18 @@ def fused_moe(
+     clamp_shared: bool = True,
+     herd_topk: int = 0,
+     herd_routed_scaling_factor: float = 1.0,
++    stage2_fp8: bool = False,
+ ):
+     """Run fused MoE, dispatching to FHMoE when shared-expert tensors are present.
+ 
++    ``stage2_fp8=True`` makes a FlyDSL layout ``reduce`` stage 2 of this call
++    write each route's output as FP8 (e4m3, an e8m0 scale per 32 columns) and sum
++    the routes in fp32, as ``AITER_FLYDSL_STAGE2_FP8=1`` does for every call.
++    With a ``flydsl_mxmoe_g1`` stage 1, a ``scatter`` stage 2 with MXFP4
++    activations and bf16 output runs as the ``reduce`` stage 2 of the same tile.
++    Other stage 2s, FlyDSL v1 ones included, and stage 2s with a bias are
++    unchanged. The output is not bitwise equal to the default.
++
+     Supplying any shared tensor (or ``shared_expert_id``) requires all four
+     shared weight/scale tensors and dispatches through the gfx950 FHMoE path.
+     Inputs must satisfy the contracts documented in :mod:`aiter.fhmoe`.
+@@ -1230,6 +1239,8 @@ def fused_moe(
+             unsupported.append("quant_dtype_a")
+         if quant_dtype_a2 is not None:
+             unsupported.append("quant_dtype_a2")
++        if stage2_fp8:
++            unsupported.append("stage2_fp8")
+         # The MXFP8 path does not consume caller-prequantized activations and
+         # requires an explicit preshuffle marker. Preserve the existing DSV4
+         # MXFP4 path, which accepts activation scales and trusts its layout.
+@@ -1336,6 +1347,7 @@ def fused_moe(
+         quant_dtype_a2=quant_dtype_a2,
+         herd_topk=herd_topk,
+         herd_routed_scaling_factor=herd_routed_scaling_factor,
++        stage2_fp8=stage2_fp8,
+     )
+ 
+ 
+@@ -1380,6 +1392,7 @@ def fused_moe_fake(
+     quant_dtype_a2: torch.dtype | None = None,
+     herd_topk: int = 0,
+     herd_routed_scaling_factor: float = 1.0,
++    stage2_fp8: bool = False,
+ ) -> torch.Tensor:
+     device = topk_ids.device
+     M, _topk = topk_ids.shape
+@@ -1443,6 +1456,7 @@ def fused_moe_(
+     quant_dtype_a2: torch.dtype | None = None,
+     herd_topk: int = 0,
+     herd_routed_scaling_factor: float = 1.0,
++    stage2_fp8: bool = False,
+ ) -> torch.Tensor:
+     stage2_scatter = None
+     if ep_source_token_map is not None:
+@@ -1488,6 +1502,7 @@ def fused_moe_(
+         quant_dtype_a2=quant_dtype_a2,
+         herd_topk=herd_topk,
+         herd_routed_scaling_factor=herd_routed_scaling_factor,
++        stage2_fp8=stage2_fp8,
+     )
+ 
+ 
+@@ -1524,6 +1539,7 @@ def _fused_moe_impl(
+     quant_dtype_a2: torch.dtype | None = None,
+     herd_topk: int = 0,
+     herd_routed_scaling_factor: float = 1.0,
++    stage2_fp8: bool = False,
+     *,
+     _q_dtype_a: torch.dtype | None = None,
+     _metadata_transform: Callable | None = None,
+@@ -1777,6 +1793,7 @@ def _fused_moe_impl(
+             has_activation_scales=a1_scale is not None or a2_scale is not None,
+             _has_input_activation_scales=a1_scale is not None,
+             has_num_local_tokens=num_local_tokens is not None,
++            stage2_fp8=stage2_fp8,
+         )
+         return (
+             metadata if _metadata_transform is None else _metadata_transform(metadata)
+@@ -3302,6 +3319,7 @@ def _mxfp4_a4w4_stage2_fw(
+     kernelName2="",
+     reverse_sorted=None,
+     use_valid_token_count=False,
++    stage2_fp8=False,
+     **_kwargs,
+ ):
+ 
+@@ -3353,6 +3371,7 @@ def _mxfp4_a4w4_stage2_fw(
+             block_m=block_m,
+             reverse_sorted=reverse_sorted,
+             use_valid_token_count=use_valid_token_count,
++            stage2_fp8=stage2_fp8,
+         )
+     if bias2 is not None:
+         raise ValueError(f"MXMOE GEMM2 {kernelName2!r} does not support bias")
+@@ -3457,6 +3476,7 @@ def _flydsl_v2_stage2_wrapper(
+     topk_weights=None,
+     reverse_sorted=None,
+     use_valid_token_count=False,
++    stage2_fp8=False,
+     **_kwargs,
+ ):
+     from aiter.ops.flydsl.kernels.mxmoe_dispatcher import (
+@@ -3491,7 +3511,7 @@ def _flydsl_v2_stage2_wrapper(
+             f"(model_dim={model_dim_runtime}, topk={topk})"
+         )
+     target = out
+-    _s2_fp8_inter = epilog == "reduce" and _flydsl_stage2_fp8_enabled()
++    _s2_fp8_inter = epilog == "reduce" and (stage2_fp8 or _flydsl_stage2_fp8_enabled())
+     if _s2_fp8_inter:
+         _s2_fp8_inter = sorted_weights is not None and topk_weights is not None
+     _defer_w = _s2_fp8_inter
+@@ -3531,8 +3551,8 @@ def _flydsl_v2_stage2_wrapper(
+ 
+             if model_dim_runtime % FP8OUT_SCALE_BLK_MIN != 0:
+                 raise ValueError(
+-                    "AITER_FLYDSL_STAGE2_FP8 requires model_dim to be divisible "
+-                    f"by {FP8OUT_SCALE_BLK_MIN}"
++                    "FP8 route output (stage2_fp8 or AITER_FLYDSL_STAGE2_FP8) needs "
++                    f"model_dim divisible by {FP8OUT_SCALE_BLK_MIN}"
+                 )
+             _fp8_scale_blk = fp8out_scale_blk(model_dim_runtime)
+             _fp8_pitch_align = FP8OUT_PITCH_ALIGN
+@@ -3829,6 +3849,39 @@ def _mxmoe_opus_call_unsupported(
+     return ""
+ 
+ 
++
++def _stage2_fp8_kernel_name(kernel_name2):
++    """The stage 2 that ``fused_moe(stage2_fp8=True)`` runs after an MXMOE stage 1,
++    or None when the flag leaves this stage 2 as it is.
++
++    A ``reduce`` kernel keeps its name. A ``scatter`` kernel with MXFP4
++    activations and bf16 output becomes the plain ``reduce`` kernel of the same
++    tile and sort block, as the FP8 route output is a ``reduce`` epilogue.
++    """
++    cfg = parse_flydsl_v2_gemm2_kernel(kernel_name2)
++    if cfg is None:
++        return None
++    if cfg["epilog"] == "reduce":
++        return kernel_name2
++    if cfg["epilog"] != "scatter" or (cfg["a_dtype"], cfg["out_dtype"]) != (
++        "fp4",
++        "bf16",
++    ):
++        return None
++    return _get_flydsl_moe_kernels().build_flydslv2_gemm2_name(
++        cfg["a_dtype"],
++        cfg["b_dtype"],
++        cfg["out_dtype"],
++        tm=cfg["tile_m"],
++        tn=cfg["tile_n"],
++        tk=cfg["tile_k"],
++        epilog="reduce",
++        persist=False,
++        use_nt=False,
++        sbm=cfg["sort_block_m"],
++    )
++
++
+ def _make_mxfp4_metadata(
+     kernel_name1,
+     kernel_name2,
+@@ -3841,8 +3894,21 @@ def _make_mxfp4_metadata(
+     has_stage2_bias=False,
+     opus_launch=None,
+     route_bucket_metadata=None,
++    stage2_fp8=False,
+ ):
+     p1 = _parse_mxfp4_g1_kname(kernel_name1)
++    fp8_kernel_name2 = (
++        _stage2_fp8_kernel_name(kernel_name2)
++        if stage2_fp8 and not has_stage2_bias
++        else None
++    )
++    if fp8_kernel_name2 is not None:
++        logger.info(
++            "[fused_moe] stage2_fp8: %s writes FP8 route rows (tuned: %s)",
++            fp8_kernel_name2,
++            kernel_name2,
++        )
++        kernel_name2 = fp8_kernel_name2
+     # Use the stage2 dispatch parser so metadata only promises supported bias.
+     is_layout_gemm2 = parse_flydsl_v2_gemm2_kernel(kernel_name2) is not None
+     is_opus = _opus_a8w4.is_opus_a8w4_stage2_kernel(kernel_name2)
+@@ -3865,6 +3931,8 @@ def _make_mxfp4_metadata(
+         if is_opus
+         else functools.partial(_mxfp4_a4w4_stage2_fw, kernelName2=kernel_name2)
+     )
++    if fp8_kernel_name2 is not None:
++        stage2 = functools.partial(stage2, stage2_fp8=True)
+     return MOEMetadata(
+         stage1=functools.partial(
+             _mxfp4_a4w4_stage1_fw,
+@@ -4064,6 +4132,7 @@ def get_2stage_cfgs(
+     has_num_local_tokens=False,
+     _exclude_mxmoe=False,
+     _has_input_activation_scales=False,
++    stage2_fp8=False,
+ ):
+     gate_mode = GateMode(gate_mode)
+     cktile_mxfp4_unsafe = q_dtype_w == dtypes.fp4x2 and inter_dim % 256 != 0
+@@ -4383,6 +4452,7 @@ def get_2stage_cfgs(
+                 run_1stage=cfg.get("run_1stage", False),
+                 has_stage1_bias=has_stage1_bias,
+                 has_stage2_bias=has_stage2_bias,
++                stage2_fp8=stage2_fp8,
+             )
+             if not _is_mxfp4_inline_sort(inline_metadata):
+                 cfg = None
+@@ -4776,6 +4846,7 @@ def get_2stage_cfgs(
+             block_m=block_m,
+             opus_launch=opus_stage2_launch,
+             route_bucket_metadata=route_bucket_metadata,
++            stage2_fp8=stage2_fp8,
+         )
+ 
+     if reroute_a16wmix_bf16:
+@@ -4897,6 +4968,17 @@ def get_2stage_cfgs(
+                 inter_dim=inter_dim,
+                 num_experts=expert,
+             )
++            # Only a reduce stage 2 changes here: mapping a scatter one to reduce
++            # would also change this stage 1's sort (output_aux below).
++            if (
++                stage2_fp8
++                and not has_stage2_bias
++                and flydsl_v2_stage2_cfg["epilog"] == "reduce"
++            ):
++                logger.info(
++                    "[fused_moe] stage2_fp8: %s writes FP8 route rows", kernelName2
++                )
++                stage2_func = functools.partial(stage2_func, stage2_fp8=True)
+         elif is_flydsl2:
+             stage2_func = functools.partial(
+                 _flydsl_stage2_wrapper,
+@@ -5148,7 +5230,9 @@ def get_2stage_cfgs(
+             f"[fused_moe] no tuned FlyDSL config for {keys}, "
+             f"using heuristic MXMOE fallback (kn1={_kn1!r}, kn2={_kn2!r})"
+         )
+-        return _make_mxfp4_metadata(_kn1, _kn2, gate_mode, 0, block_m=_bm)
++        return _make_mxfp4_metadata(
++            _kn1, _kn2, gate_mode, 0, block_m=_bm, stage2_fp8=stage2_fp8
++        )
+ 
+     if use_mxfp4_flydsl:
+         from aiter.ops.flydsl.moe_kernels import (
+@@ -5728,7 +5812,14 @@ def fused_moe_2stages(
+         _mxfp4_a4w4_stage2_fw,
+     ):
+         extra_stage2_args["use_valid_token_count"] = num_local_tokens is not None
+-    if uses_flydsl_v2_stage2 and not doweight_stage1 and _flydsl_stage2_fp8_enabled():
++    if (
++        uses_flydsl_v2_stage2
++        and not doweight_stage1
++        and (
++            _flydsl_stage2_fp8_enabled()
++            or stage2_keywords.get("stage2_fp8", False)
++        )
++    ):
+         # FP8 route-output reduction applies the route weights after GEMM2.
+         extra_stage2_args["topk_weights"] = topk_weights
+     if stage2_func is _opus_a8w4.opus_a8w4_stage2_wrapper:

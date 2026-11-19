@@ -1,6 +1,8 @@
 # [FlyDSL] [QSA] Sparse prefill attention on gfx950: union and packed-direct ports, strided K/V rows
-# https://github.com/ROCm/aiter/pull/7556  (files at e6a31510c9, the PR's last own commit for these files; its head
-# 60fe14d4ca adds only main's ROCm/aiter#8083 selection-width query to qsa_sparse_prefill.py, which patch 13 does not use)
+# https://github.com/ROCm/aiter/pull/7556  (files at e6a31510c9; the PR head 1c8725c7f3 has the same kernels/qsa/ files
+# and differs only in qsa_sparse_prefill.py's argument checks: main's ROCm/aiter#8083 selection-width query, which patch
+# 13 does not use; a softmax_scale that float() cannot convert is rejected instead of raising; out is checked for overlap
+# against the K/V rows instead of their strided span, so an out in the padding between rows is accepted)
 # Replaces aiter/ops/flydsl/qsa_sparse_prefill.py and aiter/ops/flydsl/kernels/qsa/ of the 20261117 image's editable
 # AITER checkout (/sgl-workspace/aiter, 581579ab, 0.1.29.dev156). Nothing calls these kernels unless patch 13 is applied
 # and SGLANG_AMD_QSA_FLYDSL_PREFILL is set.

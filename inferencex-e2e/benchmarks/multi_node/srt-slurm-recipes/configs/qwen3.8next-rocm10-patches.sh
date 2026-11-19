@@ -70,7 +70,7 @@ print(
     f"flydsl {metadata.version('flydsl')}, from {importlib.util.find_spec('aiter').origin}"
 )
 PY
-# Patch 12 writes into the AITER that python imports, which must be the image's editable checkout.
+# Patches 12 and 22 write into the AITER that python imports, which must be the image's editable checkout.
 aiter_root="$(python3 -c 'import aiter, pathlib; print(pathlib.Path(aiter.__file__).resolve().parents[1])')"
 [[ $aiter_root == /sgl-workspace/aiter ]] || { echo "qwen3.8next: aiter imports from $aiter_root, expected /sgl-workspace/aiter" >&2; exit 1; }
 
@@ -96,6 +96,11 @@ apply /sgl-workspace/sglang 15-sglang-50863-hc-prefill-triton.patch
 apply /sgl-workspace/sglang 16-sglang-50871-51263-qsa-prefill-topk-v2.patch
 apply /sgl-workspace/sglang 21-sglang-50871-51242-qsa-decode-select.patch
 apply /sgl-workspace/sglang 24-sglang-51180-gdn-verify.patch
+apply "$aiter_root" 22-aiter-8174-moe-stage2-fp8.patch
+apply /sgl-workspace/sglang 23-sglang-51198-moe-stage2-fp8.patch
+# 26 brings patch 15's two files to sglang#50863's head, so 15 stays and 26 applies after it.
+apply /sgl-workspace/sglang 26-sglang-50863-hc-prefill-triton-head.patch
+apply /sgl-workspace/sglang 27-sglang-51023-decode-fp8-quant-fuse.patch
 
 # The monokernel patch must be the code python imports (an editable install of the checkout).
 python3 - <<'PY'
