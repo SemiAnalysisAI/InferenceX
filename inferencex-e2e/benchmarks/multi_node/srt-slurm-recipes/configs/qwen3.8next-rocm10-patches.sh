@@ -3,11 +3,11 @@
 # c67db7c762 and AITER 581579ab 0.1.29.dev156 with FlyDSL 0.4.2, both editable checkouts under
 # /sgl-workspace).
 #   AITER
-#   - Not touched. The image's AITER has what the AITER release wheel gave this recipe before:
+#   - Not replaced. The image's AITER has what the AITER release wheel gave this recipe before:
 #     ROCm/aiter#5992 (FlyDSL causal conv1d prefill, GDN decode/verify kernels), #6670 (FlyDSL
 #     fused QSA sparse decode, needed by sglang#45196), #6496 (FlyDSL single-kernel GDN fused
-#     chunked prefill) and #5993 (hc_mix kernels). The script only checks that the FlyDSL modules
-#     are importable.
+#     chunked prefill) and #5993 (hc_mix kernels). The script checks that the FlyDSL modules are
+#     importable.
 #   SGLang (each patch is the source-only diff of an open upstream PR, rebased onto the image's
 #   SGLang; tests, benchmarks and AITER's AOT registry dropped; the header of each file names the
 #   PR and its head commit)
@@ -32,7 +32,7 @@
 # topk_gating router (sglang#40708), ratio-3 GDN packing (sglang#44302) and the 128-row hc_mix
 # (sglang#41880). All Python. A patch that no longer applies, or a missing FlyDSL module, fails the
 # worker.
-set -euo pipefail
+set -eo pipefail
 # srtctl only looks up setup_script here; the patches live with the single-node
 # recipe and are read through the workspace mount.
 patches=/infmax-workspace/benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/mi355x-fp4-mtp/patches
@@ -70,6 +70,9 @@ print(
     f"flydsl {metadata.version('flydsl')}, from {importlib.util.find_spec('aiter').origin}"
 )
 PY
+# Patch 12 writes into the AITER that python imports, which must be the image's editable checkout.
+aiter_root="$(python3 -c 'import aiter, pathlib; print(pathlib.Path(aiter.__file__).resolve().parents[1])')"
+[[ $aiter_root == /sgl-workspace/aiter ]] || { echo "qwen3.8next: aiter imports from $aiter_root, expected /sgl-workspace/aiter" >&2; exit 1; }
 
 apply() {
     git -c safe.directory="*" -C "$1" apply "$patches/$2"
@@ -85,6 +88,14 @@ apply /sgl-workspace/sglang 06-sglang-44103-aiter-gdn-chunked-prefill.patch
 apply /sgl-workspace/sglang 07-sglang-48090-mtp-sparse-rejection-target-probs.patch
 apply /sgl-workspace/sglang 09-sglang-50024-qwen4-packed-fp8-gdn-in-proj.patch
 apply /sgl-workspace/sgl-amd-mono 10-sgl-amd-mono-qfn-mono-tp-afbb25a.patch
+apply /sgl-workspace/sglang 11-sglang-48625-qsa-grouped-verify.patch
+apply "$aiter_root" 12-aiter-7556-qsa-flydsl-sparse-prefill.patch
+apply /sgl-workspace/sglang 13-sglang-51179-qsa-flydsl-prefill.patch
+apply /sgl-workspace/sglang 14-sglang-49852-mxfp4-moe-pad128.patch
+apply /sgl-workspace/sglang 15-sglang-50863-hc-prefill-triton.patch
+apply /sgl-workspace/sglang 16-sglang-50871-51263-qsa-prefill-topk-v2.patch
+apply /sgl-workspace/sglang 21-sglang-50871-51242-qsa-decode-select.patch
+apply /sgl-workspace/sglang 24-sglang-51180-gdn-verify.patch
 
 # The monokernel patch must be the code python imports (an editable install of the checkout).
 python3 - <<'PY'

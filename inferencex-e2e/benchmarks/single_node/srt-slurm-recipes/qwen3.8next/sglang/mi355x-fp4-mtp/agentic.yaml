@@ -17,7 +17,7 @@ base:
   engine: sglang
   # The image (lmsysorg/sglang-rocm 20261117: SGLang c67db7c762, AITER 581579ab 0.1.29.dev156,
   # FlyDSL 0.4.2) already has the AITER FlyDSL kernels this recipe uses (ROCm/aiter#5992, #5993,
-  # #6496, #6670), so AITER is not touched. The setup script patches SGLang with open upstream
+  # #6496, #6670), so AITER is not replaced. The setup script patches SGLang with open upstream
   # PRs (sgl-project/sglang #48648, #45196, #48649, #45529, #41879, #44103, #48090, #50024). It
   # also patches the image's sgl-amd-mono (the monokernel, an editable install at
   # /sgl-workspace/sgl-amd-mono) with the updated Qwen3.8-Flash-Next monokernel of
@@ -50,7 +50,6 @@ base:
         scheduler-recv-interval: 10
         stream-interval: 50
         reasoning-parser: qwen3
-        default-chat-template-kwargs: '{"enable_thinking": false}'
         tool-call-parser: qwen3_coder
         speculative-algorithm: NEXTN
         speculative-num-steps: 3
@@ -105,6 +104,8 @@ override_c1:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_USE_AITER: '1'
         SGLANG_QWEN35_PACKED_IN_PROJ: '0'
+        # Patch 10 runs the MTP draft's lm_head on an FP8 copy unless this is 0; 0 keeps the shipped BF16 head.
+        SGLANG_AMD_MONO_QWEN38_DRAFT_HEAD_FP8: '0'
   benchmark:
     env:
       CONC: '1'
@@ -123,6 +124,7 @@ override_c2:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_USE_AITER: '1'
         SGLANG_QWEN35_PACKED_IN_PROJ: '0'
+        SGLANG_AMD_MONO_QWEN38_DRAFT_HEAD_FP8: '0'
   benchmark:
     env:
       CONC: '2'
@@ -158,6 +160,22 @@ override_c12:
         SGLANG_USE_AITER_UNIFIED_ATTN: '1'
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_OPT_QWEN4_FUSED_HC: '1'
+        # Patch 11: the 4 draft rows of a request share their compressed-key reads in QSA verify.
+        SGLANG_AMD_QSA_GROUPED_VERIFY: '1'
+        # Patches 12-13: QSA sparse prefill attention on the FlyDSL kernels.
+        SGLANG_AMD_QSA_FLYDSL_PREFILL: '1'
+        # Patch 14: the MoE intermediate padded to 640, so AITER's tuned MXFP4 rows apply.
+        SGLANG_AMD_MXFP4_PAD128: '1'
+        # Patch 15: prefill-sized HC sites as one folded-norm GEMM plus Triton kernels.
+        SGLANG_AMD_HC_PREFILL: '1'
+        # Patch 16: QSA indexer prefill blocks selected by the exact topk_v2, scored in one pipeline stage.
+        SGLANG_AMD_QSA_PREFILL_TOPK_V2: '1'
+        # Patch 21: QSA decode, verify and draft-extend blocks selected by the exact topk_v2,
+        # and draft-extend rows scored grouped as in verify.
+        SGLANG_AMD_QSA_DECODE_TOPK_V2: '1'
+        SGLANG_AMD_QSA_GROUPED_DRAFT_EXTEND: '1'
+        # Patch 24: GDN ReplaySSM verify and commit kernels.
+        SGLANG_AMD_GDN_VERIFY: '1'
   benchmark:
     env:
       KV_OFFLOADING: none
