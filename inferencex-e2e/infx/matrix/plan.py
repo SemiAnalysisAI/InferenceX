@@ -11,6 +11,7 @@ from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
 from .fingerprint import recipe_fingerprint
 from .generate import (
+    SCENARIO_TYPES,
     EvalMode,
     drop_app_colliding_evals,
     freeze_config_value,
@@ -22,12 +23,14 @@ from .revision import GENERATOR, snapshot
 from .validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
+    ChangelogMetadata,
     config_root,
     load_config_files,
     load_runner_file,
 )
 
-SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+# An entry without scenario-type reruns these; video runs only for entries that name it.
+DEFAULT_SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
@@ -68,6 +71,29 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
             added_lines.append(line[1:])
 
     return "\n".join(added_lines)
+
+
+PULL_REQUEST_LINK = re.compile(
+    r"https?://(?:www\.)?github\.com/([^/\s]+/[^/\s]+)/pull/([0-9]+)(?:[/?#]\S*)?", re.IGNORECASE
+)
+
+
+def entries_from_repository(entries: list, repository: str, pull_request: int | None) -> list:
+    """Return the entries except those linking another repository's pull request.
+
+    A link numbered ``pull_request``, the pull request the push merged, is kept whatever its owner.
+    """
+
+    def elsewhere(entry: object) -> bool:
+        link = str(entry.get("pr-link", "")).strip() if isinstance(entry, dict) else ""
+        match = PULL_REQUEST_LINK.fullmatch(link)
+        return (
+            match is not None
+            and match.group(1).lower() != repository.lower()
+            and int(match.group(2)) != pull_request
+        )
+
+    return [entry for entry in entries if not elsewhere(entry)]
 
 
 def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | None) -> list[dict]:
@@ -148,6 +174,8 @@ def _matrix_visual_series_key(entry: dict) -> tuple:
 
 def _matrix_concurrencies(entry: dict) -> tuple[int, ...]:
     """Return a row's concurrencies as a tuple, or raise ValueError if they are not ints."""
+    if entry.get("scenario-type") == "video-generation":
+        raise ValueError("video-generation requires a regular sweep; append-only is not supported")
     conc = entry.get("conc")
     if isinstance(conc, int):
         return (conc,)
@@ -399,6 +427,22 @@ def build_plan(
                     raise ValueError(f"retired configs still exist in head: {still_active}")
                 continue
             all_configs = get_config_keys_from_master(entry.config_keys, master_config)
+            # Wildcards may match video configs a non-video entry means to skip; a named one must plan.
+            selected = set(entry.scenario_type or DEFAULT_SCENARIO_TYPES)
+            empty = [
+                key
+                for key in entry.config_keys
+                if "*" not in key
+                and "video-generation" in master_config[key]["scenarios"]
+                and not selected & master_config[key]["scenarios"].keys()
+            ]
+            if empty:
+                fix = "add video-generation to the entry's scenario-type"
+                if set(empty) != set(all_configs):
+                    fix += " and keep fixed-seq-len and agentic-coding for its other configs"
+                raise ValueError(
+                    f"{fix}; under {sorted(selected)} these video configs plan no jobs: {empty}"
+                )
             resolved_entries.append((entry, all_configs))
 
         if has_append_only:
@@ -407,7 +451,9 @@ def build_plan(
             selected_config_scenarios: dict[str, set[str]] = defaultdict(set)
             for entry, configs in resolved_entries:
                 for config in configs:
-                    selected_config_scenarios[config].update(entry.scenario_type or SCENARIO_TYPES)
+                    selected_config_scenarios[config].update(
+                        entry.scenario_type or DEFAULT_SCENARIO_TYPES
+                    )
             selected_configs = selected_config_scenarios.keys()
             missing_from_base = selected_configs - base_master.keys()
             if missing_from_base:
@@ -424,7 +470,7 @@ def build_plan(
         resolved_entries.sort(key=lambda item: not item[0].all_evals)
 
         for entry, all_configs in resolved_entries:
-            entry_scenarios = tuple(entry.scenario_type or SCENARIO_TYPES)
+            entry_scenarios = tuple(entry.scenario_type or DEFAULT_SCENARIO_TYPES)
             expand_all_evals = all_evals or entry.all_evals
             suppress_throughput = evals_only or entry.evals_only or entry.all_evals
 
@@ -433,7 +479,7 @@ def build_plan(
                     all_configs, entry_scenarios, benchmark_scenarios_seen
                 )
                 for scenarios, benchmark_configs in benchmark_groups.items():
-                    selection = scenarios if scenarios != SCENARIO_TYPES else None
+                    selection = scenarios if scenarios != DEFAULT_SCENARIO_TYPES else None
                     head_results = generate_current(benchmark_configs, "none", selection)
                     if entry.append_only:
                         if base is None:
@@ -471,14 +517,16 @@ def build_plan(
             node_type = "multi_node" if result.get("prefill") is not None else "single_node"
             if result.get("scenario-type") == "agentic-coding":
                 scenario = "agentic"
+            elif result.get("scenario-type") == "video-generation":
+                scenario = "video"
             else:
                 scenario = seq_len_itos.get((result["isl"], result["osl"]))
-            if scenario is None:
-                raise ValueError(
-                    f"{result['exp-name']}: fixed-sequence isl={result['isl']} "
-                    f"osl={result['osl']} has no sweep job; supported: "
-                    f"{', '.join(seq_len_itos.values())}"
-                )
+                if scenario is None:
+                    raise ValueError(
+                        f"{result['exp-name']}: fixed-sequence isl={result['isl']} "
+                        f"osl={result['osl']} has no sweep job; supported: "
+                        f"{', '.join(seq_len_itos.values())}"
+                    )
             final_results[node_type][scenario].append(result)
 
         all_eval_results = [
@@ -511,6 +559,15 @@ def main() -> None:
         action="store_true",
         help="Suppress throughput for every changelog entry without expanding eval selection.",
     )
+    parser.add_argument(
+        "--repository",
+        help="Leave out entries whose pr-link is a pull request in another owner/name repository.",
+    )
+    parser.add_argument(
+        "--pull-request",
+        type=int,
+        help="Number of the pull request the push merged; --repository keeps entries linking it.",
+    )
     args = parser.parse_args()
 
     added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
@@ -519,6 +576,13 @@ def main() -> None:
         raise ValueError("No additions found in the changelog file.")
 
     changelog_data = yamlio.load(added_yaml, yamlio.UniqueKeySafeLoader)
+    if args.repository and isinstance(changelog_data, list):
+        changelog_data = entries_from_repository(changelog_data, args.repository, args.pull_request)
+        if not changelog_data:
+            metadata = ChangelogMetadata(base_ref=args.base_ref, head_ref=args.head_ref, entries=[])
+            empty = ChangelogMatrixEntry(changelog_metadata=metadata)
+            print(empty.model_dump_json(by_alias=True, exclude_none=True))
+            return
 
     try:
         result = build_plan(

@@ -19,6 +19,7 @@ from typing import Self
 
 from infx.bench.proc import status
 from infx.config import MASTER_CONFIGS, git_repository_root, project_root
+from infx.matrix.validation import VIDEO_SPEC_DIR
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ SNAPSHOT_PATHS = (
     "benchmarks/single_node/srt-slurm-recipes",
     "benchmarks/multi_node/srt-slurm-recipes",
 )
+REPOSITORY_PATHS = (VIDEO_SPEC_DIR,)
 INHERITED_ENV = ("PATH", "HOME", "LANG", "TMPDIR")
 _FORK_REPLY = "infx-fork-exit "
 _FORK_SERVER = """
@@ -319,6 +321,7 @@ def snapshot(ref: str) -> Iterator[Revision]:
             "--",
             *SNAPSHOT_PATHS,
             *(NESTED_PROJECT + path for path in SNAPSHOT_PATHS),
+            *REPOSITORY_PATHS,
         ],
         cwd=repository,
         capture_output=True,
@@ -328,12 +331,10 @@ def snapshot(ref: str) -> Iterator[Revision]:
     for entry in listing.split(b"\0")[:-1]:
         metadata, path = entry.split(b"\t", 1)
         objects[os.fsdecode(path)] = metadata.split()[2]
-    if any(path.startswith(NESTED_PROJECT) for path in objects):
-        objects = {
-            path.removeprefix(NESTED_PROJECT): oid
-            for path, oid in objects.items()
-            if path.startswith(NESTED_PROJECT)
-        }
+    nested = any(path.startswith(NESTED_PROJECT) for path in objects)
+    if nested:
+        kept = (NESTED_PROJECT, *(path + "/" for path in REPOSITORY_PATHS))
+        objects = {path: oid for path, oid in objects.items() if path.startswith(kept)}
     blobs = io.BytesIO(
         subprocess.run(
             ["git", "cat-file", "--batch"],
@@ -354,7 +355,7 @@ def snapshot(ref: str) -> Iterator[Revision]:
             destination = Path(temp_dir, path)
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(content)
-        revision = Revision(Path(temp_dir))
+        revision = Revision(Path(temp_dir, NESTED_PROJECT) if nested else Path(temp_dir))
         inputs = [*revision.master_configs, revision.runner_config]
         if missing := [
             Path(path).relative_to(revision.root).as_posix()

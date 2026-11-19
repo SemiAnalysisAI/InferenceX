@@ -137,3 +137,47 @@
   suites: [swap-blocks]
   description:
     - Take 100 iterations per swap-blocks point, so p99 is no longer the slowest of 20 samples.
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4882
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300]
+  backends: [deepep-v2]
+  modes: [normal]
+  description:
+    - Charge vLLM's finalize copy in DeepEP V2 normal combine (the result is copied into the MoE layer's output, as mori and flashinfer-ep already did).
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4882
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, mi300x, mi325x, mi355x]
+  backends: [uccl-ep]
+  modes: [normal]
+  description:
+    - Charge vLLM's finalize copy in UCCL-EP normal combine.
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4883
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, gb200, gb300]
+  backends: [deepep-v2]
+  description:
+    - Build DeepEP V2 against the image's torch and NCCL instead of an isolated venv (torch 2.11.0, NCCL 2.30.4).
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4883
+  pools: [b200-nscale]
+  backends: [flashinfer-ep]
+  description:
+    - Run flashinfer-ep EP8 on B200.
+- date: 2026-11-07
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4895
+  pools: [b300]
+  backends: [flashinfer-ep]
+  description:
+    - Run flashinfer-ep EP8 on B300.
+- date: 2026-11-12
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5039
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+  suites: [ep-core]
+  description:
+    - Time the pair period over back-to-back pairs with no event between them. The event window around each pair read 4.5-13.5 us above it at T=1 on NVIDIA EP8 and about 6 us on AMD.
+- date: 2026-11-12
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5039
+  pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
+  suites: [swap-blocks]
+  description:
+    - Take 40 iterations per swap-blocks point instead of 100, so p99 is the slowest sample.

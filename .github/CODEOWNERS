@@ -28,6 +28,9 @@ collectivex/ @Oseltamivir @functionstackx
 # OperatorX
 operatorx/ @hbarclay
 
+# Video generation
+video-generation/ @functionstackx
+
 # Experimental
 experimental/ @functionstackx
 

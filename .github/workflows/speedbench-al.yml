@@ -70,7 +70,7 @@ on: # zizmor: ignore[concurrency-limits]
         type: boolean
         default: false
       golden-curve:
-        description: "Golden curve file stem that open-pr writes, e.g. dsv4_mtp or kimik3_dspark (required with open-pr)"
+        description: "Golden curve file stem that open-pr writes, e.g. deepseek-v4-pro__mtp__native__default-default or kimi-k3__dspark__kimi-k3-dspark__default-default (required with open-pr)"
         required: false
         type: string
         default: ''
@@ -120,16 +120,15 @@ jobs:
     name: setup
     runs-on: ubuntu-latest
     outputs:
-      priority: ${{ steps.score.outputs.priority }}
-      queue-token: ${{ steps.score.outputs.queue-token }}
+      queue-token: ${{ steps.queue.outputs.queue-token }}
     steps:
       - name: Validate golden curve target
         if: ${{ inputs.open-pr }}
         env:
           GOLDEN_CURVE: ${{ inputs.golden-curve }}
         run: |
-          if [[ ! "$GOLDEN_CURVE" =~ ^[a-z0-9_.-]+$ ]]; then
-            echo "::error::open-pr needs golden-curve, a curve file stem such as dsv4_mtp (got '$GOLDEN_CURVE')." >&2
+          if [[ ! "$GOLDEN_CURVE" =~ ^[a-z0-9_.-]+$ || "$GOLDEN_CURVE" == identities ]]; then
+            echo "::error::open-pr needs golden-curve, a curve file stem such as deepseek-v4-pro__mtp__native__default-default (got '$GOLDEN_CURVE')." >&2
             exit 1
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -146,7 +145,7 @@ jobs:
         if: ${{ inputs.ref && inputs.ref != '' }}
         run: python3 -P -m infx.workflows.require_launcher .measured
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - id: score
+      - id: queue
         env:
           RUNNER: ${{ inputs.runner }}
           MODEL_PREFIX: ${{ inputs.model-prefix }}
@@ -162,46 +161,37 @@ jobs:
               precision: "fp4",
               "spec-decoding": "mtp"
             }]')
-          scored=$(printf '%s' "$entry" |
+          annotated=$(printf '%s' "$entry" |
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-              python -m infx.workflows.ci_priority \
-              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}")
-          echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
-          echo "queue-token=$(jq -r '.[0]["queue-token"]' <<<"$scored")" >> "$GITHUB_OUTPUT"
+              python -m infx.workflows.scheduler_facts \
+              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+              --facts-file "${RUNNER_TEMP}/scheduling-facts.json")
+          echo "queue-token=$(jq -r '.[0]["queue-token"]' <<<"$annotated")" >> "$GITHUB_OUTPUT"
+      - name: Upload scheduling facts
+        if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ runner.temp }}/scheduling-facts.json
+          archive: false
+          overwrite: true
+          if-no-files-found: error
 
   collect-al:
     needs: setup
     runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; workflow_dispatch only
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            '"nodes:1"',
-            toJSON(format(
-              'ci-job-{0}-{1}',
-              needs.setup.outputs.priority,
-              needs.setup.outputs.queue-token
-            )),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format(
-              'ci-job-{0}-{1}',
-              needs.setup.outputs.priority,
-              needs.setup.outputs.queue-token
-            )),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          )
+        format(
+          '["self-hosted",{0},{1},{2},{3}]',
+          toJSON(inputs.runner),
+          '"nodes:1"',
+          toJSON(format('ci-job-{0}', needs.setup.outputs.queue-token)),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
     timeout-minutes: 600
-    name: "p${{ needs.setup.outputs.priority }} | SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
+    name: "SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
@@ -307,6 +297,10 @@ jobs:
             echo "AL collection failed: speedbench-reference-al.yaml not produced." >&2
             exit 1
           fi
+          if ! grep -qE '^ +[0-9]+: [0-9]' speedbench-reference-al.yaml; then
+            echo "AL collection failed: no cell was measured (every value is N/A)." >&2
+            exit 1
+          fi
           echo "### SpeedBench AL matrix" >> "$GITHUB_STEP_SUMMARY"
           echo '```yaml' >> "$GITHUB_STEP_SUMMARY"
           cat speedbench-reference-al.yaml >> "$GITHUB_STEP_SUMMARY"
@@ -337,7 +331,7 @@ jobs:
             collection=$(PYTHONPATH="$PWD" "$INFERENCEX_LAUNCH_PYTHON" -P -c 'import sys, yaml; from infx.golden_al_distribution import load_curve; c = load_curve(sys.argv[1]).collection; print(yaml.safe_dump({"collection": c}, sort_keys=False) if c else "", end="")' "$GOLDEN_CURVE")
           fi
           {
-            echo "# Source GitHub Actions run: ${run_url}"
+            echo "source_run: ${run_url}"
             cat speedbench-reference-al.yaml
             if [[ -n "$collection" ]]; then printf '\n%s\n' "$collection"; fi
           } > "$curve_file"
@@ -356,7 +350,7 @@ jobs:
           git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push -u origin "$BRANCH"
           gh pr create \
             --title "Update golden AL curve ${GOLDEN_CURVE} (auto)" \
-            --body "Auto-generated by the SpeedBench AL Collection workflow (${run_url}). Curve: \`${curve_file}\`, collector: \`${BENCH_SCRIPT_OVERRIDE}\`, model: \`${MODEL}\`, category: \`${CATEGORY}\`, MTP: \`${MTP_LIST}\`, thinking: \`${THINKING_MODES}\`, output_len: \`${SPEEDBENCH_OUTPUT_LEN}\`. Review the measured values against the checklist in infx/golden_al_distribution/README.md before merging. The curve keeps its previous \`collection\` block; confirm it still matches the collector's client settings, and add one for a new curve. A new curve also needs its row in that README's curve table." \
+            --body "Auto-generated by the SpeedBench AL Collection workflow (${run_url}). Curve: \`${curve_file}\`, collector: \`${BENCH_SCRIPT_OVERRIDE}\`, model: \`${MODEL}\`, category: \`${CATEGORY}\`, MTP: \`${MTP_LIST}\`, thinking: \`${THINKING_MODES}\`, output_len: \`${SPEEDBENCH_OUTPUT_LEN}\`. Review the measured values against the checklist in infx/golden_al_distribution/README.md before merging. The curve keeps its previous \`collection\` block; confirm it still matches the collector's client settings, and add one for a new curve. A new curve also needs its row in that README's curve table and its identity in identities.yaml, named as the README's naming rule says." \
             --base main \
             --head "$BRANCH"
 

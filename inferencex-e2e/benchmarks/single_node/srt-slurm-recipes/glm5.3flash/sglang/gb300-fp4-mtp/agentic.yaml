@@ -1,0 +1,73 @@
+base:
+  schema: 2
+  name: glm5.3flash-fp4-gb300-sglang-agentic-mtp
+  identity:
+    model:
+      revision: 1d00738646cbb0c6d0a9eb403dac5f366f1473a7
+    container: {}
+    frameworks:
+      sglang: 0.5.22
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  slurm:
+    time_limit: '4:00:00'
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: nvidia/GLM-5.3-Flash-NVFP4
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        context-length: 1048576
+        dsa-prefill-backend: trtllm
+        dsa-decode-backend: trtllm
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: flashinfer_trtllm
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 1800
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        PYTHONUNBUFFERED: '1'
+        HF_HUB_OFFLINE: '1'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  benchmark:
+    env:
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_gpu_kv:
+  benchmark:
+    env:
+      KV_OFFLOADING: none
+
+override_hicache:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        # The 0.8 default sizes the host pool at about 1.0x the device KV pool on GB300.
+        hicache-host-memory-fraction: 0.90
+  benchmark:
+    env:
+      KV_OFFLOADING: dram

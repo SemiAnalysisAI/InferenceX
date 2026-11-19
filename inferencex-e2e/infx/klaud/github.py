@@ -7,6 +7,7 @@ import io
 import json
 import re
 import subprocess
+import sys
 import time
 import zipfile
 from collections.abc import Callable
@@ -154,6 +155,21 @@ def file_at(repository: str, head: str, path: str) -> bytes:
     return base64.b64decode(result["content"])
 
 
+def _artifact_archive(repository: str, artifact_id: int) -> bytes:
+    """Return the zip of artifact ``artifact_id``; a failed gh call carries its stderr as text."""
+    try:
+        return subprocess.run(
+            ["gh", "api", f"repos/{repository}/actions/artifacts/{artifact_id}/zip"],
+            capture_output=True,
+            timeout=60,
+            check=True,
+        ).stdout
+    except subprocess.CalledProcessError as error:
+        error.stderr = (error.stderr or b"").decode(errors="replace")
+        sys.stderr.write(error.stderr)
+        raise
+
+
 def download_json(repository: str, artifact: dict, destination: Path) -> None:
     """Write the JSON members of ``artifact`` under ``destination``, raising VerificationError.
 
@@ -162,14 +178,7 @@ def download_json(repository: str, artifact: dict, destination: Path) -> None:
     limit = 256 * 1024 * 1024
     if artifact["expired"] or not 0 < artifact["size_in_bytes"] <= limit:
         raise VerificationError("Artifact unavailable or too large")
-    archive = subprocess.check_output(
-        [
-            "gh",
-            "api",
-            f"repos/{repository}/actions/artifacts/{int(artifact['id'])}/zip",
-        ],
-        timeout=60,
-    )
+    archive = _retrying(lambda: _artifact_archive(repository, int(artifact["id"])))
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as source:
             members = [item for item in source.infolist() if item.filename.endswith(".json")]

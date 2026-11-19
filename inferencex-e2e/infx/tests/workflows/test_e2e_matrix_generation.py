@@ -37,6 +37,7 @@ def run_get_jobs(tmp_path, *, launcher=True, **inputs):
         **os.environ,
         "PATH": os.pathsep.join([str(fake_bin), str(Path(sys.executable).parent), os.environ["PATH"]]),
         "GITHUB_WORKSPACE": str(workspace),
+        "RUNNER_TEMP": str(tmp_path),
         "GITHUB_OUTPUT": str(outputs),
         "GITHUB_EVENT_NAME": "workflow_dispatch",
         "GITHUB_RUN_ID": "1",
@@ -77,9 +78,15 @@ def test_get_jobs_runs_the_measured_revisions_own_tooling(tmp_path, inputs):
         key: [] for key in (
             "agentic-config", "agentic-eval-config", "multi-node-agentic-config",
             "multi-node-agentic-eval-config", "multi-node-config", "eval-config",
-            "multi-node-eval-config",
+            "multi-node-eval-config", "video-config",
         )
     }
+    facts = json.loads((tmp_path / "scheduling-facts.json").read_text())
+    assert {key: value for key, value in facts.items() if key != "jobs"} == {
+        "version": 1, "event": "workflow_dispatch", "patchwork": False, "checklist-complete": False,
+    }
+    assert set(facts["jobs"]) == {row["queue-token"] for row in jobs["single-node-config"]}
+    assert len(facts["jobs"]) == len(POINTS)
 
 
 def test_get_jobs_rejects_a_revision_its_gpu_jobs_could_not_launch(tmp_path):

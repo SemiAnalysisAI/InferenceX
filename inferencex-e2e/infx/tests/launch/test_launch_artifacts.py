@@ -1,7 +1,9 @@
 """Workspace staging behavior of the launcher artifact helpers."""
 
+import json
 import os
 import stat
+import sys
 import tarfile
 
 import pytest
@@ -11,8 +13,8 @@ from infx.launch.artifacts import (
     bundle_server_logs,
     collect_agentic_power_results,
     copy_agentic_results,
+    copy_al_gate_result,
     copy_fixed_sequence_results,
-    copy_gate_results,
     copy_to_workspace,
 )
 from infx.launch.backends.base import JobState, JobStatus
@@ -66,15 +68,17 @@ def test_agentic_results_require_a_match(tmp_path):
         copy_agentic_results(tmp_path / "src", tmp_path, "point")
 
 
-def test_gate_raw_files_are_staged_even_without_a_verdict(tmp_path):
+def test_an_eval_gate_verdict_is_staged_when_the_job_ran_one(tmp_path):
     logs, workspace = tmp_path / "logs", tmp_path / "ws"
-    (logs / "al_gate" / "scrapes").mkdir(parents=True)
-    (logs / "al_gate" / "scrapes" / "before.prom").write_text("vllm:spec_decode_num_drafts_total 7\n")
-    (logs / "al_gate_point.json").write_text("")
+    logs.mkdir()
     workspace.mkdir()
-    with pytest.raises(ArtifactError, match="al_gate_point.json is missing or empty"):
-        copy_gate_results(logs, workspace, "point")
-    assert (workspace / "al_gate/scrapes/before.prom").read_text() == "vllm:spec_decode_num_drafts_total 7\n"
+    copy_al_gate_result(logs, workspace, "point")
+    assert not (workspace / "al_gate_point.json").exists()
+    (logs / "al_gate" / "scrapes").mkdir(parents=True)
+    (logs / "al_gate_point.json").write_text('{"status": "pass"}\n')
+    copy_al_gate_result(logs, workspace, "point")
+    assert (workspace / "al_gate_point.json").read_text() == '{"status": "pass"}\n'
+    assert not (workspace / "al_gate").exists()  # raw replay files stay in the server logs
 
 
 def test_bundle_skips_empty_logs_and_archives_contents(tmp_path):
@@ -127,3 +131,53 @@ def test_power_collection_records_the_job_status_and_stages_results_either_way(t
 
     assert (logs / "power" / "native-job-status.txt").read_text() == f"42|{status.raw}\n"
     assert (workspace / "point_conc4.json").exists()
+
+
+def test_agentic_collection_requires_declared_cpu_and_keeps_gpu_valid(tmp_path):
+    from infx.tests.results.power.test_aggregate_power_multinode import (
+        PRODUCER_SHA,
+        build_package,
+    )
+
+    pkg = build_package(tmp_path / "captured")
+    result_dir = pkg.logs_root / "agentic/conc_4"
+    result_dir.mkdir(parents=True)
+    formal_result = result_dir / "agentic_power_concurrency_4.json"
+    formal_result.write_bytes(pkg.original_result.read_bytes())
+    [window_path] = pkg.windows_dir.glob("*.json")
+    window = json.loads(window_path.read_text())
+    window["result_path"] = str(formal_result.relative_to(pkg.logs_root))
+    window_path.unlink()
+    window_path = pkg.windows_dir / formal_result.name
+    window_path.write_text(json.dumps(window))
+    manifest_path = pkg.power_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["window_validations"][0]["window_file"] = f"windows/{formal_result.name}"
+    for device in manifest["expected_devices"]:
+        device["assignments"][0].update(worker_role="agg", het_group=0)
+    manifest_path.write_text(json.dumps(manifest))
+    source, workspace = tmp_path / "source", tmp_path / "output"
+    source.mkdir()
+    workspace.mkdir()
+    (source / "point_conc4.json").write_text(
+        json.dumps({"disagg": False, "num_prefill_gpu": 4, "num_decode_gpu": 0})
+    )
+    status = JobStatus(JobState.SUCCEEDED, "COMPLETED|0:0", 0)
+    assert collect_agentic_power_results(
+        status,
+        "42",
+        pkg.logs_root,
+        source,
+        workspace,
+        "point",
+        PRODUCER_SHA,
+        [4],
+        results_python=sys.executable,
+        expected_cpu=True,
+    ) == 1
+    result = json.loads((workspace / "point_conc4.json").read_text())
+    assert result["power_valid"] == 1
+    assert result["cpu_power_valid"] == 0
+    assert result["total_gpu_energy_j"] == 84000.0
+    assert result["power_audit"]["source"] == "LOGS/agentic/conc_4/power_validation.json"
+    assert result["power_audit"]["cpu"]["reason_codes"] == ["cpu_artifacts_missing"]

@@ -2004,9 +2004,6 @@
     },
     "sources": [
       "moonshotai/Kimi-K3/block_sparse_moe"
-    ],
-    "recipes": [
-      "kimik3-fp4-mi355x-vllm-agentic-mtp"
     ]
   },
   {
@@ -5881,9 +5878,6 @@
     },
     "sources": [
       "moonshotai/Kimi-K3/block_sparse_moe"
-    ],
-    "recipes": [
-      "kimik3-fp4-mi355x-vllm-agentic-mtp"
     ]
   },
   {
@@ -5966,9 +5960,6 @@
     },
     "sources": [
       "moonshotai/Kimi-K3/block_sparse_moe"
-    ],
-    "recipes": [
-      "kimik3-fp4-mi355x-vllm-agentic-mtp"
     ]
   },
   {
@@ -6051,9 +6042,6 @@
     },
     "sources": [
       "moonshotai/Kimi-K3/block_sparse_moe"
-    ],
-    "recipes": [
-      "kimik3-fp4-mi355x-vllm-agentic-mtp"
     ]
   },
   {
@@ -6136,9 +6124,6 @@
     },
     "sources": [
       "moonshotai/Kimi-K3/block_sparse_moe"
-    ],
-    "recipes": [
-      "kimik3-fp4-mi355x-vllm-agentic-mtp"
     ]
   },
   {

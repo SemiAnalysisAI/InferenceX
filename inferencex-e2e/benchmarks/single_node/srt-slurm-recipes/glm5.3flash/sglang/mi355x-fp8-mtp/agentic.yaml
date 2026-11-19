@@ -1,0 +1,134 @@
+# SGLang cookbook GLM-5.3-Flash MI355X FP8 Low Latency recipe (TP4/EP4, MTP 5/1/6)
+# with the default deploy-panel overlays; the dram points add its HiCache L1 + L2 tier.
+base:
+  schema: 2
+  name: glm5.3flash-fp8-mi355x-sglang-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      args:
+        served-model-name: zai-org/GLM-5.3-Flash
+        trust-remote-code: true
+        quantization: fp8
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        # The cookbook passes 64; v0.5.22 forces 256 for DSA models.
+        page-size: 256
+        mem-fraction-static: 0.82
+        max-running-requests: 96
+        cuda-graph-max-bs-decode: 96
+        min-free-slots-delay: 1
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        prefill-decode-interval: 0
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        linear-attn-verify-backend: triton
+        kv-cache-dtype: fp8_e4m3
+        moe-runner-backend: aiter
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        speculative-attention-mode: prefill
+        speculative-accept-threshold-single: 1.0
+        speculative-accept-threshold-acc: 1.0
+        speculative-moe-a2a-backend: none
+        mm-feature-transport: cpu
+        reasoning-parser: auto
+        tool-call-parser: auto
+        watchdog-timeout: 1800
+        dist-timeout: 600
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        SGLANG_USE_AITER: '1'
+        AITER_ONLINE_TUNE: '0'
+        SGLANG_OPT_FUSED_KDA_VERIFY: '1'
+        SGLANG_DSA_FUSE_TOPK: '0'
+        SGLANG_ENABLE_WAR_BARRIER: '1'
+        SGLANG_FORCE_COARSE_WAR_BARRIER: '1'
+        # The image sets INT8; MODELS.md's all-reduce policy requires NONE for new models.
+        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp4_c1:
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp4_c2:
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp4_c8:
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: none
+
+override_tp4_c16:
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_c24:
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: none
+
+override_tp4_c32:
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
+# hicache-size 180 per rank; run 42074044563 allocated 187.33 GB per rank (113.10 GB KV,
+# 66.94 GB KDA state, 7.29 GB DSA indexer), 749.33 GB for the TP4 server.
+override_tp4_c40_hicache:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram
+
+override_tp4_c48_hicache:
+  roles:
+    agg:
+      args:
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram

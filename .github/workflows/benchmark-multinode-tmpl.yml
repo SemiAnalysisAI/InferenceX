@@ -22,10 +22,6 @@ on:
         description: "Total Slurm nodes required by this benchmark"
         required: true
         type: number
-      priority:
-        description: "Higher-is-sooner CI priority score"
-        required: true
-        type: string
       queue-token:
         description: "One-shot queue token generated for this job"
         required: true
@@ -63,9 +59,6 @@ on:
         required: false
         type: string
         default: ""
-      al-gate:
-        description: "Run the report-only acceptance gate of config['al-gate'] instead of AgentX throughput"
-        type: boolean
       require-power:
         description: "Fail fixed-sequence result processing when GPU power is invalid"
         type: boolean
@@ -146,10 +139,8 @@ env:
   EVAL_CONC: ${{ inputs.eval-conc }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   POWER: ${{ fromJSON(inputs.config).power && '1' || '0' }}
-  AL_GATE: ${{ inputs.al-gate }}
-  AL_GATE_CURVE: ${{ inputs.al-gate && fromJSON(inputs.config)['al-gate'].curve || '' }}
-  AL_GATE_DRAFT_TOKENS: ${{ inputs.al-gate && format('{0}', fromJSON(inputs.config)['al-gate']['draft-tokens']) || '' }}
-  AL_GATE_DATASET: ${{ inputs.al-gate && 'al_gate_dataset/speedbench_coding.jsonl' || '' }}
+  CPU_POWER: ${{ fromJSON(inputs.config)['cpu-power'] && '1' || '0' }}
+  AL_GATE_DATASET: ${{ inputs.eval-only && inputs.scenario-type == 'agentic-coding' && 'al_gate_dataset/speedbench_coding.jsonl' || '' }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
@@ -197,27 +188,18 @@ jobs:
     runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; callers gate fork PRs behind maintainer-applied sweep labels
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            toJSON(format('nodes:{0}', inputs.node-count)),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          )
+        format(
+          '["self-hosted",{0},{1},{2},{3}]',
+          toJSON(inputs.runner),
+          toJSON(format('nodes:{0}', inputs.node-count)),
+          toJSON(format('ci-job-{0}', inputs.queue-token)),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
     timeout-minutes: ${{ inputs.scenario-type == 'agentic-coding' && 780 || 480 }}
     name: >-
-      ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
+      ${{ inputs.klaud-run && 'klaud | ' || '' }}${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
       ${{ format('{0}', fromJSON(inputs.config).disagg) == 'true' && format('{0}P ', fromJSON(inputs.config).prefill.num-worker) || '' }}(TP${{ fromJSON(inputs.config).prefill.tp }}${{ format('{0}', fromJSON(inputs.config).prefill.pp) != '' && format('{0}', fromJSON(inputs.config).prefill.pp) != '1' && format('/PP{0}', fromJSON(inputs.config).prefill.pp) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.dcp-size) != '' && format('{0}', fromJSON(inputs.config).prefill.dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).prefill.dcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.pcp-size) != '' && format('{0}', fromJSON(inputs.config).prefill.pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).prefill.pcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.ep) != '' && format('{0}', fromJSON(inputs.config).prefill.ep) != '1' && format('/EP{0}', fromJSON(inputs.config).prefill.ep) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.dp-attn) == 'true' && '/DPA' || '' }})
       ${{ format('{0}', fromJSON(inputs.config).disagg) == 'true' && format('x {0}D (TP{1}{2}{3}{4}{5}{6})', fromJSON(inputs.config).decode.num-worker, fromJSON(inputs.config).decode.tp, format('{0}', fromJSON(inputs.config).decode.pp) != '' && format('{0}', fromJSON(inputs.config).decode.pp) != '1' && format('/PP{0}', fromJSON(inputs.config).decode.pp) || '', format('{0}', fromJSON(inputs.config).decode.dcp-size) != '' && format('{0}', fromJSON(inputs.config).decode.dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).decode.dcp-size) || '', format('{0}', fromJSON(inputs.config).decode.pcp-size) != '' && format('{0}', fromJSON(inputs.config).decode.pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).decode.pcp-size) || '', format('{0}', fromJSON(inputs.config).decode.ep) != '' && format('{0}', fromJSON(inputs.config).decode.ep) != '1' && format('/EP{0}', fromJSON(inputs.config).decode.ep) || '', format('{0}', fromJSON(inputs.config).decode.dp-attn) == 'true' && '/DPA' || '') || '' }}
       ${{ fromJSON(inputs.config).spec-decoding != 'none' && fromJSON(inputs.config).spec-decoding || '' }}
@@ -297,15 +279,14 @@ jobs:
           "$INFERENCEX_LAUNCH_PYTHON" -P -m infx.launch cleanup
 
       - name: Download acceptance gate prompts
-        if: ${{ inputs.al-gate }}
-        continue-on-error: true
+        if: ${{ inputs.eval-only && inputs.scenario-type == 'agentic-coding' && env.SPEC_DECODING != 'none' }}
+        continue-on-error: true # Without them the eval runs alone and the gate records why.
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: al_gate_dataset
           path: ${{ github.workspace }}/inferencex-e2e/al_gate_dataset
 
       - name: Launch multi-node job script
-        continue-on-error: ${{ inputs.al-gate }}
         env:
           PREFILL_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).prefill.additional-settings) }}
           DECODE_ADDITIONAL_SETTINGS: ${{ toJSON(fromJSON(inputs.config).decode.additional-settings) }}
@@ -319,7 +300,6 @@ jobs:
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -x
           RESULT_FILENAME=$(python3 -m infx.results.result_filename)
-          if [ "${AL_GATE}" = "true" ]; then RESULT_FILENAME="${RESULT_FILENAME}_algate"; fi  # apart from the point's throughput artifacts
           export RESULT_FILENAME
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
           echo "EVAL_ARTIFACT_RECIPE=${RECIPE_FINGERPRINT:0:16}" >> "$GITHUB_ENV"
@@ -343,9 +323,7 @@ jobs:
           export EVAL_CONC
           export IS_MULTINODE=true
           "$INFERENCEX_LAUNCH_PYTHON" -m infx.launch run
-          if [ "${AL_GATE}" = "true" ]; then
-            test -f "al_gate_${RESULT_FILENAME}.json" || { echo "Run failed: no acceptance gate result." >&2; exit 1; }
-          elif [ "${EVAL_ONLY}" = "true" ]; then
+          if [ "${EVAL_ONLY}" = "true" ]; then
             echo "Eval-only mode: skipping benchmark result file check"
             if ! ls results*.json 1>/dev/null 2>&1; then
               echo "Eval-only run failed: no results*.json files found." >&2
@@ -393,53 +371,14 @@ jobs:
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence --all
 
       - name: Upload result
-        id: upload-result
         if: ${{ success() && env.RESULT_FILENAME != '' && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: $/.github/actions/upload-artifact-retry
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
-
-      - name: Wait before retrying upload result
-        if: ${{ always() && steps.upload-result.outcome == 'failure' }}
-        run: sleep 10
-
-      - name: Retry upload result (attempt 2)
-        id: retry-upload-result
-        if: ${{ always() && steps.upload-result.outcome == 'failure' }}
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          overwrite: true
-          name: bmk_${{ env.RESULT_FILENAME }}
-          path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
-
-      - name: Wait before final result upload attempt
-        if: ${{ always() && steps.retry-upload-result.outcome == 'failure' }}
-        run: sleep 30
-
-      - name: Retry upload result (attempt 3)
-        if: ${{ always() && steps.retry-upload-result.outcome == 'failure' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          overwrite: true
-          name: bmk_${{ env.RESULT_FILENAME }}
-          path: ${{ env.INFERENCEX_E2E_ROOT }}/agg_${{ env.RESULT_FILENAME }}_*.json
-
-      - name: Upload acceptance gate result
-        if: ${{ always() && inputs.al-gate }}
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: algate_${{ fromJSON(inputs.config)['al-gate'].key }}
-          overwrite: true
-          path: |
-            ${{ env.INFERENCEX_E2E_ROOT }}/al_gate_${{ env.RESULT_FILENAME }}.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/al_gate/
 
       - name: Upload power audit bundle
-        if: ${{ always() && !inputs.eval-only && !inputs.al-gate }}
+        if: ${{ always() && !inputs.eval-only }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: power_audit_${{ env.RESULT_FILENAME }}
@@ -484,80 +423,16 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result
-        id: upload-agentic-aggregated
-        if: ${{ always() && !inputs.eval-only && !inputs.al-gate && inputs.scenario-type == 'agentic-coding' }}
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() && !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        uses: $/.github/actions/upload-artifact-retry
         with:
-          name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_conc*.json
-
-      - name: Wait before retrying upload agentic aggregated result
-        if: ${{ always() && steps.upload-agentic-aggregated.outcome == 'failure' }}
-        run: sleep 10
-
-      - name: Retry upload agentic aggregated result (attempt 2)
-        id: retry-upload-agentic-aggregated
-        if: ${{ always() && steps.upload-agentic-aggregated.outcome == 'failure' }}
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          overwrite: true
-          name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_conc*.json
-
-      - name: Wait before final agentic aggregated result
-        if: ${{ always() && steps.retry-upload-agentic-aggregated.outcome == 'failure' }}
-        run: sleep 30
-
-      - name: Retry upload agentic aggregated result (attempt 3)
-        if: ${{ always() && steps.retry-upload-agentic-aggregated.outcome == 'failure' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          overwrite: true
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
           path: ${{ env.INFERENCEX_E2E_ROOT }}/${{ env.RESULT_FILENAME }}_conc*.json
 
       - name: Upload agentic raw results
-        id: upload-agentic-raw
-        if: ${{ always() && !inputs.al-gate && inputs.scenario-type == 'agentic-coding' }}
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        uses: $/.github/actions/upload-artifact-retry
         with:
-          name: agentic_${{ env.RESULT_FILENAME }}
-          path: |
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**
-            !${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/aiperf_artifacts/inputs.json
-            !${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/aiperf_artifacts/profile_export_raw.jsonl
-          if-no-files-found: ignore
-
-      - name: Wait before retrying upload agentic raw results
-        if: ${{ always() && steps.upload-agentic-raw.outcome == 'failure' }}
-        run: sleep 10
-
-      - name: Retry upload agentic raw results (attempt 2)
-        id: retry-upload-agentic-raw
-        if: ${{ always() && steps.upload-agentic-raw.outcome == 'failure' }}
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          overwrite: true
-          name: agentic_${{ env.RESULT_FILENAME }}
-          path: |
-            ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**
-            !${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/aiperf_artifacts/inputs.json
-            !${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**/aiperf_artifacts/profile_export_raw.jsonl
-          if-no-files-found: ignore
-
-      - name: Wait before final agentic raw results
-        if: ${{ always() && steps.retry-upload-agentic-raw.outcome == 'failure' }}
-        run: sleep 30
-
-      - name: Retry upload agentic raw results (attempt 3)
-        if: ${{ always() && steps.retry-upload-agentic-raw.outcome == 'failure' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          overwrite: true
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/LOGS/agentic/**
@@ -566,63 +441,14 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)
-        id: upload-eval
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: $/.github/actions/upload-artifact-retry
         with:
           name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
           path: |
             ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
             ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/*_report.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/*_results.jsonl
-            ${{ env.INFERENCEX_E2E_ROOT }}/sample*.jsonl
-            ${{ env.INFERENCEX_E2E_ROOT }}/agent_preds.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/predictions.jsonl
-            ${{ env.INFERENCEX_E2E_ROOT }}/swebench_report_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/*_artifacts.tar.gz
-            ${{ env.INFERENCEX_E2E_ROOT }}/*.traj*
-          if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
-
-      - name: Wait before retrying upload eval results (if any)
-        if: ${{ always() && steps.upload-eval.outcome == 'failure' }}
-        run: sleep 10
-
-      - name: Retry upload eval results (attempt 2)
-        id: retry-upload-eval
-        if: ${{ always() && steps.upload-eval.outcome == 'failure' }}
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          overwrite: true
-          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
-          path: |
-            ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/*_report.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/*_results.jsonl
-            ${{ env.INFERENCEX_E2E_ROOT }}/sample*.jsonl
-            ${{ env.INFERENCEX_E2E_ROOT }}/agent_preds.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/predictions.jsonl
-            ${{ env.INFERENCEX_E2E_ROOT }}/swebench_report_*.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/*_artifacts.tar.gz
-            ${{ env.INFERENCEX_E2E_ROOT }}/*.traj*
-          if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
-
-      - name: Wait before final eval upload attempt
-        if: ${{ always() && steps.retry-upload-eval.outcome == 'failure' }}
-        run: sleep 30
-
-      - name: Retry upload eval results (attempt 3)
-        if: ${{ always() && steps.retry-upload-eval.outcome == 'failure' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          overwrite: true
-          name: eval_${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_p${{ env.PREFILL_NUM_WORKERS }}x${{ env.PREFILL_TP }}p${{ env.PREFILL_PP_SIZE }}c${{ env.PREFILL_DCP_SIZE }}k${{ env.PREFILL_PCP_SIZE }}${{ env.DWDP_ARTIFACT_SUFFIX }}e${{ env.PREFILL_EP }}d${{ env.PREFILL_DP_ATTN }}_d${{ env.DECODE_NUM_WORKERS }}x${{ env.DECODE_TP }}p${{ env.DECODE_PP_SIZE }}c${{ env.DECODE_DCP_SIZE }}k${{ env.DECODE_PCP_SIZE }}e${{ env.DECODE_EP }}d${{ env.DECODE_DP_ATTN }}_g${{ env.DISAGG }}_r${{ env.EVAL_ARTIFACT_RECIPE }}_c${{ env.EVAL_ARTIFACT_CONC }}_kv${{ env.KV_OFFLOADING }}-${{ env.KV_OFFLOAD_BACKEND }}_spec${{ env.SPEC_DECODING }}_${{ env.EVAL_FRAMEWORK }}_${{ env.EVAL_SUITE }}_${{ runner.name }}_${{ github.run_attempt }}
-          path: |
-            ${{ env.INFERENCEX_E2E_ROOT }}/meta_env.json
-            ${{ env.INFERENCEX_E2E_ROOT }}/results*.json
+            ${{ env.INFERENCEX_E2E_ROOT }}/al_gate_*.json
             ${{ env.INFERENCEX_E2E_ROOT }}/*_report.json
             ${{ env.INFERENCEX_E2E_ROOT }}/*_results.jsonl
             ${{ env.INFERENCEX_E2E_ROOT }}/sample*.jsonl
@@ -649,6 +475,7 @@ jobs:
           if [[ -f inferencex-e2e/configs/runners.yaml ]]; then cd inferencex-e2e; fi
           rm -f meta_env.json || true
           rm -f results*.json || true
+          rm -f al_gate_*.json || true
           rm -f -- ./*_report.json || true
           rm -f -- ./*_results.jsonl || true
           rm -f -- ./*_artifacts.tar.gz || true

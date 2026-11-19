@@ -45,16 +45,16 @@ def job(job_id: int, name: str, conclusion: str, steps: list[tuple[str, str]], *
 def test_jobs_without_a_record_get_one_and_recorded_jobs_gain_their_conclusion(tmp_path, monkeypatch):
     jobs = [
         job(1, "get-jobs", "success", [("Set up job", "success")]),
-        job(2, "single-node 1k1k / (img...) / p5.000 | dsr1 fp8 cluster:h200-dgxc sgl TP8    c4",
+        job(2, "single-node 1k1k / (img...) / dsr1 fp8 cluster:h200-dgxc sgl TP8    c4",
             "failure", [("Set up job", "success"), ("Launch job script", "failure"),
                         ("Process result", "failure")], runner_name="h200-dgxc_01"),
-        job(3, "multi-node 8k1k / (img...) / klaud | p1.392 | dsr1 fp4 gb200 dynamo-trt 1P (TP8) "
+        job(3, "multi-node 8k1k / (img...) / klaud | dsr1 fp4 gb200 dynamo-trt 1P (TP8/PP2) "
             "x 3D (TP8) mtp   c6x12", "failure",
             [("Set up job", "success"), ("Run actions/checkout@3d3c", "failure"),
              ("Retry checkout", "failure")], runner_name="gb200-nv_02"),
-        job(4, "eval / (img...) / p1.050 | dsr1 fp8 mi355x atom TP8    c64 | eval-only", "cancelled",
+        job(4, "eval / (img...) / p0.500 | dsr1 fp8 mi355x atom TP8    c64 | eval-only", "cancelled",
             [], runner_name=None),
-        job(5, "agentic / (img...) / p2.000 | kimik3 fp4 b200 vllm TP8   c16", "skipped", []),
+        job(5, "agentic / (img...) / kimik3 fp4 b200 vllm TP8   c16", "skipped", []),
     ]  # fmt: skip
     payload = tmp_path / "jobs.json"
     payload.write_text(json.dumps([{"total_count": len(jobs), "jobs": jobs}]))
@@ -87,6 +87,7 @@ def test_jobs_without_a_record_get_one_and_recorded_jobs_gain_their_conclusion(t
         "message": "job concluded failure at step 'Run actions/checkout@3d3c' and left no job_event.json",
         "exit_code": None, "retriable": None, "evidence": f"{RUN}/job/3",
     }  # fmt: skip
-    assert (cancelled["conc"], cancelled["eval_only"], cancelled["error"]["stage"]) == (64, True, "runner")
+    assert (cancelled["model_prefix"], cancelled["precision"], cancelled["conc"], cancelled["eval_only"],
+            cancelled["error"]["stage"]) == ("dsr1", "fp8", 64, True, "runner")
     for record in (checkout, cancelled):
         assert JobEvent.model_validate(record).github.run_url == RUN

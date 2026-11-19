@@ -11,6 +11,8 @@ import pytest
 import yaml
 
 from infx.matrix import revision
+from infx.matrix.validation import VIDEO_SPEC_DIR
+from infx.srt_slurm import video
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -210,6 +212,22 @@ def test_historical_generation_from_nested_project(generation_repo, monkeypatch,
     with revision.snapshot(ref) as inputs:
         rows = inputs.generate(["fixture"], ["--no-evals"])
     assert [(row["model"], row["conc"]) for row in rows] == [expected]
+
+
+def test_nested_snapshot_keeps_the_video_specs_the_binder_loads(generation_repo, monkeypatch):
+    root, git = generation_repo
+    git("restore", ".")
+    (root / "inferencex-e2e").mkdir()
+    git("mv", "infx", "configs", "benchmarks", "inferencex-e2e/")
+    (root / VIDEO_SPEC_DIR).mkdir(parents=True)
+    for name in ("video_spec.py", "h3-v2.yaml"):
+        shutil.copy(ROOT.parent / VIDEO_SPEC_DIR / name, root / VIDEO_SPEC_DIR / name)
+    git("add", ".")
+    git("commit", "-qm", "relocate project beside the video harness")
+    monkeypatch.chdir(root / "inferencex-e2e")
+    expected = video.load_spec("h3-v2.yaml", root=ROOT, set_id="release-v1")
+    with revision.snapshot("HEAD") as inputs:
+        assert video.load_spec("h3-v2.yaml", root=inputs.root, set_id="release-v1") == expected
 
 
 LEGACY_GENERATOR = """\

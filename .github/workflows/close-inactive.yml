@@ -1,0 +1,50 @@
+name: Close Inactive
+
+on:
+  schedule:
+    - cron: '41 15 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: close-inactive
+  cancel-in-progress: false
+
+jobs:
+  close:
+    name: close
+    if: github.repository == 'SemiAnalysisAI/InferenceX'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      issues: write # comment on and close inactive issues
+      pull-requests: write # comment on and close inactive pull requests
+    steps:
+      - name: Close pull requests and issues inactive for 30 days
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eo pipefail
+
+          # updatedAt moves on any activity: commits, comments, reviews, labels and edits.
+          cutoff=$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          failed=0
+          for kind in pr issue; do
+            if [[ $kind == pr ]]; then noun='pull request'; extra=(); else noun=issue; extra=(--reason 'not planned'); fi
+            body="This $noun has had no activity (commits, comments, reviews or other updates) for more than 30 days, so it is being closed automatically. Reopen it if it is still needed."
+            numbers=$(gh "$kind" list --state open --limit 1000 --json number,updatedAt \
+              --jq ".[] | select(.updatedAt < \"$cutoff\") | .number")
+            for number in $numbers; do
+              echo "Closing $noun #$number"
+              if ! gh "$kind" close "$number" --comment "$body" "${extra[@]}"; then
+                echo "::warning::Could not close $noun #$number"
+                failed=1
+              fi
+              # Stay under GitHub's secondary rate limit on content creation.
+              sleep 2
+            done
+          done
+          exit "$failed"

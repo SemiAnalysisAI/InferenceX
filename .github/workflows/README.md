@@ -34,7 +34,7 @@ usage: python -m infx.matrix.generate full-sweep
     [--no-evals | --evals-only] [--all-evals]
     [--smoke] [--trim-conc]
     [--runner-node-filter RUNNER_NODE_FILTER]
-    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
+    [--scenario-type {fixed-seq-len,agentic-coding,video-generation} [{fixed-seq-len,agentic-coding,video-generation} ...]]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
@@ -109,7 +109,7 @@ usage: python -m infx.matrix.generate test-config
     [--no-evals | --evals-only] [--all-evals]
     [--smoke] [--trim-conc]
     [--runner-node-filter RUNNER_NODE_FILTER]
-    [--scenario-type {fixed-seq-len,agentic-coding} [{fixed-seq-len,agentic-coding} ...]]
+    [--scenario-type {fixed-seq-len,agentic-coding,video-generation} [{fixed-seq-len,agentic-coding,video-generation} ...]]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
     [--exp-names EXP_NAMES [EXP_NAMES ...]]
@@ -187,15 +187,30 @@ does not dispatch a sweep. Changing a recognized primary or modifier label
 cancels the active sweep; another starts only if a primary label remains.
 To retrigger an already-labeled PR, remove and reapply its primary label.
 Merge conflicts block sweeps. Queue priority comes from the PR diff and the
-PR description's checklist, not priority labels. A PR gets a small bonus when
+PR description's checklist, not priority labels. When
+`PRIORITY_SCHEDULER_ENABLED` is true, each sweep's setup job uploads a
+`scheduling-facts.json` artifact. It keys every queued job by the token in its
+`ci-job-<token>` runner label and lists the facts the classifier credited
+(framework, model prefix, precision, speculative decoding, multi-node, AgentX,
+eval-only and node count), plus whether the PR is patchwork and whether its
+checklist is complete. The priority scheduler scores jobs from those facts.
+Its weights are not kept in this repository. A checklist is complete when
 every item under its `Checklist` heading is checked, except conditional items
 ("If ...", "Before merging ...") that do not apply yet. The checklist is read
 when the sweep starts, so later edits count from the next sweep. Trusted
 external sweeps classify the approved PR diff the same way. Manual
 `e2e-tests.yml` and `profile.yml` dispatches of a revision not yet on `main`
-classify its diff from the merge
-base only for patchwork, so engine-patching branches still run last. Klaud runs
-and revisions already on `main` keep unclassified scoring.
+classify its diff from the merge base only for patchwork, so engine-patching
+branches are still flagged. Klaud runs and revisions already on `main` stay
+unclassified and report every fact of each job.
+
+Patchwork classification requires concrete evidence of engine/runtime source
+changes, a local engine build, or a fork/image containing unmerged changes.
+Runtime tuning through environment variables (including `K31MK_*`) or CLI/config
+options does not qualify by itself, nor does a dev/nightly image tag. The
+classifier must cite the file and code, command, or explicit provenance behind
+its verdict; unknown provenance alone does not qualify. Actual patching still
+counts when configured through YAML or environment variables.
 
 The canary is the lowest-concurrency non-eval candidate among single-node
 fixed-sequence 1k/1k, 8k/1k, or AgentX entries, falling back to multi-node AgentX.
@@ -207,15 +222,7 @@ Manual `e2e-tests.yml` has no canary and defaults `fail-fast` to false.
 
 ## Speculative acceptance gate
 
-AgentX throughput forces speculative acceptance to the committed golden acceptance length (AL). The acceptance gate, milestone M1 of [#1651](https://github.com/SemiAnalysisAI/InferenceX/issues/1651), measures each deployment's real AL alongside it. Only `run-sweep.yml` PR sweeps run it; `e2e-tests.yml` has no gate.
-
-1. `al-gate-select` starts right after `setup`, alongside the canary. The planning and canary execution jobs explicitly check cancellation and dependency success, so a skipped optional reuse job does not suppress them. [`infx.srt_slurm.al_gate plan`](../../inferencex-e2e/infx/srt_slurm/al_gate.py) groups the AgentX speculative points by deployment topology and drafting configuration (method, draft length, draft model, and draft and rejection samplers). Each group gets one gate, on its representative point: the smallest concurrency at or above 64, the gate's replay concurrency, otherwise the largest. [`infx.workflows.al_gate_reuse`](../../inferencex-e2e/infx/workflows/al_gate_reuse.py) then keys each gate on its id, the representative's recipe fingerprint, and the git versions of `inferencex-e2e/infx`, the gate script and the srt-slurm submodule. A gate whose key already has a result other than `error` in one of the last 30 completed runs of the PR is not run again; its result is re-published as `algate_reused`.
-2. When the plan has gates, the hosted job restores the SPEED-Bench `coding` prompts from the Actions cache, keyed on [`speedbench.py`](../../inferencex-e2e/infx/bench/speedbench.py). [`al-gate-prompts.yml`](al-gate-prompts.yml) keeps that entry warm on `main`, because a cache saved by a PR run is visible only to that PR. On a miss the job frees disk for the pinned resolver's source datasets and prepares the prompts with `python -m infx.bench.speedbench`, which runs the pinned NeMo-Skills `prepare.py` on a pinned dataset revision with a date-pinned dependency set and fails unless the prompts match the pinned digest. The prompts are uploaded as the `al_gate_dataset` artifact; GPU nodes never prepare them.
-3. Each point the planner cannot gate is listed as unresolved, with the reason, and gets no GPU time. Frameworks in `AL_GATE_EXEMPT_FRAMEWORKS` ([`request.py`](../../inferencex-e2e/infx/launch/request.py)) are exempt, and the launcher refuses a gate for them: `dynamo-trt`, whose recipes turn TensorRT-LLM metrics off, and `tilert`, whose router rejects streaming `/v1/completions` and serves no metrics. Dynamo vLLM data-parallel generation workers that span more than one node are exempt too, because the benchmark receives only the leader's metrics URL. Points of curves without a `collection` block stay unresolved ([details](../../inferencex-e2e/infx/golden_al_distribution/README.md#collection-settings)).
-4. After the canary, `al-gate` and `al-gate-multinode` launch each representative's recipe with real verification and replace the AgentX benchmark with `python3 -m infx.bench al-gate`. It replays the prompts at concurrency 64 with the client settings in the curve's `collection` block and computes AL from the generation engine's acceptance counters, scraped before and after the replay. Each gate uploads `algate_<key>`.
-5. `al-gate-collect` publishes measured AL, golden AL, ratio, and status in the run summary, followed by planned gates without a result and the unresolved points. The status is `pass`, `below` (under 0.95x golden), `above` (over 1.05x), `no-counters`, `no-drafting`, or `error`. It also raises a warning annotation when any planned gate measured nothing.
-
-The gate is report-only. AgentX throughput does not wait for it, and a verdict or a failed measurement never fails the run: the gate's prompt download, launch, and result upload continue on error. Runner setup and cleanup steps fail a gate job as they fail any benchmark job. The AgentX canary point runs its throughput before its gate, and fixed-sequence speculative points are not gated.
+AgentX throughput forces speculative acceptance to the committed golden acceptance length (AL). The acceptance gate, milestone M1 of [#1651](https://github.com/SemiAnalysisAI/InferenceX/issues/1651), measures each agentic speculative eval's real AL on the eval's own server, in the same Slurm job, before the eval runs. `run-sweep.yml` and `e2e-tests.yml` call [`al-gate-prompts.yml`](al-gate-prompts.yml) for the SPEED-Bench prompts before their agentic eval jobs, and `collect-evals.yml` tabulates the verdicts. The gate is report-only: a verdict, a skipped gate or a failed measurement never fails the eval or the run. See [the speculative acceptance gate](../../inferencex-e2e/infx/evals/EVALS.md#speculative-acceptance-gate) for how it is planned, run, and skipped.
 
 ## Changelog Conflict Recovery
 
@@ -261,6 +268,8 @@ This proof of concept produces benchmark and evaluation artifacts through the
 End-to-End Tests workflow. The dispatch also uploads a `source-identity`
 artifact (PR number, full approved head SHA, merge SHA, and the `evals-only`,
 `agentx-fast`, `all-evals`, and fail-fast modifiers) and `changelog-metadata`.
+When the matrix selects video, it also uploads `video-sweep-manifest` and runs
+`validate-video-results`, because video reuse requires that manifest.
 A pinned `/use <run_id>` accepts these runs; reuse and staging report the
 recorded PR head and judge modifiers from the recorded dispatch rather than the
 PR's current labels. Older runs without the artifact fall back to the run title
@@ -296,7 +305,7 @@ Acceptance does not
 certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
 
-The latest matching comment across both names by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
+The latest matching comment across both names by a user with write access to the repository wins.
 The bot reacts with 👍 after validating the request, or 👎 on rejection. When the
 pinned run's commit is not part of the PR, it also posts one warning comment for
 that request and run; reuse still proceeds. Details are in the Actions run summary.
@@ -325,10 +334,13 @@ single `ingest` job first computes the changelog delta with `infx.matrix.plan`.
 For entries with results, it resolves the merge commit's PR, reuse command, and
 source run with `infx.workflows.reuse`, and fails before uploading or dispatching
 anything unless reuse is validly authorized. It then uploads merge-time `changelog-metadata`
-and sends one `repository_dispatch` to InferenceX-app: `ingest-agentic-results`
+and sends one `repository_dispatch` to the app repository (`APP_REPO`, below): `ingest-agentic-results`
 (with `database-target: production`) when the delta has agentic entries,
 otherwise `ingest-results`. The payload's `source-run-id` is the reused PR
-`run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run.
+`run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run. The delta
+leaves out entries whose `pr-link` is a pull request in another repository,
+unless it has the number of the pull request the push merged; when none remain,
+Merge Ingest uploads and dispatches nothing. Recovery applies the same rule.
 
 For a nonempty delta consisting entirely of `retired: true` entries, the planner
 verifies that the selected configs existed in the base and are absent from the
@@ -354,6 +366,20 @@ by that commit, and posts one comment per merge run, updated in place on reruns
 Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
 never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
 the Merge Ingest run fails and nothing is benchmarked or ingested.
+
+## Repository Scope
+
+Scheduled and run-completion jobs (Klaud, the runner offline digest,
+`close-inactive`, scheduled AL gate prompt warming, video quality scoring) and
+the pull request bots (Claude review, recipe reminder, infx diff comment,
+CODEOWNER sign-off verification) run only in `SemiAnalysisAI/InferenceX`.
+Sweeps, CI, staging, ingest, and manual dispatches run in any repository,
+configured by these repository variables:
+
+| Variable          | Default                                                       | Effect                                                                                                                                                                                                                                                         |
+| ----------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_REPO`        | `SemiAnalysisAI/InferenceX-app`                               | App repository that `merge-ingest`, `recover-reused-ingest`, `operatorx-sweep`, and `stage-results` dispatch ingest, video, and staging events to, and the only source the ingest and staging callbacks accept. `FRONTEND_PAT` must be able to dispatch to it. |
+| `STAGING_APP_URL` | `https://inferencemax-app-git-staging-semianalysisai.vercel.app` | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`.                                                   |
 
 ## Validation Architecture
 

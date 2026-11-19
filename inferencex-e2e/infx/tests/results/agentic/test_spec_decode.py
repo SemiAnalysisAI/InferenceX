@@ -59,6 +59,13 @@ def test_each_series_increase_survives_resets_new_series_and_shared_labels() -> 
             'vllm:spec_decode_num_drafts_total{engine="0"} 1000\n',
             (2840, 1000),
         ),
+        (
+            "tokenspeed",
+            'tokenspeed:spec_decode_num_accepted_tokens_total{model_name="m"} 2840\n'
+            'tokenspeed:spec_decode_num_drafts_total{model_name="m"} 1000\n'
+            'tokenspeed:spec_decode_num_draft_tokens_total{model_name="m"} 3000\n',
+            (2840, 1000),
+        ),
         # Decode emitted 4100 tokens for 100 requests in 1000 verifications: 4100 - 100 - 1000
         # accepted drafts. Prefill workers' series never verify.
         (
@@ -89,13 +96,13 @@ def test_each_series_increase_survives_resets_new_series_and_shared_labels() -> 
         ),
         ("atom", "atom_mtp_decode_steps_total 40\natom_mtp_accepted_tokens_total 70\n", (70, 40)),
     ],
-    ids=["vllm", "sglang-disagg", "trtllm", "atom", "atom-underscore"],
+    ids=["vllm", "tokenspeed", "sglang-disagg", "trtllm", "atom", "atom-underscore"],
 )
 def test_each_engine_reads_its_accepted_drafts_and_verifications(engine, after, expected) -> None:
     assert READERS[engine](increase({WORKER: ""}, {WORKER: after})) == expected
 
 
-@pytest.mark.parametrize("engine", ["vllm", "sglang", "trtllm", "atom"])
+@pytest.mark.parametrize("engine", ["vllm", "tokenspeed", "sglang", "trtllm", "atom"])
 def test_an_engine_without_its_counters_reads_nothing(engine) -> None:
     # Another engine's spec-decode families never give this one's reading.
     other = (
