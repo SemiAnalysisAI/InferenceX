@@ -96,7 +96,7 @@ def native_fragment(tmp_path):
             "env": {"VIDEO_SERVER_SERVICE": "video-server", "VIDEO_SERVER_PORT": "30283"},
         },
     }
-    path = tmp_path / "serving-client.yaml"
+    path = tmp_path / "agg-ulysses.yaml"
 
     def write(recipe=raw):
         path.write_text(yaml.safe_dump(recipe))
