@@ -13109,3 +13109,14 @@
   description:
     - "Add vllm/vllm-omni-rocm:v0.30.0, the newest stable vLLM-Omni ROCm image, pinned by its linux/amd64 digest, on the MI355X H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, the AITER FLASH_ATTN diffusion attention backend, vLLM quick all-reduce quantization set to NONE, and the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4971
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move MiniMax-M3.1-Flash GB300 Dynamo+SGLang aggregated AgentX to lmsysorg/sglang:nightly-cu134-20261113-5792cf6 (sha256:967d09b3, SGLang 5792cf6e5, ai-dynamo 1.7.0.dev20261112). TP4 at concurrency 1 (both rows), TP4 with 32k prefill chunks at concurrency 8 and TP4 + HiCache at concurrency 24 move with no other change."
+    - "TP4 at concurrency 4, 8 and 16 and TP4 + 180 GB/rank HiCache at the new concurrency 20 run shortest-prefill-first scheduling with prefill-decode interval 32, stream interval 20, 8k prefill chunks and 0.90 of GPU memory. Concurrency 4 and 16 replace their rows; concurrency 8 adds a row beside the 32k-chunk one."
+    - "From concurrency 16 up, Dynamo parses reasoning and tool calls (dyn-reasoning-parser and dyn-tool-call-parser minimax_m3) in place of SGLang's tool-call parser."
+    - "TP2 + HiCache moves from concurrency 40, 40 and 44 to 44, 48 and 50, with shortest-prefill-first scheduling, stream interval 20, 8k prefill chunks, prefill-decode interval 32 at 0.92 of GPU memory (44, 48) and 20 at 0.93 (50). It keeps the 180 GB/rank write-back host tier, 360 GB per server, within the recorded 385 GB share of its 2 GPUs. Both ranks sit on GPUs 0 and 1, whose host memory is on one Grace socket; SGLang binds each rank's host pool to its GPU's NUMA node, and one socket cannot hold two pools above about 200 GB."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5137
