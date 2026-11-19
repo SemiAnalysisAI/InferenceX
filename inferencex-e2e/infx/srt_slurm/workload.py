@@ -102,6 +102,7 @@ INSTALLERS = {
     "tokenspeed-nightly.sh": ("router", "smg"),
     "glm5.3-tilert-rocm.sh": ("router", "tilert-pd-router"),
     "dsv41flash-tilert-nv.sh": ("router", "tilert-pd-router"),
+    "infera-sglang.sh": ("router", "infera-router"),
     "vllm-mooncake.sh": ("kv-offload-backend", "mooncake"),
     "vllm-router.sh": ("router", "vllm-router"),
 }

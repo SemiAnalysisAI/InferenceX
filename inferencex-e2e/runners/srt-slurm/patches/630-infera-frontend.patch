@@ -1,0 +1,522 @@
+diff --git a/src/srtctl/backends/base.py b/src/srtctl/backends/base.py
+index 625c858..9d9d996 100644
+--- a/src/srtctl/backends/base.py
++++ b/src/srtctl/backends/base.py
+@@ -294,6 +294,14 @@ class Backend(ABC):
+         """
+         return {}
+ 
++    def get_kv_events_config_for_mode(self, mode: WorkerMode) -> dict[str, Any] | None:
++        """``roles.<role>.kv_events`` for a worker mode over the engine's defaults; None when it publishes none.
++
++        A worker gets an allocated KV-events port whether or not its role
++        publishes, so this, not ``Process.kv_events_port``, says whether it does.
++        """
++        return None
++
+     def get_mooncake_worker_env(
+         self, infra_node_ip: str, local_hostname: str, mode: WorkerMode | None = None
+     ) -> dict[str, str]:
+diff --git a/src/srtctl/backends/sglang.py b/src/srtctl/backends/sglang.py
+index 4b48b9f..766565b 100644
+--- a/src/srtctl/backends/sglang.py
++++ b/src/srtctl/backends/sglang.py
+@@ -357,8 +357,9 @@ class SGLangBackend(Backend):
+         leader_ip = get_hostname_ip(endpoint_nodes[0], runtime.network_interface)
+ 
+         # Direct frontends run the native server; Dynamo frontends run the registering worker.
++        # A frontend may name a module that wraps the native server (Infera registers it in etcd).
+         use_sglang = frontend.worker_launch == "direct"
+-        python_module = "sglang.launch_server" if use_sglang else "dynamo.sglang"
++        python_module = frontend.worker_module(self.type) or ("sglang.launch_server" if use_sglang else "dynamo.sglang")
+ 
+         # Get served model name from config
+         served_model_name = self.get_served_model_name(runtime.model_path.name)
+@@ -368,11 +369,9 @@ class SGLangBackend(Backend):
+         # Start with nsys prefix if provided
+         cmd: list[str] = list(nsys_prefix) if nsys_prefix else []
+ 
++        cmd.extend(["python3", "-m", python_module, *frontend.worker_launcher_args(self, process, runtime)])
+         cmd.extend(
+             [
+-                "python3",
+-                "-m",
+-                python_module,
+                 "--model-path",
+                 model_arg,
+                 "--served-model-name",
+diff --git a/src/srtctl/cli/mixins/worker_stage.py b/src/srtctl/cli/mixins/worker_stage.py
+index 80c8fb4..a24ab17 100644
+--- a/src/srtctl/cli/mixins/worker_stage.py
++++ b/src/srtctl/cli/mixins/worker_stage.py
+@@ -221,8 +221,9 @@ class WorkerStageMixin:
+         return {self.runtime.visible_devices_env: process.cuda_visible_devices}
+ 
+     def _worker_environment_defaults(self, process: "Process") -> dict[str, str]:
+-        env = {"HEAD_NODE_IP": self.runtime.head_node_ip}
+-        if get_frontend(self.config.frontend.type).worker_launch == "dynamo":
++        frontend = get_frontend(self.config.frontend.type)
++        env = {"HEAD_NODE_IP": self.runtime.head_node_ip, **frontend.worker_environment(process, self.runtime)}
++        if frontend.worker_launch == "dynamo":
+             env.update(discovery_env(self.config, self.runtime))
+             env.update(lifecycle_otel_env(self.config.services, self.runtime.head_node_ip, process.endpoint_mode))
+             env.update(
+diff --git a/src/srtctl/core/schema.py b/src/srtctl/core/schema.py
+index 7b3b50a..45d1ff9 100755
+--- a/src/srtctl/core/schema.py
++++ b/src/srtctl/core/schema.py
+@@ -2640,7 +2640,8 @@ class FrontendConfig:
+     """Frontend/router configuration.
+ 
+     Attributes:
+-        type: Frontend type - "dynamo" (default); "sglang-router" (SGLang Model
++        type: Frontend type - "dynamo" (default) and "infera" (Infera router,
++            SGLang workers register in etcd); "sglang-router" (SGLang Model
+             Gateway), "vllm-router", "smg" (Shepherd Model Gateway, any backend), "llm-d"
+             (llm-d Endpoint Picker behind Envoy, vLLM), "atomesh", and
+             "tilert-router" (static routers); "sglang", "vllm", and
+diff --git a/src/srtctl/frontends/AGENTS.md b/src/srtctl/frontends/AGENTS.md
+index 421d45c..dc4fb00 100644
+--- a/src/srtctl/frontends/AGENTS.md
++++ b/src/srtctl/frontends/AGENTS.md
+@@ -4,11 +4,11 @@ Rules for `src/srtctl/frontends/`. The Design Rules in the root `CLAUDE.md` appl
+ 
+ ## Frontends and readiness
+ 
+-The frontend is the process that owns the public OpenAI port (`FRONTEND_PUBLIC_PORT`) and decides when the job is ready. Implementations live under `src/srtctl/frontends/`, register with `@register_frontend("<type>")`, and are imported from the package `__init__`; `frontend.type` resolves through that registry (`get_frontend`, `list_frontend_types`) and nowhere else. Registered today: `dynamo` (etcd/NATS discovery), `sglang-router`, `vllm-router` and `smg` (static URL routers built on `StaticRouterFrontend`; `smg` pairs with any backend), `llm-d` (the llm-d EPP behind Envoy, on `StaticRouterFrontend`: it writes the workers into an endpoints file instead of a command line, and reaches decode workers through the P/D sidecar service it implies), `trtllm_serve` (direct aggregate or the disaggregated orchestrator), `sglang` and `vllm` (one direct worker owns the port); `none` is the services-only job with no implementation and no gate.
++The frontend is the process that owns the public OpenAI port (`FRONTEND_PUBLIC_PORT`) and decides when the job is ready. Implementations live under `src/srtctl/frontends/`, register with `@register_frontend("<type>")`, and are imported from the package `__init__`; `frontend.type` resolves through that registry (`get_frontend`, `list_frontend_types`) and nowhere else. Registered today: `dynamo` (etcd/NATS discovery), `infera` (etcd discovery of SGLang workers started by Infera's registering launcher), `sglang-router`, `vllm-router` and `smg` (static URL routers built on `StaticRouterFrontend`; `smg` pairs with any backend), `llm-d` (the llm-d EPP behind Envoy, on `StaticRouterFrontend`: it writes the workers into an endpoints file instead of a command line, and reaches decode workers through the P/D sidecar service it implies), `trtllm_serve` (direct aggregate or the disaggregated orchestrator), `sglang` and `vllm` (one direct worker owns the port); `none` is the services-only job with no implementation and no gate.
+ 
+ `Frontend` hooks: `required_backend` and `validate(config)` (recipe rules, run by `SrtConfig._validate_frontend` at load so dry-run catches them; raise `ValueError` with the user-facing message), `health_endpoint` and `parse_health` (readiness), `get_backend_health_urls` (second gate: every advertised worker URL must answer 200 before traffic), `start_frontends` (launch on `topology.frontend_nodes`, one `ManagedProcess` per node with a `step_name`), `get_frontend_args_list` (`frontend.args` to CLI). The schema knows no individual frontend: pairing and per-type rules come from these two members.
+ 
+-Two base classes cover the two ways a frontend learns about its workers. `DynamicFrontend` (`frontends/dynamic_frontend.py`) is for frontends whose workers register themselves over a discovery plane: it fronts any engine, needs no per-worker URL gate, and no worker is the public endpoint; Dynamo is its only implementation. A router binary that can also take static URLs (vLLM Router's ZMQ discovery mode) is a mode of a static router, not a dynamic frontend. `StaticRouterFrontend` (`frontends/static_router.py`) is the base for routers that take worker URLs on the command line. Subclasses set `executable`, `pd_flag`, `process_name` and override only what differs: `worker_scheme` (the backend's `direct_worker_scheme`, normally HTTP/gRPC), `worker_bootstrap_port` (the P/D port advertised next to a prefill URL), `resolve_worker_host`, `get_managed_frontend_args` (arguments derived from the allocated topology and runtime paths; a conflicting user value raises instead of being overwritten), `build_bash_preamble`, `build_router_command`, `start_process` (test seam). `collect_workers` asks `Backend.router_worker_address` for the listener node and port. Its default uses a positive `Process.http_port` on the worker node, including vLLM node-local DP pools; a headless engine can instead advertise an allocated listener on the frontend node. Keep `Process.node` physical and use `runtime.shared_model_arg` for gateway model/tokenizer paths even when workers stage weights locally.
++Two base classes cover the two ways a frontend learns about its workers. `DynamicFrontend` (`frontends/dynamic_frontend.py`) is for frontends whose workers register themselves over a discovery plane: it fronts any engine, needs no per-worker URL gate, and no worker is the public endpoint; Dynamo and Infera implement it. Infera's workers are still `direct` (SGLang's own server): `worker_module` names the registering wrapper the backend starts as `python3 -m <module>`, `worker_launcher_args` its flags, and the backend appends the same engine flags as for any direct worker; per-process variables such as the wrapper's readiness port go through `worker_environment`, which the worker stage merges for every frontend beneath the recipe's environment, never as an `env` prefix in the command. A router binary that can also take static URLs (vLLM Router's ZMQ discovery mode) is a mode of a static router, not a dynamic frontend. `StaticRouterFrontend` (`frontends/static_router.py`) is the base for routers that take worker URLs on the command line. Subclasses set `executable`, `pd_flag`, `process_name` and override only what differs: `worker_scheme` (the backend's `direct_worker_scheme`, normally HTTP/gRPC), `worker_bootstrap_port` (the P/D port advertised next to a prefill URL), `resolve_worker_host`, `get_managed_frontend_args` (arguments derived from the allocated topology and runtime paths; a conflicting user value raises instead of being overwritten), `build_bash_preamble`, `build_router_command`, `start_process` (test seam). `collect_workers` asks `Backend.router_worker_address` for the listener node and port. Its default uses a positive `Process.http_port` on the worker node, including vLLM node-local DP pools; a headless engine can instead advertise an allocated listener on the frontend node. Keep `Process.node` physical and use `runtime.shared_model_arg` for gateway model/tokenizer paths even when workers stage weights locally.
+ 
+ Readiness runs in `BenchmarkStageMixin._wait_for_service_ready`: `wait_for_model` owns timing, abort, and progress logging, and calls the frontend's `probe_ready(host, port, n_prefill, n_decode, config)` once per poll with counts from the frontend's `health_expectations(config, processes)`; then `get_backend_health_urls` are polled with `wait_for_http_endpoints`. A probe raises `requests.RequestException` while the endpoint is down and otherwise returns a `WorkerHealthResult`. `core/health.py` has the three probe shapes to build on: `probe_json_health` (a JSON worker count through `parse_health`), `probe_http_ok` (a bare 200), `probe_direct_server` (`/health` then `/v1/models`). No frontend name appears in `wait_for_model` or `_get_health_expectations`.
+ 
+diff --git a/src/srtctl/frontends/__init__.py b/src/srtctl/frontends/__init__.py
+index 611e15b..cb0639d 100644
+--- a/src/srtctl/frontends/__init__.py
++++ b/src/srtctl/frontends/__init__.py
+@@ -10,6 +10,7 @@ importing it from here is what makes ``frontend.type: <type>`` resolvable.
+ 
+ Supported frontend types:
+ - dynamo: Dynamo frontend with NATS/etcd communication
++- infera: Infera router discovering self-registering SGLang workers through etcd
+ - llm-d: llm-d Endpoint Picker behind Envoy, with the P/D sidecar on decode workers
+ - sglang: Direct sglang.launch_server for a single aggregate worker (no router)
+ - sglang-router: SGLang Model Gateway router in front of static workers
+@@ -30,6 +31,7 @@ from srtctl.frontends.base import (
+ )
+ from srtctl.frontends.dynamic_frontend import DynamicFrontend
+ from srtctl.frontends.dynamo import DynamoFrontend
++from srtctl.frontends.infera import InferaFrontend
+ from srtctl.frontends.llm_d import LLMDFrontend
+ from srtctl.frontends.sglang import SGLangRouterFrontend
+ from srtctl.frontends.sglang_direct import SGLangFrontend
+@@ -45,6 +47,7 @@ __all__ = [
+     "DynamicFrontend",
+     "DynamoFrontend",
+     "Frontend",
++    "InferaFrontend",
+     "LLMDFrontend",
+     "SGLangFrontend",
+     "SGLangRouterFrontend",
+diff --git a/src/srtctl/frontends/base.py b/src/srtctl/frontends/base.py
+index 124a38c..1b2c879 100644
+--- a/src/srtctl/frontends/base.py
++++ b/src/srtctl/frontends/base.py
+@@ -195,6 +195,25 @@ class Frontend(ABC):
+         """
+         return frozenset()
+ 
++    def worker_module(self, backend_type: str) -> str | None:
++        """Python module that starts a worker in place of the engine's server module, or ``None``.
++
++        The module runs the engine's own OpenAI server on the allocated port and
++        registers it with this frontend's discovery plane (Infera's
++        ``infera.engine.sglang``). The backend still builds ``python3 -m <module>``,
++        then ``worker_launcher_args``, then the engine flags it would pass to its
++        own server module, unchanged.
++        """
++        return None
++
++    def worker_launcher_args(self, backend: Any, process: "Process", runtime: "RuntimeContext") -> list[str]:
++        """Arguments of ``worker_module`` for ``process``, ahead of the engine flags; empty without one."""
++        return []
++
++    def worker_environment(self, process: "Process", runtime: "RuntimeContext") -> dict[str, str]:
++        """Per-process environment this frontend's workers need, beneath the recipe's own environment."""
++        return {}
++
+     def kv_events_subscriber(
+         self, process: "Process", runtime: "RuntimeContext", model_name: str
+     ) -> tuple[str, int, str] | None:
+diff --git a/src/srtctl/frontends/dynamic_frontend.py b/src/srtctl/frontends/dynamic_frontend.py
+index 22e749f..d47697c 100644
+--- a/src/srtctl/frontends/dynamic_frontend.py
++++ b/src/srtctl/frontends/dynamic_frontend.py
+@@ -15,10 +15,12 @@ itself the public endpoint.
+ A router binary that can also take static URLs (vLLM Router's ZMQ discovery
+ mode) is a mode of a static router, not a dynamic frontend.
+ 
+-Dynamo is the only implementation today. A subclass sets ``type`` and
++Dynamo and Infera implement it. A subclass sets ``type`` and
+ ``worker_launch``, registers with ``@register_frontend``, parses its own
+ registration count in ``parse_health``, decides which rank serves which port,
+-and launches the process in ``start_frontends``.
++and launches the process in ``start_frontends``. Infera's workers are direct
++(the engine's own server, started by the wrapper module ``worker_module``
++names, which registers it), so it overrides the Dynamo-shaped metrics path.
+ """
+ 
+ from __future__ import annotations
+diff --git a/src/srtctl/frontends/infera.py b/src/srtctl/frontends/infera.py
+new file mode 100644
+index 0000000..c75c1f9
+--- /dev/null
++++ b/src/srtctl/frontends/infera.py
+@@ -0,0 +1,324 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++
++"""Infera's router in front of SGLang workers that register themselves in etcd.
++
++Each worker is ``python3 -m infera.engine.sglang``: it starts SGLang's own
++server (``sglang.launch_server``) on the allocated HTTP port with the flags the
++SGLang backend builds, then registers the worker's URL, role, bootstrap address,
++DP size and KV-events endpoint under an etcd prefix. ``infera-router`` (the
++Rust data plane, started through ``python3 -m infera.server --router-backend
++rust``) watches that prefix and routes over HTTP, reading KV events straight
++from SGLang's ZMQ publishers. The worker is therefore a direct worker (the
++engine's own server); the frontend is dynamic because the router learns its
++workers from etcd.
++"""
++
++from __future__ import annotations
++
++import logging
++import shlex
++import threading
++from typing import TYPE_CHECKING, Any, ClassVar, Literal
++
++from srtctl.core.health import WorkerHealthResult
++from srtctl.core.slurm import get_hostname_ip, start_srun_process
++from srtctl.frontends.base import Frontend, numactl_prefix, register_frontend
++from srtctl.frontends.dynamic_frontend import DynamicFrontend
++from srtctl.frontends.static_router import setup_script_preamble
++from srtctl.ports import ETCD_CLIENT_PORT
++from srtctl.services.config import ServiceConfig
++from srtctl.services.implicit import ETCD_SERVICE_NAME, EffectiveService, infra_placement
++
++if TYPE_CHECKING:
++    from srtctl.backends.base import WorkerMode
++    from srtctl.core.processes import ManagedProcess
++    from srtctl.core.runtime import RuntimeContext
++    from srtctl.core.topology import Process
++
++logger = logging.getLogger(__name__)
++
++# Both sides speak HTTP and ZMQ only, so no NATS service is implied.
++ROUTER_MANAGED_ARGS = frozenset(
++    {
++        "router-backend",
++        "host",
++        "port",
++        "discovery-backend",
++        "etcd-endpoint",
++        "request-transport",
++        "kv-event-transport",
++    }
++)
++_ROLE_BY_DISAGG_MODE = {"prefill": "prefill", "decode": "decode", "mixed": "decode"}
++# Infera's registering launcher for each engine this frontend pairs with. Only SGLang:
++# Infera also wraps vLLM (infera.engine.vllm), but a row for it would also need the vLLM
++# backend to call the worker hooks and this frontend's port answers checked against it.
++WORKER_LAUNCHERS = {"sglang": "infera.engine.sglang"}
++# The launcher's readiness listener port; unset, it binds a fixed default.
++READINESS_PORT_ENV = "INFERA_READINESS_PORT"
++# Unless this is "0", the launcher sets SGLang's KV cache to fp8_e4m3 whenever the
++# command line has no --kv-cache-dtype.
++DEFAULT_KV_FP8_ENV = "INFERA_DEFAULT_KV_FP8"
++# The release setup_script installs (configs/install-infera.sh); the router and the
++# workers must run the same one.
++VERSION_ENV = "INFERA_VERSION"
++# `python3 -m infera.server` routes kv-aware unless frontend.args says otherwise.
++DEFAULT_ROUTER_POLICY = "kv-aware"
++# kv-aware's decode balancing by in-flight input tokens, which needs no KV events; the
++# router reads this env when frontend.args leaves decode-input-demand unset.
++DECODE_INPUT_DEMAND_ENV = "INFERA_DECODE_INPUT_DEMAND"
++
++
++def etcd_endpoint(runtime: RuntimeContext) -> str:
++    """The job's etcd on the infra node; workers and the router must name the same one."""
++    return f"http://{runtime.infra_node_ip}:{ETCD_CLIENT_PORT}"
++
++
++def decode_input_demand(config: Any) -> str:
++    """The router's decode-input-demand mode: frontend.args, else the router's env, else off."""
++    env = {**(config.environment or {}), **(config.frontend.env or {})}
++    return str((config.frontend.args or {}).get("decode-input-demand", env.get(DECODE_INPUT_DEMAND_ENV, "off")))
++
++
++@register_frontend("infera")
++class InferaFrontend(DynamicFrontend):
++    """``infera-router`` discovering ``infera.engine.sglang`` workers through etcd."""
++
++    type: ClassVar[str] = "infera"
++    required_backend: ClassVar[str | None] = "sglang"
++    # The worker is SGLang's own OpenAI server; the launcher only adds registration.
++    worker_launch: ClassVar[Literal["dynamo", "direct"]] = "direct"
++
++    @property
++    def health_endpoint(self) -> str:
++        """The router lists every registered worker with its role and status here."""
++        return "/v1/workers"
++
++    def validate(self, config: Any) -> None:
++        clashes = sorted(ROUTER_MANAGED_ARGS & set(config.frontend.args or {}))
++        if clashes:
++            raise ValueError(
++                f"frontend.args {clashes} are set by srtctl for frontend.type: infera "
++                "(etcd discovery, HTTP requests, ZMQ KV events); remove them"
++            )
++        for service in config.services or ():
++            if service.name == ETCD_SERVICE_NAME and service.enabled and service.external:
++                raise ValueError(
++                    "frontend.type: infera registers workers in the job's own etcd; "
++                    "an external etcd service is not supported"
++                )
++        for role, backend in config.active_role_backends():
++            if backend.is_grpc_mode(role):
++                raise ValueError(f"frontend.type: infera routes HTTP workers; roles.{role} serves gRPC")
++        policy = (config.frontend.args or {}).get("router-policy", DEFAULT_ROUTER_POLICY)
++        publishing = [
++            role for role, backend in config.active_role_backends() if backend.get_kv_events_config_for_mode(role)
++        ]
++        if policy == "kv-aware" and not publishing:
++            if decode_input_demand(config) in ("on", "shadow"):
++                logger.warning(
++                    "frontend.type: infera: no role publishes KV events, so kv-aware picks prefill workers "
++                    "on load (and session affinity) alone; decode-input-demand still balances decode"
++                )
++            else:
++                raise ValueError(
++                    "frontend.type: infera routes kv-aware (infera.server's default router-policy) on KV events, "
++                    "but no role publishes them, so the router would route on load alone; set kv_events: true "
++                    "on the prefill (or agg) role, set frontend.args.router-policy, or turn on "
++                    "decode-input-demand if kv-aware is there for decode balancing"
++                )
++        versions = {
++            source: env[VERSION_ENV]
++            for source, env in (
++                ("environment", config.environment),
++                ("frontend.env", config.frontend.env),
++                *((f"roles.{name}.env", role.env) for name, role in (config.roles or {}).items()),
++            )
++            if env and VERSION_ENV in env
++        }
++        if len(set(versions.values())) > 1:
++            raise ValueError(
++                f"the Infera router and workers must run one release, but {VERSION_ENV} differs: "
++                + ", ".join(f"{source}={version}" for source, version in versions.items())
++            )
++
++    def worker_metrics_path(self, backend: Any, mode: WorkerMode) -> str | None:
++        """Workers are SGLang's own servers, so metrics are the engine's, not a runtime's."""
++        return Frontend.worker_metrics_path(self, backend, mode)
++
++    def worker_metrics_port(self, process: Process, runtime: RuntimeContext) -> int | None:
++        """The leader rank's SGLang HTTP server carries /metrics; followers serve nothing."""
++        if process.is_leader and process.http_port > 0:
++            return process.http_port
++        return None
++
++    def worker_endpoint_port(self, process: Process, config: Any, runtime: RuntimeContext) -> int | None:
++        if process.is_leader and process.http_port > 0:
++            return process.http_port
++        return None
++
++    def profiling_control_port(self, process: Process, config: Any, runtime: RuntimeContext) -> int | None:
++        return process.http_port if process.http_port > 0 else None
++
++    def worker_ready_port(self, process: Process) -> int:
++        return process.http_port
++
++    def implied_services(self, config: Any) -> list[EffectiveService]:
++        """etcd for worker registration; requests and KV events do not ride on NATS."""
++        return [
++            EffectiveService(
++                ServiceConfig(name=ETCD_SERVICE_NAME, type="etcd", placement=infra_placement(config)),
++                implicit=True,
++                reason="frontend.type infera",
++            )
++        ]
++
++    def worker_module(self, backend_type: str) -> str:
++        """Infera's launcher, which starts the engine's own server and registers it in etcd."""
++        try:
++            return WORKER_LAUNCHERS[backend_type]
++        except KeyError:
++            raise ValueError(f"frontend.type: infera has no worker launcher for engine {backend_type!r}") from None
++
++    def worker_launcher_args(self, backend: Any, process: Process, runtime: RuntimeContext) -> list[str]:
++        """Registration in the job's etcd over HTTP and ZMQ.
++
++        Every listener the launcher opens is the allocator's. A role that publishes
++        KV events gets ``--kv-events-config`` with its allocated port from the
++        backend, and the launcher advertises that endpoint. Infera's own KV probe
++        plane, which the router does not read, stays off.
++        """
++        args = [
++            "--discovery-backend",
++            "etcd",
++            "--etcd-endpoint",
++            etcd_endpoint(runtime),
++            "--advertise-host",
++            get_hostname_ip(process.node, runtime.network_interface),
++            "--request-transport",
++            "http",
++            "--kv-event-transport",
++            "zmq",
++            "--kv-events",
++            "off",
++        ]
++        # Without --kv-events-config the launcher publishes anyway, on a port it picks itself.
++        if backend.get_kv_events_config_for_mode(process.endpoint_mode) is None:
++            args.append("--no-enable-kv-events")
++        return args
++
++    def worker_environment(self, process: Process, runtime: RuntimeContext) -> dict[str, str]:
++        """The launcher's readiness port, and its fp8 KV-cache default turned off.
++
++        The readiness listener the launcher opens once registered is the process's
++        system port: srtctl reads readiness from the router, and the system port is
++        otherwise unused without Dynamo, so co-located workers do not contend for
++        Infera's default. With the fp8 default off, the KV-cache dtype is the recipe's
++        (``kv-cache-dtype`` in the role's args), as under any other frontend.
++        """
++        return {READINESS_PORT_ENV: str(process.sys_port), DEFAULT_KV_FP8_ENV: "0"}
++
++    def parse_health(self, response_json: dict, expected_prefill: int, expected_decode: int) -> WorkerHealthResult:
++        """Count active registrations by role; an aggregate (``mixed``) worker counts as decode.
++
++        An entry without ``status`` or ``disagg_mode`` does not count, so a schema
++        change in the router fails readiness instead of passing it.
++        """
++        counts = {"prefill": 0, "decode": 0}
++        for worker in response_json.get("workers") or []:
++            role = _ROLE_BY_DISAGG_MODE.get(str(worker.get("disagg_mode")))
++            if role is not None and worker.get("status") == "active":
++                counts[role] += 1
++        ready = counts["prefill"] >= expected_prefill and counts["decode"] >= expected_decode
++        return WorkerHealthResult(
++            ready=ready,
++            message=(
++                f"infera-router: {counts['prefill']}/{expected_prefill} prefill, "
++                f"{counts['decode']}/{expected_decode} decode registered"
++            ),
++            prefill_ready=counts["prefill"],
++            prefill_expected=expected_prefill,
++            decode_ready=counts["decode"],
++            decode_expected=expected_decode,
++        )
++
++    def build_router_command(self, port: int, runtime: RuntimeContext, config: Any) -> list[str]:
++        """Infera's launcher execs the Rust data plane after resolving a Hugging Face id to a local tokenizer.
++
++        kv-aware routing hashes prompts with the served model's tokenizer, so it
++        defaults to the checkpoint the workers load.
++        """
++        args = dict(config.frontend.args or {})
++        args.setdefault("router-tokenizer-path", runtime.worker_model_arg)
++        return [
++            "python3",
++            "-m",
++            "infera.server",
++            "--router-backend",
++            "rust",
++            "--host",
++            "0.0.0.0",
++            "--port",
++            str(port),
++            "--discovery-backend",
++            "etcd",
++            "--etcd-endpoint",
++            etcd_endpoint(runtime),
++            "--request-transport",
++            "http",
++            "--kv-event-transport",
++            "zmq",
++            *self.get_frontend_args_list(args),
++        ]
++
++    def start_process(self, **kwargs: Any) -> Any:
++        """Launch one router process; split out for tests."""
++        return start_srun_process(**kwargs)
++
++    def start_frontends(
++        self,
++        topology: Any,
++        runtime: RuntimeContext,
++        config: Any,
++        backend: Any,
++        backend_processes: list[Process],
++        stop_event: threading.Event | None = None,  # unused: returns immediately
++    ) -> list[ManagedProcess]:
++        from srtctl.core.processes import FRONTEND_TERMINATE_TIMEOUT_SECONDS, ManagedProcess
++
++        processes: list[ManagedProcess] = []
++        for idx, node in enumerate(topology.frontend_nodes):
++            log_file = runtime.log_dir / f"{node}_infera_router_{idx}.out"
++            cmd = numactl_prefix(config) + self.build_router_command(topology.frontend_port, runtime, config)
++            logger.info("Starting infera router %d on %s: %s", idx, node, shlex.join(cmd))
++
++            env = dict(runtime.environment)
++            env.update(config.frontend.env or {})
++            step_name = f"infera_router_{idx}"
++            proc = self.start_process(
++                command=cmd,
++                nodelist=[node],
++                output=str(log_file),
++                container_image=config.frontend.container_image or str(runtime.container_image),
++                reuse_container=runtime.reuse_container,
++                container_prepare_timeout_seconds=runtime.container_prepare_timeout_seconds,
++                container_mounts=runtime.container_mounts,
++                env_to_set=env or None,
++                bash_preamble=setup_script_preamble(config),
++                het_group=runtime.nodes.het_group_for(node),
++                step_name=step_name,
++                srun_options=runtime.srun_options,
++            )
++            processes.append(
++                ManagedProcess(
++                    name=step_name,
++                    popen=proc,
++                    log_file=log_file,
++                    node=node,
++                    critical=True,
++                    terminate_timeout=FRONTEND_TERMINATE_TIMEOUT_SECONDS,
++                    step_name=step_name,
++                )
++            )
++        return processes
+diff --git a/src/srtctl/mock.py b/src/srtctl/mock.py
+index 1458b28..0b8e9eb 100644
+--- a/src/srtctl/mock.py
++++ b/src/srtctl/mock.py
+@@ -295,6 +295,7 @@ def mock_infrastructure(*, options: MockOptions, output_dir: Path):
+         ("srtctl.cli.mixins.postprocess_stage.get_batch_host", _fake_batch_host),
+         ("srtctl.cli.mixins.postprocess_stage.shrink_job_allocation", _fake_shrink),
+         ("srtctl.frontends.dynamo.start_srun_process", _fake_srun),
++        ("srtctl.frontends.infera.start_srun_process", _fake_srun),
+         ("srtctl.frontends.sglang.start_srun_process", _fake_srun),
+         ("srtctl.frontends.static_router.start_srun_process", _fake_srun),
+         ("srtctl.frontends.trtllm_serve.start_srun_process", _fake_srun),
+@@ -307,6 +308,7 @@ def mock_infrastructure(*, options: MockOptions, output_dir: Path):
+         ("srtctl.cli.mixins.frontend_stage.get_hostname_ip", _fake_hostname_ip),
+         ("srtctl.cli.mixins.benchmark_stage.get_hostname_ip", _fake_hostname_ip),
+         ("srtctl.cli.mixins.service_stage.get_hostname_ip", _fake_hostname_ip),
++        ("srtctl.frontends.infera.get_hostname_ip", _fake_hostname_ip),
+         ("srtctl.frontends.sglang.get_hostname_ip", _fake_hostname_ip),
+         ("srtctl.frontends.static_router.get_hostname_ip", _fake_hostname_ip),
+         ("srtctl.frontends.trtllm_serve.get_hostname_ip", _fake_hostname_ip),
