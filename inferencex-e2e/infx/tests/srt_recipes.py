@@ -75,7 +75,10 @@ def fixed_seq_entry(recipe: str, concurrencies: list[int]) -> dict:
     }  # fmt: skip
 
 
-def video_entry(recipe: str = "video.yaml") -> dict:
+VIDEO_RECIPE = "video/agg-tp2.yaml"
+
+
+def video_entry(recipe: str = VIDEO_RECIPE) -> dict:
     """A master entry with one 2-GPU video point of ``VIDEO_SPEC``'s set served by ``recipe``."""
     return {
         "image": "example/video:1", "model": VIDEO_MODEL, "model-prefix": "h3",
