@@ -64,4 +64,4 @@ for op in all_gather all_reduce reduce_scatter alltoall; do   # nccom-test's nam
     run "${op}_hbm" $op -b $MIN -e 4GB -f 2
   fi
 done
-echo "$PL lnc=$LNC cores=$NEURON_RT_VISIBLE_CORES ranks=$R group=$G flags=${CC_FLAGS:-}" > "$OUT/placement.txt"
+echo "$PL lnc=$LNC cores=$NEURON_RT_VISIBLE_CORES ranks=$R group=$G flags=$(echo ${CC_FLAGS:-} | tr ' ' ,)" > "$OUT/placement.txt"
