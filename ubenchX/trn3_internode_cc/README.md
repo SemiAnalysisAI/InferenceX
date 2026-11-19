@@ -21,10 +21,11 @@ multi-node workloads`) and has no SBUF alltoall.
   at setup (`RING selected but NCCL built 0 channels`), and whole-node collectives above 16 MiB are refused.
 - The `trn3-ubench` image on every node (`docker build -t trn3-ubench ubenchX/trn3_docker`), and the
   launching user in the `docker` group with passwordless SSH from node 0 to every node over the private IPs.
-- `TRN3_HOSTS`: the four private IPs in UltraServer order. EC2 does not report the order. Find it by running
-  a 16 MiB `all_reduce` on node pairs: a same-rack pair reaches about 147 GB/s busbw with no EFA traffic, the
-  cable pair about 75 GB/s with the `kangaring` algorithm and no EFA traffic, and the other pairs about 14 GB/s
-  over EFA (`/sys/class/infiniband/*/ports/1/hw_counters/tx_bytes`).
+- `TRN3_HOSTS`: the four private IPs in UltraServer-index order, as `neuron-ls` prints `ultraserver-instance-index`
+  on each node. The Neuron driver puts indices 0 and 1 in one rack and 3 and 2 in the other, with a NeuronLink
+  cable between the same slot of each rack (0-3, 1-2); see `trn3_core_membw`. EC2 does not report the rack
+  split. Bandwidth at one size does not show it either: at 16 MiB the cable pair is faster than the same-rack
+  pair, and only from about 256 MiB is the same-rack pair ahead.
 
 ## Run
 

@@ -4,8 +4,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 source "$HERE/../../inferencex-e2e/benchmarks/check_env.sh"
 check_env_vars TRN3_HOSTS OUT_DIR TOPOS OPS BUF LNC ITERS WARMUP MAXBYTES TIMEOUT_S
 
-# Node indices are UltraServer order: 0,1 share a rack, 3 is node 0's slot in the other rack (cable), 2 is reachable
-# from node 0 only over EFA. Measured: busbw and EFA tx bytes of 16 MiB all_reduce per pair.
+# Node indices are UltraServer indices (neuron-ls ultraserver-instance-index). The Neuron driver puts 0,1 in one rack
+# and 3,2 in the other: 3 is node 0's slot in the other rack (cable), 2 is reachable from node 0 only over EFA.
 declare -A NODESET=([1n]="0" [2n_rack]="0 1" [2n_cable]="0 3" [2n_efa]="0 2" [4n]="0 1 2 3")
 read -r -a ALL <<< "$TRN3_HOSTS"
 [ ${#ALL[@]} = 4 ] || { echo "TRN3_HOSTS must list the 4 nodes in UltraServer order" >&2; exit 1; }
