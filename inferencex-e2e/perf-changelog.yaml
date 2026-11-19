@@ -12929,4 +12929,5 @@
     - "Add TP4 specialized decode (additional-config decode_backend latency_specialized) at concurrency 1, 4, 8 and 12, and at 16 with a 640 GB SimpleCPUOffloadConnector CPU KV tier: fp8 KV and index-K caches, DSpark K7 with the FLASHINFER_TS drafter, max-num-seqs 8 and FULL decode graphs for 8 to 64 rows. These replace stock concurrency 1 and 4; stock 8, 12, 16, 32 and 40 stay."
     - "Every aggregated point sets stream-interval 20 and prefill-schedule-interval 24, as on GB300."
     - "Dynamo builds from tag v1.6.0-minimax-m3.1-flash-dev.1 (92b661bd), since the 1.6.0.dev20261023 wheel fails to import on vLLM main (ai-dynamo/dynamo#18841); CUDARC_CUDA_VERSION=13030 lets the build accept CUDA 13.5."
+    - "Run the vLLM engines natively behind Dynamo sidecars (gRPC, TCP request plane, ZMQ events, no NATS), as on GB300."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5076
