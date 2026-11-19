@@ -30,6 +30,8 @@ base:
         data-parallel-size: 1
         attention-backend: aiter
         enable-aiter-allreduce-fusion: true
+        page-size: 16
+        kv-cache-dtype: fp8_e4m3
         mamba-ssm-dtype: bfloat16
         tokenizer-worker-num: 6
         max-prefill-tokens: 32768
@@ -46,6 +48,7 @@ base:
       env:
         PYTHONNOUSERSITE: '1'
         SGLANG_ENABLE_SPEC_V2: '1'
+        SGLANG_USE_AITER_UNIFIED_ATTN: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
   benchmark:
     env:
@@ -58,7 +61,7 @@ override_tp8_ep1_c4:
     agg:
       args:
         expert-parallel-size: 1
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         max-running-requests: 8
   benchmark:
     env:
@@ -69,7 +72,7 @@ override_tp8_ep1_c16:
     agg:
       args:
         expert-parallel-size: 1
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         max-running-requests: 32
   benchmark:
     env:
@@ -80,7 +83,7 @@ override_tp8_ep1_c20:
     agg:
       args:
         expert-parallel-size: 1
-        cuda-graph-max-bs: 20
+        cuda-graph-max-bs-decode: 20
         max-running-requests: 40
   benchmark:
     env:
@@ -91,7 +94,7 @@ override_tp8_ep1_c24:
     agg:
       args:
         expert-parallel-size: 1
-        cuda-graph-max-bs: 24
+        cuda-graph-max-bs-decode: 24
         max-running-requests: 48
   benchmark:
     env:
@@ -102,7 +105,7 @@ override_tp8_ep1_c32:
     agg:
       args:
         expert-parallel-size: 1
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         max-running-requests: 64
   benchmark:
     env:
@@ -113,7 +116,7 @@ override_tp8_ep8_c4:
     agg:
       args:
         expert-parallel-size: 8
-        cuda-graph-max-bs: 4
+        cuda-graph-max-bs-decode: 4
         max-running-requests: 8
   benchmark:
     env:
@@ -124,7 +127,7 @@ override_tp8_ep8_c16:
     agg:
       args:
         expert-parallel-size: 8
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 16
         max-running-requests: 32
   benchmark:
     env:
@@ -135,7 +138,7 @@ override_tp8_ep8_c20:
     agg:
       args:
         expert-parallel-size: 8
-        cuda-graph-max-bs: 20
+        cuda-graph-max-bs-decode: 20
         max-running-requests: 40
   benchmark:
     env:
@@ -146,7 +149,7 @@ override_tp8_ep8_c24:
     agg:
       args:
         expert-parallel-size: 8
-        cuda-graph-max-bs: 24
+        cuda-graph-max-bs-decode: 24
         max-running-requests: 48
   benchmark:
     env:
@@ -157,7 +160,7 @@ override_tp8_ep8_c32:
     agg:
       args:
         expert-parallel-size: 8
-        cuda-graph-max-bs: 32
+        cuda-graph-max-bs-decode: 32
         max-running-requests: 64
   benchmark:
     env:

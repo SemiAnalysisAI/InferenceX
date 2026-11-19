@@ -9,6 +9,7 @@ import yaml
 from infx.klaud.models import Feed
 from infx.matrix.validation import VIDEO_SPEC_DIR
 from infx.tests.srt_recipes import (
+    VIDEO_RECIPE,
     VIDEO_SPEC,
     fixed_seq_entry,
     single_node_fragment,
@@ -374,9 +375,9 @@ def test_matrix_at_generates_llm_points_only_and_runs_no_revision_code(tmp_path,
         yaml.safe_dump({"llm": fixed_seq_entry("stable.yaml", [2]), "video": video_entry()})
     )
     (project / "configs/amd-master.yaml").write_text("{}\n")
-    recipes.mkdir(parents=True)
+    (recipes / "video").mkdir(parents=True)
     (recipes / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
-    (recipes / "video.yaml").write_text(yaml.safe_dump(video_fragment()))
+    (recipes / VIDEO_RECIPE).write_text(yaml.safe_dump(video_fragment()))
     # git archive rejects a DATA_PATHS entry that the tree lacks.
     (project / "benchmarks/multi_node/srt-slurm-recipes").mkdir(parents=True)
     (project / "benchmarks/multi_node/srt-slurm-recipes/.keep").touch()
