@@ -135,6 +135,25 @@ override_tp4_c14_hicache:
       CONC: '14'
       KV_OFFLOADING: dram
 
+# The dense c16 point. The matrix runs c16 on the DCP4 variant below, so this
+# one is selected only when that row moves back to dcp-size 1.
+override_tp4_c16_hicache:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        enable-hierarchical-cache: true
+        hicache-size: 180
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+
 # DCP4 stripes the latent KV across the TP4 ranks; sgl-project/sglang#45205
 # lets the host tier sit under it. 256 GB a rank matches the ATOM ladder and
 # leaves the DSA indexer its host allocation, with two groups still on a node.
