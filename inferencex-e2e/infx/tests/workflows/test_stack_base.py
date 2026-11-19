@@ -137,8 +137,8 @@ def test_parent_behind_base_is_rejected(repo: Repo, monkeypatch) -> None:
     repo.entries = repo.entries[:-1]
     repo.commit(entry("other", 9))
     repo.git("checkout", "-q", "-b", "child")
-    repo.git("merge", "-q", "-X", "theirs", "--no-edit", "parent")
-    head = repo.git("rev-parse", "HEAD")
+    repo.git("merge", "-q", "-s", "ours", "--no-edit", "parent")
+    head = repo.commit(entry("agg", PARENT), entry("agg", CHILD, append_only=True))
     fake_parent(monkeypatch, parent)
 
     with pytest.raises(StackError, match="behind"):
