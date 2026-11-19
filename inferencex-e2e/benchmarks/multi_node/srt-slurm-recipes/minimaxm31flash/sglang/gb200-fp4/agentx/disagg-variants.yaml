@@ -812,6 +812,26 @@ override_2p_dep8_dep16_linker_d1115:
       args: *linker-prefill-args
     decode: *linker-dep16-decode-d1115
 
+override_1p_dep8_dep16_linker_d1115_layerwise:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-1p-dep8-dep16-linker-d1115-layerwise
+  # The 1P d1115 point with layer-wise linker loads instead of prefetch, so a
+  # hit takes device KV only when its request is scheduled. Nothing else changes.
+  identity:
+    frameworks:
+      dynamo: "1.7.0.dev20261115"
+      sglang: "0.0.0.dev1+g209741ec5"
+  services: *linker-services-infra150
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env: *linker-env-d1115
+      args:
+        <<: *linker-prefill-args
+        unified-cache-external-linker-config: '{"load_mode":"layer_wise","enable_group_semantics":false}'
+    decode: *linker-dep16-decode-d1115
+
 override_3p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
   roles:
