@@ -51,6 +51,19 @@ binding.
   row uses its ROCm MI35x build, and the MI355X vLLM-Omni row the public
   `vllm/vllm-omni-rocm` amd64 image.
 
+Name the recipe `<model-prefix>/<engine>/<gpu>-<precision>/video/agg-<layout>.yaml`, which
+extends the [recipe naming convention](../inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#directory-and-filename-convention).
+Matrix generation rejects any other video `srt-recipe`.
+
+- `<layout>` lists each parallel degree above 1 in the order
+  `tp pp ep dp pcp cfg ulysses ring`, for example `agg-cfg2-ulysses4.yaml`. vLLM-Omni's
+  `--usp` is `ulysses`. A recipe whose degrees are all 1 is `agg-tp1.yaml`.
+- A degree set to `{gpus_per_node}` has no number: one recipe that serves 1, 2, 4 and 8
+  GPUs with Ulysses is `agg-ulysses.yaml`. Leave out settings that equal the GPU count,
+  such as VAE patch parallelism and text-encoder TP.
+- Set the recipe `name` to `<model-prefix>-<engine>-<file stem>`, for example
+  `wan22-vllm-omni-agg-cfg2`.
+
 A shared image does not qualify a different topology or SKU. Each selected
 deployment qualifies through its own sweep. Maintainers stage model snapshots in the
 runner's existing Hugging Face cache. Do not patch the cache or pass launch flags
