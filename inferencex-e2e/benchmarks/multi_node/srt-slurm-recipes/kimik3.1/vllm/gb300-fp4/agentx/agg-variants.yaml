@@ -6,14 +6,14 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: "0.23.1rc1.dev7347+gc92eaa62c"
-      dynamo: "3dd0744eb72c707d76d4c520ae4dea9e286a4ab6"
+      vllm: "0.1.dev25356+gdbbc9e310"
+      dynamo: "229be5cff1156859b0e3e43b598ee800b2f81ccc"
 
-  # ai-dynamo/dynamo#18124 head: the first Dynamo that registers the kimi_k31 model type.
+  # Dynamo v1.7.0-kimi-k3.1-pro-dev.1, which registers the kimi_k31 model type.
   dynamo:
     install: true
     source:
-      rev: "3dd0744eb72c707d76d4c520ae4dea9e286a4ab6"
+      rev: "229be5cff1156859b0e3e43b598ee800b2f81ccc"
 
   # The DSpark draft is read from the shared Hub cache.
   environment:
@@ -63,7 +63,6 @@ base:
     enable_multiple_frontends: false
     args:
       router-mode: "least-loaded"
-      router-session-affinity-ttl-secs: 1
     env:
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
       DYN_TOKENIZER_CACHE_BYTES: "8589934592"
