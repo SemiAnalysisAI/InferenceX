@@ -284,3 +284,99 @@ override_tp2_c64:
   benchmark:
     env:
       CONC: '64'
+
+override_dp2_umbp_c256:
+  # Each srtctl step has its own mount namespace; a node-local host directory is
+  # the one place the UMBP server and the engine workers both see its sockets.
+  container_mounts: &umbp_host_dir
+    /dev/shm: /umbp-host
+  frontend: &dp2_router
+    type: vllm-router
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+  setup_script: vllm-router.sh
+  services: &umbp_server
+  - name: umbp-server
+    type: generic
+    start: before_workers
+    critical: true
+    preamble: mkdir -p /umbp-host/umbp
+    # The server binary ships inside the MORI package and loads its libraries from there.
+    command:
+    - bash
+    - -c
+    - P=$(python3 -c 'import mori, os; print(os.path.dirname(mori.__file__))') && LD_LIBRARY_PATH=$P:$LD_LIBRARY_PATH exec $P/umbp_standalone_server unix:///umbp-host/umbp/standalone.grpc.sock
+    env:
+      UMBP_STANDALONE_ADDRESS: unix:///umbp-host/umbp/standalone.grpc.sock
+      # TOTAL_CPU_DRAM_GB in bytes.
+      UMBP_DRAM_CAPACITY: '449000000000'
+      # The mi355x-amds host setup releases hugepages, so the pool uses 4 KiB pages.
+      UMBP_DRAM_USE_HUGEPAGES: '0'
+      UMBP_SSD_ENABLED: '0'
+      # The readiness line below is logged at INFO; the default level is WARN.
+      MORI_UMBP_LOG_LEVEL: INFO
+    readiness:
+      log:
+        pattern: '\[StandaloneServer\] listening'
+      # Faulting in a ~450 GB pool on 4 KiB pages takes several minutes.
+      timeout_seconds: 1800
+  roles:
+    agg: &dp2_umbp_agg
+      gpus: 2
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+        # The DP2 points were tuned without mono decode.
+        monokernel: null
+        prefill-schedule-interval: 11
+        # Per-tensor fp8 KV rows (vllm-project/vllm#66036) instead of the block-scaled
+        # fp8_ds_mla record; the DSpark draft layers share the same cache dtype.
+        kv-cache-dtype: fp8_e4m3
+        kv-transfer-config: '{"kv_connector":"UMBPStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"mode":"standalone","endpoint":"unix:///umbp-host/umbp/standalone.grpc.sock"}}'
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '449'
+
+override_dp2_umbp_c384:
+  container_mounts: *umbp_host_dir
+  frontend: *dp2_router
+  setup_script: vllm-router.sh
+  services: *umbp_server
+  roles:
+    agg: *dp2_umbp_agg
+  benchmark:
+    env:
+      CONC: '384'
+      KV_OFFLOADING: 'dram'
+      TOTAL_CPU_DRAM_GB: '449'
+
+override_dp2_c128:
+  frontend: *dp2_router
+  setup_script: vllm-router.sh
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 1
+        data-parallel-size: 2
+        engram-config: '{"cpu_offload":true}'
+        max-cudagraph-capture-size: 1024
+        max-num-batched-tokens: 16384
+        # The DP2 points were tuned without mono decode.
+        monokernel: null
+        prefill-schedule-interval: 11
+        # Per-tensor fp8 KV rows (vllm-project/vllm#66036) instead of the block-scaled
+        # fp8_ds_mla record; the DSpark draft layers share the same cache dtype.
+        kv-cache-dtype: fp8_e4m3
+  benchmark:
+    env:
+      CONC: '128'

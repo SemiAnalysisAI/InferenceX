@@ -1,6 +1,9 @@
 """Launch-path, model, cache and time-limit policy for srt-slurm lanes."""
 
+import subprocess
+
 import pytest
+from huggingface_hub.utils import filter_repo_objects
 
 from infx.clusters import Cluster, load_inventory
 from infx.clusters.slurm import SrtSlurmSettings
@@ -165,6 +168,26 @@ def test_minimax_shared_cache_keeps_m31_but_excludes_retired_m3(tmp_path, model,
     c.bind_id("mi355x-amds")
     assert single_node_hf_cache(c, request(MODEL=model, IS_AGENTIC="1")) == tmp_path / directory
 
+
+
+def test_video_models_download_only_where_the_login_node_fills_the_cache(tmp_path, monkeypatch):
+    calls: list[list] = []
+    monkeypatch.setattr(
+        models.proc, "run", lambda argv, env: calls.append(argv) or subprocess.CompletedProcess(argv, 0)
+    )
+    c = cluster(tmp_path)
+    models.download_video_model(c, {}, tmp_path, "MiniMaxAI/MiniMax-H3", "a" * 40)
+    assert calls == []
+
+    c.bind_id("a100-cw")
+    models.download_video_model(c, {}, tmp_path, "MiniMaxAI/MiniMax-H3", "a" * 40)
+    [argv] = calls
+    files = ["Ref2VA/model_index.json", "Ref2VA/transformer/w.safetensors", "FL2VA/w.safetensors"]
+    excluded = argv[argv.index("--exclude") + 1]
+    assert list(filter_repo_objects(files, ignore_patterns=[excluded])) == [
+        "Ref2VA/model_index.json",
+        "FL2VA/w.safetensors",
+    ]
 
 BUMP = TimeBump(Match(agentic=True), min_conc=64, minutes=1440)
 LANE = SrtLane(time_limit="4:00:00", long_time_limit="8:00:00", long_time=Match(any_of("dsv4"), agentic=True))
