@@ -7,7 +7,7 @@ base:
     container: {}
     frameworks:
       dynamo: "1.7.0.dev20261110"
-      tensorrt_llm: "1.4.0rc4.dev202611160007"
+      tensorrt_llm: "1.4.0rc5.dev202611190007"
   dynamo:
     install: true
     source:
