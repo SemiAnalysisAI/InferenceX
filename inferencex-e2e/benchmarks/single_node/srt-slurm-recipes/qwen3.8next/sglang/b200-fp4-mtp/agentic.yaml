@@ -44,6 +44,7 @@ base:
         NCCL_NVLS_ENABLE: '1'
         SGL_ENABLE_JIT_DEEPGEMM: 'false'
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
         # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
   benchmark:
@@ -51,49 +52,98 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
 
 # One variant per point. NEXTN resets an unset admission cap to 48, so it is
-# explicit: 2x CONC, with the graph batch equal to it. C16 needs a larger
-# static fraction and a bounded Mamba cache.
-override_c1:
-  roles:
-    agg:
-      args:
-        max-running-requests: 2
-        cuda-graph-max-bs: 2
-        mem-fraction-static: 0.8
-  benchmark:
-    env:
-      CONC: '1'
-
-override_c4:
-  roles:
-    agg:
-      args:
-        max-running-requests: 8
-        cuda-graph-max-bs: 8
-        mem-fraction-static: 0.8
-  benchmark:
-    env:
-      CONC: '4'
-
+# explicit at every point.
 override_c8:
   roles:
     agg:
       args:
         max-running-requests: 16
-        cuda-graph-max-bs: 16
+        cuda-graph-max-bs-decode: 32
         mem-fraction-static: 0.8
   benchmark:
     env:
       CONC: '8'
 
-override_c16:
+override_tp2_c8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        mem-fraction-static: 0.8
+  benchmark:
+    env:
+      CONC: '8'
+
+override_dram_c16:
   roles:
     agg:
       args:
         max-running-requests: 32
-        cuda-graph-max-bs: 32
-        mem-fraction-static: 0.9
-        max-mamba-cache-size: 160
+        cuda-graph-max-bs-decode: 32
+        cuda-graph-backend-prefill: disabled
+        mem-fraction-static: 0.85
+        kv-cache-dtype: fp8_e4m3
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        max-mamba-cache-size: 320
+        speculative-num-steps: 2
+        speculative-num-draft-tokens: 3
+        enable-hierarchical-cache: true
+        hicache-size: 200
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_back
   benchmark:
     env:
       CONC: '16'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '214'
+
+override_dram_c24:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        cuda-graph-backend-prefill: disabled
+        mem-fraction-static: 0.85
+        kv-cache-dtype: fp8_e4m3
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        max-mamba-cache-size: 320
+        speculative-num-steps: 2
+        speculative-num-draft-tokens: 3
+        prefill-decode-interval: 16
+        enable-hierarchical-cache: true
+        hicache-size: 200
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '214'
+
+override_dram_c32:
+  roles:
+    agg:
+      args:
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        cuda-graph-backend-prefill: disabled
+        mem-fraction-static: 0.85
+        kv-cache-dtype: fp8_e4m3
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        max-mamba-cache-size: 320
+        enable-hierarchical-cache: true
+        hicache-size: 200
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_back
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '214'

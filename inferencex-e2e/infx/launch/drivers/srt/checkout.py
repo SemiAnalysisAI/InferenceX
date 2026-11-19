@@ -24,6 +24,7 @@ SUBMODULE = Path("utils/srt-slurm")
 # The cpu-power-exporter release asset ``make setup`` installs for a job that scrapes Grace CPU
 # power; it ships with the srt-slurm release the submodule pins, so bump both together.
 CPU_POWER_EXPORTER_RELEASE = "v2.66.1"
+TACHOMETER_RELEASE = "v2.66.1"
 PATCHES = Path("runners/srt-slurm/patches")
 SETUP_LOG = "srt-setup.log"
 SETUP_ATTEMPTS = 5
@@ -208,7 +209,12 @@ def run_setup(run: SrtRun, checkout: Checkout, *, cpu_power_exporter: bool = Fal
     event.evidence(log)
     for attempt in range(1, SETUP_ATTEMPTS + 1):
         print(f"Setting up srt-slurm, attempt {attempt} (details: {SETUP_LOG})", flush=True)
-        argv = ["make", "setup", f"ARCH={run.cluster.arch}"]
+        argv = [
+            "make",
+            "setup",
+            f"ARCH={run.cluster.arch}",
+            f"TACHOMETER_RELEASE={TACHOMETER_RELEASE}",
+        ]
         if cpu_power_exporter:
             argv.append(f"CPU_POWER_EXPORTER_RELEASE={CPU_POWER_EXPORTER_RELEASE}")
         rc = _run_logged(argv, log, env=run.env, cwd=checkout.root)

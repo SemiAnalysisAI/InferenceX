@@ -17,7 +17,7 @@ from typing import Any
 
 from infx import github
 
-APP_REPOSITORY = "SemiAnalysisAI/InferenceX-app"
+APP_REPOSITORY = os.environ.get("APP_REPO") or "SemiAnalysisAI/InferenceX-app"
 MERGE_WORKFLOW = ".github/workflows/merge-ingest.yml"
 BOT_LOGIN = "github-actions[bot]"
 CATEGORIES = ("benchmark", "eval", "trace", "power")

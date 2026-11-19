@@ -216,7 +216,7 @@ VIDEO_ENV = {
     "MODEL_PREFIX": "h3", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "0", "OSL": "0",
     "SCENARIO_TYPE": "video-generation", "IS_MULTINODE": "false", "GPU_COUNT": "2",
     "CONC_LIST": "1 2", "VIDEO_SPEC": "h3.yaml", "VIDEO_SET": "release-v1", "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
-    "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/b200-bf16/serving-client.yaml",
+    "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/b200-bf16/video/agg-ulysses.yaml",
     "FAKE_RESULTS": "video",
 }  # fmt: skip
 
@@ -751,6 +751,33 @@ def batch_env(harness, **overrides: str) -> dict[str, str]:
         "PRECISION": "fp8", "IS_AGENTIC": "1", "DURATION": "600", "RUNNER_TEMP": str(runner_temp),
         "SRT_RECIPE": "recipe.yaml:base", **overrides,
     }  # fmt: skip
+
+
+@pytest.mark.parametrize(("cluster_id", "agentic", "mounted", "handed", "opened"), [
+    ("gb200-nv", "1", True, True, 0o777),
+    ("gb300-nv", "1", True, True, 0),
+    ("gb200-nv", "0", False, False, 0),
+    ("h100-cw", "1", False, False, 0),
+])  # fmt: skip
+def test_single_node_agentx_shares_the_clusters_dataset_cache(
+    harness, cluster_id, agentic, mounted, handed, opened
+):
+    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": POINT_RECIPE}))
+    env = {
+        **harness.env, **POINT_ENV, "RUNNER_NAME": runner_for(cluster_id), "PRECISION": "fp8",
+        "MODEL_PREFIX": "dsv41flash", "IS_AGENTIC": agentic, "DURATION": "600",
+        "SRT_RECIPE": "recipe.yaml:base",
+    }  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [call] = srtctl_calls(harness.logs)
+    cache = 'benchmark.env.AIPERF_DATASET_MMAP_CACHE_DIR="/aiperf_mmap_cache"'
+    assert (cache in call["argv"]) is handed
+    mounts = srtslurm(harness.workspace)["default_mounts"]
+    hosts = [host for host, target in mounts.items() if target == "/aiperf_mmap_cache"]
+    assert bool(hosts) is mounted
+    assert all(Path(host).is_dir() for host in hosts)
+    assert all(Path(host).stat().st_mode & opened == opened for host in hosts)
 
 
 def test_b300_flash_agentx_reenters_inside_a_batch_allocation(harness):

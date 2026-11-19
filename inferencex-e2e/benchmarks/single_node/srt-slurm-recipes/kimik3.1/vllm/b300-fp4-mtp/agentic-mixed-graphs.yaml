@@ -1,0 +1,107 @@
+base:
+  schema: 2
+  name: kimik3.1-fp4-b300-vllm-agentic-mixed-graphs
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine:
+    type: vllm
+    connector: null
+  # Loading ~1.56 TB of MXFP4 shards plus the latency_specialized decode autotune can take
+  # most of VLLM_ENGINE_READY_TIMEOUT_S.
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      gpus: 8
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        tensor-parallel-size: 8
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        kv-cache-dtype: fp8
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        # The K3.1 week-1 precision policy requires an FP32 KDA recurrent state.
+        mamba-ssm-cache-dtype: float32
+        enable-prefix-caching: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        max-num-batched-tokens: 16384
+        # Prefill and mixed steps up to 4096 tokens replay graphs instead of running eager
+        # (~150 ms of launch overhead per step); larger steps are GPU-bound.
+        max-cudagraph-capture-size: 4096
+        # Prefix-cache hits are KV-bound on B300.
+        gpu-memory-utilization: 0.95
+        stream-interval: 10
+        disable-uvicorn-access-log: true
+        # TOTAL_CPU_DRAM_GB split across the 8 TP ranks.
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":281125000000,"lazy_offload":false}}'
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        PYTHONUNBUFFERED: '1'
+        # Identical prefixes must hash to identical block keys run-to-run.
+        PYTHONHASHSEED: '42'
+        # Outlast AIPerf's pooled-connection idle gaps.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '900'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '2249'
+
+# CUDA graphs cover prefill and mixed steps up to 4096 tokens as well as decode. c12 and c24 run TP8 x DCP8
+# with DSpark drafting 3 tokens.
+# Throughput runs replace block rejection with the golden acceptance length.
+
+override_dcp8_c12:
+  roles:
+    agg:
+      args:
+        # Admit prefill once every 8 engine steps; the fused decode serves pure decode steps only.
+        prefill-schedule-interval: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        use-replayssm: true
+        max-num-seqs: 96
+        cudagraph-capture-sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 260, 264, 268, 272, 276, 280, 284, 288, 292, 296, 300, 304, 308, 312, 316, 320, 324, 328, 332, 336, 340, 344, 348, 352, 356, 360, 364, 368, 372, 376, 380, 384, 512, 640, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+  benchmark:
+    env:
+      CONC: '12'
+
+override_dcp8_c24:
+  roles:
+    agg:
+      args:
+        # Admit prefill once every 8 engine steps; the fused decode serves pure decode steps only.
+        prefill-schedule-interval: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: a2a
+        use-replayssm: true
+        max-num-seqs: 96
+        cudagraph-capture-sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196, 200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 260, 264, 268, 272, 276, 280, 284, 288, 292, 296, 300, 304, 308, 312, 316, 320, 324, 328, 332, 336, 340, 344, 348, 352, 356, 360, 364, 368, 372, 376, 380, 384, 512, 640, 768, 1024, 1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096]
+        speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","revision":"6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94","num_speculative_tokens":3,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      env:
+        VLLM_USE_DIRECT_DCP_A2A: '1'
+        VLLM_USE_DIRECT_DCP_Q_GATHER: '1'
+        VLLM_USE_DIRECT_DCP_KV_GATHER: '1'
+  benchmark:
+    env:
+      CONC: '24'
