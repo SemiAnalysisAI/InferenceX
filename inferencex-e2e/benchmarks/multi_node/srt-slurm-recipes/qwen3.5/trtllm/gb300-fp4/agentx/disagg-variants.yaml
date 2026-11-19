@@ -95,8 +95,9 @@ base:
           use_kv_cache_manager_v2: true
           remote_cache_config:
             directory: /logs/rt_rdv
-            cache_size: 214748364800
-            transport: fabric
+            transport: {kind: fabric}
+            level:
+              size: 214748364800
         max_batch_size: 64
         max_num_tokens: 16384
         max_seq_len: 262144
@@ -238,8 +239,9 @@ base:
           defer_generation_only_release: true
           remote_cache_config:
             directory: /logs/rt_rdv
-            donate_size: 171798691840
-            transport: fabric
+            transport: {kind: fabric}
+            donor:
+              size: 171798691840
         max_batch_size: 64
         max_num_tokens: 896
         max_seq_len: 262148
@@ -333,8 +335,10 @@ override_1p1d_tep2_tep8_c240:
       args:
         kv_cache_config:
           remote_cache_config:
-            expected_num_donors: 8
-            expected_claim_size: 435939180544
+            level:
+              expected:
+                num_donors: 8
+                claim_size: 435939180544
     decode:
       nodes: 2
       env:
@@ -369,8 +373,10 @@ override_1p2d_tep2_tep8_c48:
       args:
         kv_cache_config:
           remote_cache_config:
-            expected_num_donors: 16
-            expected_claim_size: 435939180544
+            level:
+              expected:
+                num_donors: 16
+                claim_size: 435939180544
     decode:
       workers: 2
       env:
@@ -419,8 +425,10 @@ override_1p2d_tep2_tep8_c200:
       args:
         kv_cache_config:
           remote_cache_config:
-            expected_num_donors: 16
-            expected_claim_size: 435939180544
+            level:
+              expected:
+                num_donors: 16
+                claim_size: 435939180544
     decode:
       workers: 2
       env:
@@ -471,8 +479,10 @@ override_2p1d_tep2_tep8_c192:
       args:
         kv_cache_config:
           remote_cache_config:
-            expected_num_donors: 8
-            expected_claim_size: 871878361088
+            level:
+              expected:
+                num_donors: 8
+                claim_size: 871878361088
     decode:
       nodes: 2
       env:
@@ -493,8 +503,10 @@ override_2p1d_tep2_tep8_c352:
       args:
         kv_cache_config:
           remote_cache_config:
-            expected_num_donors: 8
-            expected_claim_size: 871878361088
+            level:
+              expected:
+                num_donors: 8
+                claim_size: 871878361088
     decode:
       nodes: 2
       args:
@@ -509,8 +521,10 @@ override_2p1d_tep2_tep8_c416:
       args:
         kv_cache_config:
           remote_cache_config:
-            expected_num_donors: 8
-            expected_claim_size: 871878361088
+            level:
+              expected:
+                num_donors: 8
+                claim_size: 871878361088
     decode:
       nodes: 2
       args:
@@ -525,8 +539,10 @@ override_2p3d_tep2_tep8_c384:
       args:
         kv_cache_config:
           remote_cache_config:
-            expected_num_donors: 24
-            expected_claim_size: 871878361088
+            level:
+              expected:
+                num_donors: 24
+                claim_size: 871878361088
     decode:
       nodes: 6
       workers: 3
@@ -554,8 +570,10 @@ override_3p2d_tep2_tep8_c456:
       args:
         kv_cache_config:
           remote_cache_config:
-            expected_num_donors: 16
-            expected_claim_size: 1307817541632
+            level:
+              expected:
+                num_donors: 16
+                claim_size: 1307817541632
     decode:
       workers: 2
       env:
@@ -577,8 +595,10 @@ override_3p2d_tep2_tep8_c512:
       args:
         kv_cache_config:
           remote_cache_config:
-            expected_num_donors: 16
-            expected_claim_size: 1307817541632
+            level:
+              expected:
+                num_donors: 16
+                claim_size: 1307817541632
     decode:
       workers: 2
       env:
@@ -632,9 +652,11 @@ override_4p1d_tep2_dep8_c840:
           kv_cache_bounce_size_mb: 2048
         kv_cache_config:
           remote_cache_config:
-            cache_size: 171798691840
-            expected_num_donors: 8
-            expected_claim_size: 1391569403904
+            level:
+              size: 171798691840
+              expected:
+                num_donors: 8
+                claim_size: 1391569403904
     decode:
       nodes: 2
       env:
@@ -665,7 +687,8 @@ override_4p1d_tep2_dep8_c840:
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
           remote_cache_config:
-            donate_size: 188978561024
+            donor:
+              size: 188978561024
           defer_generation_only_release:
         max_batch_size: 48
         max_num_tokens: 336
