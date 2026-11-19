@@ -19,7 +19,7 @@ multi-node workloads`) and has no SBUF alltoall.
 
 - Neuron driver `aws-neuronx-dkms` 2.31.7 or later on every node. With 2.25.4, every multi-node collective fails
   at setup (`RING selected but NCCL built 0 channels`), and whole-node collectives above 16 MiB are refused.
-- The `trn3-ubench` image on every node (`docker build -t trn3-ubench ubenchX/trn3_dma_bw/docker`), and the
+- The `trn3-ubench` image on every node (`docker build -t trn3-ubench ubenchX/trn3_docker`), and the
   launching user in the `docker` group with passwordless SSH from node 0 to every node over the private IPs.
 - `TRN3_HOSTS`: the four private IPs in UltraServer order. EC2 does not report the order. Find it by running
   a 16 MiB `all_reduce` on node pairs: a same-rack pair reaches about 147 GB/s busbw with no EFA traffic, the

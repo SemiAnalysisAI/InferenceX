@@ -64,7 +64,7 @@ GEMM 路径尚未在加速器硬件上验证，未附带硬件实测结果。脚
 每个 NKI kernel 是一组连续发出的 `[pdim, fdim]` fp16 拷贝；同一方向的三个 kernel
 仅 `dge_mode` 不同。
 
-命令在 `trn3-ubench` 镜像（Neuron SDK 2.33，NKI 0.7）中运行。`run.sh` 负责构建镜像、
+命令在 `trn3-ubench` 镜像（Neuron SDK 2.33，NKI 0.7，由 `ubenchX/trn3_docker` 构建）中运行。`run.sh` 负责构建镜像、
 传入所有 `/dev/neuron*` 设备、将仓库挂载到 `/InferenceX`，并以调用者的 uid 运行。
 请从仓库根目录执行：
 

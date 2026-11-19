@@ -69,7 +69,7 @@ HBM before execution), `hwdge` (the DGE hardware block at run time) and `swdge` 
 engine at run time). Each NKI kernel is one burst of back-to-back `[pdim, fdim]` fp16 copies;
 the three kernels of each direction differ only in `dge_mode`.
 
-Commands run in the `trn3-ubench` image (Neuron SDK 2.33, NKI 0.7). `run.sh` builds it, passes
+Commands run in the `trn3-ubench` image (Neuron SDK 2.33, NKI 0.7), built from `ubenchX/trn3_docker`. `run.sh` builds it, passes
 every `/dev/neuron*` device, mounts the repository at `/InferenceX` and runs as the caller's uid.
 Run from the repository root:
 

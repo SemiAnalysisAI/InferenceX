@@ -7,7 +7,7 @@ fi
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 image=trn3-ubench
-docker build -q -t "$image" "$repo/ubenchX/trn3_dma_bw/docker" >/dev/null
+docker build -q -t "$image" "$repo/ubenchX/trn3_docker" >/dev/null
 
 devices=()
 for device in /dev/neuron*; do devices+=(--device "$device"); done
