@@ -114,6 +114,10 @@ Inspect the run's artifacts:
 - `video-sweep-manifest` identifies the selected attempt and deployments.
 - Each `h3-results-*` bundle holds `manifest.json`, `ci.json`, `SHA256SUMS`, and the
   request, media, and power evidence under `gpu/c*/`.
+- Each cell's `gpu/c*/attestation.json` checks, from the engine's own startup
+  arguments and log, that every request ran the declared shape, seed, and denoising
+  steps without step caching, quantization, LoRA, or sparse attention. A failed
+  attestation leaves the cell unverified.
 
 Never hand-edit a bundle to make its result eligible. If a deployment fails, see
 [Troubleshoot a run](#troubleshoot-a-run).
