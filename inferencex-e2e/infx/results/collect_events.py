@@ -23,8 +23,11 @@ from infx import github
 FILENAME = "job_event.json"
 SCHEMA_VERSION = 2
 NO_RECORD = "NoLauncherRecord"
+# The template's job name is the segment after the last " / " the caller adds. Reruns of runs
+# started before scores left the workflows still prefix it with "p<score> | ".
 _BENCHMARK_JOB = re.compile(
-    r"(?:^|/ )(?:klaud \| )?p[0-9.]+ \| (?P<model_prefix>\S+) (?P<precision>\S+) (?P<runner>\S+)"
+    r"(?:^|/ )(?!.* / )(?:klaud \| )?(?:p[0-9.]+ \| )?"
+    r"(?P<model_prefix>\S+) (?P<precision>\S+) (?P<runner>\S+)"
     r" .* c(?P<conc>[0-9]+(?:x[0-9]+)*)(?: \| (?P<eval>eval|eval-only))?$"
 )
 _FAILED_STEP = frozenset({"failure", "cancelled", "timed_out"})
