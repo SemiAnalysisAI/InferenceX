@@ -13,6 +13,54 @@ import pytest
 
 from infx.workflows import reuse
 
+can_authorize_reuse = reuse.can_authorize_reuse
+
+
+@pytest.fixture(autouse=True)
+def write_access(monkeypatch):
+    monkeypatch.setattr(
+        reuse, "can_authorize_reuse", lambda repo, login, token: login == "maintainer"
+    )
+
+
+@pytest.mark.parametrize("access,allowed", [
+    ({"permission": "admin", "role_name": "admin"}, True),
+    ({"permission": "write", "role_name": "maintain"}, True),
+    ({"permission": "write", "role_name": "write"}, True),
+    ({"permission": "write", "role_name": "release-manager"}, False),
+    ({"permission": "read", "role_name": "triage"}, False),
+    ({"permission": "read", "role_name": "read"}, False),
+    ({"permission": "none", "role_name": "none"}, False),
+])
+def test_only_write_access_can_authorize_reuse(monkeypatch, access, allowed):
+    paths = []
+
+    def api(repo, path, token):
+        paths.append(path)
+        return access
+
+    monkeypatch.setattr(reuse.github, "api", api)
+    assert can_authorize_reuse("example/project", "dependabot[bot]", "token") is allowed
+    assert paths == ["/collaborators/dependabot%5Bbot%5D/permission"]
+
+
+def test_a_login_github_does_not_know_cannot_authorize_reuse(monkeypatch):
+    def api(repo, path, token):
+        raise reuse.github.APIError(path, "gh: Not Found (HTTP 404)")
+
+    monkeypatch.setattr(reuse.github, "api", api)
+    assert can_authorize_reuse("example/project", "ghost", "token") is False
+
+
+def test_a_failed_permission_lookup_is_not_read_as_no_access(monkeypatch):
+    def api(repo, path, token):
+        raise reuse.github.APIError(path, "gh: Bad Gateway (HTTP 502)")
+
+    monkeypatch.setattr(reuse.github, "api", api)
+    with pytest.raises(reuse.github.APIError):
+        can_authorize_reuse("example/project", "maintainer", "token")
+
+
 
 @pytest.mark.parametrize("token_present", [False, True])
 def test_reuse_entrypoints_preserve_outputs_and_errors_without_installation(
@@ -85,17 +133,17 @@ def test_find_reuse_authorization_uses_latest_allowed_comment(monkeypatch, older
         return [
             {
                 "created_at": "2026-05-13T00:00:00Z",
-                "author_association": "MEMBER",
+                "user": {"login": "maintainer"},
                 "body": older,
             },
             {
                 "created_at": "2026-05-13T00:03:00Z",
-                "author_association": "CONTRIBUTOR",
+                "user": {"login": "outsider"},
                 "body": "/use 222",
             },
             {
                 "created_at": "2026-05-13T00:02:00Z",
-                "author_association": "OWNER",
+                "user": {"login": "maintainer"},
                 "body": "approved\n" + newer,
             },
         ]
@@ -107,7 +155,6 @@ def test_find_reuse_authorization_uses_latest_allowed_comment(monkeypatch, older
         1321,
         "token",
         "/reuse-sweep-run",
-        {"OWNER", "MEMBER", "COLLABORATOR"},
     ) == (True, 333)
 
 
@@ -116,12 +163,12 @@ def test_find_reuse_authorization_lets_newer_no_arg_unpin_older_pin(monkeypatch)
         return [
             {
                 "created_at": "2026-05-13T00:00:00Z",
-                "author_association": "OWNER",
+                "user": {"login": "maintainer"},
                 "body": "/use 111",
             },
             {
                 "created_at": "2026-05-13T00:01:00Z",
-                "author_association": "OWNER",
+                "user": {"login": "maintainer"},
                 "body": "/reuse-sweep-run",
             },
         ]
@@ -133,7 +180,6 @@ def test_find_reuse_authorization_lets_newer_no_arg_unpin_older_pin(monkeypatch)
         1321,
         "token",
         "/reuse-sweep-run",
-        {"OWNER", "MEMBER", "COLLABORATOR"},
     ) == (True, None)
 
 
@@ -142,7 +188,7 @@ def test_find_reuse_authorization_ignores_inline_mentions(monkeypatch) -> None:
         return [
             {
                 "created_at": "2026-05-13T00:00:00Z",
-                "author_association": "OWNER",
+                "user": {"login": "maintainer"},
                 "body": "please run /reuse-sweep-run 111 after merge",
             },
         ]
@@ -154,7 +200,6 @@ def test_find_reuse_authorization_ignores_inline_mentions(monkeypatch) -> None:
         1321,
         "token",
         "/reuse-sweep-run",
-        {"OWNER", "MEMBER", "COLLABORATOR"},
     ) == (False, None)
 
 
@@ -190,7 +235,7 @@ def test_main_checks_source_before_skipping_pr_synchronize(
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
-            "author_association": "MEMBER",
+            "user": {"login": "maintainer"},
             "body": "/reuse-sweep-run",
         },
     ]
@@ -258,7 +303,7 @@ def test_main_allows_pr_synchronize_without_reuse_authorization(
         return [
             {
                 "created_at": "2026-05-13T00:00:00Z",
-                "author_association": "CONTRIBUTOR",
+                "user": {"login": "outsider"},
                 "body": "/reuse-sweep-run",
             },
         ]
@@ -362,7 +407,7 @@ def test_main_enables_pinned_reuse_without_sweep_label(monkeypatch, tmp_path, la
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
-            "author_association": "OWNER",
+            "user": {"login": "maintainer"},
             "body": f"{command} 25763404168",
         },
     ]
@@ -449,7 +494,7 @@ def test_main_reports_outside_run_source_pr(monkeypatch, tmp_path) -> None:
     def fake_paginated_github_api(repo, path, token, item_key, params=None):
         return {
             "/issues/1321/comments": [{
-                "created_at": "2026-05-13T00:00:00Z", "author_association": "OWNER",
+                "created_at": "2026-05-13T00:00:00Z", "user": {"login": "maintainer"},
                 "body": "/use 77",
             }],
             "/pulls/1321/commits": [{"sha": "abc123"}],
@@ -507,7 +552,7 @@ def run_external_reuse(monkeypatch, tmp_path, run, source_labels=(), identity=No
     def fake_paginated_github_api(repo, path, token, item_key, params=None):
         return {
             "/issues/1321/comments": [{
-                "created_at": "2026-05-13T00:00:00Z", "author_association": "OWNER",
+                "created_at": "2026-05-13T00:00:00Z", "user": {"login": "maintainer"},
                 "body": "/use 88",
             }],
             "/pulls/1321/commits": [{"sha": "abc123"}],
@@ -590,7 +635,7 @@ def test_main_enables_explicitly_pinned_failed_run(monkeypatch, tmp_path) -> Non
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
-            "author_association": "OWNER",
+            "user": {"login": "maintainer"},
             "body": "/reuse-sweep-run 25763404168",
         },
     ]
@@ -661,7 +706,7 @@ def test_main_resolves_no_arg_command_to_latest_head_sweep(monkeypatch, tmp_path
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
-            "author_association": "OWNER",
+            "user": {"login": "maintainer"},
             "body": "/reuse-sweep-run",
         },
     ]
@@ -741,7 +786,7 @@ def test_main_no_arg_picks_run_for_older_pr_commit(monkeypatch, tmp_path) -> Non
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
-            "author_association": "OWNER",
+            "user": {"login": "maintainer"},
             "body": "/reuse-sweep-run",
         },
     ]
@@ -865,7 +910,7 @@ def test_main_accepts_all_evals_with_non_canary_full_sweep_label(
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
-            "author_association": "OWNER",
+            "user": {"login": "maintainer"},
             "body": "/reuse-sweep-run 25763404168",
         },
     ]
@@ -943,7 +988,7 @@ def test_main_rejects_incompatible_label_for_reuse(
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
-            "author_association": "OWNER",
+            "user": {"login": "maintainer"},
             "body": "/reuse-sweep-run 25763404168",
         },
     ]

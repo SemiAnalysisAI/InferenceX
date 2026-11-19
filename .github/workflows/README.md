@@ -187,15 +187,22 @@ does not dispatch a sweep. Changing a recognized primary or modifier label
 cancels the active sweep; another starts only if a primary label remains.
 To retrigger an already-labeled PR, remove and reapply its primary label.
 Merge conflicts block sweeps. Queue priority comes from the PR diff and the
-PR description's checklist, not priority labels. A PR gets a small bonus when
+PR description's checklist, not priority labels. When
+`PRIORITY_SCHEDULER_ENABLED` is true, each sweep's setup job uploads a
+`scheduling-facts.json` artifact. It keys every queued job by the token in its
+`ci-job-<token>` runner label and lists the facts the classifier credited
+(framework, model prefix, precision, speculative decoding, multi-node, AgentX,
+eval-only and node count), plus whether the PR is patchwork and whether its
+checklist is complete. The priority scheduler scores jobs from those facts.
+Its weights are not kept in this repository. A checklist is complete when
 every item under its `Checklist` heading is checked, except conditional items
 ("If ...", "Before merging ...") that do not apply yet. The checklist is read
 when the sweep starts, so later edits count from the next sweep. Trusted
 external sweeps classify the approved PR diff the same way. Manual
 `e2e-tests.yml` and `profile.yml` dispatches of a revision not yet on `main`
-classify its diff from the merge
-base only for patchwork, so engine-patching branches still run last. Klaud runs
-and revisions already on `main` keep unclassified scoring.
+classify its diff from the merge base only for patchwork, so engine-patching
+branches are still flagged. Klaud runs and revisions already on `main` stay
+unclassified and report every fact of each job.
 
 Patchwork classification requires concrete evidence of engine/runtime source
 changes, a local engine build, or a fork/image containing unmerged changes.
@@ -298,7 +305,7 @@ Acceptance does not
 certify a green full sweep. Verify coverage and pin the run ID when a full sweep
 is required by the review process.
 
-The latest matching comment across both names by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
+The latest matching comment across both names by a user with write access to the repository wins.
 The bot reacts with 👍 after validating the request, or 👎 on rejection. When the
 pinned run's commit is not part of the PR, it also posts one warning comment for
 that request and run; reuse still proceeds. Details are in the Actions run summary.
@@ -327,10 +334,13 @@ single `ingest` job first computes the changelog delta with `infx.matrix.plan`.
 For entries with results, it resolves the merge commit's PR, reuse command, and
 source run with `infx.workflows.reuse`, and fails before uploading or dispatching
 anything unless reuse is validly authorized. It then uploads merge-time `changelog-metadata`
-and sends one `repository_dispatch` to InferenceX-app: `ingest-agentic-results`
+and sends one `repository_dispatch` to the app repository (`APP_REPO`, below): `ingest-agentic-results`
 (with `database-target: production`) when the delta has agentic entries,
 otherwise `ingest-results`. The payload's `source-run-id` is the reused PR
-`run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run.
+`run-sweep.yml` run and its `merge-run-id` is the Merge Ingest run. The delta
+leaves out entries whose `pr-link` is a pull request in another repository,
+unless it has the number of the pull request the push merged; when none remain,
+Merge Ingest uploads and dispatches nothing. Recovery applies the same rule.
 
 For a nonempty delta consisting entirely of `retired: true` entries, the planner
 verifies that the selected configs existed in the base and are absent from the
@@ -356,6 +366,20 @@ by that commit, and posts one comment per merge run, updated in place on reruns
 Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
 never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
 the Merge Ingest run fails and nothing is benchmarked or ingested.
+
+## Repository Scope
+
+Scheduled and run-completion jobs (Klaud, the runner offline digest,
+`close-inactive`, scheduled AL gate prompt warming, video quality scoring) and
+the pull request bots (Claude review, recipe reminder, infx diff comment,
+CODEOWNER sign-off verification) run only in `SemiAnalysisAI/InferenceX`.
+Sweeps, CI, staging, ingest, and manual dispatches run in any repository,
+configured by these repository variables:
+
+| Variable          | Default                                                       | Effect                                                                                                                                                                                                                                                         |
+| ----------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_REPO`        | `SemiAnalysisAI/InferenceX-app`                               | App repository that `merge-ingest`, `recover-reused-ingest`, `operatorx-sweep`, and `stage-results` dispatch ingest, video, and staging events to, and the only source the ingest and staging callbacks accept. `FRONTEND_PAT` must be able to dispatch to it. |
+| `STAGING_APP_URL` | `https://inferencemax-app-git-staging-semianalysisai.vercel.app` | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`.                                                   |
 
 ## Validation Architecture
 
