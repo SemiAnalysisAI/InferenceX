@@ -12,6 +12,10 @@ base:
     tachometer:
       enabled: false
   engine: sglang
+  # The TP8 points run the monokernel; the setup script fails the worker when the
+  # image's FlyDSL is too old for it, which SGLang would otherwise paper over by
+  # falling back to its own forward.
+  setup_script: glm5.2-mi355x-sglang-mono.sh
   roles:
     agg:
       nodes: 1
@@ -213,6 +217,11 @@ override_tp4_dcp4_c48:
       CONC: '48'
       KV_OFFLOADING: none
 
+# TP8 runs the sgl-amd-mono monokernel (--enable-amd-monokernel) for MTP target
+# verify and the NextN draft, in place of the Gluon target MoE. Its launches take
+# steps of up to 8 rows, so these points draft 3 tokens (4 rows a request): c1 and
+# c2 verify on it, c4's 16-row verify keeps SGLang's forward and only the draft
+# runs on it. MTP5 would already give c2 12 rows.
 override_tp8_c1:
   roles:
     agg:
@@ -220,10 +229,9 @@ override_tp8_c1:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
-        moe-runner-backend: gluon
-        speculative-moe-runner-backend: auto
-        # SGLang #48397 fixes Gluon FP32 partial stores beyond 2 GiB.
-        chunked-prefill-size: 32768
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
+        enable-amd-monokernel: true
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
   benchmark:
@@ -238,13 +246,29 @@ override_tp8_c2:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
-        moe-runner-backend: gluon
-        speculative-moe-runner-backend: auto
-        # SGLang #48397 fixes Gluon FP32 partial stores beyond 2 GiB.
-        chunked-prefill-size: 32768
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
+        enable-amd-monokernel: true
         max-running-requests: 4
         cuda-graph-max-bs-decode: 4
   benchmark:
     env:
       CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
+        enable-amd-monokernel: true
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
       KV_OFFLOADING: none

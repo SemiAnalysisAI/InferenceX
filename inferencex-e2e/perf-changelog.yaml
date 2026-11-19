@@ -13109,3 +13109,15 @@
   description:
     - "Add vllm/vllm-omni-rocm:v0.30.0, the newest stable vLLM-Omni ROCm image, pinned by its linux/amd64 digest, on the MI355X H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, the AITER FLASH_ATTN diffusion attention backend, vLLM quick all-reduce quantization set to NONE, and the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4971
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image for all three arms from lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261113 to v0.5.23-rocm10-mi35x-20261118 (sha256:723fbc92..., ROCm 10). Its sgl-amd-mono serves this Quark MXFP4 checkpoint on the GLM-5.3 monokernel spec (sgl-amd-mono#123) and its SGLang carries sglang#48773, which keeps top-k v2's refine_ties out of line on ROCm; every arm runs top-k v2. The recipe's setup_script glm5.2-mi355x-sglang-mono.sh only asserts FlyDSL 0.4.0, since a missing FlyDSL makes the monokernel fall back to SGLang's forward without failing the server."
+    - "TP8 c1, c2 and c4: run the monokernel (--enable-amd-monokernel) instead of the Gluon target MoE (moe-runner-backend gluon and speculative-moe-runner-backend auto are dropped here), and draft 3 tokens instead of 5 (speculative-num-steps 3, speculative-num-draft-tokens 4, golden AL 2.99). The monokernel takes steps of up to 8 rows: c1 and c2 run target verify and the NextN draft on it, c4's 16-row verify keeps SGLang's forward with the draft on the monokernel. Admission and decode graph batch are unchanged (2, 4 and 8)."
+    - "Concurrency 4 returns to the TP8 arm (search space [1, 2] to [1, 2, 4]); it last ran there before the Gluon change, and on the monokernel it beats the TP4/EP4 HiCache arm on interactivity. The TP4 HiCache and DCP4 arms are unchanged apart from the image."
+    - "Data types on the monokernel steps: MXFP4 routed experts run as MXFP8 activations on the FP4 MFMA. The checkpoint's BF16 linears (attention, indexer, shared and dense MLP, layers 0-77) are copied once at load to 128x128 block FP8, about 2.7 GiB per rank. The NextN draft layer (layer 78, BF16 in the checkpoint) is copied the same way. KV stays FP8 and is shared between target and draft. Prefill and steps past 8 rows keep SGLang's BF16 linears."
+    - "Measured on one 8x MI355X node on the equivalent code (SGLang af633e17 plus sglang#48773, sgl-amd-mono with the same glm53 MXFP4 support): GSM8K (400 questions, MTP3, real acceptance) 0.968 with the monokernel and 0.938 without. AgentX TP8 c1 / c2 / c4: P90 interactivity 430.2 / 327.6 / 253.6 tok/s/user against 277.0 / 242.7 / 229.4 on the MTP5 SGLang forward, throughput per GPU 3309 / 3449 / 4540 tok/s against 2436 / 2615 / 3817. The gain is the monokernel, not MTP3: at MTP3 without it c1 drops to 257 output tok/s against 291 at MTP5 on the 64K-in/8K-out fixed-length control."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
