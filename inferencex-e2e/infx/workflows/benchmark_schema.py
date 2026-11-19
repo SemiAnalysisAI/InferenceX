@@ -29,11 +29,11 @@ class _WorkflowFields(BaseModel):
 
 
 class SingleNodeConfig(_WorkflowFields, SingleNodeMatrixEntry):
-    """Fixed-sequence input to benchmark-tmpl.yml, before priority annotation."""
+    """Fixed-sequence input to benchmark-tmpl.yml, before queue-token annotation."""
 
 
 class AgenticConfig(_WorkflowFields, SingleNodeAgenticMatrixEntry):
-    """AgentX input to benchmark-tmpl.yml, before priority annotation."""
+    """AgentX input to benchmark-tmpl.yml, before queue-token annotation."""
 
     scenario_type: Literal["agentic-coding"] = Field(alias="scenario-type")
 
