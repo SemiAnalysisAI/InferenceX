@@ -224,7 +224,7 @@ override_tp2_hicache_spf_c44:
         cuda-graph-max-bs-decode: 88
         mem-fraction-static: 0.92
         enable-hierarchical-cache: true
-        hicache-size: 340
+        hicache-size: 240
         hicache-write-policy: write_back
         schedule-policy: shortest-prefill-first
         prefill-decode-interval: 32
@@ -246,7 +246,7 @@ override_tp2_hicache_spf_c48:
         cuda-graph-max-bs-decode: 96
         mem-fraction-static: 0.92
         enable-hierarchical-cache: true
-        hicache-size: 340
+        hicache-size: 240
         hicache-write-policy: write_back
         schedule-policy: shortest-prefill-first
         prefill-decode-interval: 32
@@ -268,7 +268,7 @@ override_tp2_hicache_spf_c50:
         cuda-graph-max-bs-decode: 100
         mem-fraction-static: 0.93
         enable-hierarchical-cache: true
-        hicache-size: 340
+        hicache-size: 240
         hicache-write-policy: write_back
         schedule-policy: shortest-prefill-first
         prefill-decode-interval: 20
