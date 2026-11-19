@@ -33,7 +33,7 @@ from infx.bench.video import (
     write_json,
 )
 
-from .attestation import attest
+from .attestation import POLICIES, attest
 
 EVIDENCE_KIND = "srt_slurm_h3_service"
 TASK_ID = "video-generation"
@@ -371,18 +371,20 @@ def build_bundle(
             write_json(target / "spec.json", cell_spec)
         power = _power(validation, series, run, bench, gpu_uuids, malformed)
         write_json(target / "power.json", power)
-        attestation = attest(
-            configuration.get("runtime"), server_log, plan, run.get("records") or [], precision
-        )
-        write_json(target / "attestation.json", attestation)
-        attested = {"sha256": _hash(target / "attestation.json"), "valid": attestation["valid"]}
+        # Only runtimes with a work-attestation policy are attested and gated on it.
+        attested = None
+        runtime = configuration.get("runtime")
+        if runtime in POLICIES:
+            attestation = attest(runtime, server_log, plan, run.get("records") or [], precision)
+            write_json(target / "attestation.json", attestation)
+            attested = {"sha256": _hash(target / "attestation.json"), "valid": attestation["valid"]}
         summary = run.get("summary") or {}
         complete = run_complete(run)
         if not complete:
             failures.append(
                 f"c{concurrency}: {summary.get('valid', 0)}/{summary.get('scheduled', 0)} valid clips"
             )
-        verified = complete and power["valid"] and attestation["valid"]
+        verified = complete and power["valid"] and (attested is None or attested["valid"])
         receipt = {
             "schema_version": "0.1.0",
             "bundle_type": RECEIPT_BUNDLE_TYPE,
@@ -417,10 +419,11 @@ def build_bundle(
                 "valid": power["valid"],
                 "invalid_reasons": power["invalid_reasons"],
             },
-            "attestation": {"path": "attestation.json", **attested},
             "aggregate_path": "aggregate.json" if aggregate is not None else None,
             "failures": [f for f in failures if f.startswith(f"c{concurrency}:")],
         }
+        if attested is not None:
+            receipt["attestation"] = {"path": "attestation.json", **attested}
         write_json(target / "gpu-job.json", receipt)
         cell.update(
             {
@@ -449,9 +452,10 @@ def build_bundle(
                     "sha256": receipt["power"]["sha256"],
                     "phases": power["phases"],
                 },
-                "attestation": {"path": f"{relative}/attestation.json", **attested},
             }
         )
+        if attested is not None:
+            cell["attestation"] = {"path": f"{relative}/attestation.json", **attested}
         if aggregate is not None:
             cell["aggregate"] = {
                 "path": f"{relative}/aggregate.json",

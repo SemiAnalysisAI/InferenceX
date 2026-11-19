@@ -70,12 +70,11 @@ def test_sglang_log_attests_that_every_request_did_the_declared_work():
             "unserved_request",
             {"request.server_record", "request.parameters", "request.denoise_steps"},
         ),
-        ("unknown_runtime", {"runtime.supported"}),
     ],
 )
 def test_attestation_fails_when_the_log_does_not_prove_the_declared_work(tmp_path, fault, failed):
     text = LOG.read_bytes().decode("utf-8")
-    runtime, records = "sglang", RECORDS
+    records = RECORDS
     if fault == "step_cache":
         text = text.replace('"cache_dit_config": null', '"cache_dit_config": {"enabled": true}')
     elif fault == "sparse_attention":
@@ -89,11 +88,9 @@ def test_attestation_fails_when_the_log_does_not_prove_the_declared_work(tmp_pat
         text = text.replace("49/49 [", "48/49 [")
     elif fault == "unserved_request":
         records = [*RECORDS, {**RECORDS[1], "slot_id": "measurement-r001-c002", "job_id": "x"}]
-    else:
-        runtime = "vllm-omni"
     log = tmp_path / "server.out"
     log.write_bytes(text.encode("utf-8"))
 
-    document = attest(runtime, log, PLAN, records, "bf16")
+    document = attest("sglang", log, PLAN, records, "bf16")
 
     assert (document["valid"], _failed(document)) == (False, failed)

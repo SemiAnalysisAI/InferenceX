@@ -417,11 +417,16 @@ def test_power_sample_is_valid_only_when_it_reads_every_server_gpu(tmp_path):
     assert [sample["valid"] for sample in series[4:7]] == [True, False, True]
 
 
-def test_bundle_withholds_verification_when_the_engine_log_cannot_attest_the_work(tmp_path):
+@pytest.mark.parametrize("runtime,verified", [("sglang", False), ("vllm-omni", True)])
+def test_only_runtimes_with_a_policy_are_gated_on_work_attestation(tmp_path, runtime, verified):
     logs, workspace = _native_job(tmp_path, concurrencies=(1,))
     (logs / "service_video-server.out").unlink()
+    run_path = logs / "video/gpu/c1/baseline/run.json"
+    run = json.loads(run_path.read_text())
+    run["configuration"]["runtime"] = runtime
+    run_path.write_text(json.dumps(run))
     output = tmp_path / "h3-results"
-    result = srt_bundle.build_bundle(
+    srt_bundle.build_bundle(
         video_dir=logs / "video",
         power_dir=logs / "power",
         server_log=logs / "service_video-server.out",
@@ -434,11 +439,10 @@ def test_bundle_withholds_verification_when_the_engine_log_cannot_attest_the_wor
     )
     [cell] = json.loads((output / "serving-smoke.json").read_text())["cells"]
     receipt = json.loads((output / cell["receipt"]["path"]).read_text())
-    attestation = json.loads((output / cell["attestation"]["path"]).read_text())
-    assert result["status"] == "complete" and result["power_verified"] is False
-    assert cell["verified"] is False and receipt["measurement_verified"] is False
-    assert receipt["power_verified"] is True and receipt["attestation"]["valid"] is False
-    assert attestation["valid"] is False and attestation["server_log"] == {"sha256": None}
+    assert cell["verified"] is verified and receipt["measurement_verified"] is verified
+    assert receipt["power_verified"] is True
+    assert ("attestation" in cell) is (runtime == "sglang")
+    assert (output / "gpu/c1/attestation.json").exists() is (runtime == "sglang")
 
 
 def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):

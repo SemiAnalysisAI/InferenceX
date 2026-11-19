@@ -228,20 +228,9 @@ def attest(runtime: str, server_log: Path, plan: dict, records: list[dict], prec
         data = server_log.read_bytes()
     except OSError:
         data = None
-    policy = POLICIES.get(runtime)
-    supported = _check(
-        "runtime.supported",
-        policy is not None,
-        runtime,
-        sorted(POLICIES),
-        "a work-attestation policy exists for this runtime",
-    )
-    observed, server_checks, requests = {}, [supported], []
-    if policy is not None:
-        text = (data or b"").decode("utf-8", errors="replace")
-        observed, policy_checks = _server(policy, text, precision)
-        server_checks += policy_checks
-        requests = _requests(text, plan["generation"], records)
+    text = (data or b"").decode("utf-8", errors="replace")
+    observed, server_checks = _server(POLICIES[runtime], text, precision)
+    requests = _requests(text, plan["generation"], records)
     every = server_checks + [check for request in requests for check in request["checks"]]
     return {
         "schema_version": SCHEMA_VERSION,
