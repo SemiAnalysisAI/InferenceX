@@ -259,7 +259,7 @@ jobs:
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                     python -m infx.workflows.benchmark_schema --plan)
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-                    python -m infx.workflows.ci_priority \
+                    python -m infx.workflows.scheduler_facts \
                     --event-name "${GITHUB_EVENT_NAME}" \
                     --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
                     --criteria-json "$PRIORITY_CRITERIA" \
@@ -351,7 +351,6 @@ jobs:
             pr-number: &pr-number ${{ github.event.pull_request.number }}
             klaud-run: &klaud-run ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
@@ -377,7 +376,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
@@ -430,7 +428,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             conc-list: ${{ toJson(matrix.config.conc) }}
@@ -480,7 +477,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: ${{ matrix.config.run-eval }}
@@ -530,7 +526,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
@@ -563,7 +558,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
@@ -594,7 +588,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
@@ -645,7 +638,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
@@ -678,7 +670,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
@@ -713,7 +704,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
@@ -748,7 +738,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             conc: ${{ matrix.config['eval-conc'] }}
