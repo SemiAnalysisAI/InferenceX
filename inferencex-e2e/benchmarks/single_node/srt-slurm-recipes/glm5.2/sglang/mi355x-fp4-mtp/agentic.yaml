@@ -12,10 +12,6 @@ base:
     tachometer:
       enabled: false
   engine: sglang
-  # The TP8 points run the monokernel; the setup script fails the worker when the
-  # image's FlyDSL is too old for it, which SGLang would otherwise paper over by
-  # falling back to its own forward.
-  setup_script: glm5.2-mi355x-sglang-mono.sh
   roles:
     agg:
       nodes: 1
