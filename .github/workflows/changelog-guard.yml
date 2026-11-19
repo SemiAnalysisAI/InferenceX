@@ -1,0 +1,51 @@
+name: Changelog Guard
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: changelog-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changelog-guard:
+    name: changelog-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The config diff runs on the PR head, not the merge commit, so main's later changes are not attributed to the PR.
+      - name: Checkout PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Check the PR changelog
+        working-directory: inferencex-e2e
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
+        run: |
+          source benchmarks/check_env.sh
+          check_env_vars GITHUB_BASE_REF PR_NUMBER PR_HEAD_SHA PR_CREATED_AT
+          # Runs on every PR so a required check always reports; only these paths need the diff.
+          base=$(git merge-base "origin/${GITHUB_BASE_REF}" "$PR_HEAD_SHA")
+          if git diff --quiet "$base" "$PR_HEAD_SHA" -- configs benchmarks infx/launch runners perf-changelog.yaml perf-changelog; then
+              echo "No config, script, launcher or changelog changes."
+              exit 0
+          fi
+          uv run --locked --extra recipes python -m infx.matrix.changelog check \
+            --base-ref "origin/${GITHUB_BASE_REF}" \
+            --head-ref "$PR_HEAD_SHA" \
+            --pull-request "$PR_NUMBER" \
+            --created-at "$PR_CREATED_AT"

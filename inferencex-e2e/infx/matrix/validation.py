@@ -1258,6 +1258,10 @@ def validate_runner_config(runner_configs: dict) -> dict:
     return runner_configs
 
 
+# An entry without scenario-type reruns these; video runs only for entries that name it.
+DEFAULT_SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+
+
 class ChangelogEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1278,6 +1282,12 @@ class ChangelogEntry(BaseModel):
     retired: bool = Field(
         default=False,
         description="Record configs removed from the base revision without scheduling benchmarks",
+    )
+    retired_keys: list[str] | None = Field(
+        alias="retired-keys",
+        default=None,
+        min_length=1,
+        description="Configs this PR removes alongside the configs it sweeps; never scheduled",
     )
     eval_min_prefill_ep: int | None = Field(
         alias="eval-min-prefill-ep",
@@ -1310,6 +1320,7 @@ class ChangelogEntry(BaseModel):
             or self.no_evals
             or self.eval_min_prefill_ep is not None
             or self.scenario_type is not None
+            or self.retired_keys is not None
         ):
             raise ValueError("retired entries cannot use sweep or scenario selection fields")
         if self.no_evals and (

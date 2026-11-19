@@ -1,5 +1,5 @@
 ---
-description: Add a new model+hardware single-node benchmark recipe (srt-slurm recipe + master-config entry + perf-changelog), open a [Klaud Cold] PR, label full-sweep-fail-fast, and monitor CI
+description: Add a new model+hardware single-node benchmark recipe (srt-slurm recipe + master-config entry + perf-changelog file), open a [Klaud Cold] PR, label full-sweep-fail-fast, and monitor CI
 argument-hint: <model-link> <gpu-sku> [recipes-link] [draft-model-link] [mtp]
 ---
 
@@ -27,7 +27,7 @@ Inputs from `$ARGUMENTS` (links first, then SKU. The rest are optional and order
 **engine** defaults to `vllm`. Infer otherwise from the sibling / recipes page.
 
 Standing prefs: Prefix the PR title with `[Klaud Cold]`. Add `full-sweep-fail-fast` (strongly recommended over `full-sweep-enabled`) through the REST API
-because `gh pr edit` hits the projects-classic GraphQL bug. Fill the perf-changelog `pr-link` after
+because `gh pr edit` hits the projects-classic GraphQL bug. Write the perf-changelog file after
 the PR exists. Then monitor the sweep to a fail/success conclusion and report the job
 breakdown. Do **not** invent image tags. Verify them on the registry first.
 
@@ -77,7 +77,7 @@ This research directly feeds Step 2 (recipe args/env) and Step 3 (search space).
 2. an entry in either master config, **`inferencex-e2e/configs/nvidia-master.yaml`** (b*/h*/gb* SKUs) or
    **`inferencex-e2e/configs/amd-master.yaml`** (mi* SKUs), with `srt-recipe-dir:` (the directory above,
    relative to `srt-slurm-recipes/`) on the entry and `srt-recipe:` (the file name) on every search-space row
-3. a `inferencex-e2e/perf-changelog.yaml` entry (this diff vs main is what selects the sweep)
+3. `inferencex-e2e/perf-changelog/<PR number>.yaml` (this file is what selects the sweep)
 
 ## Step 1 — branch + find the sibling to copy
 
@@ -141,15 +141,16 @@ needed; if a point matches zero or several variants, fix the recipe, not the lau
 
 ## Step 5 — perf-changelog
 
-Append a `- config-keys: [<key>]` block with a clear `description` and `pr-link: TBD`. The
-changelog diff vs `origin/main` is what `infx.matrix.plan` uses to select the sweep, so a
-new entry is **required** for CI to run your config.
+The changelog file is named after the PR, so write it in Step 7 once the PR exists. From
+`inferencex-e2e/`, `uv run --extra recipes python -m infx.matrix.changelog new -m "<description>"`
+fills `config-keys` and `scenario-type` from the config diff. The file is **required** for CI
+to run your config. See `inferencex-e2e/perf-changelog/README.md`.
 
 ## Step 6 — validate locally
 
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/<recipe>'))"
-python3 -c "import yaml; yaml.safe_load(open('inferencex-e2e/configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('inferencex-e2e/perf-changelog.yaml'))"
+python3 -c "import yaml; yaml.safe_load(open('inferencex-e2e/configs/<nvidia|amd>-master.yaml'))"
 (
   cd inferencex-e2e
   uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
@@ -158,7 +159,7 @@ python3 -c "import yaml; yaml.safe_load(open('inferencex-e2e/configs/<nvidia|amd
 )
 ```
 Sanity-check the generated matrix: expected layouts/concurrencies, `max-model-len` = scenario
-values, `spec-decoding` set where intended. Ensure both yaml files keep a trailing newline.
+values, `spec-decoding` set where intended. Ensure the yaml files keep a trailing newline.
 
 ## Step 7 — PR + label + monitor
 
@@ -167,7 +168,8 @@ git add -A && git commit -m "<key>: <one-line>"
 git push -u origin feat/<model>-<sku>[-mtp]-dayzero
 gh pr create --repo SemiAnalysisAI/InferenceX --base main \
   --title "[Klaud Cold] <key>: day-zero <MODEL> <SKU> recipe" --body "<summary>"
-# fill perf-changelog pr-link with the real URL → commit → push
+(cd inferencex-e2e && uv run --extra recipes python -m infx.matrix.changelog new --pr <PR> -m "<description>")
+git add inferencex-e2e/perf-changelog && git commit -m "Add perf changelog" && git push
 gh api -X POST repos/SemiAnalysisAI/InferenceX/issues/<PR>/labels -f "labels[]=full-sweep-fail-fast" --jq '.[].name'
 ```
 Wait for the sweep run to register on the head SHA, then monitor to a conclusion and report

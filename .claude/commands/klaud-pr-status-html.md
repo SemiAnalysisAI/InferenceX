@@ -30,7 +30,7 @@ State buckets:
 - **RUNNING.** No checks have failed. At least one is `QUEUED` / `IN_PROGRESS` / `PENDING`.
 - **READY.** No checks have failed or remain pending, and at least one `Run Sweep` check is `SUCCESS`.
 - **NO_SUCCESS.** The sweep ran but never produced a `SUCCESS` (e.g. all matrix jobs got SKIPPED).
-- **NO_SWEEP.** No `Run Sweep` check exists for this head SHA at all. `run-sweep.yml` triggers on pushes and label changes (not on PR open), only for PRs whose diff touches `inferencex-e2e/perf-changelog.yaml`, and GitHub skips it while the PR has merge conflicts. So this usually means the PR was opened without a primary sweep label (`full-sweep-fail-fast`, `full-sweep-enabled`, or `non-canary-full-sweep-enabled`) and has had no push or label change since, its diff does not touch the changelog, or it has merge conflicts.
+- **NO_SWEEP.** No `Run Sweep` check exists for this head SHA at all. `run-sweep.yml` triggers on pushes and label changes (not on PR open), only for PRs whose diff adds a changelog file under `inferencex-e2e/perf-changelog/` (or, for PRs predating that directory, touches `inferencex-e2e/perf-changelog.yaml`), and GitHub skips it while the PR has merge conflicts. So this usually means the PR was opened without a primary sweep label (`full-sweep-fail-fast`, `full-sweep-enabled`, or `non-canary-full-sweep-enabled`) and has had no push or label change since, its diff adds no changelog file, or it has merge conflicts.
 
 ```bash
 : > /tmp/klaud_pr_status.tsv
@@ -300,7 +300,7 @@ proposing a fix. Examples are hypotheses, not permission to change serving seman
 
 | Signature | Check or safe next step |
 | --- | --- |
-| Changelog history deleted | Use `.github/workflows/README.md#changelog-conflict-recovery`; never hand-merge history. |
+| Changelog history deleted (transition-only `perf-changelog.yaml` PRs) | Use `.github/workflows/README.md#changelog-conflict-recovery`; never hand-merge history. |
 | vLLM load/KV OOM or DEP CUDA-graph OOM | Distinguish profiling from real allocation; graph limits depend on per-DP-rank load, not global concurrency. |
 | Custom DSV4 image works but generic SGLang OOMs | Verify bundled source and compatibility; do not assume the generic release is interchangeable. |
 | B300 DeepGemm, EAGLE trtllm GEMM, or flash-attn assertion | Distinguish the backend and architecture; verify an upstream-supported image or setting. |

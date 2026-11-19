@@ -8,7 +8,7 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 
 调度与结果由 InferenceX 负责。`inferencex-e2e/configs/nvidia-master.yaml`
 与 `amd-master.yaml` 声明部署（`h3-bf16-<sku>-<engine>-video`），`infx.matrix` 根据
-`perf-changelog.yaml` 生成计划，`run-sweep.yml` 通过 `benchmark-tmpl.yml`
+PR 的 `perf-changelog/<PR>.yaml` 生成计划，`run-sweep.yml` 通过 `benchmark-tmpl.yml`
 运行 `video` 桶，`python -m infx.launch run` 走 `srt-video` 路径：
 `benchmarks/single_node/srt-slurm-recipes/h3/` 下的 SKU 配方通过
 `python3 -m infx.bench video serve` 把引擎作为 generic service 启动，

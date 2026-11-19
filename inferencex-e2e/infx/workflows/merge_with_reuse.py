@@ -1,9 +1,13 @@
 """Merge a PR while reusing its completed full sweep on push to main.
 
-Merge ``origin/main`` into the PR branch (a ``perf-changelog.yaml`` conflict is
-resolved by keeping main's entries and re-appending the PR's with the canonical
-PR URL), post ``/use <run_id>``, push a sync commit so the reuse gate sees
-the authorization on the new head, then squash-merge with admin bypass.
+Merge ``origin/main`` into the PR branch, post ``/use <run_id>``, push a sync commit so
+the reuse gate sees the authorization on the new head, then squash-merge with admin bypass.
+
+A PR that records its changelog entry as ``perf-changelog/<PR number>.yaml`` merges main
+cleanly and needs no changelog repair. A PR that still appends to the legacy
+``perf-changelog.yaml`` can conflict with main. That conflict is resolved by keeping
+main's entries and re-appending the PR's with the canonical PR URL, and appended ``XXX``
+links are canonicalized.
 
 From the repository root::
 
@@ -518,7 +522,11 @@ def resolve_changelog_conflict(pr: int, repo: str, git_ops: GitOps) -> bool:
 
 
 def canonicalize_changelog(pr: int, repo: str) -> None:
-    """Canonicalize appended pr-link placeholders using the Python API."""
+    """Canonicalize pr-link placeholders the PR appended to the legacy changelog file.
+
+    A PR with only a per-PR changelog file leaves the legacy file as main has it, so
+    nothing changes.
+    """
     path = git_repository_root() / changelog_path()
     original = path.read_bytes()
     base_raw = read_git_file("origin/main", str(path))

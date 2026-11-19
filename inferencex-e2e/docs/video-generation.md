@@ -70,7 +70,7 @@ recipe. It resolves the native service IP and measurement-window directory at
 runtime, preserving per-concurrency outputs and native power windows. Its request
 timeout and environment are supplied by that block.
 
-`perf-changelog.yaml` → `infx.matrix.plan` → `run-sweep.yml` →
+`perf-changelog/<PR>.yaml` → `infx.matrix.plan` → `run-sweep.yml` →
 `benchmark-tmpl.yml` → `infx.launch` → native srt-slurm service/client → result bundle.
 A video canary runs one complete deployment and is removed from the remaining
 matrix. `full-sweep-fail-fast` retains the repository's matrix-scoped fail-fast.

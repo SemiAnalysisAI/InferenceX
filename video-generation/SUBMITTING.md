@@ -10,8 +10,8 @@ sweep runs, what a result bundle contains, and how reuse is validated.
 | [1. Choose the deployment](#1-choose-the-deployment) | You |
 | [2. Change the recipe and config row](#2-change-the-recipe-and-config-row) | You |
 | [3. Check locally](#3-check-locally) | You |
-| [4. Append the changelog entry](#4-append-the-changelog-entry) | You |
-| [5. Open the PR and start the sweep](#5-open-the-pr-and-start-the-sweep) | You open the PR. A maintainer labels a fork PR. |
+| [4. Open the PR](#4-open-the-pr) | You |
+| [5. Add the changelog file and start the sweep](#5-add-the-changelog-file-and-start-the-sweep) | You add the file. A maintainer labels a fork PR. |
 | [6. Confirm the run qualifies](#6-confirm-the-run-qualifies) | You |
 | [7. Get review and sign-off](#7-get-review-and-sign-off) | One eligible CODEOWNER, then a core maintainer |
 | [8. Reuse and merge](#8-reuse-and-merge) | An authorized maintainer |
@@ -77,30 +77,36 @@ describes. If you changed code under `video-generation/`, run its
 [local checks](README.md#local-checks). For code under `inferencex-e2e/infx/`, run
 the [repository local checks](../AGENTS.md#local-checks).
 
-## 4. Append the changelog entry
+## 4. Open the PR
 
-Append one entry to the physical end of
-[`perf-changelog.yaml`](../inferencex-e2e/perf-changelog.yaml). List every affected
-config key, and include `video-generation` in `scenario-type`. The planner rejects
-an entry whose named video configs would otherwise plan no jobs.
+Write the title and body as [PR descriptions](../CONTRIBUTING.md#pr-descriptions)
+requires. The changelog file is named after the PR number, so open the PR first.
+
+## 5. Add the changelog file and start the sweep
+
+From `inferencex-e2e/`, add `perf-changelog/<PR number>.yaml`.
+
+```bash
+uv run --extra recipes python -m infx.matrix.changelog new -m "<what changes in the deployment>"
+```
+
+The command lists every affected config key and sets `scenario-type` from the
+config diff. Check that it includes `video-generation`. The planner rejects an
+entry whose named video configs would otherwise plan no jobs. The file looks like this.
 
 ```yaml
-- config-keys:
-    - h3-bf16-h100-sglang-video
-  scenario-type: [video-generation]
-  description:
-    - "<what changes in the deployment>"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+config-keys:
+  - h3-bf16-h100-sglang-video
+scenario-type:
+  - video-generation
+description:
+  - "<what changes in the deployment>"
 ```
 
 Leave `append-only` unset, because video runs only as a regular sweep. The
-[performance changelog rule](../CONTRIBUTING.md#pr-review-flow) covers the one-entry
-limit and byte preservation.
-
-## 5. Open the PR and start the sweep
-
-Write the title and body as [PR descriptions](../CONTRIBUTING.md#pr-descriptions)
-requires. Then start the sweep.
+[performance changelog rule](../CONTRIBUTING.md#pr-review-flow) and the
+[changelog README](../inferencex-e2e/perf-changelog/README.md) cover the one-file
+limit and the format. Commit and push the file, then start the sweep.
 
 - **Same-repository PR.** Apply exactly one primary label, normally
   `full-sweep-fail-fast`. `run-sweep.yml` then sweeps the changelog matrix.

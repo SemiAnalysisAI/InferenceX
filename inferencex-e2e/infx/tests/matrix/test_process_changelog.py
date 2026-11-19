@@ -492,13 +492,20 @@ def test_validator_uses_trusted_entrypoints_while_reading_another_checkout(commi
     assert result.stderr == ""
 
 
+def stub_changelog_refs(monkeypatch, added):
+    """Feed ``main`` the given legacy additions for symbolic refs that are not real commits."""
+    monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: added)
+    monkeypatch.setattr(process_changelog.changelog, "merge_base", lambda base, _: base)
+    monkeypatch.setattr(process_changelog.changelog, "added_files", lambda *_: [])
+
+
 @pytest.fixture
 def changelog_run(planning_repo, monkeypatch, capsys):
     def run(entries, cli_flags=()):
         entries = [{"config-keys": ["single"], "description": ["Controlled change"],
                     "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
                     **entry} for entry in entries]
-        monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: json.dumps(entries))
+        stub_changelog_refs(monkeypatch, json.dumps(entries))
         monkeypatch.setattr(sys, "argv", ["infx.matrix.plan", "--base-ref", "base",
                             "--head-ref", "head", "--changelog-file", "perf-changelog.yaml", *cli_flags])
         process_changelog.main()
@@ -785,6 +792,61 @@ def test_append_only_main_runs_only_added_points_and_skips_evals(planning_repo, 
     assert output["evals"] == output["agentic_evals"] == []
 
 
+def test_retired_keys_must_be_gone_from_head(planning_repo, changelog_run):
+    root, _, _ = planning_repo
+    git = lambda *args: subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+    git("init", "-q")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.com")
+    git("add", ".")
+    git("commit", "-qm", "base")
+    git("tag", "base")
+    with pytest.raises(ValueError, match=r"retired configs still exist in head: \['multi'\]"):
+        changelog_run([{"scenario-type": ["fixed-seq-len"], "retired-keys": ["multi"]}])
+
+
+@pytest.fixture
+def branched_planning_repo(planning_repo):
+    """A planning repo whose ``pr`` branch adds perf-changelog/7.yaml while main moves on."""
+    root, _, _ = planning_repo
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+    (root / "perf-changelog.yaml").write_text("")
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "test@example.com")
+    git("config", "user.name", "Test")
+    git("add", ".")
+    git("commit", "-qm", "base")
+    git("checkout", "-qb", "pr")
+    (root / "perf-changelog").mkdir()
+    (root / "perf-changelog/7.yaml").write_text(yaml.safe_dump({
+        "config-keys": ["single"], "description": ["Fixture change"],
+        "scenario-type": ["fixed-seq-len"], "no-evals": True,
+    }))
+    git("add", ".")
+    git("commit", "-qm", "pr entry")
+    git("checkout", "-q", "main")
+    (root / "perf-changelog.yaml").write_text(yaml.safe_dump([{
+        "config-keys": ["multi"], "description": ["Merged elsewhere"],
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/6",
+    }]))
+    git("commit", "-qam", "main moves on")
+    return root
+
+
+def test_plan_reads_the_pr_file_from_its_merge_base(branched_planning_repo, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["infx.matrix.plan", "--base-ref", "main",
+                        "--head-ref", "pr", "--changelog-file", "perf-changelog.yaml"])
+
+    process_changelog.main()
+
+    plan = json.loads(capsys.readouterr().out)
+    assert [entry["pr-link"] for entry in plan["changelog_metadata"]["entries"]] == [
+        "https://github.com/SemiAnalysisAI/InferenceX/pull/7"
+    ]
+    assert [row["conc"] for row in plan["single_node"]["8k1k"]] == [16, 32, 64]
+
+
 def test_generation_failure_does_not_publish_a_partial_matrix(planning_repo, changelog_run, capsys):
     (planning_repo[0] / "benchmarks/multi_node/srt-slurm-recipes/fixture/recipe.yaml").write_text(
         "schema: 2\n"
@@ -821,7 +883,7 @@ def test_a_changelog_addition_with_a_repeated_field_is_rejected(planning_repo, m
         "- config-keys: [single]\n  config-keys: [multi]\n  description: [Change]\n"
         "  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1\n"
     )
-    monkeypatch.setattr(process_changelog, "get_added_lines", lambda *_: added)
+    stub_changelog_refs(monkeypatch, added)
     monkeypatch.setattr(sys, "argv", ["infx.matrix.plan", "--base-ref", "base",
                         "--head-ref", "head", "--changelog-file", "perf-changelog.yaml"])
 

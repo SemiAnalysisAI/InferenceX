@@ -102,26 +102,23 @@ jobs:
             - For re-reviews, prefix summary with "Re-review:" and note what changed
 
             ## Master Config and Perf Changelog Validation:
-            A PR needs an `inferencex-e2e/perf-changelog.yaml` entry exactly when it changes what a benchmark runs; the entry triggers result collection.
+            A PR needs a changelog file exactly when it changes what a benchmark runs; the file triggers result collection. Each PR adds one new file, `inferencex-e2e/perf-changelog/<PR number>.yaml`, holding one entry without `pr-link`. It is written by `python -m infx.matrix.changelog new -m "<bullet>"` (add `--key <config>` for script or launcher changes the config diff cannot see). `inferencex-e2e/perf-changelog.yaml` is frozen history.
 
-            When a PR changes master configs, recipes, benchmark scripts, or launcher code and does NOT add a `inferencex-e2e/perf-changelog.yaml` entry, run `uv run python -m infx.matrix.changed --base origin/<base branch>` from `inferencex-e2e/`:
-            - If it lists changed config keys, this is a 🔴 **BLOCKING** issue. Format: "This PR changes benchmark points for <config keys> but adds no `inferencex-e2e/perf-changelog.yaml` entry. Append one entry covering these config keys to the end of the file."
-            - If it lists no changed config keys and the PR changes no benchmark script or launcher behavior that a benchmark runs, it is not an issue; do not comment on it. The tool does not see script or launcher code, so judge those changes from the diff and treat a run-affecting one without an entry as 🔴 **BLOCKING**.
+            When a PR changes master configs, recipes, benchmark scripts, or launcher code and does NOT add a changelog file, run `uv run python -m infx.matrix.changed --base origin/<base branch>` from `inferencex-e2e/`:
+            - If it lists changed config keys, this is a 🔴 **BLOCKING** issue. Format: "This PR changes benchmark points for <config keys> but adds no changelog file. Run `uv run --extra recipes python -m infx.matrix.changelog new -m '<what changed>'` from `inferencex-e2e/` to add `perf-changelog/<PR number>.yaml`."
+            - If it lists no changed config keys and the PR changes no benchmark script or launcher behavior that a benchmark runs, it is not an issue; do not comment on it. The tool does not see script or launcher code, so judge those changes from the diff and treat a run-affecting one without a changelog file as 🔴 **BLOCKING**.
             - If it cannot run, say so in the summary comment and ask whether the change alters what any benchmark runs.
 
-            ### Perf Changelog Entry Position:
-            `inferencex-e2e/perf-changelog.yaml` is read in chronological order — oldest entries at the top, newest at the bottom. New entries MUST be appended to the END of the file. Never insert in the middle or prepend.
-
-            When reviewing a PR diff for `inferencex-e2e/perf-changelog.yaml`:
-            - Check that every newly added entry lands at the very end of the file (i.e., the diff hunk adds lines after the previous last entry, not before existing entries).
-            - If any new entry is inserted above/between existing entries rather than appended to the end:
-              - This is a 🔴 **BLOCKING** issue
-              - Comment: "New `inferencex-e2e/perf-changelog.yaml` entries must be appended to the END of the file. The file is read chronologically (oldest at top, newest at bottom), so inserting in the middle or prepending breaks the ordering. Please move the new entry(ies) to the bottom of the file."
+            ### Perf Changelog Files:
+            Each of these is a 🔴 **BLOCKING** issue:
+            - The PR edits, renames, or deletes an existing file under `inferencex-e2e/perf-changelog/`. Merged files are immutable.
+            - The PR adds more than one changelog file, or names it anything other than `<this PR's number>.yaml`.
+            - The PR adds or changes entries in `inferencex-e2e/perf-changelog.yaml`, unless the PR was opened before `inferencex-e2e/perf-changelog/README.md` landed on the base branch (transition only; such a PR appends exactly one entry at the end of that file and adds no changelog file). Comment: "`perf-changelog.yaml` is frozen. Add `inferencex-e2e/perf-changelog/<PR number>.yaml` with `python -m infx.matrix.changelog new` instead."
 
             ### Append-only Perf Changelog Safety:
-            When a new `inferencex-e2e/perf-changelog.yaml` entry contains `append-only: true`, verify the complete PR diff before approving it:
+            When the PR's changelog file contains `append-only: true`, verify the complete PR diff before approving it:
             - Do not use a file allowlist. Supporting code, benchmark scripts, launchers, helpers, and other files may change. Inspect the complete diff and judge whether each benchmark-affecting change is behaviorally isolated to the appended points.
-            - Every newly added changelog entry must contain `append-only: true`; append-only and regular entries may not be mixed.
+            - The changelog file must not also list `retired-keys`; append-only and regular changes may not be mixed.
             - Treat the generated base matrix as an immutable subset of the generated head matrix. Every existing point must remain present with the same image and complete recipe. Additions may include new concurrency values or entirely new recipe variants (for example, a new tensor-parallelism value) inside the selected existing config/scenario, but they must retain the existing visual curve's single non-null image.
             - Benchmark or launch logic may change only when every changed behavior is on a control-flow path uniquely gated to the corresponding newly appended points. Trace the selected config and generated runtime values through every affected file into the condition. Confirm the path cannot be reached by any existing point. Unguarded/shared setup changes, or a branch also used by an existing concurrency/config/scenario, are blocking.
             - No existing point, recipe variant, config, or scenario may be removed or replaced. New configs and scenarios are out of scope for append-only mode; new generated variants inside the selected existing config/scenario are allowed.

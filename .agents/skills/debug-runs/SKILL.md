@@ -10,7 +10,7 @@ on the actual nodes first for a tighter loop than the full CI dispatch cycle, de
 node or infrastructure issues, or gather context on a cluster.
 
 This composes with the other skills. Use **`/nuke`** (or `/add-model-hardware`) to create
-the PR(s) with the image bump, perf-changelog entry, and `full-sweep-fail-fast` label. This
+the PR(s) with the image bump, perf-changelog file, and `full-sweep-fail-fast` label. This
 skill is the **monitor → root-cause → fix → re-verify → merge-gate** loop that follows.
 
 ## Cluster access — read it from the canvas, never hardcode it

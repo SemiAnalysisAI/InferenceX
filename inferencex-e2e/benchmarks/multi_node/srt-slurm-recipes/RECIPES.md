@@ -108,7 +108,7 @@ It writes one bound recipe per fixed-sequence or AgentX point, validated by the 
 
 The planner gives every benchmark row a `recipe-fingerprint`: a SHA-256 of its matrix fields (except `conc` and `exp-name`) and the bound variant the launcher submits, composed with its shared block and the native single-node or multi-node `power: true` telemetry block (the DCGM block, whatever the cluster's exporter); the default multi-node telemetry stays out. Concurrency values, the job `name` and everything the launcher adds for a cluster stay out, so a recipe keeps one fingerprint across concurrencies and clusters. An `eval-srt-recipe` contributes only its path; rows without an srt-slurm recipe hash their matrix fields alone.
 
-The planner selects variants without srtctl ([`variants.py`](../../../infx/srt_slurm/variants.py)), the way the launcher does, so a row that no variant serves fails planning instead of its launch. Before writing a `perf-changelog.yaml` entry, list the config keys whose results the change invalidates:
+The planner selects variants without srtctl ([`variants.py`](../../../infx/srt_slurm/variants.py)), the way the launcher does, so a row that no variant serves fails planning instead of its launch. Before writing the PR's changelog file, list the config keys whose results the change invalidates:
 
 ```bash
 uv run python -m infx.matrix.changed --base origin/main
@@ -140,4 +140,4 @@ The initial migration also resolves compatibility issues that `srtctl migrate` c
 - The power reader accepts both generations of samples CSV while validating utilization values and continuing to compute board energy from watts.
 - Post-eval selection uses native `post_eval.command` and `post_eval.passthrough_env` with [`srt_eval.sh`](../srt_eval.sh). TRT AgentX recipes declare their existing Dynamo fork with `dynamo.source.git`; launchers no longer rewrite the srt-slurm source.
 
-Append a new entry to the physical end of `perf-changelog.yaml`, covering the listed config keys, when `infx.matrix.changed` lists any; add none when it lists none. Preserve all historical bytes. When you append an entry, validate the PR with `full-sweep-fail-fast`, including evals, before following the repository's review and artifact-reuse merge process.
+When `infx.matrix.changed` lists any config keys, add one changelog file, `perf-changelog/<PR number>.yaml`, with `python -m infx.matrix.changelog new -m "<bullet>"` after opening the PR (see the [changelog README](../../../perf-changelog/README.md)); add none when it lists none. When you add one, validate the PR with `full-sweep-fail-fast`, including evals, before following the repository's review and artifact-reuse merge process.

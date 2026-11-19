@@ -20,7 +20,7 @@ Every PR description must include an **AI model disclosure** section inside a co
 
 ## PR review flow
 
-1. Open your PR and get it through PR validation. `run-sweep.yml` sweeps run only for same-repository PRs that change `inferencex-e2e/perf-changelog.yaml` (the matrix comes from the appended entries) and carry exactly one primary label, normally `full-sweep-fail-fast`. Labels, modifiers, canary, fail-fast, and the maintainer-approved fork path are described in [PR sweep labels](.github/workflows/README.md#pr-sweep-labels). Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
+1. Open your PR and get it through PR validation. `run-sweep.yml` sweeps run only for same-repository PRs that add a performance changelog file (the matrix comes from its entry) and carry exactly one primary label, normally `full-sweep-fail-fast`. Labels, modifiers, canary, fail-fast, and the maintainer-approved fork path are described in [PR sweep labels](.github/workflows/README.md#pr-sweep-labels). Let the benchmark sweep run and get a green full sweep, including evals, on a commit in your PR.
 
    **Fork PRs:** external contributors cannot apply labels. Once the PR is open, ready for review, and free of merge conflicts, a maintainer applies the labels, which approves only the current head SHA. After each push, the maintainer must remove and re-add the primary label.
 2. For changes owned by a non-admin CODEOWNER other than `@SemiAnalysisAI/core`, ask one eligible [CODEOWNER](.github/CODEOWNERS) to review and post the **PR Review Checklist** sign-off (see below) in their approval comment.
@@ -29,11 +29,15 @@ Every PR description must include an **AI model disclosure** section inside a co
 
 H3 video deployments follow the same flow. The [H3 submission guide](video-generation/SUBMITTING.md) lists their video-specific steps in order.
 
-**Performance changelog:** A PR that changes what any benchmark runs **MUST** append one new entry covering the affected config keys to the physical end of `inferencex-e2e/perf-changelog.yaml`; `python -m infx.matrix.changed --base origin/main` (run from `inferencex-e2e/`) lists them. A PR that changes no benchmark point adds none. Historical entries **MUST NOT** be edited.
+**Performance changelog:** A PR that changes what any benchmark runs **MUST** add exactly one file, `inferencex-e2e/perf-changelog/<PR number>.yaml`. Open the PR first, then run `uv run --extra recipes python -m infx.matrix.changelog new -m "<bullet>" [-m ...]` from `inferencex-e2e/`. It fills `config-keys`, `scenario-type`, and `retired-keys` from the config diff. You write the description and add any flags (`append-only`, `evals-only`, `all-evals`, `no-evals`, `eval-min-prefill-ep`). Script and launcher changes are invisible to the diff, so pass `--key <config>` for each config they change. A PR that changes no benchmark point adds no file. Merged files **MUST NOT** be edited, renamed, or deleted. The [changelog README](inferencex-e2e/perf-changelog/README.md) has the format and an example.
 
-For full config retirement, list the deleted config keys with `retired: true`. The planner verifies that every selected key existed in the base revision and is absent from the current master configs, retains the entry in changelog metadata, and schedules no benchmarks or evals for it. Retirement entries cannot use scenario filters, `append-only`, or eval-selection fields or modifiers; partial scenario retirement uses a regular entry for the surviving config.
+The `changelog-guard` check fails when configs change with no file, when the file is misnamed or there is more than one, or when the file does not cover every changed config, removed config, and changed scenario. It warns when shared scripts or launchers change with no file. Each PR adds its own file, so changelog entries do not conflict.
 
-A PR whose new entries are all retirements has no result artifacts to reuse. After review and required checks, merge it directly rather than through `merge_with_reuse`; no `/use` is required. Merge Ingest validates the retirement plan and uploads its changelog metadata, but skips reuse lookup and database dispatch. Mixed retirement and active entries still require normal sweep reuse. Do not re-append retirement entries for ingest recovery; they have no results to recover.
+`inferencex-e2e/perf-changelog.yaml` is frozen history. During the transition, a PR opened before the directory landed may still append one entry to its end until it merges, resolving conflicts with the [changelog conflict helper](.github/workflows/README.md#changelog-conflict-recovery). Every other PR uses the directory, and no PR writes both.
+
+`retired-keys` lists configs a PR removes alongside the configs it sweeps. For full config retirement with nothing to sweep, the file has `retired: true` and lists the deleted config keys in `config-keys`. The planner verifies that every selected key existed in the base revision and is absent from the current master configs, retains the entry in changelog metadata, and schedules no benchmarks or evals for it. Retirement entries cannot use scenario filters, `append-only`, or eval-selection fields or modifiers. Partial scenario retirement uses a regular entry for the surviving config.
+
+A retirement-only PR has no result artifacts to reuse. After review and required checks, merge it directly rather than through `merge_with_reuse`, with no `/use`. Merge Ingest validates the retirement plan and uploads its changelog metadata, but skips reuse lookup and database dispatch. Do not add retirement entries for ingest recovery, since they have no results to recover.
 
 ## Draft-model precision
 
@@ -170,15 +174,15 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts; `main` never re-runs the sweep itself.
 - **Reuse is mandatory.** A green sweep alone is not enough. The reuse command must be on record (the sign-off verification checks for it), otherwise the `main` run fails and the PR's results are never ingested.
-- Retirement-only changes are the no-results exception described above: merge directly after review and required checks, without `/use`. Empty or mixed changelogs do not qualify.
+- Retirement-only changes (the file has `retired: true`) are the no-results exception described above. Merge them directly after review and required checks, without `/use`.
 - Reuse does not require retaining a primary label, but it is rejected while the PR carries `evals-only` or `agentx-fast`, and `merge_with_reuse` refuses a PR with more than one primary label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary, and posts a warning comment when the pinned run's commit is outside the PR; source artifacts are revalidated at merge.
 - A missing authorized reuse command produces a Check 4 **WARN**, not a rejection. The warning stays visible in the sign-off verdict; posting an authorized command is still required to reuse artifacts.
 - From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It syncs the branch with `main`, posts the command, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
 ## Adding points to the latest curve with `append-only`
 
-When a PR only adds generated points to an existing curve, mark every new changelog
-entry with `append-only: true`. Additions may introduce new concurrency values or new
+When a PR only adds generated points to an existing curve, set `append-only: true` in its
+changelog file. Additions may introduce new concurrency values or new
 recipe variants, such as another tensor-parallelism value. Sweep setup compares the
 generated matrices at the base and head revisions, runs only the newly added points,
 and emits metadata that lets InferenceX-app extend the most recent matching curve
@@ -186,7 +190,7 @@ instead of presenting the partial run as a separate curve.
 
 This mode is intentionally narrow, but it is not based on a file allowlist. Supporting
 code, benchmark scripts, launchers, and other files may change when their behavioral
-effect is exclusive to the newly appended points named by the changelog. No changed
+effect is exclusive to the newly appended points named by the changelog file. No changed
 benchmark path may execute for or alter an existing point. Every selected config and
 scenario must already exist, and every point generated at the base revision must
 remain present with the same recipe. The head may contain any additional generated
