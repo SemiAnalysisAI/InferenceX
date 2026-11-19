@@ -1,5 +1,5 @@
 schema: 2
-name: h3-vllm-omni-agg-ulysses4
+name: h3-vllm-omni-agg-ulysses
 
 resources:
   gpu_type: h200
