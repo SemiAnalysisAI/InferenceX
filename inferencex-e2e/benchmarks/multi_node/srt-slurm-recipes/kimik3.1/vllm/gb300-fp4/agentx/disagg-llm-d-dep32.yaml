@@ -290,11 +290,8 @@ base:
       AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"
 
 override_2p1d_dep32:
-  # The client's end-of-run post-processing needs about 100 GB of host memory, more than the prefill
-  # head node has beside its Mooncake segments.
-  benchmark:
-    placement:
-      node: dedicated
+  # The client runs on the head node (the base placement): a node of its own makes this a 17-node
+  # job, more than a GB300 partition offers.
   roles:
     prefill:
       nodes: 8
