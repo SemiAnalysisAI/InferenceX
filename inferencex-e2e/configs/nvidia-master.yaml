@@ -6816,6 +6816,16 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
           tp: 4
           ep: 1
           dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: none
+        srt-recipe: agg-variants.yaml:override_tp4_c16
+        conc-list: [16]
+        num-nodes: 1
+        worker:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
 
 dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
   image: vllm/vllm-openai:cu134-nightly-aarch64-01fba62-1111d@sha256:9aa51d63c0f9e408a6a38df5aaeac2794da5de766d7398035a380bdf3d41389a

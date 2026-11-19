@@ -12744,3 +12744,12 @@
     - "Disagg: prefill Engram tables split over the prefill GPUs in HBM, KV offload up to 170 GiB per prefill rank."
     - "Disagg: 5P1D DEP32 at concurrency 3200, 7P1D DEP16 at 6600, 12P1D DEP32 at 10288 (replacing 6P1D, 9P1D and 16P1D)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5015
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append TP4 at concurrency 16 with the latency_specialized decode to the existing curve: 32 running requests, prefill every 128 decode steps, decode-replay graphs to 4096 tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  append-only: true
