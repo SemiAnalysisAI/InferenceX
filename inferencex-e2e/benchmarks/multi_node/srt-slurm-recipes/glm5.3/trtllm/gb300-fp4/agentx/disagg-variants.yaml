@@ -95,6 +95,7 @@ base:
         speculative_config:
           decoding_type: MTP
           max_draft_len: 5
+        stream_interval: 50
         tensor_parallel_size: 4
     decode:
       env:
@@ -158,7 +159,7 @@ base:
         speculative_config:
           decoding_type: MTP
           max_draft_len: 5
-        stream_interval: 20
+        stream_interval: 50
   frontend:
     type: dynamo
     enable_multiple_frontends: false
