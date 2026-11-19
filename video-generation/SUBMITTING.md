@@ -46,7 +46,7 @@ binding.
   The binder rejects any other value, and the server records it as the engine
   revision.
 - Pin the image by SHA256 digest, and use its real interpreter and architecture.
-  The A100, H100, H200, and B200 SGLang rows, the B200 and A100 vLLM-Omni H3 rows, and
+  The A100, H100, H200, and B200 SGLang rows, the B200, H200 and A100 vLLM-Omni H3 rows, and
   the H100, H200, B200 and B300 vLLM-Omni Wan2.2 rows use the public CUDA amd64 image. The MI355X row
   uses its ROCm MI35x build.
 
