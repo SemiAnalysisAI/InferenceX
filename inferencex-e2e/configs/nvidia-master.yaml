@@ -6991,8 +6991,8 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg:
           dp-attn: false
       - spec-decoding: mtp
         kv-offloading: none
-        srt-recipe: agg-variants.yaml:override_tp4_c64
-        conc-list: [64]
+        srt-recipe: agg-variants.yaml:override_tp4_c32
+        conc-list: [32]
         num-nodes: 1
         worker:
           num-worker: 1
