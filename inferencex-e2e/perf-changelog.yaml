@@ -13109,3 +13109,14 @@
   description:
     - "Add vllm/vllm-omni-rocm:v0.30.0, the newest stable vLLM-Omni ROCm image, pinned by its linux/amd64 digest, on the MI355X H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, the AITER FLASH_ATTN diffusion attention backend, vLLM quick all-reduce quantization set to NONE, and the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4971
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Serve every point with --tokenizer-backend fastokens."
+    - "TP2 c16 caps --max-running-requests at 2 instead of 4."
+    - "Add TP2 c24 with the c16 settings and --max-running-requests 4."
+    - "Add DP2 c80, c96 and c128 behind sglang-router, with the DP2 c64 settings and --max-running-requests equal to the concurrency."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5096
