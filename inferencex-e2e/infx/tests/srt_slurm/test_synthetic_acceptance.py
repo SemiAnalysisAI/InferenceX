@@ -467,7 +467,7 @@ def test_dflash_rejects_invalid_verification_block(golden_dir: Path, width: Any)
     "environment",
     [{"EVAL_ONLY": "true"}, {"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}],
 )
-@pytest.mark.parametrize("framework", ["vllm", "vllm-disagg", "sglang", "dynamo-sglang", "trt"])
+@pytest.mark.parametrize("framework", ["vllm", "vllm-disagg", "atomesh-vllm-mooncake", "sglang", "dynamo-sglang", "trt"])
 def test_real_runs_clear_synthetic_without_a_curve(
     tmp_path: Path, framework: str, environment: dict[str, str]
 ) -> None:
@@ -489,7 +489,7 @@ def test_real_runs_clear_synthetic_without_a_curve(
         build_overrides(recipe, framework, env, golden_dir=tmp_path / "absent"),
     )
     role = result["roles"]["agg"]
-    if framework in {"vllm", "vllm-disagg"}:
+    if framework in {"vllm", "vllm-disagg", "atomesh-vllm-mooncake"}:
         assert json.loads(role["args"]["speculative-config"]) == {
             "method": "dspark",
             "num_speculative_tokens": 3,

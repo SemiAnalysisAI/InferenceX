@@ -25,6 +25,7 @@ ENGINES = {
     "sglang": "sglang",
     "sglang-disagg": "sglang",
     "vllm-disagg": "vllm",
+    "atomesh-vllm-mooncake": "vllm",
     "vllm": "vllm",
     "dynamo-vllm": "vllm",
     "llmd-vllm": "vllm",
