@@ -34,7 +34,7 @@
 - [ ] I have updated documentation if necessary
 - [ ] **If `python -m infx.matrix.changed --base origin/main` lists affected config keys, I have appended one new entry covering them to the physical end of `inferencex-e2e/perf-changelog.yaml`; if it lists none, I have added none. I have not edited historical entries**
 - [ ] **If this PR appends an `inferencex-e2e/perf-changelog.yaml` entry, it carries exactly one primary sweep label** (a maintainer applies it on fork PRs): `full-sweep-fail-fast` (recommended), `full-sweep-enabled`, or `non-canary-full-sweep-enabled`. Optional modifiers `all-evals`, `evals-only`, and `agentx-fast` require a primary label; the last two block reuse while applied.
-- [ ] **Before merging via reuse, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) has commented `/use <run_id>` (or the legacy `/reuse-sweep-run`) on this PR**. Do this **only once there is a final full sweep that is all green with evals passing**, since after this comment the primary sweep label will no longer automatically kick off new sweeps. Remove and re-add the primary sweep label to force a new sweep.
+- [ ] **Before merging via reuse, a maintainer with write access to the repository has commented `/use <run_id>` (or the legacy `/reuse-sweep-run`) on this PR**. Do this **only once there is a final full sweep that is all green with evals passing**, since after this comment the primary sweep label will no longer automatically kick off new sweeps. Remove and re-add the primary sweep label to force a new sweep.
 
 </details>
 

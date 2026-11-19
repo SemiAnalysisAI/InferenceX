@@ -11,6 +11,7 @@ from infx.config import MASTER_CONFIGS, RUNNER_CONFIG, git_path_at_ref
 
 from .fingerprint import recipe_fingerprint
 from .generate import (
+    SCENARIO_TYPES,
     EvalMode,
     drop_app_colliding_evals,
     freeze_config_value,
@@ -22,12 +23,12 @@ from .revision import GENERATOR, snapshot
 from .validation import (
     ChangelogEntry,
     ChangelogMatrixEntry,
+    ChangelogMetadata,
     config_root,
     load_config_files,
     load_runner_file,
 )
 
-SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding", "video-generation")
 # An entry without scenario-type reruns these; video runs only for entries that name it.
 DEFAULT_SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 
@@ -70,6 +71,29 @@ def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
             added_lines.append(line[1:])
 
     return "\n".join(added_lines)
+
+
+PULL_REQUEST_LINK = re.compile(
+    r"https?://(?:www\.)?github\.com/([^/\s]+/[^/\s]+)/pull/([0-9]+)(?:[/?#]\S*)?", re.IGNORECASE
+)
+
+
+def entries_from_repository(entries: list, repository: str, pull_request: int | None) -> list:
+    """Return the entries except those linking another repository's pull request.
+
+    A link numbered ``pull_request``, the pull request the push merged, is kept whatever its owner.
+    """
+
+    def elsewhere(entry: object) -> bool:
+        link = str(entry.get("pr-link", "")).strip() if isinstance(entry, dict) else ""
+        match = PULL_REQUEST_LINK.fullmatch(link)
+        return (
+            match is not None
+            and match.group(1).lower() != repository.lower()
+            and int(match.group(2)) != pull_request
+        )
+
+    return [entry for entry in entries if not elsewhere(entry)]
 
 
 def filter_eval_rows_by_prefill_ep(eval_rows: list[dict], min_prefill_ep: int | None) -> list[dict]:
@@ -535,6 +559,15 @@ def main() -> None:
         action="store_true",
         help="Suppress throughput for every changelog entry without expanding eval selection.",
     )
+    parser.add_argument(
+        "--repository",
+        help="Leave out entries whose pr-link is a pull request in another owner/name repository.",
+    )
+    parser.add_argument(
+        "--pull-request",
+        type=int,
+        help="Number of the pull request the push merged; --repository keeps entries linking it.",
+    )
     args = parser.parse_args()
 
     added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
@@ -543,6 +576,13 @@ def main() -> None:
         raise ValueError("No additions found in the changelog file.")
 
     changelog_data = yamlio.load(added_yaml, yamlio.UniqueKeySafeLoader)
+    if args.repository and isinstance(changelog_data, list):
+        changelog_data = entries_from_repository(changelog_data, args.repository, args.pull_request)
+        if not changelog_data:
+            metadata = ChangelogMetadata(base_ref=args.base_ref, head_ref=args.head_ref, entries=[])
+            empty = ChangelogMatrixEntry(changelog_metadata=metadata)
+            print(empty.model_dump_json(by_alias=True, exclude_none=True))
+            return
 
     try:
         result = build_plan(

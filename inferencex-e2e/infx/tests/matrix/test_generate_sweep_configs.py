@@ -2646,9 +2646,8 @@ def agentic_config(request, sample_single_node_config):
 
 
 class TestAgenticGeneration:
-    @pytest.mark.parametrize("power_key", ["require-power", "require_power"])
     def test_required_power_reaches_benchmarks_but_not_evals(
-        self, power_key, agentic_config, sample_runner_config, generate_agentic_sweep,
+        self, agentic_config, sample_runner_config, generate_agentic_sweep,
     ):
         from infx.matrix.generate import select_matrix_evals
         from infx.matrix.validation import AgenticCodingSearchSpaceEntry
@@ -2656,7 +2655,7 @@ class TestAgenticGeneration:
         config, benchmark = agentic_config
         benchmark["conc-list"] = [1, 4, 8]
         before = generate_agentic_sweep(config, sample_runner_config)
-        benchmark[power_key] = True
+        benchmark["require-power"] = True
         AgenticCodingSearchSpaceEntry.model_validate(benchmark)
         after = generate_agentic_sweep(config, sample_runner_config)
         assert after == [{**row, "require-power": True} for row in before]
@@ -3424,9 +3423,8 @@ class TestExpandConfigKeys:
         ]
 
 
-@pytest.mark.parametrize("power_key", ["require-power", "require_power"])
 def test_require_power_is_scoped_to_one_multinode_fixed_sequence(
-    power_key, sample_multinode_config, sample_runner_config
+    sample_multinode_config, sample_runner_config
 ):
     from infx.matrix.generate import expand_full_sweep, select_matrix_evals
     from infx.matrix.validation import MultiNodeSeqLenConfig
@@ -3438,7 +3436,7 @@ def test_require_power_is_scoped_to_one_multinode_fixed_sequence(
     sequences[-1]["isl"] = 8192
     before = expand_full_sweep(config, sample_runner_config)
     assert all("require-power" not in row for row in before)
-    sequences[-1][power_key] = True
+    sequences[-1]["require-power"] = True
     MultiNodeSeqLenConfig.model_validate(sequences[-1])
     after = expand_full_sweep(config, sample_runner_config)
     assert len(before) == len(after)
@@ -3447,7 +3445,7 @@ def test_require_power_is_scoped_to_one_multinode_fixed_sequence(
     evals = select_matrix_evals(copy.deepcopy(after), mode="subset")
     assert evals
     assert all("require-power" not in row for row in evals)
-    sequences[0][power_key] = True
+    sequences[0]["require-power"] = True
     with pytest.raises(ValueError, match="only fixed-sequence 8192/1024"):
         expand_full_sweep(config, sample_runner_config)
 

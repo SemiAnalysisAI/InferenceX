@@ -265,7 +265,8 @@ schema; unknown keys fail.
 - `slurm.srt-slurm` is the cluster's srt-slurm profile: `volume-mounts` maps
   volumes every job mounts to container paths, `mounts` does the same for host
   paths outside the volumes (devices), `agentic-volume-mounts` adds world-writable
-  volumes for multi-node AgentX jobs, `power-exporter-port` is the DCGM exporter port
+  volumes for multi-node AgentX jobs (a single-node AgentX benchmark mounts only its
+  `aiperf-cache`, the shared replay dataset cache), `power-exporter-port` is the DCGM exporter port
   of multi-node power points (without it they use `extra.default_gpu_exporter`), `cpu-power-exporter` (`source: acpi` or `rapl`) is the CPU power exporter native
   single-node points and `cpu-power` rows bind beside it (`make setup` installs it from the pinned srt-slurm
   release; a RAPL job's host setup gives the job user the RAPL counters until teardown, so `rapl`
@@ -294,7 +295,7 @@ schema; unknown keys fail.
   measurement fails the job under `REQUIRE_POWER=1` and otherwise records an invalid
   verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`; AMD clusters use
   srt-slurm's
-  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/acfb4dcc3bd48fd6a1e7b615e849e7954c0c3852/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
+  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/2d9079c678e059c41d9186bbb7b14a16c414b8bc/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
   which requires `gpu_labels` and `gpu_metrics` and rejects unknown keys such as the
   former `power_profile`. The AMD exporter reads
   [`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json);

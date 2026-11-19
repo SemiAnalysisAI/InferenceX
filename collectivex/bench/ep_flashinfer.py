@@ -61,28 +61,6 @@ from ep_backend import EPBackend, blockwise_fp8_codec
 # -1 is safe: real ids are [0, num_experts).
 _INVALID_EXPERT = -1
 
-# 0.6.16 ("Port the TensorRT-LLM one-sided A2A optimizations") rewrote the combine
-# accumulator from the payload dtype to FP32 with a single narrowing store. Earlier wheels
-# round at every level of the top-k reduction tree, which is a few BF16 ulps the plain
-# FP32 expectation does not carry, so the oracle needs to know which kernel it is facing.
-_COMBINE_FP32_SINCE = (0, 6, 16)
-
-
-def _wheel_has_fp32_combine(version: str) -> bool:
-    """Does this wheel accumulate combine in FP32, per `_COMBINE_FP32_SINCE`?
-
-    Needs real version ordering, not a digit scrape: reading `0.6.16rc1` as 0.6.16 models FP32
-    against a per-level-rounding kernel, which can exceed COMBINE_REL_TOL and red a correct run.
-    The opposite error costs a few ulps, so anything unparseable answers False.
-    """
-    from packaging.version import InvalidVersion, Version
-
-    try:
-        return Version(version) >= Version(".".join(str(n) for n in _COMBINE_FP32_SINCE))
-    except InvalidVersion:
-        return False
-
-
 def _accepts_keyword(fn, name) -> bool:
     """vLLM's `supports_kw(fn, name, allow_var_kwargs=False)`: whether `name` is an explicit
     parameter of `fn`. vLLM picks its combine call by this probe, not by version (`output=` and
@@ -122,8 +100,8 @@ class FlashInferEPBackend(EPBackend):
     # combine_weight_semantics stays the base's unweighted-rank-sum: the kernel scatters expert
     # outputs back to the supplying rank without multiplying by the routing weights (those ride
     # along as a caller payload, and vLLM applies them in the MoE layer, not in the A2A).
-    # Set per wheel in create_buffer; see _COMBINE_FP32_SINCE.
-    combine_reduction = "topk-slot-tree"
+    # The pinned wheel accumulates combine in FP32 with one narrowing store (0.6.16 onwards).
+    combine_reduction = "domain-fp32"
     # Forced by the phase asserts described in the module docstring.
     requires_fresh_pair = True
 
@@ -219,8 +197,6 @@ class FlashInferEPBackend(EPBackend):
         self.library_version = flashinfer.__version__
         self.kernel_generation = f"{type(self).kernel_generation}-{_version_slug(self.library_version)}"
         self._combine_takes_output = _accepts_keyword(self._a2a.combine, "output")
-        if _wheel_has_fp32_combine(flashinfer.__version__):
-            self.combine_reduction = "domain-fp32"
         # Every rank must finish mapping its workspace before any peer writes into it;
         # vLLM barriers here for the same reason. Scoped to the EP group, not the world.
         torch.distributed.barrier(group=_ep_group())

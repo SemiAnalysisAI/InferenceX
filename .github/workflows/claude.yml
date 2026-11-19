@@ -14,7 +14,9 @@ jobs:
     concurrency:
       group: pr-review-${{ github.event.pull_request.number }}
       cancel-in-progress: false
-    if: contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+    if: >-
+      github.repository == 'SemiAnalysisAI/InferenceX'
+      && contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
     permissions:
       contents: read
       pull-requests: write # Publish PR feedback.
@@ -30,13 +32,9 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
-      - name: Install Claude Code 2.1.282
+      - name: Install Claude Code
         id: claude_cli
-        run: | # zizmor: ignore[adhoc-packages] Claude CLI and its native packages are pinned to 2.1.282
-          npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.282
-          claude_cli="$RUNNER_TEMP/claude-code/node_modules/.bin/claude"
-          test "$("$claude_cli" --version)" = "2.1.282 (Claude Code)"
-          echo "path=$claude_cli" >> "$GITHUB_OUTPUT"
+        uses: $/.github/actions/setup-claude-code
       - name: PR Review with Claude
         uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
         with:
@@ -262,6 +260,13 @@ jobs:
             If an MTP benchmark script is missing `--use-chat-template`:
             - This is a 🔴 **BLOCKING** issue
             - Comment: "MTP benchmark scripts MUST include `--use-chat-template` flag in the benchmark client configuration. This ensures proper tokenization for speculative decoding. Please add `--use-chat-template` to the benchmark command."
+
+            ## AgentX Stream Interval Validation:
+            When a PR adds or reruns `agentic-coding` (AgentX) points, resolve each point's effective stream interval in every serving role (aggregated, prefill, decode): `stream-interval` / `--stream-interval` (SGLang, vLLM), `stream_interval` (TRT-LLM and Dynamo engine configs), including values inherited from shared `*-variants.yaml` or base recipes and serve commands in benchmark scripts. An unset value uses the pinned engine's default, which must also be at most 60; compliant defaults need no explicit override.
+            - Any value above 60 is a 🔴 **BLOCKING** issue. There is no policy-imposed lower bound; do not flag valid engine-supported values below 20.
+            - Comment: "AgentX points must use a stream interval at most 60 tokens (≤ 60, inclusive). Buffering short responses into a single client chunk can inflate TTFT and prevent meaningful interactivity measurement. Please set it to 60 or lower; values below 20 are allowed. See `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md#agentx-stream-interval`."
+            - An `append-only: true` entry for an AgentX curve whose existing points run above 60 is also 🔴 **BLOCKING**: the curve must be fully rerun at 60 or lower.
+            - Do not flag fixed-sequence (non-AgentX) scenarios or untouched points the PR does not rerun.
 
             ## Model Prefix Validation:
             When reviewing changes to `inferencex-e2e/configs/*-master.yaml` files, verify that ALL config keys use valid model prefixes.

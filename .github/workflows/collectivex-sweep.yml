@@ -68,7 +68,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - name: Plan and score shards
+      - name: Plan shards
         id: plan
         env:
           PYTHONPATH: inferencex-e2e
@@ -85,11 +85,20 @@ jobs:
           jq '[.include[] | {id, sku, runner, runner_partition, backend, nodes,
                              framework: "collectivex", "node-count": .nodes}]' matrix-full.json |
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-              python -m infx.workflows.ci_priority \
-              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" > scored.json
-          [ "$(jq length scored.json)" -gt 0 ] || { echo 'No runnable shards' >&2; exit 1; }
-          echo "matrix=$(jq -c '{include: .}' scored.json)" >> "$GITHUB_OUTPUT"
-          jq -r '.[] | "p\(.priority) \(.runner) \(.runner_partition) nodes:\(.nodes) \(.id)"' scored.json
+              python -m infx.workflows.scheduler_facts \
+              --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+              --facts-file "${RUNNER_TEMP}/scheduling-facts.json" > annotated.json
+          [ "$(jq length annotated.json)" -gt 0 ] || { echo 'No runnable shards' >&2; exit 1; }
+          echo "matrix=$(jq -c '{include: .}' annotated.json)" >> "$GITHUB_OUTPUT"
+          jq -r '.[] | "\(.runner) \(.runner_partition) nodes:\(.nodes) \(.id)"' annotated.json
+      - name: Upload scheduling facts
+        if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ runner.temp }}/scheduling-facts.json
+          archive: false
+          overwrite: true
+          if-no-files-found: error
 
   sweep:
     if: github.event_name == 'workflow_dispatch'
@@ -102,11 +111,11 @@ jobs:
       ${{ fromJSON(format('["self-hosted",{0}{1}{2}]',
         toJSON(matrix.runner),
         matrix.runner_partition != '' && format(',{0}', toJSON(matrix.runner_partition)) || '',
-        vars.PRIORITY_SCHEDULER_ENABLED == 'true' && format(',{0}{1},{2}',
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' && format('{0},', toJSON(format('nodes:{0}', matrix.nodes))) || '',
-          toJSON(format('ci-job-{0}-{1}', matrix.priority, matrix.queue-token)),
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' && format(',{0},{1},{2}',
+          toJSON(format('nodes:{0}', matrix.nodes)),
+          toJSON(format('ci-job-{0}', matrix.queue-token)),
           toJSON(format('ci-attempt-{0}', github.run_attempt))) || '')) }}
-    name: p${{ matrix.priority }} | CollectiveX ${{ matrix.id }}
+    name: CollectiveX ${{ matrix.id }}
     env:
       CX_SHARD_SKU: ${{ matrix.sku }}
       CX_SHARD: ${{ matrix.id }}

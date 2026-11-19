@@ -169,3 +169,25 @@ def test_conflict_resolution_separates_multiple_contributions_by_one_blank_line(
     assert result.count(b"\n\n- config-keys:") == 3
     assert b"\n\n\n" not in result
     assert result.endswith(b"\n") and not result.endswith(b"\n\n")
+
+
+def test_conflict_resolution_drops_stacked_parent_entry_main_already_has() -> None:
+    base = block("base-config", "https://github.com/SemiAnalysisAI/InferenceX/pull/1")
+    parent = block("parent-config", "https://github.com/SemiAnalysisAI/InferenceX/pull/41")
+    pr = base + b"\n" + parent + b"\n" + block("child-config", "XXX")
+    main = base + b"\n" + parent
+
+    result = resolve_conflict_bytes(base, pr, main, 42, "SemiAnalysisAI/InferenceX")
+
+    assert result == main + b"\n" + block(
+        "child-config", "https://github.com/SemiAnalysisAI/InferenceX/pull/42"
+    )
+
+
+def test_conflict_resolution_still_rejects_another_prs_unmerged_entry() -> None:
+    base = block("base-config", "https://github.com/SemiAnalysisAI/InferenceX/pull/1")
+    pr = base + b"\n" + block("other-config", "https://github.com/SemiAnalysisAI/InferenceX/pull/41")
+    main = base + b"\n" + block("main-config", "https://github.com/SemiAnalysisAI/InferenceX/pull/40")
+
+    with pytest.raises(ChangelogValidationError, match="pull/42"):
+        resolve_conflict_bytes(base, pr, main, 42, "SemiAnalysisAI/InferenceX")

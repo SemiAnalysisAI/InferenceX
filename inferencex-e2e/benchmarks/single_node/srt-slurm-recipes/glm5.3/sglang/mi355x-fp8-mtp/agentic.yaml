@@ -1,0 +1,106 @@
+base:
+  schema: 2
+  name: glm5.3-fp8-mi355x-sglang-agentic
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: zai-org/GLM-5.3
+        trust-remote-code: true
+        kv-cache-dtype: fp8_e4m3
+        dsa-prefill-backend: tilelang
+        dsa-decode-backend: tilelang
+        tool-call-parser: auto
+        reasoning-parser: auto
+        # 32k chunks interleave decode between prefill chunks and keep per-chunk
+        # activation headroom low enough for 0.85.
+        chunked-prefill-size: 32768
+        mem-fraction-static: 0.85
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        # The gfx950 monokernel serves verify steps of one or two running requests.
+        enable-amd-monokernel: true
+        watchdog-timeout: 1800
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # The DSA indexer uses the precompiled HIP Top-K op.
+        SGLANG_OPT_USE_TOPK_V2: 'false'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# Admission is 2x CONC; the decode graph batch follows it.
+override_tp8_c1:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c2:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+  benchmark:
+    env:
+      CONC: '2'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_c10:
+  roles:
+    agg:
+      gpus: 8
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 20
+        cuda-graph-max-bs-decode: 20
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: none
