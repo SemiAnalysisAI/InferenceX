@@ -70,6 +70,10 @@ OVERRIDES: dict[str, tuple[Override, ...]] = {
             Match(any_of("glm5.2"), any_of("fp4"), any_of("dynamo-trt")),
             served_name="GLM-5.2-NVFP4",
         ),
+        Override(
+            Match(any_of("glm5.3"), any_of("fp4"), any_of("dynamo-trt")),
+            served_name="GLM-5.3-NVFP4",
+        ),
     ),
     "h200-dgxc": (
         Override(
