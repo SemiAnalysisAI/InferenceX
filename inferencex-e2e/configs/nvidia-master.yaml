@@ -4130,14 +4130,12 @@ qwen3.5-fp8-h100-sglang-agentic-mtp:
       search-space:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16], srt-recipe: agentic.yaml }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 12, 16], srt-recipe: agentic.yaml }
-# MiniMax-M3.1-Flash AgentX on H100: day-zero vLLM image from
-# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, multiarch manifest verified
-# 2026-10-23 (amd64 is minimax-m31-flash-x86_64-cu134). Serve flags follow the
+# MiniMax-M3.1-Flash AgentX on H100: vLLM nightly with FlashInfer SM90 MSA. Serve flags follow the
 # Hopper TP8 recipe: FP8 KV and indexer caches, NVFP4 experts on Marlin MoE.
 # Upstream does not enable DSpark on Hopper; this adds the GB200 recipe's
 # three-token DSpark, with synthetic acceptance from minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-h100-vllm-agentic-dspark:
-  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  image: vllm/vllm-openai:nightly-8ca766326652caf4b8e50d1b9118d8a22f6adc73@sha256:b6d1cfc60cce1f6405d37ea77645a36a46065230fb643abc2eeb93a5dc8fb79b
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:h100-dsxe
@@ -4153,14 +4151,12 @@ minimaxm31flash-fp4-h100-vllm-agentic-dspark:
       # KV per 80 GB GPU, about 2x MiniMax-M3 H100 (cliff c5-c6).
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 10, 12], srt-recipe: agentic.yaml }
 
-# MiniMax-M3.1-Flash AgentX on H200: day-zero vLLM image from
-# https://vllm.ai/blog/2026-10-23-minimax-m31-flash, multiarch manifest verified
-# 2026-10-23 (amd64 is minimax-m31-flash-x86_64-cu134). Serve flags follow the
+# MiniMax-M3.1-Flash AgentX on H200: vLLM nightly with FlashInfer SM90 MSA. Serve flags follow the
 # Hopper TP8 recipe: FP8 KV and indexer caches, NVFP4 experts on Marlin MoE.
 # Upstream does not enable DSpark on Hopper; this adds the GB200 recipe's
 # three-token DSpark, with synthetic acceptance from minimax-m3.1-flash__dspark__native__probabilistic-block.yaml.
 minimaxm31flash-fp4-h200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:minimax-m31-flash@sha256:86f582dae25ea92802353727164ae4eb03b37b18baf9119b805ffaec2a7ef07c
+  image: vllm/vllm-openai:nightly-8ca766326652caf4b8e50d1b9118d8a22f6adc73@sha256:b6d1cfc60cce1f6405d37ea77645a36a46065230fb643abc2eeb93a5dc8fb79b
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:h200-dgxc
@@ -8148,6 +8144,33 @@ h3-bf16-b200-vllm-omni-video:
             srt-recipe: serving-client.yaml
             conc-list: [1]
 
+wan22-bf16-h200-vllm-omni-video:
+  image: vllm/vllm-omni:v0.32.0@sha256:6b44ee504a0dc3a21eacf72e7dc5da318b7bcc8ed0e349dc928e67278414430c
+  model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+  model-prefix: wan22
+  runner: cluster:h200-dgxc
+  precision: bf16
+  framework: vllm-omni
+  multinode: false
+  srt-recipe-dir: wan22/vllm-omni/h200-bf16
+  scenarios:
+    video-generation:
+      - spec: wan22.yaml
+        set: release-v1
+        search-space:
+          - gpus: 1
+            srt-recipe: serving-client-g1.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: serving-client-g2.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client-g4.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
 wan22-bf16-b200-vllm-omni-video:
   image: vllm/vllm-omni:v0.32.0@sha256:6b44ee504a0dc3a21eacf72e7dc5da318b7bcc8ed0e349dc928e67278414430c
   model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
@@ -8195,6 +8218,81 @@ wan22-bf16-b300-vllm-omni-video:
           - gpus: 2
             srt-recipe: serving-client-g2.yaml
             conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client-g4.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
+wan22-bf16-h100-vllm-omni-video:
+  image: vllm/vllm-omni:v0.32.0@sha256:6b44ee504a0dc3a21eacf72e7dc5da318b7bcc8ed0e349dc928e67278414430c
+  model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+  model-prefix: wan22
+  runner: cluster:h100-dsxe
+  precision: bf16
+  framework: vllm-omni
+  multinode: false
+  srt-recipe-dir: wan22/vllm-omni/h100-bf16
+  scenarios:
+    video-generation:
+      - spec: wan22.yaml
+        set: release-v1
+        search-space:
+          - gpus: 1
+            srt-recipe: serving-client-g1.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: serving-client-g2.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client-g4.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
+wan22-bf16-h200-sglang-video:
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+  model-prefix: wan22
+  runner: cluster:h200-dgxc
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: wan22/sglang/h200-bf16
+  scenarios:
+    video-generation:
+      - spec: wan22.yaml
+        set: release-v1
+        search-space:
+          - gpus: 1
+            srt-recipe: serving-client-g1.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: serving-client-g2.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: serving-client-g4.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: serving-client.yaml
+            conc-list: [1]
+
+wan22-bf16-h100-sglang-video:
+  image: lmsysorg/sglang:v0.5.23@sha256:f7876bef696ccf9cf75a2bf7ccb82970f5fac577f082fb8ca95c9a59d2160eb5
+  model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+  model-prefix: wan22
+  runner: cluster:h100-dsxe
+  precision: bf16
+  framework: sglang
+  multinode: false
+  srt-recipe-dir: wan22/sglang/h100-bf16
+  scenarios:
+    video-generation:
+      - spec: wan22.yaml
+        set: release-v1
+        search-space:
           - gpus: 4
             srt-recipe: serving-client-g4.yaml
             conc-list: [1]

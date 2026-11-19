@@ -205,9 +205,10 @@ must require its unique `ci-job-*` label; a workflow that targets only a generic
 hardware label bypasses admission accounting.
 
 If `PRIORITY_SCHEDULER_ENABLED` is disabled, workflows omit `nodes:N`, `ci-job-*`,
-and `ci-attempt-*` and target the plain runner label. The priority score also
-subtracts `0.001` per additional node so otherwise equal work prefers smaller
-allocations without overriding the existing business-priority signals.
+and `ci-attempt-*` and target the plain runner label. When it is enabled, each
+workflow's setup job uploads a `scheduling-facts.json` artifact keyed by the
+token in every `ci-job-<token>` label. The priority scheduler scores jobs from
+those facts, node count included, with weights kept outside this repository.
 
 Aggregated multi-node search-space entries must declare one aggregate `worker`
 role and `num-nodes`; that value becomes the generated `node-count` directly.
