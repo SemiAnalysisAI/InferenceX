@@ -13117,3 +13117,16 @@
     - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the H100 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 2, 4 and 8 GPUs: DiT TP2 with Ulysses 1, 2 and 4, since H3 does not fit one 80 GB GPU, with text-encoder TP and tiled VAE patch parallelism across all GPUs, and with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
     - "The H3 snapshot staged on h100-dsxe lacks Ref2VA/model_index.json, which the vLLM-Omni model view requires, so its launcher downloads the pinned snapshot without the Ref2VA weights into its hub cache before it submits a video job, as on a100-cw; the download keeps its xet cache in a temporary directory, since the runner's HF_HOME is a read-only model store."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4969
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the aggregated GB200 MiniMax-M3.1-Flash Dynamo vLLM key to vllm/vllm-openai:cu135-nightly-60bd6dd2edd175a1c55fd3488f871e4c3d2ef27d, which includes vllm-project/vllm#66324, with no patch. The disaggregated key reruns unchanged."
+    - "Add TP4 specialized decode (additional-config decode_backend latency_specialized) at concurrency 1, 4, 8 and 12, and at 16 with a 640 GB SimpleCPUOffloadConnector CPU KV tier: fp8 KV and index-K caches, DSpark K7 with the FLASHINFER_TS drafter, max-num-seqs 8 and FULL decode graphs for 8 to 64 rows. These replace stock concurrency 1 and 4; stock 8, 12, 16, 32 and 40 stay."
+    - "Every aggregated point sets stream-interval 20 and prefill-schedule-interval 24, as on GB300."
+    - "Dynamo builds from tag v1.6.0-minimax-m3.1-flash-dev.1 (92b661bd), since the 1.6.0.dev20261023 wheel fails to import on vLLM main (ai-dynamo/dynamo#18841); CUDARC_CUDA_VERSION=13030 lets the build accept CUDA 13.5."
+    - "Run the vLLM engines natively behind Dynamo sidecars (gRPC, TCP request plane, ZMQ events, no NATS), as on GB300."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5076
