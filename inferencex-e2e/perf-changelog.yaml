@@ -13124,5 +13124,5 @@
   description:
     - "Add MiniMax-M3.1-Flash PD-disaggregated AgentX on MI355X with vLLM: one TP4 prefill and two TP4 decode engines moving KV over MooncakeConnector (RDMA) behind vllm-router 0.1.16 with consistent-hash routing, at concurrency 40, 48, 56, 64, 72 and 80, on the single-node lane's image and engine settings."
     - "Prefill admits 2x CONC, runs DBO and holds a host KV tier (1349 GB at c40-c64, 1499 GB at c72-c80); each decode engine caps its batch at CONC/8. At c80 the prefill schedules at most 4096 tokens of a prompt per step at 0.75 GPU memory utilization."
-    - "runners/srt-slurm/patches/669-vllm-router-mooncake.patch backports NVIDIA/srt-slurm#669, which runs the vLLM Router in Mooncake mode once the workers are healthy and points each prefill's bootstrap server at the port the Router queries."
+    - "Use srt-slurm cc9db05, which includes NVIDIA/srt-slurm#669, instead of the local Mooncake backport; allocate one shared bootstrap port per prefill engine and start the Router after worker health checks."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
