@@ -95,6 +95,7 @@ sys.exit(plan.get("rc", 0))
 
 PUBLISHES = {
     "kimi_vendor_eval.py": ["results_kimi_vendor_2026-01-01.json", "kimi_vendor_report.json"],
+    "kimi_beam_eval.py": ["results_kimi_beam_2026-01-01.json", "kimi_beam_report.json"],
     "minimax_provider_eval.py": ["results_minimax_vendor_2026-01-01.json", "minimax_vendor_report.json"],
     "minimax_m3_full_eval.py": [
         "results_minimax_vendor_full_2026-01-01.json",
@@ -197,6 +198,22 @@ def test_kimi_runs_the_verified_checkout_with_an_isolated_runtime(stub: Stub) ->
     assert not Path(checkout["argv"][-1]).exists()
 
 
+def test_kimi_beam_suite_adds_the_tokenizer_runtime_and_runs_its_own_adapter(stub: Stub) -> None:
+    ctx = stub.context("kimi_beam_1m", BEAM_API_KEY="sk-beam-key-4711", BEAM_LIMIT="2")
+
+    assert FRAMEWORKS["kimi-vendor"](ctx) == EvalOutcome(0, "kimi_beam_1m")
+
+    [pip] = stub.uv_calls("pip")
+    [checkout] = stub.adapter_calls("_kimi_verifier_archive.py", "prepare")
+    [run] = stub.adapter_calls("kimi_beam_eval.py", "run")
+    assert {"transformers==5.14.1", "tiktoken==0.12.0", "tokenizers==0.22.2", "openai==2.14.0"} <= set(pip["uv"])
+    assert checkout["argv"][-1] == _flag(run["argv"], "--verifier-dir")
+    assert _flag(run["argv"], "--task-name") == "kimi_beam_1m"
+    assert _flag(run["argv"], "--base-url") == f"{BASE_URL}/v1"
+    assert "sk-beam-key-4711" not in json.dumps(stub.calls())
+    assert not stub.adapter_calls("kimi_vendor_eval.py", "run")
+
+
 @pytest.mark.parametrize(
     ("suite", "adapter"),
     [(None, "minimax_provider_eval.py"), ("minimax_m3_full", "minimax_m3_full_eval.py")],
@@ -282,6 +299,8 @@ def test_unavailable_uv_fails_the_python_runtime_preparation(
      "BFCL Python runtime preparation failed with exit code 7"),
     ("kimi-vendor", "kimi_tool_call_schema_full", {"STUB_UV_PIP_RC": "12"}, 12,
      "Kimi Vendor Verifier dependency installation failed with exit code 12"),
+    ("kimi-vendor", "kimi_beam_1m", {"STUB_UV_PIP_RC": "12"}, 12,
+     "Kimi BEAM (1M) dependency installation failed with exit code 12"),
     ("bfcl", "bfcl_vllm_kimi", {"plan": {"bfcl_adapter.py prepare": {"rc": 6}}}, 6,
      "BFCL dependency installation failed with exit code 6"),
 ])  # fmt: skip

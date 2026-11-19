@@ -35,6 +35,9 @@ from throughput. Selection lives in `mark_eval_entries()` in
   runs `minimax-vendor` with `minimax_m3_full` (102 provider cases). The
   one-case smoke requires an explicit override.
 - **BFCL:** explicit only. No automatic model mapping selects BFCL.
+- **Kimi BEAM (1M):** explicit only (`eval-framework: kimi-vendor`,
+  `eval-suite: kimi_beam_1m`). It needs a 1M-token context and takes hours per
+  deployment, so no automatic mapping selects it.
 
 Every mode, including each sweep's combined changelog entries, schedules at
 most one eval per InferenceX-app eval identity: model, runner, framework,
@@ -190,6 +193,7 @@ results.
 | --- | --- | ---: | ---: |
 | `kimi_tool_call_schema` | Explicit smoke | 1 | 2 |
 | `kimi_tool_call_schema_full` | Automatic AgentX evaluation | 204 | 408 |
+| `kimi_beam_1m` | Explicit long-context diagnostic | 700 questions | 700 (or `BEAM_LIMIT`) |
 
 Each schema case runs once in streaming and once in non-streaming mode. A
 smoke score of `1.0` therefore means 2/2 checks passed on one schema case.
@@ -217,9 +221,13 @@ The smoke runs the unmodified
 [MoonshotAI/Kimi-Vendor-Verifier](https://github.com/MoonshotAI/Kimi-Vendor-Verifier)
 at commit `3dad65a760a8867cda72f6dd8848d876a4e851b4`. Each run downloads and
 SHA256-verifies the fresh pinned GitHub source archive, then safely extracts
-only the upstream pytest configuration, tool-call schema tests, and bundled
-Walle cases. InferenceX does not install the verifier package or reimplement
-its request, streaming, or validation logic.
+only the upstream pytest configuration, tool-call schema tests, bundled
+Walle cases, and the BEAM scripts, tokenizer and data. The BEAM data files are
+git-lfs pointers in the archive; the checkout step fetches the objects from
+GitHub's LFS media endpoint at the same commit and verifies each against the
+pointer's SHA256 and size before extracting anything. InferenceX does not
+install the verifier package or reimplement its request, streaming, or
+validation logic.
 
 System Python 3.12 or newer is preferred and used directly. On older images,
 the runner provisions an isolated Python 3.12 virtual environment with `uv`
@@ -278,6 +286,61 @@ quality is diagnostic while setup, timeout, malformed-report, and integration
 failures still fail through the standard zero-effective-sample error path. The
 full suite reuses the smoke's pinned checkout, stock invocation, result
 envelope, artifact staging, collector, and dashboard path.
+
+### Kimi BEAM (1M) long-context diagnostic
+
+`kimi_beam_1m` runs the verifier's BEAM (Beyond a Million Tokens) scripts,
+`beam/beam_generate.py` and `beam/beam_judge.py`, from the same pinned checkout
+and runtime as the tool-call suites, plus `transformers`, `tiktoken` and
+`tokenizers` for the bundled Kimi-K2.6 tokenizer. It is the long-term-memory
+benchmark of the Kimi Vendor Verifier ([paper](https://arxiv.org/abs/2510.27246)):
+700 probing questions over 35 conversations of up to 1M tokens, graded with an
+LLM judge against per-question rubrics. The served deployment must accept a
+1,048,576-token context; a full run takes hours at the default concurrency.
+
+The adapter `infx/evals/kimi_beam_eval.py` fixes the generation protocol:
+temperature 1.0, top-p 0.95, 32768 max tokens, the harness's bundled tokenizer
+for history truncation, and a context budget of 1,000,000 tokens (the bundled
+Kimi-K2.6 tokenizer counts at least 2.7 % fewer tokens than the Kimi K3 engine,
+so the full window makes the engine reject the largest chats). Judging is
+**self-judged**: the model under test grades its own answers at the harness's
+default judge temperature 0.3 and concurrency 32, which is a documented
+deviation from Moonshot's `kimi-k2.6` judge. Optional inputs, all read from the
+environment:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BEAM_API_KEY` | `EMPTY` | Bearer token for the endpoint under test; never placed on the command line |
+| `JUDGE_API_KEY` | `BEAM_API_KEY` | Bearer token for the judge endpoint (the same endpoint) |
+| `BEAM_LIMIT` | unset | Answer and judge only the first N questions; a smoke of the plumbing, never a full-suite result |
+| `BEAM_CONCURRENCY` | `16` | Concurrent generation requests |
+| `BEAM_THINKING_JSON` | `{"thinking":{"type":"enabled","keep":"all","effort":"max"}}` | Extra request-body JSON; set to the engine's `chat_template_kwargs` form for self-hosted SGLang or vLLM, or empty for none |
+
+The native report `kimi_beam_report.json` carries the expected, answered,
+errored and judged counts, the accuracy overall and per memory ability, and
+the fixed configuration. The answers and scores are staged as
+`samples_kimi_beam_1m_answers.jsonl` and `samples_kimi_beam_1m_scores.jsonl`.
+The projection `results_kimi_beam_*.json` reports the mean rubric score as
+`exact_match,strict-match` with the judged question count as `n_eff`. A run
+counts as complete only when every expected question was answered without
+exhausting the harness's retries and every answer received a judge score;
+anything else is a zero-score integration error, so a context-budget miss
+cannot hide inside the accuracy. The threshold is `0.0`: the score is
+diagnostic, and only infrastructure failures fail the job.
+
+To invoke it manually from `inferencex-e2e/` against a ready endpoint:
+
+```bash
+export MODEL='<HF model ID>' MODEL_NAME='<served model identifier>'
+export EVAL_ONLY=true IS_MULTINODE=false
+export EVAL_FRAMEWORK=kimi-vendor EVAL_SUITE=kimi_beam_1m
+export BEAM_API_KEY='<token, if the endpoint needs one>'
+EVAL_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+PYTHONSAFEPATH=1 PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" python3 -m infx.bench eval \
+  --endpoint "https://endpoint.example.com" --concurrency 1 --stage-to "$EVAL_DIR"
+python3 -m infx.evals.validate_scores \
+  --meta-env "$EVAL_DIR/meta_env.json" --results-glob "$EVAL_DIR/results*.json"
+```
 
 ### MiniMax provider compatibility smoke
 
@@ -685,6 +748,7 @@ attempt cannot replace a newer failed retry.
 | `EVAL_MAX_MODEL_LEN` | unset | Explicit lm-eval request budget. Unset means `MAX_MODEL_LEN` capped at the model's native maximum, or 16384 when neither is known |
 | `EVAL_CONC` | Workflow-selected; srt-slurm falls back to the highest benchmark concurrency | Multi-node eval concurrency, passed as `--concurrency`. A space-separated list enables sequential batched evals against one live engine |
 | `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests). Empty means the full set |
+| `BEAM_API_KEY`, `JUDGE_API_KEY`, `BEAM_LIMIT`, `BEAM_CONCURRENCY`, `BEAM_THINKING_JSON` | see [Kimi BEAM (1M)](#kimi-beam-1m-long-context-diagnostic) | Inputs of the `kimi_beam_1m` suite only |
 
 ### Score validation
 `infx/evals/validate_scores.py` checks eval results against thresholds in `infx/evals/thresholds.yaml`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
