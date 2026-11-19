@@ -1,5 +1,5 @@
 schema: 2
-name: wan22-sglang-serving-client-g4
+name: wan22-sglang-agg-cfg2-ulysses2
 
 resources:
   gpu_type: h200

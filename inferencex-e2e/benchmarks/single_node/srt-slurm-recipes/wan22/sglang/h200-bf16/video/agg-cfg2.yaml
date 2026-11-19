@@ -1,8 +1,8 @@
 schema: 2
-name: wan22-sglang-serving-client
+name: wan22-sglang-agg-cfg2
 
 resources:
-  gpu_type: h100
+  gpu_type: h200
 
 services:
   - name: video-server
@@ -29,11 +29,11 @@ services:
       - "{model_revision}"
       - --num-gpus
       - "{gpus_per_node}"
-      # Deployment only: CFG branches on two GPU groups, Ulysses sequence parallelism within each.
+      # Deployment only: CFG branches on two GPUs, no sequence parallelism.
       - --cfg-parallel-size
       - "2"
       - --ulysses-degree
-      - "4"
+      - "1"
       - --tp-size
       - "1"
       - --encoder-parallel
@@ -43,10 +43,6 @@ services:
       - "12.0"
       - --warmup-resolutions
       - 832x480
-      # On 8 decode ranks the default 17-frame warmup stays below Wan's sharded-decode threshold, so
-      # the decode group's NCCL buffers are first allocated mid-request on full 80 GB cards and fail.
-      - --warmup-num-frames
-      - "21"
       # The release set reuses each prompt across five seeds; cached text embeddings would skip work.
       - --disable-conditioning-cache
       - --performance-mode

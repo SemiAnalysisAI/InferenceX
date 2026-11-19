@@ -1,5 +1,5 @@
 schema: 2
-name: wan22-sglang-serving-client-g1
+name: wan22-sglang-agg-tp1
 
 resources:
   gpu_type: h200
