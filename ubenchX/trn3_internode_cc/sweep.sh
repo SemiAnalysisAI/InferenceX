@@ -2,7 +2,7 @@
 set -o pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 source "$HERE/../../inferencex-e2e/benchmarks/check_env.sh"
-check_env_vars TRN3_HOSTS OUT_DIR TOPOS OPS BUF LNC ITERS WARMUP MAXBYTES TIMEOUT_S
+check_env_vars TRN3_HOSTS OUT_DIR TOPOS OPS BUF LNC ITERS WARMUP MAXBYTES TIMEOUT_S IMAGE RG_PER_CHIP
 
 # Node indices are UltraServer indices (neuron-ls ultraserver-instance-index). The Neuron driver puts 0,1 in one rack
 # and 3,2 in the other: 3 is node 0's slot in the other rack (cable), 2 is reachable from node 0 only over EFA.
