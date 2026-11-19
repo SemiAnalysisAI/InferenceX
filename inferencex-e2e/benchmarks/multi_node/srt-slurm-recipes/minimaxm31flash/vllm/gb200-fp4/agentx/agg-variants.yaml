@@ -52,6 +52,9 @@ base:
       # Dynamo builds from source here; its cudarc crate rejects the image's CUDA 13.5 toolkit,
       # so build against the 13.3 bindings (cudarc loads libcuda at run time).
       CUDARC_CUDA_VERSION: '13030'
+      # Lets pip take the aisimulate wheel straight from pypi.nvidia.com: the PyPI
+      # placeholder for 0.13.0.dev1 pins a sha256 the hosted wheel no longer matches.
+      PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
   engine:
     type: vllm
     connector: null
@@ -72,6 +75,9 @@ base:
         # Dynamo builds from source here; its cudarc crate rejects the image's CUDA 13.5 toolkit,
         # so build against the 13.3 bindings (cudarc loads libcuda at run time).
         CUDARC_CUDA_VERSION: '13030'
+        # Lets pip take the aisimulate wheel straight from pypi.nvidia.com: the PyPI
+        # placeholder for 0.13.0.dev1 pins a sha256 the hosted wheel no longer matches.
+        PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
         DYN_TCP_CONNECT_TIMEOUT: '120'
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
