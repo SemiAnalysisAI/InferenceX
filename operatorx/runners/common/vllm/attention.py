@@ -374,25 +374,33 @@ class _Engine:
             blocks = _shuffle(blocks, rng)
         new = [NewRequestData.from_request(r, b, r._all_token_ids) for r, b in zip(self.reqs, blocks)]
         module = next(m for n, m in self.runner.model.named_modules() if n.endswith(path))
-        forward = module.forward
-        seen: dict = {"forward": forward}
+        # every call the step makes into the module, in order, each with its forward context:
+        # forward, and forward_kv where a layer writes its KV apart from its attention
+        # (DeepSeek-V4.1's KV source layer writes every row's KV, then attends on each
+        # request's trailing window in vLLM's decoder replay)
+        entries = [n for n in ("forward_kv", "forward") if callable(getattr(module, n, None))]
+        originals = {n: getattr(module, n) for n in entries}
+        seen: dict = {"calls": []}
 
-        def capture(*args, **kwargs):
-            # every call in the step: some layers (DeepSeek-V4.1 compress-ratio-1) call the
-            # module once per chunk of the batch's tokens; the op is all of them
-            if "fc" not in seen:
-                seen.update(fc=get_forward_context(), calls=[])
-            seen["calls"].append((args, kwargs))
-            return forward(*args, **kwargs)
+        def wrap(name):
+            def capture(*args, **kwargs):
+                fc = get_forward_context()
+                seen.setdefault("fc", fc)
+                seen["calls"].append((name, args, kwargs, fc))
+                return originals[name](*args, **kwargs)
+            return capture
 
-        module.forward = capture
+        for n in entries:
+            setattr(module, n, wrap(n))
         try:
             with self._configured():
                 self.runner.execute_model(self._output(new, {r.request_id: r.num_tokens - r.num_computed_tokens
                                                              for r in self.reqs}, set()))
         finally:
-            module.forward = forward
+            for n in entries:
+                setattr(module, n, originals[n])
             self.runner.execute_model_state = None
+        seen["fns"] = originals
         if "fc" not in seen:
             raise RuntimeError("the model never called the attention module")
         return seen
@@ -504,7 +512,7 @@ def _prepare(op: Op) -> dict:
                     "vllm_backends": _backends(eng.runner),
                     "vllm_attn_metadata": {k: type(v).__name__ for k, v in (seen["fc"].attn_metadata or {}).items()},
                     # the tensors the module was called with on this rank (tokens it computes)
-                    "module_calls": [_shapes(a, k) for a, k in seen["calls"]],
+                    "module_calls": [{"call": n, **_shapes(a, k)} for n, a, k, _ in seen["calls"]],
                     "scheduled_tokens": sum(r.num_tokens - r.num_computed_tokens for r in eng.reqs),
                     "kv_cache_groups": [
                         {"spec": type(g.kv_cache_spec).__name__, "block_size": g.kv_cache_spec.block_size,
@@ -529,9 +537,14 @@ def _replaying(ctx: dict):
 
 
 def _calls(ctx: dict):
-    """Every call the step made to the module, in order."""
-    for args, kwargs in ctx["calls"]:
-        out = ctx["forward"](*args, **kwargs)
+    """Every call the step made into the module, in order, each under its forward context."""
+    from vllm.forward_context import override_forward_context
+    out = None
+    for name, args, kwargs, fc in ctx["calls"]:
+        with override_forward_context(fc):
+            r = ctx["fns"][name](*args, **kwargs)
+        if name == "forward":
+            out = r
     return out
 
 
