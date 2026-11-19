@@ -161,6 +161,53 @@ def test_selected_server_requires_the_recipe_gpus_and_runtime(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize(
+    ("runtime", "flow_shift", "boundary_ratio", "message"),
+    [
+        ("sglang", ["--flow-shift", "12.0"], 0.875, None),
+        ("sglang", ["--flow_shift=12.0"], 0.875, None),
+        ("sglang", ["--flow-shift", "5.0"], 0.875, "flow_shift 5.0"),
+        ("sglang", [], 0.875, "flow_shift None"),
+        ("sglang", ["--flow-shift", "12.0", "--flow_shift", "5.0"], 0.875, "flow_shift None"),
+        ("sglang", ["--flow-shift", "12.0"], 0.9, "boundary_ratio 0.9"),
+        ("vllm-omni", [], 0.9, None),
+    ],
+)
+def test_sglang_wan22_launch_must_serve_the_controls_its_requests_omit(
+    tmp_path, monkeypatch, runtime, flow_shift, boundary_ratio, message
+):
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/wan22.yaml"), "smoke")
+    model = tmp_path / "model"
+    model.mkdir()
+    (model / "model_index.json").write_text(json.dumps({"boundary_ratio": boundary_ratio}))
+    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1"])
+    monkeypatch.setattr(srt_selected, "KFD", tmp_path / "no-kfd")
+    executed = []
+    monkeypatch.setattr(srt_selected.os, "execvpe", lambda file, argv, env: executed.append(argv))
+    monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/engine:v1@sha256:" + "b" * 64)
+    command = ["engine", "serve", str(model), *flow_shift]
+
+    def serve():
+        srt_selected.serve(
+            plan,
+            runtime=runtime,
+            runtime_revision="a" * 40,
+            model_path=model,
+            gpus=1,
+            output=tmp_path / "server",
+            command=command,
+            model_view="snapshot",
+        )
+
+    if message is None:
+        serve()
+        assert executed == [command]
+    else:
+        with pytest.raises(ValueError, match=message):
+            serve()
+        assert not executed and not (tmp_path / "server").exists()
+
+
+@pytest.mark.parametrize(
     ("field", "value", "message"),
     [
         (None, None, "requires the sealed server launch"),
@@ -246,3 +293,46 @@ def test_rocm_server_names_hip_devices_by_board_serial(tmp_path, monkeypatch):
     launch = json.loads((output / "launch.json").read_text())
     assert spec["gpu_uuids"] == launch["gpu_uuids"] == ["PCB-F5", "PCB-05"]
     assert executed[0][1]["VGBENCH_GPU_UUIDS"] == "PCB-F5,PCB-05"
+
+
+def test_prefetch_reads_every_snapshot_file_through_links(tmp_path):
+    blobs = tmp_path / "blobs"
+    blobs.mkdir()
+    (blobs / "shard").write_bytes(b"x" * 3_000_000)
+    snapshot = _snapshot(tmp_path / "snapshot")
+    (snapshot / "transformer").mkdir()
+    (snapshot / "transformer/model.safetensors").symlink_to(blobs / "shard")
+    expected = sum(path.stat().st_size for path in snapshot.rglob("*") if path.is_file())
+    assert expected > 3_000_000
+    assert srt_selected.prefetch_snapshot(snapshot, threads=2) == expected
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_server_prefetches_the_snapshot_only_when_the_recipe_asks(tmp_path, monkeypatch, enabled):
+    plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
+    model = _snapshot(tmp_path / "model")
+    monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1"])
+    monkeypatch.setattr(srt_selected, "KFD", tmp_path / "no-kfd")
+    order = []
+    monkeypatch.setattr(
+        srt_selected, "prefetch_snapshot", lambda path: order.append(("prefetch", path))
+    )
+    monkeypatch.setattr(
+        srt_selected.os, "execvpe", lambda file, argv, env: order.append(("exec", file))
+    )
+    monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/engine:v1@sha256:" + "b" * 64)
+    if enabled:
+        monkeypatch.setenv("VIDEO_PREFETCH_MODEL", "1")
+    else:
+        monkeypatch.delenv("VIDEO_PREFETCH_MODEL", raising=False)
+    srt_selected.serve(
+        plan,
+        runtime="sglang",
+        runtime_revision="a" * 40,
+        model_path=model,
+        gpus=1,
+        output=tmp_path / "server",
+        command=["python3", "-m", "x", "--model-path", str(model)],
+        model_view="snapshot",
+    )
+    assert order == ([("prefetch", model)] if enabled else []) + [("exec", "python3")]
