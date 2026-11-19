@@ -7329,7 +7329,7 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg:
           tp: 8
           ep: 8
           dp-attn: false
-    - dram-utilization: 0.80
+    - dram-utilization: 0.81
       search-space:
       - spec-decoding: draft_model
         conc-list: [76]
@@ -7342,6 +7342,8 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg:
           tp: 4
           ep: 4
           dp-attn: false
+    - dram-utilization: 0.80
+      search-space:
       - spec-decoding: draft_model
         conc-list: [56]
         kv-offloading: dram
