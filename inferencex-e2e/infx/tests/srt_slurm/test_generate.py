@@ -11,6 +11,7 @@ from infx.launch.drivers.srt import lanes
 from infx.launch.policy import LaunchPath
 from infx.tests.srt_recipes import (
     VIDEO_MODEL,
+    VIDEO_RECIPE,
     VIDEO_SPEC,
     video_entry,
     video_fragment,
@@ -100,7 +101,7 @@ def project(tmp_path):
             **RECIPE, "frontend": {"type": "sglang", "enable_multiple_frontends": False},
             "roles": {"agg": {"nodes": 1, "workers": 1, "gpus": 4, "args": {"tensor-parallel-size": 4}}},
         },
-        "single_node/srt-slurm-recipes/fixture/video.yaml": video_fragment(),
+        f"single_node/srt-slurm-recipes/fixture/{VIDEO_RECIPE}": video_fragment(),
         "multi_node/srt-slurm-recipes/fixture/agentic.yaml": {
             **RECIPE, "frontend": {"type": "sglang-router"}, "roles": {
                 role: {"nodes": 1, "workers": 1, "gpus": 8, "args": {"tensor-parallel-size": 8}}
