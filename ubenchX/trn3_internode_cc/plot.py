@@ -1,6 +1,6 @@
 """Plot collective bus bandwidth vs size (needs matplotlib).
 
-  python ubenchX/trn3_internode_cc/plot.py internode.csv out_dir --intrachip intrachip.csv
+  python ubenchX/trn3_internode_cc/plot.py internode.csv out_dir --intrachip intrachip.csv [--label "run name"]
 
 Writes two images with one panel per op, all at LNC=2, bf16, nccl-tests sizes:
   rank_scaling.png  1 chip (trn3_intrachip_cc lnc2_r4, HBM), 1 node, 1 rack (2n_rack), 1 UltraServer (4n)
@@ -19,15 +19,17 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import FixedLocator, NullLocator
 
 SURFACE, INK, INK2, MUTED, GRID, AXIS = "#fcfcfb", "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
-COLOR = {"chip": ("#2a78d6", "o"), "1n": ("#eb6834", "s"), "2n_rack": ("#1baf7a", "^"),
-         "2n_cable": ("#eda100", "v"), "2n_efa": ("#e87ba4", "D"), "4n": ("#008300", "P")}
-FIGURES = [  # file, title, [(key, label)]
+# Each figure orders its series on one ramp, light to dark and yellow through green and blue to purple: each step
+# is a new hue and darker. rank_scaling: smallest to largest job. two_node: nearest link to farthest.
+FIGURES = [  # file, title, [(key, label, color, marker)]
     ("rank_scaling", "Rank Scaling from One Chip to One UltraServer", [
-        ("chip", "1 chip (4 ranks)"), ("1n", "1 node (64 ranks)"), ("2n_rack", "1 rack, 2 nodes (128 ranks)"),
-        ("4n", "1 UltraServer, 4 nodes (256 ranks)")]),
+        ("chip", "1 chip (4 ranks)", "#e0a400", "o"), ("1n", "1 node (64 ranks)", "#1baf7a", "s"),
+        ("2n_rack", "1 rack, 2 nodes (128 ranks)", "#1f6fb8", "^"),
+        ("4n", "1 UltraServer, 4 nodes (256 ranks)", "#3b1a6e", "P")]),
     ("two_node", "Two Nodes over Each Link Type (128 ranks)", [
-        ("2n_rack", "Intra-rack NeuronLink"), ("2n_cable", "Cross-rack NeuronLink (same slot)"),
-        ("2n_efa", "EFA (cross-rack, other slot)")]),
+        ("2n_rack", "Intra-rack NeuronLink", "#1baf7a", "^"),
+        ("2n_cable", "Cross-rack NeuronLink (same slot)", "#1f6fb8", "v"),
+        ("2n_efa", "EFA (cross-rack, other slot)", "#3b1a6e", "D")]),
 ]
 OPS = ["all_reduce", "all_gather", "reduce_scatter", "alltoall"]
 TICKS = [8, 1 << 10, 64 << 10, 1 << 20, 16 << 20, 256 << 20, 4 << 30]
@@ -55,7 +57,7 @@ def style(ax, ymax: float) -> None:
         ax.spines[s].set_visible(False)
     for s in ("left", "bottom"):
         ax.spines[s].set_color(AXIS)
-    ax.tick_params(colors=MUTED, labelcolor=INK2)
+    ax.tick_params(colors=MUTED, labelcolor=INK2, labelleft=True)
 
 
 def main() -> None:
@@ -63,6 +65,7 @@ def main() -> None:
     ap.add_argument("csv")
     ap.add_argument("out_dir")
     ap.add_argument("--intrachip", required=True)
+    ap.add_argument("--label", help="appended to each title, to tell runs apart")
     a = ap.parse_args()
     df = pd.read_csv(a.csv)
     df = df[(df.status == "ok") & (df.buffer == "HBM")][["topology", "op", "bytes", "busbw_GBps"]]
@@ -79,8 +82,7 @@ def main() -> None:
         for ax, op in zip(axes, OPS):
             style(ax, ymax)
             peaks = []
-            for key, label in series:
-                color, marker = COLOR[key]
+            for key, label, color, marker in series:
                 d = df[(df.topology == key) & (df.op == op)].sort_values("bytes")
                 h = Line2D([], [], color=color, lw=2, marker=marker, ms=6, markeredgecolor=SURFACE)
                 if d.empty:
@@ -97,11 +99,12 @@ def main() -> None:
             leg._legend_box.align = "left"
             ax.set_title(op, loc="left", color=INK, fontsize=12)
         axes[0].set_ylabel("Bus bandwidth (GB/s)", color=INK2)
-        handles = [Line2D([], [], color=COLOR[k][0], lw=2, marker=COLOR[k][1], ms=6, markeredgecolor=SURFACE,
-                          label=lab) for k, lab in series]
+        handles = [Line2D([], [], color=color, lw=2, marker=marker, ms=6, markeredgecolor=SURFACE, label=lab)
+                   for _, lab, color, marker in series]
         fig.legend(handles=handles, loc="upper left", ncol=len(handles), frameon=False, labelcolor=INK,
                    fontsize=10, bbox_to_anchor=(0.008, 0.9))
-        fig.suptitle(f"Trainium3 {title}", x=0.012, y=0.99, ha="left", color=INK, fontsize=14)
+        fig.suptitle(f"Trainium3 {title}" + (f": {a.label}" if a.label else ""), x=0.012, y=0.99, ha="left",
+                     color=INK, fontsize=14)
         fig.text(0.012, 0.905, "nccom-test, bf16, LNC=2, HBM buffers, nccl-tests sizes 8 B to 4 GiB. busbw uses the "
                  "nccl-tests factors.", color=MUTED, fontsize=9, ha="left", va="bottom")
         fig.tight_layout(rect=(0, 0, 1, 0.87))

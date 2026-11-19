@@ -57,7 +57,7 @@ the sweep skips runs that already have results.
 Each run writes `NAME.json` (`nccom-test` report), `NAME.log` (node 0 output; `NAME.n<i>.log` for the others)
 and `NAME.txt` (image, replica groups, nodes, ranks, and per-node EFA transmit bytes before and after the run). `plot.py` writes
 `rank_scaling.png` (1 chip, 1 node, 1 rack, 1 UltraServer) and `two_node.png` (intra-rack NeuronLink, cross-rack
-NeuronLink, EFA), each with one panel per op.
+NeuronLink, EFA), each with one panel per op; `--label` adds a run name to the titles.
 
 ## Reading the numbers
 
