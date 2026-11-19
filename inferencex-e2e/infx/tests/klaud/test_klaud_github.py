@@ -2782,7 +2782,12 @@ def test_final_matrix_of_a_curve_needs_one_changelog_entry_for_all_its_keys(
     assert sorted(
         (row["spec-decoding"], row["conc"]) for row in canonical["single_node"]["all"]
     ) == [("mtp", 4), ("none", 2), ("none", 6)]
-    matrix = {**canonical, "changelog_metadata": {"head_ref": head, "entries": [entry]}}
+    # Sweeps set up before scores left the workflows still carry "priority" on every job.
+    matrix = {
+        **canonical,
+        "single_node": {"all": [{**row, "priority": "1.000"} for row in canonical["single_node"]["all"]]},
+        "changelog_metadata": {"head_ref": head, "entries": [entry]},
+    }
     if accepted:
         validation.check_matrix(matrix, canonical, head, family)
         # A key the baseline froze nothing for still needs every final point.

@@ -95,8 +95,16 @@ _WAN22_CONTROLS = {
     "negative_prompt",
 }
 _WAN22_CELL = {"width": 832, "height": 480, "frame_count": 81, "fps": 16}
+# SGLang 297e54fd accepts both as request fields, but its Wan pipeline reads the shift from
+# --flow-shift and the boundary from the checkpoint's model_index.json, so the launch binds them.
+SGLANG_WAN22_SERVER_CONTROLS = ("boundary_ratio", "flow_shift")
 # SGLang has no crf field; it encodes with crf = int((1 - output_compression / 100) * 51).
 SGLANG_OUTPUT_COMPRESSION = {18: 63}
+# vLLM-Omni v0.32.0 delivers Wan2.2 at libx264 ultrafast CRF 18; SGLang defaults to fast CRF 25.
+_SGLANG_WAN22_ENCODING = {
+    "x264_preset": "ultrafast",
+    "output_compression": SGLANG_OUTPUT_COMPRESSION[18],
+}
 
 
 def _digest(value: Any) -> str:
@@ -155,6 +163,20 @@ def valid_numerical_identity(identity: Any, runtime_revision: str) -> bool:
         and all(isinstance(uuid, str) and bool(uuid) for uuid in topology["gpu_uuids"])
         and len(set(topology["gpu_uuids"])) == len(topology["gpu_uuids"])
     )
+
+
+def sglang_flow_shift(argv: list[str]) -> float | None:
+    """The UniPC shift an SGLang command sets, or None unless exactly one flag sets it.
+
+    SGLang's parser reads `_` as `-` in a flag name, takes `--flag value` or `--flag=value`,
+    and lets a repeated flag override, so every spelling counts.
+    """
+    values = []
+    for part, following in zip(argv, [*argv[1:], ""]):
+        flag, equals, value = part.partition("=")
+        if flag.startswith("--") and flag[2:].replace("_", "-") == "flow-shift":
+            values.append(value if equals else following)
+    return float(values[0]) if len(values) == 1 else None
 
 
 def requested_encoding(plan: dict[str, Any]) -> dict[str, Any] | None:
@@ -304,10 +326,8 @@ def _slots(plan: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _wan22_payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[str, Any]:
-    if runtime != "vllm-omni":
-        raise ValueError("Wan2.2 plans have a vllm-omni request contract only")
     generation = plan["generation"]
-    return {
+    request = {
         "model": plan["model_id"],
         "prompt": slot["prompt"],
         "seed": slot["seed"],
@@ -323,6 +343,11 @@ def _wan22_payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> 
         "negative_prompt": generation["negative_prompt"],
         "num_outputs_per_prompt": 1,
     }
+    if runtime == "sglang":
+        for control in SGLANG_WAN22_SERVER_CONTROLS:
+            del request[control]
+        request |= _SGLANG_WAN22_ENCODING
+    return request
 
 
 def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[str, Any]:
@@ -779,6 +804,15 @@ def run_plan(
                 "numerical_identity must contain a complete matching server configuration"
             )
         canonical_json_bytes(numerical_identity)
+    if runtime == "sglang" and frozen["model_id"] == WAN22_MODEL_ID:
+        # These requests omit the shift, so only the recorded launch shows which one was served.
+        if numerical_identity is None or (
+            sglang_flow_shift(numerical_identity["server_argv"])
+            != frozen["generation"]["flow_shift"]
+        ):
+            raise ValueError(
+                "SGLang Wan2.2 runs need a sealed server launch whose --flow-shift equals the plan"
+            )
     _positive(timeout_seconds, "timeout_seconds", maximum=86400)
     safe_endpoint, parts, api_path = _endpoint(endpoint)
     credential = None
