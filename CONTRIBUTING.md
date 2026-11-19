@@ -223,12 +223,15 @@ would reject. `run-sweep.yml` instead plans the child against the parent's head 
 (`infx.workflows.stack_base`) when all of the following hold:
 
 - every appended entry linking another PR names the same open, same-repository parent
-  PR that targets the same base branch;
+  PR that targets the same base branch, and the parent's entry uses its canonical
+  `https://github.com/SemiAnalysisAI/InferenceX/pull/<number>` link, not `XXX`;
 - every other appended entry is the child's own and has `append-only: true`;
 - the parent is up to date with `main` (merge `main` into the parent, then the parent
   into the child), and the child contains the parent's current head.
 
-The sweep then runs only the child's new points. Merge the parent first with its own
+When the parent's entries are themselves all append-only, the child plans against
+`main` as before, since that sweep is already valid. The sweep then runs only the
+child's new points. Merge the parent first with its own
 `/use <run_id>`, then merge the child with `/use <child_run_id>`: Merge Ingest plans the
 child's merge commit against `main`, which now contains the parent, so the child ingests
 as append-only and InferenceX-app extends the parent's curve. If the parent changes, merge

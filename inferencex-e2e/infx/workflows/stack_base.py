@@ -128,9 +128,22 @@ def resolve(
         return StackBase(base_ref, reason=f"changelog additions unreadable: {error}")
     own, others = split_entries(added, repo, pr_number)
     if not others:
+        if any(entry.get("append-only") is True for entry in own) and not all(
+            entry.get("append-only") is True for entry in own
+        ):
+            print(
+                "::warning::append-only and regular entries are mixed, and none links another "
+                "PR. If this PR is stacked on a parent PR, give the parent's entry its "
+                "canonical pull/<number> pr-link instead of XXX so the sweep can plan against "
+                "the parent.",
+                file=sys.stderr,
+            )
         return StackBase(base_ref, reason="no entries link another pull request")
     if not own or not all(entry.get("append-only") is True for entry in own):
         return StackBase(base_ref, reason="this PR's own entries are not all append-only")
+    parent_entries = [entry for entries in others.values() for entry in entries]
+    if all(entry.get("append-only") is True for entry in parent_entries):
+        return StackBase(base_ref, reason="every appended entry is append-only")
     if len(others) != 1:
         raise StackError(
             "a stacked append-only PR must sit on exactly one parent PR; "

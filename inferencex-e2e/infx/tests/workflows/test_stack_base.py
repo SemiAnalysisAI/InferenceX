@@ -192,3 +192,13 @@ def test_two_parents_are_rejected(repo: Repo, monkeypatch) -> None:
 
     with pytest.raises(StackError, match="exactly one parent"):
         run(head)
+
+
+def test_all_append_only_stack_keeps_base_even_when_parent_is_behind(repo: Repo) -> None:
+    repo.commit()
+    repo.git("checkout", "-q", "-b", "parent")
+    repo.commit(entry("agg", PARENT, append_only=True))
+    repo.git("checkout", "-q", "-b", "child")
+    head = repo.commit(entry("agg", CHILD, append_only=True))
+
+    assert run(head).base_ref == "main"
