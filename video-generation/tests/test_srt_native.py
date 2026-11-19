@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from evaluator.attestation import SGLANG
 from evaluator import srt_bundle, srt_selected
 from specs import video_spec
 
@@ -25,6 +26,7 @@ def _run(concurrency, scheduled=4, valid=4, status="complete"):
                 {
                     **case,
                     "slot_id": slot_id,
+                    "job_id": f"c{concurrency}-{slot_id}",
                     "repetition": repetition,
                     "phase": "measurement",
                     "attempted": True,
@@ -150,6 +152,31 @@ def test_matrix_runs_every_concurrency_against_one_server_and_publishes_windows(
     assert window["benchmark_start_time_unix"] == contract["benchmark_start_time_unix"]
 
 
+def _server_log(records):
+    """An SGLang log whose startup and per-request lines attest each record ran the plan."""
+    generation = PLAN["generation"]
+    steps = generation["num_inference_steps"]
+    lines = [
+        f"[10-17 00:00:00] server_args: {json.dumps(dict(SGLANG.required_args))}",
+        "[10-17 00:00:01] Loading H3DiT from 13 safetensors file(s) , param_dtype: torch.bfloat16",
+        "[10-17 00:00:02] Using torch_sdpa attention backend",
+    ]
+    for record in records:
+        fields = {
+            "width": generation["width"],
+            "height": generation["height"],
+            "num_frames": generation["frame_count"],
+            "fps": generation["fps"],
+            "seed": record["seed"],
+            "infer_steps": steps,
+            "flow_shift": generation["flow_shift"],
+            "output_file_path": f"outputs/{record['job_id']}.mp4",
+        }
+        lines += ["[10-17 00:01:00] Sampling params:", *(f"  {k}: {v}" for k, v in fields.items())]
+        lines.append("\r".join(f"denoise: | {step}/{steps} [" for step in range(steps + 1)))
+    return "\n".join(lines) + "\n"
+
+
 def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
     logs = tmp_path / "logs"
     video, power = logs / "video", logs / "power"
@@ -196,10 +223,12 @@ def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
     (power / "exporter-image.sha256").write_text("sha256:" + "e" * 64 + "\n")
     workspace = tmp_path / "ws"
     workspace.mkdir()
+    served = []
     for concurrency in concurrencies:
         cell = video / "gpu" / f"c{concurrency}"
         (cell / "baseline/artifacts").mkdir(parents=True)
         run = _run(concurrency)
+        served += run["records"]
         (cell / "baseline/run.json").write_text(json.dumps(run))
         for record in run["records"]:
             (cell / "baseline" / record["artifact_path"]).write_bytes(b"clip")
@@ -248,6 +277,7 @@ def _native_job(tmp_path, concurrencies=(1, 2), power_valid=True):
                 }
             )
         )
+    (logs / "service_video-server.out").write_text(_server_log(served))
     return logs, workspace
 
 
@@ -272,6 +302,8 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     result = srt_bundle.build_bundle(
         video_dir=logs / "video",
         power_dir=logs / "power",
+        server_log=logs / "service_video-server.out",
+        precision="bf16",
         workspace=workspace,
         result_filename="r",
         concurrencies=[1, 2],
@@ -306,7 +338,7 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
         and ci["power"]["producer_git_commit"] == "a" * 40
     )
     for cell in matrix["cells"]:
-        for ref in ("run", "receipt", "power"):
+        for ref in ("run", "receipt", "power", "attestation"):
             path = output / cell[ref]["path"]
             assert (
                 hashlib.sha256(path.read_bytes()).hexdigest()
@@ -344,6 +376,8 @@ def test_bundle_counts_malformed_power_samples_instead_of_hiding_them(tmp_path):
     srt_bundle.build_bundle(
         video_dir=logs / "video",
         power_dir=logs / "power",
+        server_log=logs / "service_video-server.out",
+        precision="bf16",
         workspace=workspace,
         result_filename="r",
         concurrencies=[1],
@@ -364,6 +398,8 @@ def test_power_sample_is_valid_only_when_it_reads_every_server_gpu(tmp_path):
     srt_bundle.build_bundle(
         video_dir=logs / "video",
         power_dir=logs / "power",
+        server_log=logs / "service_video-server.out",
+        precision="bf16",
         workspace=workspace,
         result_filename="r",
         concurrencies=[1],
@@ -374,6 +410,34 @@ def test_power_sample_is_valid_only_when_it_reads_every_server_gpu(tmp_path):
     assert [sample["valid"] for sample in series[4:7]] == [True, False, True]
 
 
+@pytest.mark.parametrize("runtime,verified", [("sglang", False), ("vllm-omni", True)])
+def test_only_runtimes_with_a_policy_are_gated_on_work_attestation(tmp_path, runtime, verified):
+    logs, workspace = _native_job(tmp_path, concurrencies=(1,))
+    (logs / "service_video-server.out").unlink()
+    run_path = logs / "video/gpu/c1/baseline/run.json"
+    run = json.loads(run_path.read_text())
+    run["configuration"]["runtime"] = runtime
+    run_path.write_text(json.dumps(run))
+    output = tmp_path / "h3-results"
+    result = srt_bundle.build_bundle(
+        video_dir=logs / "video",
+        power_dir=logs / "power",
+        server_log=logs / "service_video-server.out",
+        precision="bf16",
+        workspace=workspace,
+        result_filename="r",
+        concurrencies=[1],
+        output=output,
+        environ={"PATH": os.environ["PATH"]},
+    )
+    [cell] = json.loads((output / "serving-smoke.json").read_text())["cells"]
+    receipt = json.loads((output / cell["receipt"]["path"]).read_text())
+    assert cell["verified"] is verified and receipt["measurement_verified"] is verified
+    assert result["power_verified"] is True and receipt["power_verified"] is True
+    assert ("attestation" in cell) is (runtime == "sglang")
+    assert (output / "gpu/c1/attestation.json").exists() is (runtime == "sglang")
+
+
 def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     logs, workspace = _native_job(tmp_path, concurrencies=(1,))
     short = _run(1, valid=3)
@@ -382,6 +446,8 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     result = srt_bundle.build_bundle(
         video_dir=logs / "video",
         power_dir=logs / "power",
+        server_log=logs / "service_video-server.out",
+        precision="bf16",
         workspace=workspace,
         result_filename="r",
         concurrencies=[1, 4],
@@ -415,6 +481,8 @@ def _bundle(tmp_path, artifacts, fingerprint, attempt):
     srt_bundle.build_bundle(
         video_dir=logs / "video",
         power_dir=logs / "power",
+        server_log=logs / "service_video-server.out",
+        precision="bf16",
         workspace=workspace,
         result_filename="r",
         concurrencies=[1, 2],
@@ -508,6 +576,8 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     result = srt_bundle.build_bundle(
         video_dir=tmp_path / "absent",
         power_dir=tmp_path / "power",
+        server_log=tmp_path / "absent.out",
+        precision="bf16",
         workspace=workspace,
         result_filename="r",
         concurrencies=[1, 2],
@@ -527,6 +597,7 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
         ("population", "request population"),
         ("missing_media", "reference mismatch"),
         ("power", "unverified native"),
+        ("attestation", "work attestation failed"),
         ("head", "CI identity mismatch"),
     ],
 )
@@ -538,7 +609,9 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
     matrix_path = bundle / "serving-smoke.json"
     matrix = json.loads(matrix_path.read_text())
     cell = matrix["cells"][0]
-    reference = None if fault == "head" else cell["power" if fault == "power" else "run"]
+    reference = (
+        None if fault == "head" else cell[fault if fault in ("power", "attestation") else "run"]
+    )
     path = bundle / ("manifest.json" if reference is None else reference["path"])
     doc = json.loads(path.read_text())
     if fault == "population":
@@ -546,7 +619,7 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
         doc["records"] = doc["records"][:1]
     elif fault == "missing_media":
         doc["records"][0]["artifact_path"] = "artifacts/missing.mp4"
-    elif fault == "power":
+    elif fault in ("power", "attestation"):
         doc["valid"] = False
     else:
         doc["ci"]["head_sha"] = "d" * 40
