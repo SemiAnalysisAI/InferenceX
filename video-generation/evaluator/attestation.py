@@ -175,6 +175,7 @@ def _requests(text: str, generation: Mapping[str, Any], records: list[dict]) -> 
         by_job.setdefault(job, []).append((fields, text[block.end() : end]))
     steps = generation.get("num_inference_steps")
     full_schedule = {"completed": steps, "totals": [steps]}
+    declared = {name: generation.get(key) for name, key in _PLAN_FIELDS.items()}
     attested = []
     for record in records:
         if not (record.get("attempted") and record.get("job_id")):
@@ -182,8 +183,7 @@ def _requests(text: str, generation: Mapping[str, Any], records: list[dict]) -> 
         matches = by_job.get(record["job_id"], [])
         found = len(matches) == 1
         fields, region = matches[0] if found else ({}, "")
-        expected = {name: generation.get(key) for name, key in _PLAN_FIELDS.items()}
-        expected["seed"] = record.get("seed")
+        expected = {**declared, "seed": record.get("seed")}
         parameters = {name: _number(fields[name]) for name in expected if name in fields}
         progress = [(int(step), int(total)) for step, total in _PROGRESS.findall(region)]
         denoise = {

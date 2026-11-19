@@ -308,6 +308,7 @@ def build_bundle(
         slurm_job["AllocTRES"] = job["alloc_tres"]
     failures: list[str] = []
     cells = []
+    measured: dict[int, bool] = {}  # concurrency -> complete with valid power, before attestation
     declared_path = workspace / "video-identity.json"
     declared = read_object(declared_path) if declared_path.is_file() else None
     plan = declared["workload_plan"] if declared else None
@@ -384,7 +385,8 @@ def build_bundle(
             failures.append(
                 f"c{concurrency}: {summary.get('valid', 0)}/{summary.get('scheduled', 0)} valid clips"
             )
-        verified = complete and power["valid"] and (attested is None or attested["valid"])
+        measured[concurrency] = complete and power["valid"]
+        verified = measured[concurrency] and (attested is None or attested["valid"])
         receipt = {
             "schema_version": "0.1.0",
             "bundle_type": RECEIPT_BUNDLE_TYPE,
@@ -463,11 +465,12 @@ def build_bundle(
             }
         cells.append(cell)
     finished = _iso(time.time())
-    # Requests decide completion; power and the work attestation decide verification. An
-    # unverified cell never publishes as measured, but invalid power fails the job only under
+    # Requests decide completion; power and, where a policy exists, the work attestation decide
+    # each cell's verified flag, which gates publication. power_verified excludes attestation so
+    # an attestation failure is not reported as a power failure, which fails the job only under
     # REQUIRE_POWER (the launcher's call).
     status = "complete" if cells and all(c["status"] == "complete" for c in cells) else "failed"
-    power_verified = bool(cells) and all(c["verified"] for c in cells)
+    power_verified = bool(cells) and all(measured.get(c["concurrency"], False) for c in cells)
     ci = _ci_context(environ)
     identity = identity or {"plan_sha256": None, "engine": None}
     artifact_name = environ.get("VIDEO_ARTIFACT_NAME")

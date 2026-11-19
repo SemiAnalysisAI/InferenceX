@@ -6,9 +6,10 @@ import pytest
 
 from evaluator.attestation import attest
 
-# A sanitized excerpt of a real B200 SGLang H3 server log: startup, the client warmup and
-# the first measured request, with denoise bars split by interleaved access-log lines.
-LOG = Path(__file__).parent / "fixtures/sglang-h3-server.log"
+# Sanitized excerpts of real SGLang server logs: startup, the client warmup and the first
+# measured request, with denoise bars split by interleaved access-log lines.
+LOG = Path(__file__).parent / "fixtures/sglang-h3-server.log"  # H3 on 4 B200
+WAN_LOG = Path(__file__).parent / "fixtures/sglang-wan22-server.log"  # Wan2.2 on 4 H100
 PLAN = {
     "generation": {
         "width": 1344,
@@ -19,20 +20,29 @@ PLAN = {
         "flow_shift": 12.0,
     }
 }
-RECORDS = [
-    {
-        "slot_id": "warmup-001",
-        "job_id": "6b0e85dd-c34b-448e-8f9e-f66139721dd3",
-        "attempted": True,
-        "seed": 11,
-    },
-    {
-        "slot_id": "measurement-r001-c001",
-        "job_id": "5f8fc4dc-811a-480f-a533-ba1007fa8ccc",
-        "attempted": True,
-        "seed": 11,
-    },
-]
+WAN_PLAN = {
+    "generation": {
+        "width": 832,
+        "height": 480,
+        "frame_count": 81,
+        "fps": 16,
+        "num_inference_steps": 40,
+        "flow_shift": 12.0,
+    }
+}
+
+
+def _records(warmup_job, measured_job):
+    return [
+        {"slot_id": "warmup-001", "job_id": warmup_job, "attempted": True, "seed": 11},
+        {"slot_id": "measurement-r001-c001", "job_id": measured_job, "attempted": True, "seed": 11},
+    ]
+
+
+RECORDS = _records("6b0e85dd-c34b-448e-8f9e-f66139721dd3", "5f8fc4dc-811a-480f-a533-ba1007fa8ccc")
+WAN_RECORDS = _records(
+    "42abb7ff-66b0-4ba4-a989-18bdcc19208e", "f15ae171-54c3-4156-bd11-8005030cfa61"
+)
 
 
 def _failed(document):
@@ -42,18 +52,24 @@ def _failed(document):
     return {check["name"] for check in checks if check["status"] == "failed"}
 
 
-def test_sglang_log_attests_that_every_request_did_the_declared_work():
-    document = attest("sglang", LOG, PLAN, RECORDS, "bf16")
+@pytest.mark.parametrize(
+    "log,plan,records",
+    [(LOG, PLAN, RECORDS), (WAN_LOG, WAN_PLAN, WAN_RECORDS)],
+    ids=["h3", "wan22"],
+)
+def test_sglang_log_attests_that_every_request_did_the_declared_work(log, plan, records):
+    document = attest("sglang", log, plan, records, "bf16")
 
     assert (document["valid"], _failed(document)) == (True, set())
-    assert document["server_log"]["sha256"] == hashlib.sha256(LOG.read_bytes()).hexdigest()
+    assert document["server_log"]["sha256"] == hashlib.sha256(log.read_bytes()).hexdigest()
     assert [request["slot_id"] for request in document["requests"]] == [
         "warmup-001",
         "measurement-r001-c001",
     ]
+    steps = plan["generation"]["num_inference_steps"]
     for request in document["requests"]:
         denoise = {check["name"]: check for check in request["checks"]}["request.denoise_steps"]
-        assert denoise["observed"] == {"completed": 49, "totals": [49]}
+        assert denoise["observed"] == {"completed": steps, "totals": [steps]}
     observed = document["server"]["observed"]
     assert observed["performance_mode"] == "speed" and observed["reduced_precision_numerics"]
     assert "203.0.113.1" not in json.dumps(document)

@@ -143,7 +143,7 @@ def validate_video_artifacts(
                 or receipt.get("status") != "complete"
             ):
                 raise ValueError(f"{name}: unverified native measurement or power receipt")
-            # Bundles from before attestation, or from runtimes without a policy, carry none.
+            # Presence-gated so older and policy-less bundles stay reusable; dropping it is not caught.
             if "attestation" in cell or "attestation" in receipt:
                 attestation = read_object(bundle / _reference(inventory, cell.get("attestation")))
                 if attestation.get("valid") is not True:

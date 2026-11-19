@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from evaluator.attestation import SGLANG
 from evaluator import srt_bundle, srt_selected
 from specs import video_spec
 
@@ -155,16 +156,8 @@ def _server_log(records):
     """An SGLang log whose startup and per-request lines attest each record ran the plan."""
     generation = PLAN["generation"]
     steps = generation["num_inference_steps"]
-    features_off = {
-        "cache_dit_config": None,
-        "quantization": None,
-        "component_quantizations": {},
-        "component_precisions": {},
-        "lora_path": None,
-        "disable_conditioning_cache": True,
-    }
     lines = [
-        f"[10-17 00:00:00] server_args: {json.dumps(features_off)}",
+        f"[10-17 00:00:00] server_args: {json.dumps(dict(SGLANG.required_args))}",
         "[10-17 00:00:01] Loading H3DiT from 13 safetensors file(s) , param_dtype: torch.bfloat16",
         "[10-17 00:00:02] Using torch_sdpa attention backend",
     ]
@@ -426,7 +419,7 @@ def test_only_runtimes_with_a_policy_are_gated_on_work_attestation(tmp_path, run
     run["configuration"]["runtime"] = runtime
     run_path.write_text(json.dumps(run))
     output = tmp_path / "h3-results"
-    srt_bundle.build_bundle(
+    result = srt_bundle.build_bundle(
         video_dir=logs / "video",
         power_dir=logs / "power",
         server_log=logs / "service_video-server.out",
@@ -440,7 +433,7 @@ def test_only_runtimes_with_a_policy_are_gated_on_work_attestation(tmp_path, run
     [cell] = json.loads((output / "serving-smoke.json").read_text())["cells"]
     receipt = json.loads((output / cell["receipt"]["path"]).read_text())
     assert cell["verified"] is verified and receipt["measurement_verified"] is verified
-    assert receipt["power_verified"] is True
+    assert result["power_verified"] is True and receipt["power_verified"] is True
     assert ("attestation" in cell) is (runtime == "sglang")
     assert (output / "gpu/c1/attestation.json").exists() is (runtime == "sglang")
 
