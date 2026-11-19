@@ -81,6 +81,10 @@ the descriptor and `SHA256SUMS`. PSNR measures technical fidelity to one referen
 implementation, so `quality_status` stays `unjudged`. To score an earlier run,
 dispatch the workflow with its `run_id` and `run_attempt`.
 
+The dashboard's [quality guide](https://inferencex.semianalysis.com/vgx/quality)
+explains how these scores judge a lossy speedup and plots one published run's
+per-clip PSNR for each GPU.
+
 ## Local checks
 
 ```bash

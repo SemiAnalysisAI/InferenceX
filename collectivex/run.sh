@@ -75,6 +75,29 @@ fi
 shard_dir="$HERE/.shards/run-$$"
 mkdir -p "$shard_dir"
 trap 'rm -rf "$shard_dir"' EXIT
+descendants() {
+  local child
+  for child in $(pgrep -P "$1"); do
+    echo "$child"
+    descendants "$child"
+  done
+}
+# The shard ignores SIGINT (see the loop), so TERM goes to its launcher and everything under it.
+interrupt() {
+  local pid
+  # The reader of these messages may already be gone.
+  trap '' HUP INT TERM PIPE
+  for pid in $(jobs -pr); do
+    echo "=== interrupted: stopping shard $id and releasing its allocation" >&2 || true
+    kill -TERM "$pid" $(descendants "$pid") 2>/dev/null || true
+  done
+  wait
+  echo "=== interrupted: the remaining shards were not run" >&2 || true
+  exit "$1"
+}
+trap 'interrupt 129' HUP
+trap 'interrupt 130' INT
+trap 'interrupt 143' TERM
 matrix="$shard_dir/matrix-$SKU.json"
 python3 "$HERE/sweep_matrix.py" "${matrix_args[@]}" --out "$matrix" >/dev/null
 
@@ -128,7 +151,8 @@ for row in "${rows[@]}"; do
   # of each other's stage directory.
   execution="manual-$stamp-$$-$id"
   echo "=== shard $id: $backend, ${nodes}x${gpn} GPUs, $ncases case(s)"
-  # A subshell keeps one shard's image and placement from leaking into the next.
+  # A subshell keeps one shard's image and placement from leaking into the next. In the
+  # background, because bash holds a trap until its foreground command returns.
   (
     unset COLLX_NGPUS
     export COLLX_SHARD_FILE="$control" COLLX_SHARD_SKU="$SKU" COLLX_BENCH="$backend"
@@ -151,8 +175,9 @@ for row in "${rows[@]}"; do
       exit 0
     fi
     echo "logs: $COLLX_LOG_DIR"
-    bash "$HERE/launchers/launch_$launcher.sh"
-  ) && rc=0 || rc=$?
+    exec bash "$HERE/launchers/launch_$launcher.sh"
+  ) </dev/null &
+  wait "$!" && rc=0 || rc=$?
   rcs+=("$rc")
 done
 [ "$dry" = 0 ] || exit 0

@@ -84,6 +84,9 @@ base:
         tensor-parallel-size: 4
         gpu-memory-utilization: 0.9
         max-model-len: 1048576
+        # AgentX requires a stream interval of 20 to 60 tokens; vLLM defaults to 1.
+        stream-interval: 20
+        prefill-schedule-interval: 24
         max-num-batched-tokens: 32768
         # Prefill CUDA graphs up to 8192 tokens; the default capture stops at 512.
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256,320,384,448,512,576,640,704,768,832,896,960,1024,1536,2048,3072,4096,6144,8192]}'
@@ -113,3 +116,24 @@ override_tp4_c16:
     agg:
       args:
         max-num-seqs: 32
+
+override_tp4_c4:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-c4
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+
+override_tp4_c8:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-c8
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+
+override_tp4_c32:
+  name: minimaxm31flash-gb300-dynamo-agg-tp4-c32
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
