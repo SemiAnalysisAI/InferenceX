@@ -13117,3 +13117,16 @@
     - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the H100 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 2, 4 and 8 GPUs: DiT TP2 with Ulysses 1, 2 and 4, since H3 does not fit one 80 GB GPU, with text-encoder TP and tiled VAE patch parallelism across all GPUs, and with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
     - "The H3 snapshot staged on h100-dsxe lacks Ref2VA/model_index.json, which the vLLM-Omni model view requires, so its launcher downloads the pinned snapshot without the Ref2VA weights into its hub cache before it submits a video job, as on a100-cw; the download keeps its xet cache in a temporary directory, since the runner's HF_HOME is a read-only model store."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4969
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+    - glm5.2-fp8-mi355x-sglang-agentic-mtp
+    - glm5.3-fp4-mi355x-sglang-agentic-mtp
+    - glm5.3-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Use lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261117 for every GLM-5.2 and GLM-5.3 MI355X SGLang AgentX config; it carries sgl-project/sglang#45205, which lets a DCP decode group run on the hierarchical cache, and it drops GLM-5.3's two digest pins."
+    - "GLM-5.2 MXFP4 DCP4 arm: 256 GB/rank write-through host tier at concurrency 16, 24, 32, 40 and 48 (32 is new). The dense TP4/EP4 HiCache arm gives up concurrency 16 and stops at 14."
+    - "New TP8/EP1 DCP8 arm on GLM-5.2 FP8 and GLM-5.3 FP8: 192 GB/rank write-through host tier on the triton DSA backends, the only ROCm DCP path, at concurrency 16, 20 and 24. GLM-5.2 FP8's dense arm gives up concurrency 16 and stops at 12; GLM-5.3 FP8 gains dram-utilization 0.8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5128
