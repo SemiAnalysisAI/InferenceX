@@ -1,6 +1,6 @@
 """Plot intra-chip collectives at LNC=2: bus bandwidth vs size, HBM vs SBUF (needs matplotlib).
 
-  python ubenchX/trn3_intrachip_cc/plot.py cc.csv [more.csv ...] out.png
+  python ubenchX/trn3_intrachip_cc/plot.py cc.csv [more.csv ...] out.png [--label "run name"]
 
 nccom-test on one Trainium3 chip at LNC=2, 4 ranks = all 4 logical cores. One panel per op, busbw (GB/s) vs size.
 Color: HBM buffers vs SBUF buffers (--sb2sb, up to 8 MiB, above which SBUF collectives do not run; all_to_all is
@@ -9,7 +9,7 @@ HBM runs to 4 GiB; where the library switches to its Ring algorithm (512 MiB to 
 segment into down-triangles. Later CSVs replace earlier ones per (placement, op, buffer, size). Size convention
 (nccom-test): all_gather = output bytes, reduce_scatter = input bytes, all_reduce / all_to_all = buffer bytes per rank.
 """
-import sys
+import argparse
 
 import matplotlib
 import pandas as pd
@@ -19,7 +19,11 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.ticker import FixedLocator, NullLocator
 
-*csvs, out = sys.argv[1:]
+ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+ap.add_argument("files", nargs="+", help="CSVs, then the output PNG")
+ap.add_argument("--label", help="appended to the title, to tell runs apart")
+a = ap.parse_args()
+*csvs, out = a.files
 SURFACE, INK, INK2, MUTED, GRID, AXIS = "#fcfcfb", "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
 COLORS = {"HBM": ("#2a78d6", "#1f5fae"), "SBUF": ("#eb6834", "#c4501f")}
 MARKERS = {"Mesh": "o", "RDH": "s", "Ring": "v"}  # anything else (a future algorithm name) falls back to a diamond
@@ -86,10 +90,11 @@ for ax, op in zip(axes, OPS):
 handles = [Line2D([], [], color=c, lw=2, label=b) for b, (c, _) in COLORS.items()]
 handles += [Line2D([], [], ls="none", marker=m, ms=6, color=INK2, label=f"{a} algorithm")
             for a, m in MARKERS.items() if (shown.algorithm == a).any()]
-fig.legend(handles=handles, loc="upper right", ncol=len(handles), frameon=False, labelcolor=INK, fontsize=10,
-           bbox_to_anchor=(0.99, 0.975), handlelength=2.4)
-fig.suptitle("Collective Bus Bandwidth across the 4 Logical Cores of One Chip, LNC=2 (nccom-test, bf16)", x=0.02,
-             y=0.965, ha="left", color=INK, fontsize=13.5)
-fig.tight_layout(rect=(0, 0, 1, 0.92))
+fig.legend(handles=handles, loc="upper left", ncol=len(handles), frameon=False, labelcolor=INK, fontsize=10,
+           bbox_to_anchor=(0.012, 0.93), handlelength=2.4)
+fig.suptitle("Collective Bus Bandwidth across the 4 Logical Cores of One Chip, LNC=2 (nccom-test, bf16)"
+             + (f": {a.label}" if a.label else ""), x=0.02,
+             y=0.985, ha="left", color=INK, fontsize=13.5)
+fig.tight_layout(rect=(0, 0, 1, 0.9))
 fig.savefig(out, dpi=200, facecolor=SURFACE)
 print("wrote", out)
