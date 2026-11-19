@@ -6,11 +6,11 @@ base:
       revision: d9e99b0792a5e93b78ea9bea62a68167e36ddd9e
     container: {}
     frameworks:
-      tokenspeed: 0.1.1.post20261118
-      tokenspeed-kernel: 0.1.5.post20261118
-      tokenspeed-kernel-amd: 0.1.4.post20261118
+      tokenspeed: 0.1.1.post20261119
+      tokenspeed-kernel: 0.1.5.post20261119
+      tokenspeed-kernel-amd: 0.1.4.post20261119
       tokenspeed-scheduler: 0.1.58
-      tokenspeed-engine: 0.1.1.post20261118
+      tokenspeed-engine: 0.1.1.post20261119
   resources:
     gpu_type: mi355x
     gpus_per_node: 8

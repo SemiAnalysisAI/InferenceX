@@ -188,6 +188,17 @@ def test_tokenspeed_dspark_reads_its_draft_and_explicit_verifier() -> None:
     assert run.verify == Fact("block", "explicit")
 
 
+def test_snapshot_arguments_keep_tokenspeed_sampling_mode() -> None:
+    role = _role(**{
+        "speculative-algorithm": "DSPARK", "speculative-num-steps": 5,
+        "speculative-draft-model-path": "Inferact/Kimi-K3.1-Pro-DSpark",
+        "enable-speculative-sampling": True, "speculative-rejection-sample-method": "block",
+        "kv-cache-dtype": "fp8",
+    })
+    result = audit("kimik3.1", {"args": spec_arguments(role)}, "tokenspeed")
+    assert result["curve"] == "kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block"
+
+
 def test_adaptive_run_is_reported() -> None:
     spec = {
         "method": "dspark", "num_speculative_tokens": 5, "draft_sample_method": "probabilistic",
