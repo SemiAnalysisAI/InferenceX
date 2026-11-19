@@ -12751,5 +12751,5 @@
     - agentic-coding
   description:
     - "Append TP4 at concurrency 16 with the latency_specialized decode to the existing curve: 32 running requests, prefill every 128 decode steps, decode-replay graphs to 4096 tokens."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5135
   append-only: true
