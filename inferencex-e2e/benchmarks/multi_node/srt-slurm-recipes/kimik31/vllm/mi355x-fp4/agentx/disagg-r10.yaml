@@ -3,8 +3,8 @@ identity:
   model:
     revision: 6d0a0202956796543364d666ab19c6ad1a494ee1
   frameworks:
-    vllm: 0.0.0+mum.181bd93fc6
-    vllm-router: 0.1.15
+    vllm: 0.0.0+k31.64e9878711e9
+    vllm-router: 0.1.17
 slurm:
   time_limit: 08:00:00
 sbatch_directives:
@@ -19,7 +19,6 @@ container_mounts:
   /dev/infiniband: /dev/infiniband
 extra_mount:
 - /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:/usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav34.so:ro
-- /var/lib/hf-hub-cache:/k31-preview:ro
 resources:
   gpu_type: mi355x
   gpus_per_node: 8
@@ -28,7 +27,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:238b758c4cc682243dde5984de0565d9168fb332a2f60aba32cef200231bf943
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:17a44de58cd2d1b6ecac3aed20e940c2cde83d60624243ed6a9a1a2028b45478
   args:
     policy: consistent_hash
     prefill-policy: consistent_hash
@@ -36,6 +35,7 @@ frontend:
     log-level: info
   env:
     K31_ROUTER_ONLY: '1'
+    PATH: /opt/runtime-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 observability:
   enabled: false
   tachometer:
@@ -69,11 +69,9 @@ roles:
       max-num-seqs: 48
       max-num-batched-tokens: 16384
       compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":4096,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[256,512,768,1024,1536,2048,3072,4096]}'
-      speculative-config: '{"model": "/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94",
-        "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "ROCM_AITER_MLA", "kv_cache_dtype":
-        "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method": "synthetic", "synthetic_acceptance_length":
-        2.88}'
-      additional-config: '{"kda_prefill_backend":"fused"}'
+      speculative-config: '{"model": "Inferact/Kimi-K3.1-Pro-DSpark", "num_speculative_tokens": 3, "method": "dspark", "attention_backend":
+        "TRITON_ATTN", "draft_sample_method": "probabilistic", "rejection_sample_method": "block", "revision": "e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f"}'
+      additional-config: '{"kda_prefill_backend": "fused", "k31_pd_preparation": true}'
       kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false,"defer_timeout":300}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}]}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
@@ -90,7 +88,7 @@ roles:
       HOME: /private-state/k31-clean-home
       HF_HOME: /private-state/huggingface
       HF_HUB_CACHE: /private-state/huggingface/hub
-      HF_HUB_OFFLINE: '1'
+      HF_HUB_OFFLINE: '0'
       VLLM_USE_V2_MODEL_RUNNER: '1'
       VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
       NCCL_IB_HCA: '@fabric.rdma-devices'
@@ -143,19 +141,17 @@ roles:
       VLLM_ROCM_MEM_HEADROOM_GIB: '8'
       VLLM_ROCM_DCP_VUP_RS: '0'
       VLLM_ROCM_DSA_MULTISTREAM: '0'
-      TRITON_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/triton
-      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/inductor
-      K31_SIMPLECPU_OBSERVER: '1'
-      K31_RUNTIME_ROLE: P
+      TRITON_CACHE_DIR: /private-state/kernel-cache/di-64e9878711e9/triton
+      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/di-64e9878711e9/inductor
       VLLM_K3_SP_PREFILL: '1'
       VLLM_K3_SP_PREFILL_MIN_TOKENS: '4096'
-      K31_DCP_PREFILL_PACK_QUERY: '1'
       VLLM_K31_BEAT_EAGERPREP: '1'
       VLLM_K31_BEAT_DRAFTMETA: '1'
       VLLM_K31_CPRR_NATIVE96: '0'
       VLLM_K31_CPRR_SPLIT96: '0'
       VLLM_ROCM_K3_MOE_ROW_TAIL: '1'
       VLLM_ROCM_K3_MOE_ROW_TAIL_MIN_TOKENS: '8192'
+      K31_ROUTER_ONLY: '0'
   decode:
     nodes: 1
     workers: 1
@@ -178,11 +174,9 @@ roles:
       max-num-seqs: 144
       max-num-batched-tokens: 576
       compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":576,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[4,8,12,16,20,24,28,32,40,48,56,64,72,80,88,96,104,112,120,128,160,176,192,208,224,240,256,288,320,352,384,416,448,480,512,544,576]}'
-      speculative-config: '{"model": "/k31-preview/models--Inferact--Kimi-K3.1-Pro-DSpark-preview/snapshots/6a2ef20a05efe88aabbf9ecaa12d020c3b0edf94",
-        "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "ROCM_AITER_MLA", "kv_cache_dtype":
-        "fp8", "draft_sample_method": "probabilistic", "rejection_sample_method": "synthetic", "synthetic_acceptance_length":
-        2.88}'
-      additional-config: '{"kda_prefill_backend": "fused", "k31_moe_front_pair": true}'
+      speculative-config: '{"model": "Inferact/Kimi-K3.1-Pro-DSpark", "num_speculative_tokens": 3, "method": "dspark", "attention_backend":
+        "TRITON_ATTN", "draft_sample_method": "probabilistic", "rejection_sample_method": "block", "revision": "e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f"}'
+      additional-config: '{"kda_prefill_backend": "fused", "k31_moe_front_pair": true, "k31_pd_preparation": true}'
       kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
@@ -201,7 +195,7 @@ roles:
       HOME: /private-state/k31-clean-home
       HF_HOME: /private-state/huggingface
       HF_HUB_CACHE: /private-state/huggingface/hub
-      HF_HUB_OFFLINE: '1'
+      HF_HUB_OFFLINE: '0'
       VLLM_USE_V2_MODEL_RUNNER: '1'
       VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
       NCCL_IB_HCA: '@fabric.rdma-devices'
@@ -254,15 +248,15 @@ roles:
       VLLM_ROCM_MEM_HEADROOM_GIB: '8'
       VLLM_ROCM_DCP_VUP_RS: '1'
       VLLM_ROCM_DSA_MULTISTREAM: '1'
-      TRITON_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/triton
-      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/clean-181bd93f/inductor
+      TRITON_CACHE_DIR: /private-state/kernel-cache/di-64e9878711e9/triton
+      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/di-64e9878711e9/inductor
       VLLM_DCP_Q_REPLICATE: '1'
       VLLM_K31_CPRR_SPLIT96: '0'
-      K31_RUNTIME_ROLE: D
       VLLM_K3_SP_PREFILL: '0'
       VLLM_K31_BEAT_EAGERPREP: '1'
       VLLM_K31_BEAT_DRAFTMETA: '1'
       VLLM_K31_CPRR_NATIVE96: '1'
+      K31_ROUTER_ONLY: '0'
 benchmark:
   env:
     AGENTIC_MODEL_READY_TIMEOUT_SECONDS: '300'
@@ -282,7 +276,7 @@ environment:
   TOTAL_CPU_DRAM_GB: '1799'
   DECODE_CPU_DRAM_GB: '0'
   KV_P2P_TRANSFER: moriio
-  K31_CLEAN_RUN_ID: k31-pd-1115r2
+  K31_CLEAN_RUN_ID: k31-di-1119
 telemetry:
   storage_subdir: power
   startup_timeout_seconds: 300

@@ -796,6 +796,7 @@ clusters:
     slurm:
       partition: compute
       exclusive: true
+      exclude: [mia1-p01-g09, mia1-p01-g11]
       gres: "gpu:{gpus}"
       cpus-per-task: 128
       srun-args: [--container-remap-root, --container-writable]
