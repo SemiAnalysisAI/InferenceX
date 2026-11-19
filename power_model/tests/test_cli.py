@@ -219,14 +219,14 @@ def test_cli_selects_each_hgx_family_board_and_nic(
 @pytest.mark.parametrize(
     "state, workload, expected, it_w, fan_w, board_w, nic_w, cpu_w, memory_w",
     [
-        ("idle", "fixed-seq-len", 506.143395, 6229.457169, 97.890571, 3280, 480, 660, 176),
-        ("active", "fixed-seq-len", 556.436627, 6848.450792, 105.395062, 3600, 800, 660, 176),
+        ("idle", "fixed-seq-len", 506.186299, 6229.985224, 98.385465, 3280, 480, 660, 176),
+        ("active", "fixed-seq-len", 556.515561, 6849.422292, 106.311883, 3600, 800, 660, 176),
         (
             "idle",
             "agentic-cpu-offloading",
-            516.773168,
-            6360.285144,
-            100.661497,
+            516.829239,
+            6360.975248,
+            101.309947,
             3280,
             480,
             780,
@@ -235,9 +235,9 @@ def test_cli_selects_each_hgx_family_board_and_nic(
         (
             "active",
             "agentic-cpu-offloading",
-            567.005064,
-            6978.523867,
-            108.305195,
+            567.098274,
+            6979.671062,
+            109.390634,
             3600,
             800,
             780,

@@ -64,3 +64,7 @@ AMD Zen RAPL has not been validated against wall power, and Schöne et al. (TU D
 python -m power_model --system=mi355 --gpu-level-power-per-gpu=612.5 \
   --cpu-measured-power-per-socket=180 --power-breakdown-per-chassis
 ```
+
+## License
+
+`power_model` is licensed under GPL-3.0-only (see [LICENSE](LICENSE)), unlike the repository's Apache-2.0 root license.

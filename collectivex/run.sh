@@ -15,7 +15,7 @@ REPO_ROOT="$(cd "$HERE/.." && pwd)"
 usage() {
   cat <<'EOF'
 usage: collectivex/run.sh <sku> [options]
-  --suite LIST         any of ep, swap-blocks, kv-transfer (default: ep,swap-blocks)
+  --suite LIST         any of ep, swap-blocks (default: ep,swap-blocks)
   --backend NAME       one EP backend (default: all)
   --ep LIST            EP sizes, e.g. 8,16 (default: all)
   --modes LIST         normal, low-latency (default: all)
@@ -75,11 +75,34 @@ fi
 shard_dir="$HERE/.shards/run-$$"
 mkdir -p "$shard_dir"
 trap 'rm -rf "$shard_dir"' EXIT
+descendants() {
+  local child
+  for child in $(pgrep -P "$1"); do
+    echo "$child"
+    descendants "$child"
+  done
+}
+# The shard ignores SIGINT (see the loop), so TERM goes to its launcher and everything under it.
+interrupt() {
+  local pid
+  # The reader of these messages may already be gone.
+  trap '' HUP INT TERM PIPE
+  for pid in $(jobs -pr); do
+    echo "=== interrupted: stopping shard $id and releasing its allocation" >&2 || true
+    kill -TERM "$pid" $(descendants "$pid") 2>/dev/null || true
+  done
+  wait
+  echo "=== interrupted: the remaining shards were not run" >&2 || true
+  exit "$1"
+}
+trap 'interrupt 129' HUP
+trap 'interrupt 130' INT
+trap 'interrupt 143' TERM
 matrix="$shard_dir/matrix-$SKU.json"
 python3 "$HERE/sweep_matrix.py" "${matrix_args[@]}" --out "$matrix" >/dev/null
 
 # One tab-separated line per selected shard:
-# id launcher backend nodes gpus_per_node scale_up_domain cases image staged_image_dir minutes fabric
+# id launcher backend nodes gpus_per_node scale_up_domain cases image staged_image_dir minutes
 rows=()
 while IFS= read -r row; do rows+=("$row"); done < <(python3 - "$matrix" "${shards[@]}" <<'EOF'
 import json, sys
@@ -95,7 +118,7 @@ for shard in include:
         shard["id"], shard["launcher"], shard["backend"], shard["nodes"],
         shard["gpus_per_node"], shard["scale_up_domain"], len(shard["cases"]),
         shard.get("image") or "-", shard.get("staged_image_dir") or "-",
-        shard.get("allocation_minutes") or "-", shard.get("fabric") or "-")))
+        shard.get("allocation_minutes") or "-")))
 EOF
 )
 [ "${#rows[@]}" -gt 0 ] || { echo "no runnable shards for $SKU" >&2; exit 1; }
@@ -112,8 +135,7 @@ fi
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 rcs=()
 for row in "${rows[@]}"; do
-  IFS=$'\t' read -r id launcher backend nodes gpn domain ncases image staged minutes fabric \
-    <<< "$row"
+  IFS=$'\t' read -r id launcher backend nodes gpn domain ncases image staged minutes <<< "$row"
   # Every shard stages the checkout as it is now, but its results carry the source recorded at
   # start: stop rather than stamp a later shard with a commit it did not run.
   if [ "$dry" = 0 ] && { [ "$(git -C "$REPO_ROOT" rev-parse HEAD)" != "$source_sha" ] ||
@@ -129,7 +151,8 @@ for row in "${rows[@]}"; do
   # of each other's stage directory.
   execution="manual-$stamp-$$-$id"
   echo "=== shard $id: $backend, ${nodes}x${gpn} GPUs, $ncases case(s)"
-  # A subshell keeps one shard's image and placement from leaking into the next.
+  # A subshell keeps one shard's image and placement from leaking into the next. In the
+  # background, because bash holds a trap until its foreground command returns.
   (
     unset COLLX_NGPUS
     export COLLX_SHARD_FILE="$control" COLLX_SHARD_SKU="$SKU" COLLX_BENCH="$backend"
@@ -143,9 +166,6 @@ for row in "${rows[@]}"; do
     unset COLLX_IMAGE_OVERRIDE
     [ "$image" = - ] || export COLLX_IMAGE_OVERRIDE="$image"
     [ "$staged" = - ] || export COLLX_STAGED_IMAGE_DIR="$staged"
-    # The fabric a kv-transfer shard claims: its rdma legs on an MNNVL rack leave the NVL domain.
-    unset COLLX_FABRIC
-    [ "$fabric" = - ] || export COLLX_FABRIC="$fabric"
     # The caller's COLLX_TIME wins: a first-time image import can outlast a short shard's ask.
     [ -n "${COLLX_TIME:-}" ] || { [ "$minutes" = - ] && COLLX_TIME=300 || COLLX_TIME="$minutes"; }
     export COLLX_TIME
@@ -155,8 +175,9 @@ for row in "${rows[@]}"; do
       exit 0
     fi
     echo "logs: $COLLX_LOG_DIR"
-    bash "$HERE/launchers/launch_$launcher.sh"
-  ) && rc=0 || rc=$?
+    exec bash "$HERE/launchers/launch_$launcher.sh"
+  ) </dev/null &
+  wait "$!" && rc=0 || rc=$?
   rcs+=("$rc")
 done
 [ "$dry" = 0 ] || exit 0

@@ -35,7 +35,7 @@ jobs:
         run: >-
           uv run --no-project --python 3.12
           --with 'av==16.1.0' --with 'numpy==2.3.5'
-          --with 'pyyaml>=6,<7' --with 'pytest>=8,<9'
+          --with 'pyyaml>=6,<7' --with 'pytest==9.2.0'
           python -m pytest -q
       - name: Lint and format
         run: |

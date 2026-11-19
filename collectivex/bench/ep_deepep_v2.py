@@ -114,14 +114,6 @@ def _configure_gin_mode(args, world_size: int) -> bool:
     return allow_hybrid_mode
 
 
-def _require_runtime() -> None:
-    """Capability check only: the loaded deep_ep must expose ElasticBuffer (still
-    catches the b300 image-bundled deep_ep 1.2.1 shadowing the from-source build,
-    which lacks the class)."""
-    if not inspect.isclass(ElasticBuffer) or ElasticBuffer.__name__ != "ElasticBuffer":
-        raise RuntimeError("invalid DeepEP V2 runtime: deep_ep.ElasticBuffer is absent")
-
-
 class DeepEPV2Backend(LegacyBufferLL, EPBackend):
     name = "deepep-v2"
     maturity = "production"  # vLLM --all2all-backend deepep_v2; SGLang --moe-a2a-backend deepep
@@ -212,7 +204,6 @@ class DeepEPV2Backend(LegacyBufferLL, EPBackend):
     def _normal_create_buffer(self, spec):
         args, world_size = self.args, self.world_size
         self.max_tokens = spec.max_tokens_per_rank
-        _require_runtime()
         jit_root = Path(os.environ["EP_JIT_CACHE_DIR"])
         # Hybrid exactly where vLLM's VLLM_DEEPEP_V2_ALLOW_HYBRID_MODE=1 autoselects it: DeepEP
         # goes hybrid only when the NVLink (LSA) team is smaller than the world, so passing False

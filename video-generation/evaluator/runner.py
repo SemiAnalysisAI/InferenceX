@@ -34,17 +34,21 @@ from typing import Any
 
 from specs.video_spec import canonical_json_bytes, schema_version
 
+from .media import X264_PRESET_OPTIONS
 from .serving import settings as serving_settings, summarize as serving_summary
 
 
-MODEL_ID = "MiniMaxAI/MiniMax-H3"
+H3_MODEL_ID = "MiniMaxAI/MiniMax-H3"
+WAN22_MODEL_ID = "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
 RUNTIMES = {"sglang", "vllm-omni"}
 MAX_JSON_BYTES = 1024 * 1024
 MAX_MEDIA_BYTES = 512 * 1024 * 1024
 MAX_SLOTS = 10000
-MAX_POLLS = 10000
 SOCKET_TIMEOUT_SECONDS = 30.0
-POLL_INTERVAL_SECONDS = 0.5
+# A job is seen as done only at the next poll, so latency includes up to one interval.
+POLL_INTERVAL_SECONDS = 0.1
+# Keeps the poll budget past the default 3600 s attempt timeout.
+MAX_POLLS = 50000
 _ACTIVE_STATUSES = {"queued", "pending", "in_progress", "processing", "running"}
 _FAILED_STATUSES = {"failed", "cancelled", "canceled"}
 _TERMINAL_STATUSES = _FAILED_STATUSES | {"completed", "succeeded", "success"}
@@ -76,8 +80,31 @@ _H3_CELL = {
 }
 # H3 snaps each requested duration to its own delivered frame count.
 _H3_DURATION_FRAMES = ((4, 107), (5, 124), (8, 192))
+# Wan2.2 T2V is silent and takes its geometry, cadence, and both CFG scales per request.
+# Each control is required so no server default can stand in for the workload.
+_WAN22_CONTROLS = {
+    "width",
+    "height",
+    "frame_count",
+    "fps",
+    "num_inference_steps",
+    "guidance_scale",
+    "guidance_scale_2",
+    "boundary_ratio",
+    "flow_shift",
+    "negative_prompt",
+}
+_WAN22_CELL = {"width": 832, "height": 480, "frame_count": 81, "fps": 16}
+# SGLang 297e54fd accepts both as request fields, but its Wan pipeline reads the shift from
+# --flow-shift and the boundary from the checkpoint's model_index.json, so the launch binds them.
+SGLANG_WAN22_SERVER_CONTROLS = ("boundary_ratio", "flow_shift")
 # SGLang has no crf field; it encodes with crf = int((1 - output_compression / 100) * 51).
 SGLANG_OUTPUT_COMPRESSION = {18: 63}
+# vLLM-Omni v0.32.0 delivers Wan2.2 at libx264 ultrafast CRF 18; SGLang defaults to fast CRF 25.
+_SGLANG_WAN22_ENCODING = {
+    "x264_preset": "ultrafast",
+    "output_compression": SGLANG_OUTPUT_COMPRESSION[18],
+}
 
 
 def _digest(value: Any) -> str:
@@ -138,6 +165,20 @@ def valid_numerical_identity(identity: Any, runtime_revision: str) -> bool:
     )
 
 
+def sglang_flow_shift(argv: list[str]) -> float | None:
+    """The UniPC shift an SGLang command sets, or None unless exactly one flag sets it.
+
+    SGLang's parser reads `_` as `-` in a flag name, takes `--flag value` or `--flag=value`,
+    and lets a repeated flag override, so every spelling counts.
+    """
+    values = []
+    for part, following in zip(argv, [*argv[1:], ""]):
+        flag, equals, value = part.partition("=")
+        if flag.startswith("--") and flag[2:].replace("_", "-") == "flow-shift":
+            values.append(value if equals else following)
+    return float(values[0]) if len(values) == 1 else None
+
+
 def requested_encoding(plan: dict[str, Any]) -> dict[str, Any] | None:
     return plan["fairness"]["encoding"] if schema_version(plan) == 2 else None
 
@@ -155,38 +196,7 @@ def _case(case: Any, name: str) -> None:
             raise ValueError(f"{name}.{field} must be an explicit boolean")
 
 
-def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
-    """Check the structure a run needs, without making a request.
-
-    Workload policy, such as the schema version 2 prompt count and warmup rules, is validated once
-    by ``specs/video_spec.py``. Unknown root metadata is preserved in the plan digest.
-    """
-    if not isinstance(plan, dict):
-        raise ValueError("plan must be an object")
-    try:
-        frozen = json.loads(canonical_json_bytes(plan))
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError("plan must contain finite JSON values") from exc
-    for field in ("plan_id", "model_id", "model_revision"):
-        _text(frozen.get(field), field)
-    if frozen["model_id"] != MODEL_ID:
-        raise ValueError(f"this runner supports only {MODEL_ID}")
-    if not re.fullmatch(r"[a-fA-F0-9]{40}", frozen["model_revision"]):
-        raise ValueError("model_revision must be an immutable 40-character commit")
-    if schema_version(frozen) not in (1, 2):
-        raise ValueError("schema_version must be 1 or 2")
-    if schema_version(frozen) == 2:
-        fairness = frozen.get("fairness")
-        encoding = fairness.get("encoding") if isinstance(fairness, dict) else None
-        if (
-            not isinstance(encoding, dict)
-            or not isinstance(encoding.get("preset"), str)
-            or type(encoding.get("crf")) is not int
-        ):
-            raise ValueError("schema 2 plans must request fairness.encoding preset and integer crf")
-    generation = frozen.get("generation")
-    if not isinstance(generation, dict):
-        raise ValueError("generation must be an object with explicit controls")
+def _h3_generation(generation: dict[str, Any]) -> None:
     if set(generation) - _GENERATION_CONTROLS:
         raise ValueError("unsupported generation controls must not be silently ignored")
     _positive(
@@ -209,6 +219,70 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
             "this runner supports the 16:9 1344x768 24 fps H3 cell with 32 kHz stereo audio"
             " and 4s/107, 5s/124, or 8s/192 frames"
         )
+
+
+def _wan22_generation(generation: dict[str, Any]) -> None:
+    if set(generation) != _WAN22_CONTROLS:
+        raise ValueError(f"Wan2.2 generation must declare exactly {sorted(_WAN22_CONTROLS)}")
+    if any(generation[key] != value for key, value in _WAN22_CELL.items()):
+        raise ValueError("this runner supports the Wan2.2 832x480 16 fps 81-frame cell")
+    _positive(
+        generation["num_inference_steps"],
+        "generation.num_inference_steps",
+        maximum=1000,
+        integer=True,
+    )
+    for field in ("guidance_scale", "guidance_scale_2", "flow_shift"):
+        _positive(generation[field], f"generation.{field}", maximum=1000)
+    boundary = generation["boundary_ratio"]
+    if isinstance(boundary, bool) or not isinstance(boundary, (int, float)) or not 0 < boundary < 1:
+        raise ValueError("generation.boundary_ratio must be a number in (0, 1)")
+    if not isinstance(generation["negative_prompt"], str):
+        raise ValueError("generation.negative_prompt must be an explicit string")
+
+
+def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    """Check the structure a run needs, without making a request.
+
+    Workload policy, such as the schema version 2 prompt count and warmup rules, is validated once
+    by ``specs/video_spec.py``. Unknown root metadata is preserved in the plan digest.
+    """
+    if not isinstance(plan, dict):
+        raise ValueError("plan must be an object")
+    try:
+        frozen = json.loads(canonical_json_bytes(plan))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("plan must contain finite JSON values") from exc
+    for field in ("plan_id", "model_id", "model_revision"):
+        _text(frozen.get(field), field)
+    if frozen["model_id"] not in (H3_MODEL_ID, WAN22_MODEL_ID):
+        raise ValueError(f"this runner supports only {H3_MODEL_ID} and {WAN22_MODEL_ID}")
+    if not re.fullmatch(r"[a-fA-F0-9]{40}", frozen["model_revision"]):
+        raise ValueError("model_revision must be an immutable 40-character commit")
+    if schema_version(frozen) not in (1, 2):
+        raise ValueError("schema_version must be 1 or 2")
+    if frozen["model_id"] == WAN22_MODEL_ID and schema_version(frozen) != 1:
+        raise ValueError("Wan2.2 plans use schema 1; schema 2 fairness is H3-specific")
+    if schema_version(frozen) == 2:
+        fairness = frozen.get("fairness")
+        encoding = fairness.get("encoding") if isinstance(fairness, dict) else None
+        if (
+            not isinstance(encoding, dict)
+            or not isinstance(encoding.get("preset"), str)
+            or type(encoding.get("crf")) is not int
+        ):
+            raise ValueError("schema 2 plans must request fairness.encoding preset and integer crf")
+        if encoding["preset"] not in X264_PRESET_OPTIONS:
+            raise ValueError(
+                f"fairness.encoding preset {encoding['preset']} has no verifiable x264 options"
+            )
+    generation = frozen.get("generation")
+    if not isinstance(generation, dict):
+        raise ValueError("generation must be an object with explicit controls")
+    if frozen["model_id"] == WAN22_MODEL_ID:
+        _wan22_generation(generation)
+    else:
+        _h3_generation(generation)
     cases = frozen.get("cases")
     if not isinstance(cases, list) or not cases:
         raise ValueError("cases must be a nonempty array")
@@ -251,7 +325,34 @@ def _slots(plan: dict[str, Any]) -> list[dict[str, Any]]:
     return slots
 
 
+def _wan22_payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[str, Any]:
+    generation = plan["generation"]
+    request = {
+        "model": plan["model_id"],
+        "prompt": slot["prompt"],
+        "seed": slot["seed"],
+        "width": generation["width"],
+        "height": generation["height"],
+        "fps": generation["fps"],
+        "num_frames": generation["frame_count"],
+        "num_inference_steps": generation["num_inference_steps"],
+        "guidance_scale": generation["guidance_scale"],
+        "guidance_scale_2": generation["guidance_scale_2"],
+        "boundary_ratio": generation["boundary_ratio"],
+        "flow_shift": generation["flow_shift"],
+        "negative_prompt": generation["negative_prompt"],
+        "num_outputs_per_prompt": 1,
+    }
+    if runtime == "sglang":
+        for control in SGLANG_WAN22_SERVER_CONTROLS:
+            del request[control]
+        request |= _SGLANG_WAN22_ENCODING
+    return request
+
+
 def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[str, Any]:
+    if plan["model_id"] == WAN22_MODEL_ID:
+        return _wan22_payload(plan, slot, runtime)
     generation = plan["generation"]
     encoding = requested_encoding(plan)
     target = {
@@ -298,6 +399,23 @@ def _payload(plan: dict[str, Any], slot: dict[str, Any], runtime: str) -> dict[s
         "num_outputs_per_prompt": 1,
         "extra_params": extra,
     }
+
+
+def _provider_metrics(reply: dict[str, Any]) -> dict[str, float] | None:
+    """Server-reported job figures, kept apart from client-measured latency.
+
+    vLLM-Omni reports the primary rank's caching-allocator high-water mark for the
+    request as ``peak_memory_mb``, and 0 when it did not sample one.
+    """
+    metrics = {
+        name: float(reply[name])
+        for name in ("peak_memory_mb", "inference_time_s")
+        if not isinstance(reply.get(name), bool)
+        and isinstance(reply.get(name), (int, float))
+        and math.isfinite(reply[name])
+        and reply[name] > 0
+    }
+    return metrics or None
 
 
 def preview_plan(plan: dict[str, Any], *, runtime: str = "sglang") -> dict[str, Any]:
@@ -686,6 +804,15 @@ def run_plan(
                 "numerical_identity must contain a complete matching server configuration"
             )
         canonical_json_bytes(numerical_identity)
+    if runtime == "sglang" and frozen["model_id"] == WAN22_MODEL_ID:
+        # These requests omit the shift, so only the recorded launch shows which one was served.
+        if numerical_identity is None or (
+            sglang_flow_shift(numerical_identity["server_argv"])
+            != frozen["generation"]["flow_shift"]
+        ):
+            raise ValueError(
+                "SGLang Wan2.2 runs need a sealed server launch whose --flow-shift equals the plan"
+            )
     _positive(timeout_seconds, "timeout_seconds", maximum=86400)
     safe_endpoint, parts, api_path = _endpoint(endpoint)
     credential = None
@@ -820,7 +947,8 @@ def run_plan(
             **frozen["generation"],
             "requires_motion": slot["requires_motion"],
             "requires_sound": slot["requires_sound"],
-            "audio_required": True,
+            "requires_picture": True,
+            "audio_required": frozen["model_id"] != WAN22_MODEL_ID,
         }
         expected["duration_seconds"] = expected["frame_count"] / expected["fps"]
         if encoding:
@@ -845,6 +973,7 @@ def run_plan(
             "job_id": None,
             "provider_status": None,
             "submit_to_accepted_seconds": None,
+            "provider_metrics": None,
         }
         if abort_reason:
             record["error"] = abort_code
@@ -904,6 +1033,7 @@ def run_plan(
                     )
                     if status in _TERMINAL_STATUSES:
                         remote_terminal = True
+                        record["provider_metrics"] = _provider_metrics(reply)
                         record["submit_to_terminal_seconds"] = time.monotonic() - start
                         record["timing_window"]["terminal_monotonic_seconds"] = (
                             start + record["submit_to_terminal_seconds"]
@@ -1029,15 +1159,6 @@ def run_plan(
                                     record["outcome"] = "interrupted"
                                     interrupted, abort_reason = exc, record["error"]
                                     stop.set()
-                            finally:
-                                record["latency_seconds"] = (
-                                    time.monotonic()
-                                    - record["timing_window"]["start_monotonic_seconds"]
-                                )
-                                record["timing_window"]["end_monotonic_seconds"] = (
-                                    record["timing_window"]["start_monotonic_seconds"]
-                                    + record["latency_seconds"]
-                                )
                         retain(record)
                 except KeyboardInterrupt as exc:
                     interrupted, abort_reason = exc, "interrupted by operator"

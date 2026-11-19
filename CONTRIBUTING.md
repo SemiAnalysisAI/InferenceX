@@ -165,7 +165,7 @@ The verdict records only the commit actually assessed; it does not carry approva
 
 A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR, so an approved PR's sweep runs only once, for PR validation. `main` never reruns it after merge; the reuse path publishes that PR sweep instead:
 
-- After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line. The pinned run may come from any PR; if its commit is not part of this PR, reuse is still accepted but flagged as a warning.
+- After your PR has an eligible green full sweep, a maintainer with write access to the repository comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line. The pinned run may come from any PR; if its commit is not part of this PR, reuse is still accepted but flagged as a warning.
 - External PRs sweep through `trusted-external-sweep.yml`, which dispatches `e2e-tests.yml`; pin that run explicitly with `/use <run_id>`, because automatic selection and `merge_with_reuse` only find `run-sweep.yml` runs.
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts; `main` never re-runs the sweep itself.
@@ -173,7 +173,7 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - Retirement-only changes are the no-results exception described above: merge directly after review and required checks, without `/use`. Empty or mixed changelogs do not qualify.
 - Reuse does not require retaining a primary label, but it is rejected while the PR carries `evals-only` or `agentx-fast`, and `merge_with_reuse` refuses a PR with more than one primary label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary, and posts a warning comment when the pinned run's commit is outside the PR; source artifacts are revalidated at merge.
 - A missing authorized reuse command produces a Check 4 **WARN**, not a rejection. The warning stays visible in the sign-off verdict; posting an authorized command is still required to reuse artifacts.
-- From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
+- From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It syncs the branch with `main`, posts the command, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
 ## Adding points to the latest curve with `append-only`
 
@@ -213,6 +213,29 @@ control-flow isolation.
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
   append-only: true
 ```
+
+### Stacking append-only points on an unmerged parent PR
+
+To sweep append-only points on a curve that an open parent PR introduces, before the
+parent merges, branch the child PR from the parent and target `main`. The child's diff
+against `main` then carries the parent's regular entry too, which an append-only sweep
+would reject. `run-sweep.yml` instead plans the child against the parent's head SHA
+(`infx.workflows.stack_base`) when all of the following hold:
+
+- every appended entry linking another PR names the same open, same-repository parent
+  PR that targets the same base branch, and the parent's entry uses its canonical
+  `https://github.com/SemiAnalysisAI/InferenceX/pull/<number>` link, not `XXX`;
+- every other appended entry is the child's own and has `append-only: true`;
+- the parent is up to date with `main` (merge `main` into the parent, then the parent
+  into the child), and the child contains the parent's current head.
+
+When the parent's entries are themselves all append-only, the child plans against
+`main` as before, since that sweep is already valid. The sweep then runs only the
+child's new points. Merge the parent first with its own
+`/use <run_id>`, then merge the child with `/use <child_run_id>`: Merge Ingest plans the
+child's merge commit against `main`, which now contains the parent, so the child ingests
+as append-only and InferenceX-app extends the parent's curve. If the parent changes, merge
+it into the child again; the sweep rejects a child that no longer contains the parent head.
 
 ## AMD cluster: never leave root-owned files in runner workspaces
 
