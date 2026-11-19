@@ -13117,3 +13117,12 @@
     - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the H100 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 2, 4 and 8 GPUs: DiT TP2 with Ulysses 1, 2 and 4, since H3 does not fit one 80 GB GPU, with text-encoder TP and tiled VAE patch parallelism across all GPUs, and with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
     - "The H3 snapshot staged on h100-dsxe lacks Ref2VA/model_index.json, which the vLLM-Omni model view requires, so its launcher downloads the pinned snapshot without the Ref2VA weights into its hub cache before it submits a video job, as on a100-cw; the download keeps its xet cache in a temporary directory, since the runner's HF_HOME is a read-only model store."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4969
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-disagg-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Add MiniMax-M3.1-Flash PD-disaggregated AgentX on MI355X under vllm-disagg: one TP4 prefill and two TP4 decode vLLM engines moving KV over MooncakeConnector (RDMA) behind vllm-router 0.1.16 with consistent-hash routing, at concurrency 40, 48, 56, 64, 72 and 80, on the single-node lane's image and engine settings."
+    - "Prefill admits 2x CONC, runs DBO and holds a host KV tier (1349 GB at c40-c64, 1499 GB at c72-c80); each decode engine caps its batch at CONC/8. At c80 the prefill schedules at most 4096 tokens of a prompt per step at 0.75 GPU memory utilization."
+    - "Use srt-slurm cc9db05, which includes NVIDIA/srt-slurm#669, instead of the local Mooncake backport; allocate one shared bootstrap port per prefill engine and start the Router after worker health checks."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
