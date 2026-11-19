@@ -13069,6 +13069,56 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5124
 
 - config-keys:
+    - wan22-bf16-h200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add a vLLM-Omni v0.32.0 Wan2.2-T2V-A14B baseline on 1, 2, 4 and 8 H200 GPUs, on the B200 row's workload (wan22.yaml release-v1, C1) and image digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5110
+
+- config-keys:
+    - wan22-bf16-h100-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add a vLLM-Omni v0.32.0 Wan2.2-T2V-A14B baseline on 1, 2, 4 and 8 H100 GPUs, on the B200 row's workload (wan22.yaml release-v1, C1) and image digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5111
+
+- config-keys:
+    - wan22-bf16-h200-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Add an SGLang v0.5.23 Wan2.2-T2V-A14B baseline on 1, 2, 4 and 8 H200 GPUs, on the vLLM-Omni Wan2.2 rows' workload (wan22.yaml release-v1, C1) and parallel layout and the H3 SGLang rows' image digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5113
+
+- config-keys:
+    - wan22-bf16-h100-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Add an SGLang v0.5.23 Wan2.2-T2V-A14B baseline on 4 and 8 H100 GPUs, on the H200 SGLang row's workload (wan22.yaml release-v1, C1) and image digest, with a 21-frame server warmup on 8 GPUs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5114
+
+- config-keys:
+    - h3-bf16-h200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the H200 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4970
+
+- config-keys:
+    - h3-bf16-mi355x-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vllm/vllm-omni-rocm:v0.30.0, the newest stable vLLM-Omni ROCm image, pinned by its linux/amd64 digest, on the MI355X H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, the AITER FLASH_ATTN diffusion attention backend, vLLM quick all-reduce quantization set to NONE, and the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4971
+
+- config-keys:
+    - h3-bf16-h100-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the H100 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 2, 4 and 8 GPUs: DiT TP2 with Ulysses 1, 2 and 4, since H3 does not fit one 80 GB GPU, with text-encoder TP and tiled VAE patch parallelism across all GPUs, and with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+    - "The H3 snapshot staged on h100-dsxe lacks Ref2VA/model_index.json, which the vLLM-Omni model view requires, so its launcher downloads the pinned snapshot without the Ref2VA weights into its hub cache before it submits a video job, as on a100-cw; the download keeps its xet cache in a temporary directory, since the runner's HF_HOME is a read-only model store."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4969
+
+- config-keys:
     - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dcp8-disagg
     - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep16-disagg
     - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep32-disagg

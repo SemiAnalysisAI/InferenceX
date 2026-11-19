@@ -46,9 +46,23 @@ binding.
   The binder rejects any other value, and the server records it as the engine
   revision.
 - Pin the image by SHA256 digest, and use its real interpreter and architecture.
-  The A100, H100, H200, and B200 SGLang rows, the B200 and A100 vLLM-Omni H3 rows, and
-  the B200 and B300 vLLM-Omni Wan2.2 rows use the public CUDA amd64 image. The MI355X row
-  uses its ROCm MI35x build.
+  The A100, H100, H200, and B200 SGLang rows, the B200, H200, H100 and A100 vLLM-Omni H3 rows, and
+  the H100, H200, B200 and B300 vLLM-Omni Wan2.2 rows use the public CUDA amd64 image. The MI355X SGLang
+  row uses its ROCm MI35x build, and the MI355X vLLM-Omni row the public
+  `vllm/vllm-omni-rocm` amd64 image.
+
+Name the recipe `<model-prefix>/<engine>/<gpu>-<precision>/video/agg-<layout>.yaml`, which
+extends the [recipe naming convention](../inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#directory-and-filename-convention).
+Matrix generation rejects any other video `srt-recipe`.
+
+- `<layout>` lists each parallel degree above 1 in the order
+  `tp pp ep dp pcp cfg ulysses ring`, for example `agg-cfg2-ulysses4.yaml`. vLLM-Omni's
+  `--usp` is `ulysses`. A recipe whose degrees are all 1 is `agg-tp1.yaml`.
+- A degree set to `{gpus_per_node}` has no number: one recipe that serves 1, 2, 4 and 8
+  GPUs with Ulysses is `agg-ulysses.yaml`. Leave out settings that equal the GPU count,
+  such as VAE patch parallelism and text-encoder TP.
+- Set the recipe `name` to `<model-prefix>-<engine>-<file stem>`, for example
+  `wan22-vllm-omni-agg-cfg2`.
 
 A shared image does not qualify a different topology or SKU. Each selected
 deployment qualifies through its own sweep. Maintainers stage model snapshots in the
@@ -113,6 +127,10 @@ Inspect the run's artifacts:
 - `video-sweep-manifest` identifies the selected attempt and deployments.
 - Each `h3-results-*` bundle holds `manifest.json`, `ci.json`, `SHA256SUMS`, and the
   request, media, and power evidence under `gpu/c*/`.
+- Each cell's `gpu/c*/attestation.json` checks, from the engine's own startup
+  arguments and log, that every request ran the declared shape, seed, and denoising
+  steps without step caching, quantization, LoRA, or sparse attention. A failed
+  attestation leaves the cell unverified.
 
 Never hand-edit a bundle to make its result eligible. If a deployment fails, see
 [Troubleshoot a run](#troubleshoot-a-run).
