@@ -8006,13 +8006,13 @@ h3-bf16-a100-sglang-video:
         set: release-v1
         search-space:
           - gpus: 2
-            srt-recipe: serving-client-tp2.yaml
+            srt-recipe: video/agg-tp2.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-tp2-ulysses2.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client-tp2-ulysses4.yaml
+            srt-recipe: video/agg-tp2-ulysses4.yaml
             conc-list: [1]
 
 h3-bf16-a100-vllm-omni-video:
@@ -8030,13 +8030,13 @@ h3-bf16-a100-vllm-omni-video:
         set: release-v1
         search-space:
           - gpus: 2
-            srt-recipe: serving-client-tp2.yaml
+            srt-recipe: video/agg-tp2.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-tp2-ulysses2.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client-tp2-ulysses4.yaml
+            srt-recipe: video/agg-tp2-ulysses4.yaml
             conc-list: [1]
 
 h3-bf16-h100-sglang-video:
@@ -8054,13 +8054,37 @@ h3-bf16-h100-sglang-video:
         set: release-v1
         search-space:
           - gpus: 2
-            srt-recipe: serving-client-tp2.yaml
+            srt-recipe: video/agg-tp2.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-tp2-ulysses2.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client-tp2-ulysses4.yaml
+            srt-recipe: video/agg-tp2-ulysses4.yaml
+            conc-list: [1]
+
+h3-bf16-h100-vllm-omni-video:
+  image: vllm/vllm-omni:v0.32.0@sha256:6b44ee504a0dc3a21eacf72e7dc5da318b7bcc8ed0e349dc928e67278414430c
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h100-dsxe
+  precision: bf16
+  framework: vllm-omni
+  multinode: false
+  srt-recipe-dir: h3/vllm-omni/h100-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 2
+            srt-recipe: video/agg-tp2.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: video/agg-tp2-ulysses2.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: video/agg-tp2-ulysses4.yaml
             conc-list: [1]
 
 h3-bf16-h200-sglang-video:
@@ -8078,16 +8102,43 @@ h3-bf16-h200-sglang-video:
         set: release-v1
         search-space:
           - gpus: 1
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
           - gpus: 2
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
+            conc-list: [1]
+
+h3-bf16-h200-vllm-omni-video:
+  image: vllm/vllm-omni:v0.32.0@sha256:6b44ee504a0dc3a21eacf72e7dc5da318b7bcc8ed0e349dc928e67278414430c
+  model: MiniMaxAI/MiniMax-H3
+  model-prefix: h3
+  runner: cluster:h200-dgxc
+  precision: bf16
+  framework: vllm-omni
+  multinode: false
+  srt-recipe-dir: h3/vllm-omni/h200-bf16
+  scenarios:
+    video-generation:
+      - spec: h3-v2.yaml
+        set: release-v1
+        search-space:
+          - gpus: 1
+            srt-recipe: video/agg-ulysses.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: video/agg-ulysses.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: video/agg-ulysses.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
 
 h3-bf16-b200-sglang-video:
@@ -8105,16 +8156,16 @@ h3-bf16-b200-sglang-video:
         set: release-v1
         search-space:
           - gpus: 1
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
           - gpus: 2
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
 
 h3-bf16-b200-vllm-omni-video:
@@ -8132,16 +8183,16 @@ h3-bf16-b200-vllm-omni-video:
         set: release-v1
         search-space:
           - gpus: 1
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
           - gpus: 2
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-ulysses.yaml
             conc-list: [1]
 
 wan22-bf16-h200-vllm-omni-video:
@@ -8159,16 +8210,16 @@ wan22-bf16-h200-vllm-omni-video:
         set: release-v1
         search-space:
           - gpus: 1
-            srt-recipe: serving-client-g1.yaml
+            srt-recipe: video/agg-tp1.yaml
             conc-list: [1]
           - gpus: 2
-            srt-recipe: serving-client-g2.yaml
+            srt-recipe: video/agg-cfg2.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client-g4.yaml
+            srt-recipe: video/agg-cfg2-ulysses2.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-cfg2-ulysses4.yaml
             conc-list: [1]
 
 wan22-bf16-b200-vllm-omni-video:
@@ -8186,16 +8237,16 @@ wan22-bf16-b200-vllm-omni-video:
         set: release-v1
         search-space:
           - gpus: 1
-            srt-recipe: serving-client-g1.yaml
+            srt-recipe: video/agg-tp1.yaml
             conc-list: [1]
           - gpus: 2
-            srt-recipe: serving-client-g2.yaml
+            srt-recipe: video/agg-cfg2.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client-g4.yaml
+            srt-recipe: video/agg-cfg2-ulysses2.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-cfg2-ulysses4.yaml
             conc-list: [1]
 
 wan22-bf16-b300-vllm-omni-video:
@@ -8213,16 +8264,16 @@ wan22-bf16-b300-vllm-omni-video:
         set: release-v1
         search-space:
           - gpus: 1
-            srt-recipe: serving-client-g1.yaml
+            srt-recipe: video/agg-tp1.yaml
             conc-list: [1]
           - gpus: 2
-            srt-recipe: serving-client-g2.yaml
+            srt-recipe: video/agg-cfg2.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client-g4.yaml
+            srt-recipe: video/agg-cfg2-ulysses2.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-cfg2-ulysses4.yaml
             conc-list: [1]
 
 wan22-bf16-h100-vllm-omni-video:
@@ -8240,16 +8291,16 @@ wan22-bf16-h100-vllm-omni-video:
         set: release-v1
         search-space:
           - gpus: 1
-            srt-recipe: serving-client-g1.yaml
+            srt-recipe: video/agg-tp1.yaml
             conc-list: [1]
           - gpus: 2
-            srt-recipe: serving-client-g2.yaml
+            srt-recipe: video/agg-cfg2.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client-g4.yaml
+            srt-recipe: video/agg-cfg2-ulysses2.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-cfg2-ulysses4.yaml
             conc-list: [1]
 
 wan22-bf16-h200-sglang-video:
@@ -8267,16 +8318,16 @@ wan22-bf16-h200-sglang-video:
         set: release-v1
         search-space:
           - gpus: 1
-            srt-recipe: serving-client-g1.yaml
+            srt-recipe: video/agg-tp1.yaml
             conc-list: [1]
           - gpus: 2
-            srt-recipe: serving-client-g2.yaml
+            srt-recipe: video/agg-cfg2.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client-g4.yaml
+            srt-recipe: video/agg-cfg2-ulysses2.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-cfg2-ulysses4.yaml
             conc-list: [1]
 
 wan22-bf16-h100-sglang-video:
@@ -8294,10 +8345,10 @@ wan22-bf16-h100-sglang-video:
         set: release-v1
         search-space:
           - gpus: 4
-            srt-recipe: serving-client-g4.yaml
+            srt-recipe: video/agg-cfg2-ulysses2.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-cfg2-ulysses4.yaml
             conc-list: [1]
 
 glm5.3-fp4-b300-sglang-agentic-mtp:
