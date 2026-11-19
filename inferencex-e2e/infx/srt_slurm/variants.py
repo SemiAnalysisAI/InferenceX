@@ -63,8 +63,13 @@ def _zip_slice(group: dict[str, Any], index: int) -> dict[str, Any]:
     return sliced
 
 
-def _block_variants(raw: dict[str, Any], key: str) -> list[tuple[str, dict[str, Any]]]:
-    """Each variant of one ``override_*`` or ``zip_override_*`` block, named by its selector."""
+def _block_variants(
+    raw: dict[str, Any], key: str, only: int | None = None
+) -> list[tuple[str, dict[str, Any]]]:
+    """Each variant of one ``override_*`` or ``zip_override_*`` block, named by its selector.
+
+    ``only`` keeps the zip variant at that index, or none when the block is shorter.
+    """
     base, block = raw["base"], raw[key]
     base_name = base.get("name", "unnamed")
     if key.startswith("override_"):
@@ -74,7 +79,8 @@ def _block_variants(raw: dict[str, Any], key: str) -> list[tuple[str, dict[str, 
         return [(key, merged)]
     group = key.removeprefix("zip_override_")
     variants = []
-    for index in range(_zip_length(block)):
+    indexes = range(_zip_length(block))
+    for index in indexes if only is None else indexes[only : only + 1]:
         merged = deep_merge(base, _zip_slice(block, index))
         if not isinstance(block.get("name"), list):
             merged["name"] = f"{base_name}_{group}_{index}"
@@ -110,10 +116,10 @@ def expand_variants(
     elif selector == "base":
         selected = [("base", deepcopy(raw["base"]))]
     elif zipped and zipped[1] in raw:
-        variants = _block_variants(raw, zipped[1])
-        if int(zipped[2]) >= len(variants):
-            raise ValueError(f"{selector}: {zipped[1]} has {len(variants)} variants")
-        selected = [variants[int(zipped[2])]]
+        selected = _block_variants(raw, zipped[1], int(zipped[2]))
+        if not selected:
+            count = _zip_length(raw[zipped[1]])
+            raise ValueError(f"{selector}: {zipped[1]} has {count} variants")
     elif selector.startswith("override_") and selector in raw:
         selected = _block_variants(raw, selector)
     else:

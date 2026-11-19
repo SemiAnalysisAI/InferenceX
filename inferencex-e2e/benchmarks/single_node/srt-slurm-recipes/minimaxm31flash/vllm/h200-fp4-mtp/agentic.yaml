@@ -35,6 +35,7 @@ base:
         enable-auto-tool-choice: true
         # MSA sparse/index cache needs 128-token blocks.
         block-size: 128
+        # fp8 caches enable FlashInfer MSA on SM90.
         kv-cache-dtype: fp8
         attention-config: '{"indexer_kv_dtype":"fp8"}'
         moe-backend: marlin

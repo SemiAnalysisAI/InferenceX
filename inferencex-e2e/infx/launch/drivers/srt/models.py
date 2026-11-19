@@ -9,11 +9,14 @@ MODEL_PATH: the ``hf:<MODEL>`` its recipe is bound to maps to it.
 from __future__ import annotations
 
 import os
+import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from infx.clusters.slurm import slurm_settings
+from infx.launch import proc
 from infx.launch.context import LaunchError
 from infx.launch.drivers.srt.config import volume_path
 from infx.launch.policy import Match, any_of, point_settings
@@ -194,6 +197,7 @@ SHARED_HF_CACHE_LANES: dict[str, tuple[Match, ...]] = {
         Match(agentic=True, model_glob="MiniMaxAI/MiniMax-M3.1-*"),
         Match(agentic=True, model_glob="amd/MiniMax-M3.1-*"),
         Match(agentic=True, model_glob="zai-org/GLM-5.2-FP8"),
+        Match(agentic=True, model_glob="zai-org/GLM-5.3-Flash"),
         Match(agentic=True, model_glob="deepseek-ai/DeepSeek-V4.1-Flash"),
         Match(agentic=True, model_glob="amd/Muse-Spark-Open-*"),
         Match(model_glob="MiniMaxAI/MiniMax-H3"),
@@ -205,3 +209,33 @@ def single_node_hf_cache(cluster: Cluster, request: LaunchRequest) -> Path:
     """The HF hub cache a single-node job mounts at HF_HUB_CACHE."""
     shared = any(rule(request) for rule in SHARED_HF_CACHE_LANES.get(cluster.id, ()))
     return volume_path(cluster, "shared-hf-hub-cache" if shared else "hf-hub-cache")
+
+
+HUB_DOWNLOAD_CLUSTERS = frozenset({"a100-cw", "h100-dsxe"})
+"""Clusters whose launcher downloads a video model into the hub cache before it submits.
+
+Their login node writes the same shared cache that the job then reads offline.
+"""
+# No tested model view loads the Ref2VA weights; vLLM-Omni reads only Ref2VA/model_index.json.
+VIDEO_HUB_EXCLUDE = "Ref2VA/*/*"
+HF_HUB = "huggingface_hub==2.4.0"
+
+
+def download_video_model(
+    cluster: Cluster, env: Mapping[str, str], hf_cache: Path, model: str, revision: str
+) -> None:
+    """Download ``model`` at ``revision`` into ``hf_cache`` on a ``HUB_DOWNLOAD_CLUSTERS`` cluster.
+
+    Cached files are skipped, so a complete snapshot costs one Hub listing.
+    """
+    if cluster.id not in HUB_DOWNLOAD_CLUSTERS:
+        return
+    download = [
+        "uv", "tool", "run", "--from", HF_HUB, "hf", "download", model, "--revision", revision,
+        "--cache-dir", hf_cache, "--exclude", VIDEO_HUB_EXCLUDE,
+    ]  # fmt: skip
+    # A runner's HF_HOME can be a read-only model store, and the Hub client keeps its xet cache there.
+    with tempfile.TemporaryDirectory() as xet_cache:
+        hub_env = {**env, "HF_HUB_DISABLE_PROGRESS_BARS": "1", "HF_XET_CACHE": xet_cache}
+        if proc.run(download, env=hub_env).returncode:
+            raise LaunchError(f"could not download {model} at {revision} into {hf_cache}")

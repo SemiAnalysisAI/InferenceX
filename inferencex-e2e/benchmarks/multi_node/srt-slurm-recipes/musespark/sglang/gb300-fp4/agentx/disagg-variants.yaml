@@ -1,0 +1,319 @@
+schema: 2
+
+base:
+  name: "musespark-fp4-gb300-dynamo-sglang-agentx-disagg"
+  identity:
+    model: {}
+    container: {}
+  dynamo:
+    install: false
+  environment:
+    HF_HUB_OFFLINE: "1"
+    HF_HUB_CACHE: /hf_hub_cache
+  slurm:
+    time_limit: "4:00:00"
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  resources:
+    gpu_type: "gb300"
+    gpus_per_node: 4
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: nats
+      type: nats
+      placement:
+        node: infra
+      options:
+        max_payload_mb: 32
+  frontend:
+    type: dynamo
+    nginx_session_affinity: true
+    nginx_session_affinity_header: X-Dynamo-Session-ID
+    enable_multiple_frontends: false
+    env:
+      DYN_NATS_REQUEST_TIMEOUT_SECS: "1800"
+      DYN_ROUTER_USE_KV_EVENTS: "false"
+      DYN_ROUTER_TTL_SECS: "14400"
+    args:
+      router-mode: "kv"
+      active-decode-blocks-threshold: "None"
+      active-prefill-tokens-threshold: "None"
+      active-prefill-tokens-threshold-frac: "None"
+    placement:
+      node: head
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    prefill:
+      env:
+        DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+        HF_HUB_CACHE: /hf_hub_cache
+        HF_HUB_OFFLINE: "1"
+        MC_FORCE_MNNVL: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "14400"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "14400"
+        SGLANG_DISAGG_PREFILL_EARLY_SEND_CACHED_PREFIX: "0"
+        SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION: "0"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+        SGLANG_DISAGGREGATION_THREAD_POOL_SIZE: "32"
+        SGLANG_DISAGGREGATION_QUEUE_SIZE: "8"
+      args:
+        chunked-prefill-size: 32768
+        context-length: 1048576
+        cuda-graph-max-bs-decode: 64
+        disaggregation-transfer-backend: mooncake
+        dyn-reasoning-parser: muse
+        dyn-tool-call-parser: muse
+        enable-cache-report: true
+        enable-hierarchical-cache: true
+        enable-layernorm-sp: true
+        enable-megamoe-for-layernorm-sp: true
+        enable-metrics: true
+        expert-parallel-size: 8
+        hicache-size: 150
+        hicache-write-policy: write_back
+        kv-cache-dtype: fp8_e4m3
+        max-prefill-tokens: 32768
+        max-running-requests: 256
+        mem-fraction-static: 0.85
+        mm-feature-transport: cpu
+        moe-runner-backend: flashinfer_trtllm
+        optimistic-prefill-attempts: 0
+        preferred-sampling-params: '{"temperature":1.0,"top_p":1.0,"top_k":64}'
+        quantization: modelopt_fp4
+        reasoning-parser: muse
+        schedule-policy: shortest-prefill-first
+        served-model-name: "meta-models/Muse-Spark-Open-816B-A42B-NVFP4"
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: "RadixArk/Muse-Spark-Open-DFlash2"
+        speculative-draft-model-revision: "46c90f412549c472941a68382d91a99e5e6372a0"
+        speculative-num-draft-tokens: 8
+        stream-interval: 20
+        swa-full-tokens-ratio: 0.16
+        tensor-parallel-size: 8
+        trust-remote-code: true
+        watchdog-timeout: 3600
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        speculative-draft-attention-backend: trtllm_mha
+    decode:
+      env:
+        DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+        HF_HUB_CACHE: /hf_hub_cache
+        HF_HUB_OFFLINE: "1"
+        MC_FORCE_MNNVL: "1"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        PYTHONNOUSERSITE: "1"
+        PYTHONUNBUFFERED: "1"
+        PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+        SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "14400"
+        SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "14400"
+        SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION: "0"
+        SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+        SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+        SGLANG_TRTLLM_MHA_FULL_ATTN_KV_SPLITS: "16"
+        SGLANG_DISAGGREGATION_THREAD_POOL_SIZE: "32"
+        SGLANG_DISAGGREGATION_QUEUE_SIZE: "8"
+        SGLANG_DISAGG_PREFILL_EARLY_SEND_CACHED_PREFIX: "0"
+      args:
+        context-length: 1048576
+        disaggregation-transfer-backend: mooncake
+        dyn-reasoning-parser: muse
+        dyn-tool-call-parser: muse
+        enable-cache-report: true
+        enable-layernorm-sp: false
+        enable-megamoe-for-layernorm-sp: false
+        enable-metrics: true
+        expert-parallel-size: 8
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.92
+        mm-feature-transport: cpu
+        moe-runner-backend: flashinfer_trtllm
+        preferred-sampling-params: '{"temperature":1.0,"top_p":1.0,"top_k":64}'
+        quantization: modelopt_fp4
+        reasoning-parser: muse
+        served-model-name: "meta-models/Muse-Spark-Open-816B-A42B-NVFP4"
+        speculative-algorithm: DFLASH
+        speculative-draft-model-path: "RadixArk/Muse-Spark-Open-DFlash2"
+        speculative-draft-model-revision: "46c90f412549c472941a68382d91a99e5e6372a0"
+        speculative-num-draft-tokens: 8
+        stream-interval: 20
+        swa-full-tokens-ratio: 0.1
+        tensor-parallel-size: 8
+        trust-remote-code: true
+        watchdog-timeout: 3600
+        weight-loader-drop-cache-after-load: false
+        model-loader-extra-config: '{"enable_multithread_load":true}'
+        speculative-draft-attention-backend: trtllm_mha
+  sbatch_directives:
+    mem: "0"
+  srun_options:
+    mem: "0"
+  benchmark:
+    placement:
+      node: head
+    env:
+      HF_HUB_OFFLINE: "0"
+      TOKENIZER: /model
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+      AGENTIC_WARMUP_GRACE_PERIOD: "3600"
+
+override_3p4d_tp8_tp8_c672:
+  roles:
+    prefill:
+      nodes: 6
+      workers: 3
+      gpus: 8
+    decode:
+      nodes: 8
+      workers: 4
+      gpus: 8
+      args:
+        cuda-graph-max-bs-decode: 56
+        max-running-requests: 56
+        disaggregation-decode-extra-slots: 56
+  frontend:
+    args:
+      router-session-affinity-mode: soft
+      router-session-affinity-ttl-secs: 14400
+
+override_2p3d_tp8_tp8_c352:
+  roles:
+    prefill:
+      nodes: 4
+      workers: 2
+      gpus: 8
+    decode:
+      nodes: 6
+      workers: 3
+      gpus: 8
+      args:
+        cuda-graph-max-bs-decode: 40
+        max-running-requests: 40
+        disaggregation-decode-extra-slots: 40
+  frontend:
+    args:
+      router-session-affinity-mode: soft
+      router-session-affinity-ttl-secs: 14400
+
+override_1p2d_tp8_tp8_c224:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+    decode:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      args:
+        cuda-graph-max-bs-decode: 36
+        max-running-requests: 36
+        disaggregation-decode-extra-slots: 36
+
+override_1p2d_tp8_tp8_c160:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+    decode:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      args:
+        cuda-graph-max-bs-decode: 24
+        max-running-requests: 24
+        disaggregation-decode-extra-slots: 24
+
+override_1p3d_tp8_tp8_c224:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+    decode:
+      nodes: 6
+      workers: 3
+      gpus: 8
+      args:
+        cuda-graph-max-bs-decode: 20
+        max-running-requests: 20
+        disaggregation-decode-extra-slots: 20
+
+override_1p4d_tp8_tp8_c112:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+    decode:
+      nodes: 8
+      workers: 4
+      gpus: 8
+      args:
+        cuda-graph-max-bs-decode: 6
+        max-running-requests: 6
+        disaggregation-decode-extra-slots: 6
+
+override_1p5d_tp8_tp8_c120:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+    decode:
+      nodes: 10
+      workers: 5
+      gpus: 8
+      args:
+        cuda-graph-max-bs-decode: 5
+        max-running-requests: 5
+        disaggregation-decode-extra-slots: 5
+
+override_1p4d_tp8_tp8_c56:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+    decode:
+      nodes: 8
+      workers: 4
+      gpus: 8
+      args:
+        cuda-graph-max-bs-decode: 3
+        max-running-requests: 3
+        disaggregation-decode-extra-slots: 3
+
+override_1p4d_tp8_tp8_c32:
+  roles:
+    prefill:
+      nodes: 2
+      workers: 1
+      gpus: 8
+    decode:
+      nodes: 8
+      workers: 4
+      gpus: 8
+      args:
+        cuda-graph-max-bs-decode: 3
+        max-running-requests: 3
+        disaggregation-decode-extra-slots: 3

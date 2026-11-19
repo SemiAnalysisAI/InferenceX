@@ -90,8 +90,8 @@ def mocked_media(monkeypatch, tmp_path):
                 "fps": expected["fps"],
             },
             "audio": {
-                "sample_rate_hz": expected["audio_sample_rate_hz"],
-                "channels": expected["audio_channels"],
+                "sample_rate_hz": expected.get("audio_sample_rate_hz"),
+                "channels": expected.get("audio_channels"),
             },
             "checks": {"fixture_analysis_only": state["valid"]},
             "valid": state["valid"],
@@ -213,6 +213,8 @@ def fixture_server():
                             "id": self.path.rsplit("/", 1)[-1],
                             "status": status,
                             "error": "do-not-log-this-server-secret",
+                            "peak_memory_mb": 61440.5,
+                            "inference_time_s": 31.25,
                         },
                     )
 
@@ -419,14 +421,15 @@ def test_cli_run_records_the_declared_numerical_identity(
 def test_request_encoding_comes_from_the_plan(tmp_path):
     path = Path(__file__).resolve().parents[1] / "specs/h3-v2.yaml"
     plan = video_spec.plan_for(video_spec.load_spec(path), "release-v1")
-    plan["fairness"]["encoding"]["preset"] = "veryfast"
-    sglang = runner.preview_plan(plan, runtime="sglang")["slots"][0]["request"]
-    vllm = runner.preview_plan(plan, runtime="vllm-omni")["slots"][0]["request"]
-    assert (sglang["x264_preset"], sglang["output_compression"]) == ("veryfast", 63)
-    assert vllm["extra_params"]["video_codec_options"] == {"preset": "veryfast", "crf": "18"}
     plan["fairness"]["encoding"]["crf"] = 23
+    vllm = runner.preview_plan(plan, runtime="vllm-omni")["slots"][0]["request"]
+    assert vllm["extra_params"]["video_codec_options"] == {"preset": "ultrafast", "crf": "23"}
     output = tmp_path / "not-created"
     with pytest.raises(ValueError, match="SGLang cannot request CRF 23"):
+        execute(plan, output, "http://127.0.0.1:1")
+    assert not output.exists()
+    plan["fairness"]["encoding"].update(preset="veryfast", crf=18)
+    with pytest.raises(ValueError, match="veryfast has no verifiable x264 options"):
         execute(plan, output, "http://127.0.0.1:1")
     assert not output.exists()
 
@@ -695,6 +698,7 @@ def test_serving_overlaps_requests_without_waiting_for_local_validation(
 
     def validate_after_submissions(path, expected):
         assert submitted.wait(2), "local validation blocked later submissions"
+        time.sleep(0.2)
         return analyzer(path, expected)
 
     monkeypatch.setattr(sys.modules["evaluator.media"], "analyze_media", validate_after_submissions)
@@ -721,6 +725,8 @@ def test_serving_overlaps_requests_without_waiting_for_local_validation(
             <= record["submit_to_terminal_seconds"]
             <= record["submit_to_media_seconds"]
             <= record["latency_seconds"]
+            < record["submit_to_media_seconds"] + 0.2
+            <= record["submit_to_media_seconds"] + record["media_validation_seconds"]
         )
     assert len(state["posts"]) == 4
 
@@ -814,3 +820,122 @@ def test_watchdog_deadline_wins_over_socket_teardown_errors(
     )
     assert run["serving"]["outcomes"]["timed_out"] == 1
     assert run["summary"]["not_started"] == 3
+
+
+WAN22_SPEC = Path(__file__).resolve().parents[1] / "specs" / "wan22.yaml"
+
+
+def wan22_plan(set_id="smoke"):
+    return video_spec.plan_for(video_spec.load_spec(WAN22_SPEC), set_id)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("width", 1280),
+        ("frame_count", 121),
+        ("fps", 24),
+        ("boundary_ratio", 1.0),
+        ("guidance_scale_2", 0),
+        ("negative_prompt", None),
+    ],
+)
+def test_wan22_rejects_other_cells_and_controls(field, value):
+    plan = wan22_plan()
+    plan["generation"][field] = value
+    with pytest.raises(ValueError):
+        runner.validate_plan(plan)
+
+
+def test_wan22_requires_every_control():
+    plan = wan22_plan()
+    del plan["generation"]["flow_shift"]
+    with pytest.raises(ValueError, match="exactly"):
+        runner.validate_plan(plan)
+    plan = wan22_plan()
+    plan["generation"]["audio_flow_shift"] = 3.0
+    with pytest.raises(ValueError, match="exactly"):
+        runner.validate_plan(plan)
+
+
+def test_wan22_sglang_request_omits_only_the_controls_its_server_binds():
+    plan = wan22_plan()
+    assert runner.preview_plan(plan, runtime="sglang")["slots"][0]["request"] == {
+        "model": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+        "prompt": plan["cases"][0]["prompt"],
+        "seed": 11,
+        "width": 832,
+        "height": 480,
+        "fps": 16,
+        "num_frames": 81,
+        "num_inference_steps": 40,
+        "guidance_scale": 4.0,
+        "guidance_scale_2": 3.0,
+        "negative_prompt": "",
+        "num_outputs_per_prompt": 1,
+        "x264_preset": "ultrafast",
+        "output_compression": 63,
+    }
+
+
+@pytest.mark.parametrize("server_argv", [None, ["sglang", "serve", "--flow-shift", "5.0"]])
+def test_wan22_sglang_run_requires_a_launch_that_sets_the_plan_flow_shift(tmp_path, server_argv):
+    identity = server_argv and {
+        "runtime_revision": RUNTIME_REVISION,
+        "image_digest": "a" * 64,
+        "server_argv": server_argv,
+        "server_environment": {"CACHE": "0"},
+        "gpu_topology": {"gpu_uuids": ["GPU-fixture"]},
+    }
+    output = tmp_path / "not-created"
+    with pytest.raises(ValueError, match="sealed server launch"):
+        execute(
+            wan22_plan(),
+            output,
+            "http://127.0.0.1:1",
+            runtime="sglang",
+            numerical_identity=identity,
+        )
+    assert not output.exists()
+
+
+def test_wan22_vllm_omni_run_sends_every_control_and_keeps_server_metrics(
+    tmp_path, mocked_media, fixture_server
+):
+    plan = wan22_plan()
+    endpoint, server = fixture_server()
+    run = execute(plan, tmp_path / "wan22", endpoint, runtime="vllm-omni")
+    assert run["status"] == "complete"
+    assert run["summary"]["scheduled"] == run["summary"]["valid"] == 1
+    assert len(server["posts"]) == 2
+    assert server["posts"][1] == {
+        "model": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+        "prompt": plan["cases"][0]["prompt"],
+        "seed": "11",
+        "width": "832",
+        "height": "480",
+        "fps": "16",
+        "num_frames": "81",
+        "num_inference_steps": "40",
+        "guidance_scale": "4.0",
+        "guidance_scale_2": "3.0",
+        "boundary_ratio": "0.875",
+        "flow_shift": "12.0",
+        "negative_prompt": "",
+        "num_outputs_per_prompt": "1",
+    }
+    calls, _ = mocked_media
+    for _, expected in calls:
+        assert expected["audio_required"] is False
+        assert expected["requires_sound"] is False
+        assert math.isclose(expected["duration_seconds"], 81 / 16)
+    for record in run["records"]:
+        assert record["provider_metrics"] == {"peak_memory_mb": 61440.5, "inference_time_s": 31.25}
+
+
+def test_provider_metrics_drop_unsampled_and_malformed_values():
+    assert runner._provider_metrics({"peak_memory_mb": 0.0, "inference_time_s": None}) is None
+    assert runner._provider_metrics({"peak_memory_mb": True, "inference_time_s": "30"}) is None
+    assert runner._provider_metrics({"peak_memory_mb": 2048, "status": "completed"}) == {
+        "peak_memory_mb": 2048.0
+    }

@@ -27,6 +27,7 @@ def encode_media(
     audio_offset_seconds: float = 0.0,
     audio_duration_scale: float = 1.0,
     freeze_after_frame: int | None = None,
+    x264_options: dict[str, str] | None = None,
 ) -> Path:
     """Encode exact RGB+PCM in MKV, or browser-playable H.264+AAC in MP4.
 
@@ -48,7 +49,7 @@ def encode_media(
         video.width, video.height = width, height
         video.pix_fmt = "yuv420p" if is_mp4 else "bgr0"
         if is_mp4:
-            video.options = {"preset": "ultrafast", "crf": "18"}
+            video.options = x264_options or {"preset": "ultrafast", "crf": "18"}
         audio = None
         if audio_mode != "absent":
             audio = container.add_stream("aac" if is_mp4 else "pcm_s16le", rate=sample_rate)
@@ -109,6 +110,7 @@ def expectation() -> dict:
         "audio_sample_rate_hz": 24000,
         "audio_channels": 2,
         "requires_motion": True,
+        "requires_picture": True,
         "requires_sound": True,
     }
 
@@ -182,7 +184,7 @@ def test_silence_freeze_and_blank_are_detected_without_quality_claims(tmp_path):
     assert measured["video"]["frozen_fraction"] == 1.0
     result = analyze_media(path, expectation())
     failed = {item["name"] for item in result["checks"] if item["status"] == "failed"}
-    assert {"video.motion_presence", "audio.sound_presence"} <= failed
+    assert {"video.motion_presence", "video.picture_presence", "audio.sound_presence"} <= failed
     json.dumps(result, allow_nan=False)
 
 
@@ -232,7 +234,7 @@ def test_audio_optional_and_identically_silent_pairs_are_explicit(tmp_path):
     json.dumps(silent_pair, allow_nan=False)
 
 
-def test_real_cpu_encoding_checks_observable_streams_without_inventing_options(tmp_path):
+def test_real_cpu_encoding_checks_streams_and_x264_settings(tmp_path):
     path = encode_media(
         tmp_path / "encoding-contract.mp4", fps=24, frame_count=124, sample_rate=32000
     )
@@ -260,11 +262,29 @@ def test_real_cpu_encoding_checks_observable_streams_without_inventing_options(t
     assert {
         check["name"]: check["status"]
         for check in result["checks"]
-        if check["name"] in {"video.codec", "video.pixel_format", "audio.codec"}
-    } == {"video.codec": "passed", "video.pixel_format": "passed", "audio.codec": "passed"}
-    assert {"preset", "crf", "video_encoder_implementation"} <= set(
-        result["encoding_evidence"]["unverified"]
-    )
+        if check["name"]
+        in {"video.codec", "video.pixel_format", "audio.codec", "video.encoder_settings"}
+    } == {
+        "video.codec": "passed",
+        "video.pixel_format": "passed",
+        "audio.codec": "passed",
+        "video.encoder_settings": "passed",
+    }
+    for name, options in (
+        ("crf23", {"preset": "ultrafast", "crf": "23"}),
+        ("superfast", {"preset": "superfast", "crf": "18"}),
+    ):
+        other = encode_media(
+            tmp_path / f"{name}.mp4",
+            fps=24,
+            frame_count=124,
+            sample_rate=32000,
+            x264_options=options,
+        )
+        failed = [
+            c["name"] for c in analyze_media(other, expected)["checks"] if c["status"] == "failed"
+        ]
+        assert failed == ["video.encoder_settings"], name
     wrong = encode_media(tmp_path / "wrong-encoder.mkv", fps=24, frame_count=124, sample_rate=32000)
     refused = analyze_media(wrong, expected)
     assert refused["valid"] is False

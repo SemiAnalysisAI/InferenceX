@@ -23,7 +23,12 @@ from types import MappingProxyType
 
 import pytest
 
-from infx.results.agentic.request_metrics import compute_qps_stats, compute_request_metrics
+from infx.results.agentic.artifacts import iter_trace_blobs
+from infx.results.agentic.request_metrics import (
+    compute_qps_stats,
+    compute_request_metrics,
+    replayed_trace_ids,
+)
 from infx.results.agentic import _gpu_shape
 from infx.results.agentic import (
     build_result,
@@ -1460,12 +1465,12 @@ def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
                     {
                         "endpoint_url": prefill_url,
                         "labels": {"dynamo_component": "prefill"},
-                        "stats": {"total": 600.0},
+                        "stats": {"total": 1000.0},
                     },
                     {
                         "endpoint_url": decode_url,
                         "labels": {"dynamo_component": "backend"},
-                        "stats": {"total": 400.0},
+                        "stats": {"total": 1000.0},
                     },
                 ],
             },
@@ -1482,15 +1487,15 @@ def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
             "trtllm_prompt_cached_tokens_total": {
                 "type": "counter",
                 "series": [
-                    {"endpoint_url": prefill_url, "stats": {"total": 200.0}},
-                    {"endpoint_url": decode_url, "stats": {"total": 300.0}},
+                    {"endpoint_url": prefill_url, "stats": {"total": 970.0}},
+                    {"endpoint_url": decode_url, "stats": {"total": 0.0}},
                 ],
             },
             "trtllm_kv_cache_hit_rate": {
                 "type": "gauge",
                 "series": [
-                    {"endpoint_url": prefill_url, "stats": {"avg": 0.4}},
-                    {"endpoint_url": decode_url, "stats": {"avg": 0.6}},
+                    {"endpoint_url": prefill_url, "stats": {"avg": 0.95}},
+                    {"endpoint_url": decode_url, "stats": {"avg": 0.0}},
                 ],
             },
             "trtllm_kv_cache_utilization": {
@@ -1553,17 +1558,129 @@ def test_processor_normalizes_trtllm_server_metrics(tmp_path: Path):
     _assert_stable_server_metrics_schema(agg)
     assert agg["server_metrics"]["tokens"]["prompt_total"] == 1000
     assert agg["server_metrics"]["tokens"]["generation_total"] == 200
-    assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.5)
-    assert agg["server_metrics"]["cache"]["overall_cache_hit_rate"] == pytest.approx(0.5)
+    cache = agg["server_metrics"]["cache"]
+    assert cache["gpu_cache_hit_rate"] == pytest.approx(0.97)
+    assert cache["overall_cache_hit_rate"] == pytest.approx(0.97)
+    assert (cache["prefix_cache_hits"], cache["prefix_cache_queries"]) == (970.0, 1000.0)
+    assert agg["server_metrics"]["tokens"]["prompt_by_source"]["computed"] == 30.0
     assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.8)
     assert agg["server_metrics"]["kv_cache"]["cpu_usage_pct"] == pytest.approx(0.25)
     assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 19_200
     assert agg["server_metrics"]["kv_offload"]["bytes_gpu_to_cpu"] == 4096
     assert agg["server_metrics"]["kv_offload"]["bytes_cpu_to_gpu"] == 2048
-    assert {source["role"] for source in agg["server_metrics"]["sources"]} == {
-        "prefill",
-        "decode",
+    assert {
+        source["role"]: source["prefix_cache_hit_rate"]
+        for source in agg["server_metrics"]["sources"]
+    } == {"prefill": pytest.approx(0.97), "decode": 0.0}
+
+
+def _trtllm_series(metric_type: str, stat: str, values: dict[str, float]) -> dict:
+    return {
+        "type": metric_type,
+        "series": [{"endpoint_url": url, "stats": {stat: value}} for url, value in values.items()],
     }
+
+
+def _trtllm_roles(roles: dict[str, str]) -> dict:
+    return {
+        "trtllm_request_type_total": {
+            "type": "counter",
+            "series": [
+                {
+                    "endpoint_url": url,
+                    "labels": {"disaggregation_mode": role},
+                    "stats": {"total": 1.0},
+                }
+                for url, role in roles.items()
+            ],
+        }
+    }
+
+
+def test_trtllm_aggregated_hit_rate_uses_window_token_counters():
+    metrics = {
+        "trtllm_prompt_tokens_total": _trtllm_series("counter", "total", {"a": 600.0, "b": 400.0}),
+        "trtllm_prompt_cached_tokens_total": _trtllm_series(
+            "counter", "total", {"a": 570.0, "b": 330.0}
+        ),
+        "trtllm_kv_cache_hit_rate": _trtllm_series("gauge", "avg", {"a": 0.99, "b": 0.99}),
+        **_trtllm_roles({"a": "prefill_and_decode", "b": "prefill_and_decode"}),
+    }
+
+    flat, nested, _ = compute_server_metrics(
+        {"metrics": metrics}, framework="dynamo-trt", records=[]
+    )
+
+    assert flat["server_gpu_cache_hit_rate"] == pytest.approx(0.9)
+    assert nested["cache"]["prefix_cache_queries"] == 1000.0
+
+
+def test_trtllm_disaggregated_hit_rate_reads_unsuffixed_counters():
+    # aiperf 1.0.12 exports counters under their base names; decode workers re-report every
+    # prompt with no cached tokens (TensorRT-LLM 1.4.0rc0 and later).
+    metrics = {
+        "trtllm_prompt_tokens": _trtllm_series("counter", "total", {"ctx": 1000.0, "gen": 1000.0}),
+        "trtllm_prompt_cached_tokens": _trtllm_series(
+            "counter", "total", {"ctx": 970.0, "gen": 0.0}
+        ),
+        "trtllm_kv_cache_hit_rate": _trtllm_series("gauge", "avg", {"ctx": 0.5, "gen": 0.0}),
+        **_trtllm_roles({"ctx": "prefill", "gen": "backend"}),
+    }
+
+    flat, nested, _ = compute_server_metrics(
+        {"metrics": metrics}, framework="dynamo-trt", records=[]
+    )
+
+    assert flat["server_gpu_cache_hit_rate"] == pytest.approx(0.97)
+    assert nested["cache"]["prefix_cache_queries"] == 1000.0
+    assert flat["total_prompt_tokens"] == 1000
+    assert nested["tokens"]["prompt_by_source"]["computed"] == 30
+
+
+@pytest.mark.parametrize(
+    "metrics",
+    [
+        {
+            "trtllm_kv_cache_reused_blocks_total": _trtllm_series(
+                "counter", "total", {"ctx": 97.0, "gen": 0.0}
+            ),
+            "trtllm_kv_cache_missed_blocks_total": _trtllm_series(
+                "counter", "total", {"ctx": 3.0, "gen": 100.0}
+            ),
+        },
+        {"trtllm_kv_cache_hit_rate": _trtllm_series("gauge", "avg", {"ctx": 0.97, "gen": 0.0})},
+    ],
+    ids=["block-counters", "gauge"],
+)
+def test_trtllm_disaggregated_hit_rate_fallbacks_count_only_prefill(metrics):
+    metrics = {**metrics, **_trtllm_roles({"ctx": "prefill", "gen": "decode"})}
+
+    flat, nested, _ = compute_server_metrics(
+        {"metrics": metrics}, framework="dynamo-trt", records=[]
+    )
+
+    assert flat["server_gpu_cache_hit_rate"] == pytest.approx(0.97)
+    assert nested["cache"]["prefix_cache_hits"] is None
+
+
+def test_trtllm_endpoint_role_survives_generic_dynamo_labels():
+    metrics = {
+        "trtllm_prompt_tokens": _trtllm_series("counter", "total", {"ctx": 1000.0, "gen": 1000.0}),
+        "trtllm_prompt_cached_tokens": _trtllm_series(
+            "counter", "total", {"ctx": 970.0, "gen": 0.0}
+        ),
+        **_trtllm_roles({"ctx": "prefill", "gen": "decode"}),
+        "dynamo_other": {
+            "series": [{"endpoint_url": "ctx", "labels": {"dynamo_component": "worker"}}]
+        },
+    }
+
+    flat, nested, _ = compute_server_metrics(
+        {"metrics": metrics}, framework="dynamo-trt", records=[]
+    )
+
+    assert flat["server_gpu_cache_hit_rate"] == pytest.approx(0.97)
+    assert nested["sources"][0]["role"] == "prefill"
 
 
 def test_processor_normalizes_dynamo_server_metrics(tmp_path: Path):
@@ -1930,6 +2047,61 @@ def test_processor_preserves_validation_before_optional_trace_reads(tmp_path, ov
     assert proc.stderr.rstrip().endswith(message)
     assert proc.stdout == ""
     assert not out.exists()
+
+
+def test_a_broken_trace_the_run_did_not_replay_does_not_fail_the_point(tmp_path):
+    result_dir = _write_fixture(tmp_path)
+    snapshot = tmp_path / "hf" / "datasets--semianalysisai--cc-traces-weka-062126" / "snapshots" / "one"
+    snapshot.mkdir(parents=True)
+    traces = [
+        {"id": "never-replayed", "requests": [{"type": "n", "out": "bad-output"}]},
+        {"id": "trace-A", "requests": [{"type": "n", "out": 23}] * 8},
+    ]
+    (snapshot / "traces.jsonl").write_text("".join(json.dumps(trace) + "\n" for trace in traces))
+
+    result = _run_processor(result_dir, tmp_path / "out", {"HF_HUB_CACHE": str(tmp_path / "hf")})
+
+    assert result["request_metrics"]["tokens"]["output_expected"]["mean"] == 23
+
+
+def test_replayed_traces_are_the_ones_behind_each_conversation():
+    records = [
+        {"metadata": {"conversation_id": "trace-A::aux:000"}},
+        {"metadata": {"conversation_id": "trace-B"}},
+        {"metadata": {"turn_index": 3}},
+        {},
+    ]
+
+    assert replayed_trace_ids(records) == {"trace-A", "trace-B"}
+    assert replayed_trace_ids([*records, {"metadata": {"conversation_id": 7}}]) is None
+
+
+REPLAYED = [{"type": "n", "out": 17}]
+
+
+@pytest.mark.parametrize(("line", "wanted"), [
+    (json.dumps({"id": "trace-A", "requests": REPLAYED}), "trace-A"),
+    ('{"requests": [{"type": "n", "out": 17}], "id" :\t"trace-A"}', "trace-A"),
+    ('{"id": "trace-\\u0041", "requests": [{"type": "n", "out": 17}]}', "trace-A"),
+    ('{"id": "other", "source": {"id": "x"}, "id": "trace-A", "requests": []}', "trace-A"),
+    ('{"id": 7, "requests": [{"type": "n", "out": 17}]}', "7"),
+    ("[1, 2]", "trace-A"),
+])  # fmt: skip
+def test_only_traces_that_may_be_replayed_are_read(tmp_path, line, wanted):
+    snapshot = tmp_path / "datasets--example--traces" / "snapshots" / "one"
+    snapshot.mkdir(parents=True)
+    skipped = [
+        {"id": "trace-B", "requests": REPLAYED, "note": "id"},
+        {"id": "trace-AA", "about": {"id": "trace-C"}, "requests": REPLAYED},
+    ]
+    (snapshot / "traces.jsonl").write_text(
+        "".join(json.dumps(trace) + "\n" for trace in skipped) + line + "\n"
+    )
+    aggregate = {"metadata": {"dataset": {"hf_dataset_name": "example/traces"}}}
+    env = {"HF_HUB_CACHE": str(tmp_path)}
+
+    assert list(iter_trace_blobs(aggregate, env, {wanted})) == [json.loads(line)]
+    assert list(iter_trace_blobs(aggregate, env)) == [*skipped, json.loads(line)]
 
 
 @pytest.mark.parametrize("cache_env", ["HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE", "HF_HOME"])
