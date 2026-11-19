@@ -135,8 +135,7 @@ override_tp4_c14_hicache:
       CONC: '14'
       KV_OFFLOADING: dram
 
-# The dense c16 point. The matrix runs c16 on the DCP4 variant below, so this
-# one is selected only when that row moves back to dcp-size 1.
+# The dense c16 point, selected only at dcp-size 1; the matrix runs c16 on the DCP4 variant below.
 override_tp4_c16_hicache:
   roles:
     agg:
@@ -154,9 +153,7 @@ override_tp4_c16_hicache:
       CONC: '16'
       KV_OFFLOADING: dram
 
-# DCP4 stripes the latent KV across the TP4 ranks; sgl-project/sglang#45205
-# lets the host tier sit under it. 256 GB a rank matches the ATOM ladder and
-# leaves the DSA indexer its host allocation, with two groups still on a node.
+# sgl-project/sglang#45205 lets a host tier sit under DCP4; 256 GB a rank leaves the DSA indexer its host allocation and fits two groups on a node.
 override_tp4_dcp4_c16:
   roles:
     agg:
