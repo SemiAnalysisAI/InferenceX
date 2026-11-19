@@ -8078,13 +8078,13 @@ h3-bf16-h100-vllm-omni-video:
         set: release-v1
         search-space:
           - gpus: 2
-            srt-recipe: serving-client-tp2.yaml
+            srt-recipe: video/agg-tp2.yaml
             conc-list: [1]
           - gpus: 4
-            srt-recipe: serving-client.yaml
+            srt-recipe: video/agg-tp2-ulysses2.yaml
             conc-list: [1]
           - gpus: 8
-            srt-recipe: serving-client-tp2-ulysses4.yaml
+            srt-recipe: video/agg-tp2-ulysses4.yaml
             conc-list: [1]
 
 h3-bf16-h200-sglang-video:
