@@ -13097,25 +13097,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5114
 
 - config-keys:
-    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
-    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
-  scenario-type: [agentic-coding]
-  description:
-    - "Image vllm/vllm-openai:cu134-nightly-aarch64-01fba62-1111d (vLLM main 01fba62 with the merged vllm#66552)."
-    - "Agg: TP4 with the latency_specialized decode and prefill every 24 decode steps at concurrency 1, 4 and 8 (replacing 1 and 16)."
-    - "Disagg: prefill Engram tables split over the prefill GPUs in HBM, KV offload up to 170 GiB per prefill rank."
-    - "Disagg: 5P1D DEP32 at concurrency 3200, 7P1D DEP16 at 6600, 12P1D DEP32 at 10288 (replacing 6P1D, 9P1D and 16P1D)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5015
-
-- config-keys:
-    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
-  scenario-type:
-    - agentic-coding
-  description:
-    - "Append TP4 at concurrency 16 with the latency_specialized decode to the existing curve: 32 running requests, prefill every 128 decode steps, decode-replay graphs to 4096 tokens."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5135
-
-- config-keys:
     - h3-bf16-h200-vllm-omni-video
   scenario-type: [video-generation]
   description:
@@ -13136,3 +13117,23 @@
     - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the H100 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 2, 4 and 8 GPUs: DiT TP2 with Ulysses 1, 2 and 4, since H3 does not fit one 80 GB GPU, with text-encoder TP and tiled VAE patch parallelism across all GPUs, and with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
     - "The H3 snapshot staged on h100-dsxe lacks Ref2VA/model_index.json, which the vLLM-Omni model view requires, so its launcher downloads the pinned snapshot without the Ref2VA weights into its hub cache before it submits a video job, as on a100-cw; the download keeps its xet cache in a temporary directory, since the runner's HF_HOME is a read-only model store."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4969
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Image vllm/vllm-openai:cu134-nightly-aarch64-01fba62-1111d (vLLM main 01fba62 with the merged vllm#66552)."
+    - "Agg: TP4 with the latency_specialized decode and prefill every 24 decode steps at concurrency 1, 4 and 8 (replacing 1 and 16)."
+    - "Disagg: prefill Engram tables split over the prefill GPUs in HBM, KV offload up to 170 GiB per prefill rank."
+    - "Disagg: 5P1D DEP32 at concurrency 3200, 7P1D DEP16 at 6600, 12P1D DEP32 at 10288 (replacing 6P1D, 9P1D and 16P1D)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5015
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append TP4 at concurrency 16 with the latency_specialized decode to the existing curve: 32 running requests, prefill every 128 decode steps, decode-replay graphs to 4096 tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5135
+  append-only: true
