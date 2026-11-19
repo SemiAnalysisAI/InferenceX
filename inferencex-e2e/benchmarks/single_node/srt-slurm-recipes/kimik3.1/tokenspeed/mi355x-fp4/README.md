@@ -9,10 +9,13 @@ tokens per step and is served as it ships, in BF16. The KV cache is FP8
 with the MXFP4 DSA indexer key cache, and the KDA recurrent state stays in
 TokenSpeed's default FP32, as the K3.1 week-1 precision policy requires. The
 context is 1,048,560 tokens and prefill runs in 8K chunks. From concurrency 8,
-the Host L2 KV store holds eight times the GPU KV blocks (`kvstore-ratio: 8`),
-up to 254.94 GB per GPU; concurrency 1 and 4 run without it
-(`disable-kvstore`), since their GPU KV pool already holds the sessions'
-prefixes.
+the Host L2 KV store holds 128 GB per GPU (`kvstore-size: 128`); concurrency 1
+and 4 run without it (`disable-kvstore`), since their GPU KV pool already holds
+the sessions' prefixes. `HSA_USERPTR_FOR_PAGED_MEM=0` makes `hipHostMalloc`
+take the pinned Host L2 from the amdgpu GTT pool instead of registering pageable
+memory page by page, which on a node whose page cache holds the checkpoint can
+take longer than the distributed startup timeout. The GTT pool is about half the
+node's memory, so the eight GPUs' Host L2 stays well below it.
 
 Each concurrency has its own override:
 
@@ -40,11 +43,12 @@ let prefill and decode share an iteration. The caps keep decode batches small
 and the intervals keep prefill from interrupting decode; both lower TPOT at the
 cost of time to first token.
 
-The recipe installs the November 18 TokenSpeed, kernel, kernel-amd and engine
+The recipe installs the November 19 TokenSpeed, kernel, kernel-amd and engine
 wheels by release URL and SHA256, `tokenspeed-scheduler` `0.1.58` from PyPI,
-and `tokenspeed-smg` `1.16.0.post20261117`, the gateway that TokenSpeed
-revision pins. The November 18 nightly is the first to serve the released
-draft. The runner image, pinned by digest in the master config,
+and `tokenspeed-smg` `1.16.0.post20261118`, the gateway that TokenSpeed
+revision pins. On gfx950 the November 19 kernels run each MoE layer's
+post-attention work as one launch in decode steps that hold one request. The
+runner image, pinned by digest in the master config,
 provides ROCm torch; `tokenspeed-nightly-rocm.sh` installs the pinned packages
 without replacing it and checks that torch is still a ROCm build. The worker
 pins the checkpoint with `revision` and the draft with

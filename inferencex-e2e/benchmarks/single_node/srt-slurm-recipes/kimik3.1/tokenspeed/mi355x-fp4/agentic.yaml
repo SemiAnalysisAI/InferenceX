@@ -39,11 +39,11 @@ base:
   engine: tokenspeed
   setup_script: tokenspeed-nightly-rocm.sh
   environment:
-    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261118/tokenspeed-0.1.1.post20261118-py3-none-any.whl#sha256=c0fe4fe9dc7096fa0a4b0933a827540f48d913a570bc0151e6dba90166e44a0e
-    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261118-rocm72/tokenspeed_kernel-0.1.5.post20261118-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=dc1ab4ff90674e246befcf3932d6d012848059d92861dac0bf9659b95f9dd570
-    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261118/tokenspeed_kernel_amd-0.1.4.post20261118-py3-none-any.whl#sha256=0a54bdf2bb34bf84b9fda83683556ef6923026098753dee8ff54aabd54870b40
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261119/tokenspeed-0.1.1.post20261119-py3-none-any.whl#sha256=a50cc6aca1e6dec22c14a914d9e593b5f6490b44ee26062f75718b6591dc69c4
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261119-rocm72/tokenspeed_kernel-0.1.5.post20261119-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=0d045c1bfeafa1e1118606a511cd7fb2195dbc693d335d93a0273678f5d36523
+    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261119/tokenspeed_kernel_amd-0.1.4.post20261119-py3-none-any.whl#sha256=cfb38b114f4a1ccb75e36f2dc0ae407c7be25844d21b4bd66754cb87eea83334
     TOKENSPEED_SCHEDULER_VERSION: 0.1.58
-    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.1.post20261118/tokenspeed_engine-0.1.1.post20261118-cp312-abi3-manylinux_2_28_x86_64.whl#sha256=48d933c4423b3ccb08ae336bf78f5bf14849a6ea3fa4932154805a1570338fbf
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.1.post20261119/tokenspeed_engine-0.1.1.post20261119-cp312-abi3-manylinux_2_28_x86_64.whl#sha256=2034d53a09fd05667d297cf0f960c94383954087da9b2dd3976b2ae2c0d7e401
   roles:
     agg:
       nodes: 1
@@ -52,6 +52,9 @@ base:
       env:
         GPU_MAX_HW_QUEUES: '2'
         PYTHONNOUSERSITE: '1'
+        # Pinned Host L2 comes from hipHostMalloc's GTT pool; registering pageable memory
+        # pins it page by page and can outlast the distributed startup timeout.
+        HSA_USERPTR_FOR_PAGED_MEM: '0'
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         revision: d9e99b0792a5e93b78ea9bea62a68167e36ddd9e
@@ -71,8 +74,8 @@ base:
         max-prefill-tokens: 8192
         gpu-memory-utilization: 0.95
         enable-prefix-caching: true
-        # Host L2 holds eight times the GPU KV blocks, up to 254.94 GB per GPU with KVP8.
-        kvstore-ratio: 8
+        # Host L2 per GPU; the eight GPUs' Host L2 must fit the node's GTT pool.
+        kvstore-size: 128
         reasoning-parser: passthrough
         drafter-attention-backend: mha
         speculative-algorithm: DSPARK
@@ -107,7 +110,7 @@ override_tp8_c1:
         speculative-num-draft-tokens: 8
         # No Host L2: the GPU KV pool already holds the sessions' prefixes.
         disable-kvstore: true
-        kvstore-ratio: null
+        kvstore-size: null
   benchmark:
     env:
       CONC: '1'
@@ -125,7 +128,7 @@ override_tp8_c4:
         speculative-num-steps: 7
         speculative-num-draft-tokens: 8
         disable-kvstore: true
-        kvstore-ratio: null
+        kvstore-size: null
   benchmark:
     env:
       CONC: '4'
@@ -151,7 +154,7 @@ override_tp8_dcp8_c8:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2360'
+      TOTAL_CPU_DRAM_GB: '1025'
 
 override_tp8_dcp8_c16:
   roles:
@@ -171,7 +174,7 @@ override_tp8_dcp8_c16:
     env:
       CONC: '16'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2360'
+      TOTAL_CPU_DRAM_GB: '1025'
 
 override_tp8_dcp8_c24:
   roles:
@@ -191,7 +194,7 @@ override_tp8_dcp8_c24:
     env:
       CONC: '24'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2360'
+      TOTAL_CPU_DRAM_GB: '1025'
 
 override_tp8_dcp8_c32:
   roles:
@@ -212,7 +215,7 @@ override_tp8_dcp8_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2360'
+      TOTAL_CPU_DRAM_GB: '1025'
 
 override_tp8_dcp8_c48:
   roles:
@@ -232,4 +235,4 @@ override_tp8_dcp8_c48:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2360'
+      TOTAL_CPU_DRAM_GB: '1025'
