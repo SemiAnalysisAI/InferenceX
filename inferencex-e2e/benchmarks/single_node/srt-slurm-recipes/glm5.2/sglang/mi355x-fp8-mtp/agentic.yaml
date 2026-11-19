@@ -144,10 +144,8 @@ override_tp8_c12_hicache:
       CONC: '12'
       KV_OFFLOADING: dram
 
-# DCP8 stripes the latent KV across the TP8 ranks; sgl-project/sglang#45205 lets
-# the host tier sit under it. ROCm DSA DCP runs only on the triton backends.
-# The replicated index-K host mirror adds about half of hicache-size a rank, so
-# 192 GB keeps eight ranks inside the 2399 GB DRAM budget; 256 GB runs out of host memory.
+# sgl-project/sglang#45205 lets a host tier sit under DCP8, which on ROCm runs only on the triton backends.
+# The replicated index-K host mirror costs about half of hicache-size again a rank, so 256 GB a rank runs out of host memory and 192 GB does not.
 override_tp8_dcp8_c16:
   roles:
     agg:
