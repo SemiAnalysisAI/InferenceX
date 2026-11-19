@@ -82,8 +82,7 @@ roles:
       mamba-ssm-cache-dtype: float32
       mamba-cache-mode: align
       block-size: 64
-      # SPF is a SimpleCPU read-only preview policy and fatally rejects this
-      # standalone UMBP + MoRIIO WRITE path on the first request.
+      # SPF is restricted to the SimpleCPU path and rejects standalone UMBP.
       scheduling-policy: fcfs
       enable-prompt-tokens-details: true
     env:
