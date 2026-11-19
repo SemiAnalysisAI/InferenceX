@@ -3376,7 +3376,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
   framework: dynamo-sglang
   router:
     name: dynamo-router
-    version: 1.7.0.dev20261106
+    version: 1.8.0.dev20261119
   multinode: true
   disagg: false
   srt-recipe-dir: qwen3.5/sglang/gb300-fp4/agentx
@@ -3495,7 +3495,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
   framework: dynamo-sglang
   router:
     name: dynamo-router
-    version: 1.7.0.dev20261106
+    version: 1.8.0.dev20261119
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true

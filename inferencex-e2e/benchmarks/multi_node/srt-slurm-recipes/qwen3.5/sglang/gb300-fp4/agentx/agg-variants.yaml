@@ -3,7 +3,7 @@ base:
   dynamo:
     install: true
     source:
-      wheel: 1.7.0.dev20261106
+      wheel: 1.8.0.dev20261119
   slurm:
     time_limit: '8:00:00'
   health_check:
