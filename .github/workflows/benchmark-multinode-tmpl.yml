@@ -22,10 +22,6 @@ on:
         description: "Total Slurm nodes required by this benchmark"
         required: true
         type: number
-      priority:
-        description: "Higher-is-sooner CI priority score"
-        required: true
-        type: string
       queue-token:
         description: "One-shot queue token generated for this job"
         required: true
@@ -192,27 +188,18 @@ jobs:
     runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; callers gate fork PRs behind maintainer-applied sweep labels
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        (
-          vars.NODE_SLOT_SCHEDULER_ENABLED == 'true' &&
-          format(
-            '["self-hosted",{0},{1},{2},{3}]',
-            toJSON(inputs.runner),
-            toJSON(format('nodes:{0}', inputs.node-count)),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          ) ||
-          format(
-            '["self-hosted",{0},{1},{2}]',
-            toJSON(inputs.runner),
-            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
-            toJSON(format('ci-attempt-{0}', github.run_attempt))
-          )
+        format(
+          '["self-hosted",{0},{1},{2},{3}]',
+          toJSON(inputs.runner),
+          toJSON(format('nodes:{0}', inputs.node-count)),
+          toJSON(format('ci-job-{0}', inputs.queue-token)),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
         format('[{0}]', toJSON(inputs.runner))
       ) }}
     timeout-minutes: ${{ inputs.scenario-type == 'agentic-coding' && 780 || 480 }}
     name: >-
-      ${{ inputs.klaud-run && 'klaud | ' || '' }}p${{ inputs.priority }} | ${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
+      ${{ inputs.klaud-run && 'klaud | ' || '' }}${{ fromJSON(inputs.config).model-prefix }} ${{ fromJSON(inputs.config).precision }} ${{ inputs.runner }} ${{ fromJSON(inputs.config).framework == 'sglang' && 'sgl' || fromJSON(inputs.config).framework == 'dynamo-sglang' && 'dyn-sgl' || fromJSON(inputs.config).framework == 'sglang-disagg' && 'sgl-disagg' || fromJSON(inputs.config).framework }}
       ${{ format('{0}', fromJSON(inputs.config).disagg) == 'true' && format('{0}P ', fromJSON(inputs.config).prefill.num-worker) || '' }}(TP${{ fromJSON(inputs.config).prefill.tp }}${{ format('{0}', fromJSON(inputs.config).prefill.pp) != '' && format('{0}', fromJSON(inputs.config).prefill.pp) != '1' && format('/PP{0}', fromJSON(inputs.config).prefill.pp) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.dcp-size) != '' && format('{0}', fromJSON(inputs.config).prefill.dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).prefill.dcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.pcp-size) != '' && format('{0}', fromJSON(inputs.config).prefill.pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).prefill.pcp-size) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.ep) != '' && format('{0}', fromJSON(inputs.config).prefill.ep) != '1' && format('/EP{0}', fromJSON(inputs.config).prefill.ep) || '' }}${{ format('{0}', fromJSON(inputs.config).prefill.dp-attn) == 'true' && '/DPA' || '' }})
       ${{ format('{0}', fromJSON(inputs.config).disagg) == 'true' && format('x {0}D (TP{1}{2}{3}{4}{5}{6})', fromJSON(inputs.config).decode.num-worker, fromJSON(inputs.config).decode.tp, format('{0}', fromJSON(inputs.config).decode.pp) != '' && format('{0}', fromJSON(inputs.config).decode.pp) != '1' && format('/PP{0}', fromJSON(inputs.config).decode.pp) || '', format('{0}', fromJSON(inputs.config).decode.dcp-size) != '' && format('{0}', fromJSON(inputs.config).decode.dcp-size) != '1' && format('/DCP{0}', fromJSON(inputs.config).decode.dcp-size) || '', format('{0}', fromJSON(inputs.config).decode.pcp-size) != '' && format('{0}', fromJSON(inputs.config).decode.pcp-size) != '1' && format('/PCP{0}', fromJSON(inputs.config).decode.pcp-size) || '', format('{0}', fromJSON(inputs.config).decode.ep) != '' && format('{0}', fromJSON(inputs.config).decode.ep) != '1' && format('/EP{0}', fromJSON(inputs.config).decode.ep) || '', format('{0}', fromJSON(inputs.config).decode.dp-attn) == 'true' && '/DPA' || '') || '' }}
       ${{ fromJSON(inputs.config).spec-decoding != 'none' && fromJSON(inputs.config).spec-decoding || '' }}

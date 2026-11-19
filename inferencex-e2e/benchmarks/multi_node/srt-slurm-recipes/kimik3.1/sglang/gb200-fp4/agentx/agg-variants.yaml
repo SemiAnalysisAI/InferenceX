@@ -46,6 +46,7 @@ base:
       active-prefill-tokens-threshold-frac: None
   engine: sglang
   roles:
+    # A single worker leaves the KV router nothing to choose, so it publishes no KV events.
     agg:
       nodes: 4
       workers: 1
@@ -67,16 +68,17 @@ base:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         trust-remote-code: true
         tensor-parallel-size: 16
-        dcp-size: 16
-        expert-parallel-size: 1
+        # The per-layer DCP combine on each verify and draft step spans two trays instead of four.
+        dcp-size: 8
         kv-cache-dtype: fp8_e4m3
         # Week-1 K3.1 precision policy: FP32 KDA recurrent state.
         mamba-ssm-dtype: float32
-        mem-fraction-static: 0.85
         chunked-prefill-size: 16384
         max-prefill-tokens: 16384
-        weight-loader-prefetch-checkpoints: true
-        model-loader-extra-config: '{"enable_multithread_load":true}'
+        load-format: runai_streamer
+        model-loader-extra-config: '{"concurrency":16,"distributed":true}'
+        weight-loader-drop-cache-after-load: false
+        dist-timeout: 3600
         dyn-reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         speculative-algorithm: DFLASH
@@ -84,10 +86,12 @@ base:
         speculative-draft-kv-cache-dtype: fp8_e4m3
         speculative-draft-attention-backend: cutedsl_mla
         speculative-use-block-verification: true
+        speculative-num-draft-tokens: 8
         # Without ReplaySSM, DFLASH keeps one KDA state per draft token and the KV pool collapses.
         enable-linear-replayssm-spec: true
         enable-hierarchical-cache: true
-        hicache-size: 120
+        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 fits a tray's 487 GB offload share.
+        hicache-size: 108
         hicache-io-backend: direct
         hicache-mem-layout: page_first_direct
         hicache-write-policy: write_back
@@ -99,7 +103,6 @@ base:
         router-session-affinity-ttl-secs: '14400'
         watchdog-timeout: 3600
         enable-metrics: true
-      kv_events: true
   health_check:
     max_attempts: 1440
     interval_seconds: 10
@@ -125,67 +128,24 @@ base:
     mem: '0'
     container-remap-root: ''
 
-override_tp16_c1:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-c1-dflash7
+override_tp16_dcp8_c1:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-dcp8-c1-dflash7
   roles:
     agg:
       args:
-        speculative-num-draft-tokens: 8
+        expert-parallel-size: 1
+        mem-fraction-static: 0.85
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
 
-override_tp16_c4:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-c4-dflash7
+override_tp16_ep4_dcp8_c4:
+  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-ep4-dcp8-c4-dflash7
   roles:
     agg:
       args:
-        speculative-num-draft-tokens: 8
+        # EP4 shards the routed experts four ways and shortens the weight-read-bound decode step.
+        expert-parallel-size: 4
+        # At 0.85 an EP4 rank can fall under 0.1 GiB free and fail the draft GEMM in cuBLAS.
+        mem-fraction-static: 0.82
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
-
-override_tp16_c8:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-c8-dflash7
-  roles:
-    agg:
-      args:
-        speculative-num-draft-tokens: 8
-        max-running-requests: 16
-        cuda-graph-max-bs-decode: 16
-
-override_tp16_c24:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-c24-dflash5
-  roles:
-    agg:
-      args:
-        # Above CONC 8 the verify rows dominate a step: 5 drafts (width 6), the cookbook's
-        # throughput setting.
-        speculative-num-draft-tokens: 6
-        max-running-requests: 48
-        cuda-graph-max-bs-decode: 48
-
-override_tp16_c32:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-c32-dflash5
-  roles:
-    agg:
-      args:
-        speculative-num-draft-tokens: 6
-        max-running-requests: 64
-        cuda-graph-max-bs-decode: 64
-
-override_tp16_c48:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-c48-dflash5
-  roles:
-    agg:
-      args:
-        speculative-num-draft-tokens: 6
-        max-running-requests: 96
-        cuda-graph-max-bs-decode: 96
-
-override_tp16_c56:
-  name: kimik3.1-fp4-gb200-dynamo-sglang-agentx-agg-tp16-c56-dflash5
-  roles:
-    agg:
-      args:
-        speculative-num-draft-tokens: 6
-        max-running-requests: 112
-        cuda-graph-max-bs-decode: 112

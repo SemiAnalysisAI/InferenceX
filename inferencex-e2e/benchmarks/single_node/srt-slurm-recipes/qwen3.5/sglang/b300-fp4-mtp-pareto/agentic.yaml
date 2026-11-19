@@ -1,0 +1,348 @@
+base:
+  schema: 2
+  name: qwen3.5-fp4-b300-sglang-agentic-pareto
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      workers: 1
+      args:
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+        trust-remote-code: true
+        data-parallel-size: 1
+        enable-symm-mem: true
+        quantization: modelopt_fp4
+        fp4-gemm-backend: flashinfer_cutlass
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        attention-backend: trtllm_mha
+        moe-runner-backend: flashinfer_trtllm
+        max-prefill-tokens: 16384
+        chunked-prefill-size: 16384
+        mem-fraction-static: 0.8
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-path: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
+        reasoning-parser: qwen3
+        tool-call-parser: qwen3_coder
+        speculative-algorithm: NEXTN
+        speculative-num-steps: 6
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 7
+        enable-metrics: true
+        enable-cache-report: true
+        weight-loader-prefetch-checkpoints: true
+        weight-loader-prefetch-num-threads: 4
+      env:
+        TORCH_CUDA_ARCH_LIST: '10.0'
+        PYTHONNOUSERSITE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        SGL_ENABLE_JIT_DEEPGEMM: 'false'
+        SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+        SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+# One variant per point. max-running-requests caps the engine below AgentX admission so the decode batch stays small;
+# the CUDA graph batch equals the cap.
+
+override_tp4_ep1_c4_cap1_arf:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        cuda-graph-bs-decode:
+        - 1
+        flashinfer-allreduce-fusion-backend: cutedsl
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp4_ep1_c6_cap1_arf:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 1
+        cuda-graph-max-bs-decode: 1
+        cuda-graph-bs-decode:
+        - 1
+        mamba-track-interval: 1048576
+        flashinfer-allreduce-fusion-backend: cutedsl
+  benchmark:
+    env:
+      CONC: '6'
+      KV_OFFLOADING: none
+
+override_tp4_ep1_c12_cap2_arf:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        cuda-graph-bs-decode:
+        - 1
+        - 2
+        mamba-track-interval: 1048576
+        flashinfer-allreduce-fusion-backend: cutedsl
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: none
+
+override_tp4_ep1_c14_cap2_arf:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 2
+        cuda-graph-max-bs-decode: 2
+        cuda-graph-bs-decode:
+        - 1
+        - 2
+        mamba-track-interval: 1048576
+        flashinfer-allreduce-fusion-backend: cutedsl
+  benchmark:
+    env:
+      CONC: '14'
+      KV_OFFLOADING: none
+
+override_tp4_ep1_c16_cap3_arf:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        tokenizer-worker-num: 6
+        max-running-requests: 3
+        cuda-graph-max-bs-decode: 3
+        cuda-graph-bs-decode:
+        - 1
+        - 2
+        - 3
+        mamba-track-interval: 1048576
+        flashinfer-allreduce-fusion-backend: cutedsl
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp4_ep4_c22_cap4:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        tokenizer-worker-num: 6
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+        mamba-track-interval: 1048576
+  benchmark:
+    env:
+      CONC: '22'
+      KV_OFFLOADING: none
+
+override_tp4_ep4_c26_cap5:
+  roles:
+    agg:
+      gpus: 4
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        tokenizer-worker-num: 6
+        max-running-requests: 5
+        cuda-graph-max-bs-decode: 5
+        mamba-track-interval: 1048576
+  benchmark:
+    env:
+      CONC: '26'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c16_cap4:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 4
+        cuda-graph-max-bs-decode: 4
+        cuda-graph-bs-decode:
+        - 1
+        - 2
+        - 3
+        - 4
+        mamba-track-interval: 1048576
+        mamba-max-states-per-path: 3
+      env:
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c20_cap5:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 5
+        cuda-graph-max-bs-decode: 5
+        mamba-track-interval: 1048576
+        mamba-max-states-per-path: 3
+      env:
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c24_cap8:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        mamba-track-interval: 1048576
+        mamba-max-states-per-path: 3
+      env:
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c32_cap13_pf:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 13
+        cuda-graph-max-bs-decode: 13
+        mamba-track-interval: 1048576
+        mamba-max-states-per-path: 3
+        linear-attn-prefill-backend: flashinfer
+      env:
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '131072'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c40_cap17_pf:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        mem-fraction-static: 0.85
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 17
+        cuda-graph-max-bs-decode: 17
+        page-size: 64
+        mamba-track-interval: 1048576
+        mamba-max-states-per-path: 3
+        tokenizer-worker-num: 6
+        linear-attn-prefill-backend: flashinfer
+      env:
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '131072'
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c48_cap32_pf:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        mem-fraction-static: 0.85
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        page-size: 64
+        mamba-track-interval: 1048576
+        mamba-max-states-per-path: 3
+        enable-linear-replayssm-spec: true
+        max-mamba-cache-size: 488
+        tokenizer-worker-num: 6
+        linear-attn-prefill-backend: flashinfer
+      env:
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '131072'
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: none
+
+override_tp2_ep2_c64_cap128_pf_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        mem-fraction-static: 0.88
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 128
+        cuda-graph-max-bs-decode: 128
+        page-size: 64
+        mamba-track-interval: 1048576
+        mamba-max-states-per-path: 3
+        enable-linear-replayssm-spec: true
+        max-mamba-cache-size: 640
+        tokenizer-worker-num: 6
+        enable-hierarchical-cache: true
+        hicache-size: 299
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-write-policy: write_back
+        soft-watchdog-timeout: 60
+        linear-attn-prefill-backend: flashinfer
+        strip-thinking-cache: true
+      env:
+        SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
+        SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: '131072'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '599'
