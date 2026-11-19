@@ -1,0 +1,9 @@
+# Dynamo router policy: predict each request's reply length online and forward it as the backend
+# priority, so a TensorRT-LLM worker with scheduler_config.waiting_queue_policy: priority admits short
+# replies first (ai-dynamo/dynamo#18940; priority forwarding to TensorRT-LLM from ai-dynamo/dynamo#18772).
+# Runs only on decode/aggregated worker sets routed by the KV router. A worker set that advertises its
+# own router config reads its own policy file, so set it on those workers:
+#   DYN_ROUTER_MODE: kv
+#   DYN_ROUTER_POLICY_CONFIG: /configs/dynamo-router-policy-output-length.yaml
+request_classifier:
+  type: output_length_prediction
