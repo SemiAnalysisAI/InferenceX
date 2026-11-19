@@ -1,0 +1,195 @@
+[11-17 23:23:10] server_args: {"model_id": "Wan-AI/Wan2.2-T2V-A14B-Diffusers", "attention_backend": null, "cache_dit_config": null, "num_gpus": 4, "performance_mode": "speed", "tp_size": 1, "ulysses_degree": 2, "ring_degree": 1, "cfg_parallel_degree": 2, "lora_path": null, "component_quantizations": {}, "component_precisions": {}, "quantization": null, "enable_torch_compile": false, "allow_cudnn_tf32": true, "allow_bf16_reduced_precision_reduction": true, "disable_conditioning_cache": true}
+[11-17 23:23:37] Numerics policy: cudnn TF32 and bf16 reduced-precision reduction enabled. These lower precision below the reference, so quality='exact' is bit-reproducible on this server but not free of approximate library defaults. Pass --allow-cudnn-tf32 false --allow-bf16-reduced-precision-reduction false for the strict contract (slower fp32 convolutions).
+[11-17 23:23:45] Loading WanTransformer3DModel from 12 safetensors file(s) , param_dtype: torch.bfloat16
+[11-17 23:28:45] Attention backends for transformer_2: fa
+[11-17 23:28:45] Loading WanTransformer3DModel from 12 safetensors file(s) , param_dtype: torch.bfloat16
+[11-17 23:33:44] Attention backends for transformer: fa
+[11-17 23:34:16] Using fa attention backend
+[11-17 23:34:18] Warmup requests: 0/1 server warmup req (832x480x17f, 2/40 steps)
+[11-17 23:34:46] Warmup requests: 1/1 server warmup req (832x480x17f, 2/40 steps)
+[11-17 23:36:19] Sampling params:
+                       width: 832
+                      height: 480
+                  num_frames: 81
+                         fps: 16
+                      prompt: <redacted, len=209>
+                  neg_prompt: <redacted, len=0>
+                        seed: 11
+                 infer_steps: 40
+      num_outputs_per_prompt: 1
+              guidance_scale: 4.0
+     embedded_guidance_scale: 6.0
+                    n_tokens: None
+                  flow_shift: 12.0
+                  image_path: None
+                 save_output: True
+            output_file_path: outputs/42abb7ff-66b0-4ba4-a989-18bdcc19208e.mp4
+        
+[11-17 23:36:19] Running pipeline stages: ['InputValidationStage', 'TextEncodingStage', 'LatentPreparationStage', 'TimestepPreparationStage', 'denoising_stage', 'decoding_stage']
+[11-17 23:36:19] [InputValidationStage] started...
+[11-17 23:36:19] [InputValidationStage] finished in 0.0000 seconds
+[11-17 23:36:19] [TextEncodingStage] started...
+[11-17 23:36:19] [TextEncodingStage] finished in 0.1184 seconds
+[11-17 23:36:19] [LatentPreparationStage] started...
+[11-17 23:36:19] [LatentPreparationStage] finished in 0.0002 seconds
+[11-17 23:36:19] [TimestepPreparationStage] started...
+[11-17 23:36:19] [TimestepPreparationStage] finished in 0.0004 seconds
+[11-17 23:36:19] [DenoisingStage] started...
+[2026-11-17 23:36:23] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:36:27] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:36:31] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:36:35] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:36:39] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+
+  0%|          | 0/40 [00:00<?, ?it/s]
+  2%|▎         | 1/40 [00:02<01:34,  2.41s/it]
+  5%|▌         | 2/40 [00:02<00:40,  1.05s/it]
+  8%|▊         | 3/40 [00:03<00:40,  1.11s/it]
+ 10%|█         | 4/40 [00:04<00:42,  1.17s/it]
+ 12%|█▎        | 5/40 [00:06<00:42,  1.21s/it]
+ 15%|█▌        | 6/40 [00:07<00:41,  1.23s/it]
+ 18%|█▊        | 7/40 [00:08<00:41,  1.24s/it]
+ 20%|██        | 8/40 [00:10<00:40,  1.25s/it]
+ 22%|██▎       | 9/40 [00:11<00:39,  1.26s/it]
+ 25%|██▌       | 10/40 [00:12<00:37,  1.27s/it]
+ 28%|██▊       | 11/40 [00:13<00:36,  1.27s/it]
+ 30%|███       | 12/40 [00:15<00:35,  1.27s/it]
+ 32%|███▎      | 13/40 [00:16<00:34,  1.27s/it]
+ 35%|███▌      | 14/40 [00:17<00:33,  1.27s/it]
+ 38%|███▊      | 15/40 [00:18<00:31,  1.27s/it]
+ 40%|████      | 16/40 [00:20<00:30,  1.27s/it]
+ 42%|████▎     | 17/40 [00:21<00:29,  1.27s/it]
+ 45%|████▌     | 18/40 [00:22<00:28,  1.27s/it]
+[2026-11-17 23:36:44] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:36:48] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:36:52] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:36:56] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:37:00] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:37:04] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+/40 [00:24<00:26,  1.27s/it]
+ 50%|█████     | 20/40 [00:25<00:25,  1.28s/it]
+ 52%|█████▎    | 21/40 [00:26<00:24,  1.27s/it]
+ 55%|█████▌    | 22/40 [00:27<00:22,  1.27s/it]
+ 57%|█████▊    | 23/40 [00:29<00:21,  1.27s/it]
+ 60%|██████    | 24/40 [00:30<00:20,  1.28s/it]
+ 62%|██████▎   | 25/40 [00:31<00:19,  1.28s/it]
+ 65%|██████▌   | 26/40 [00:32<00:17,  1.28s/it]
+ 68%|██████▊   | 27/40 [00:35<00:21,  1.65s/it]
+ 72%|███████▎  | 29/40 [00:36<00:13,  1.19s/it]
+ 75%|███████▌  | 30/40 [00:38<00:12,  1.21s/it]
+ 78%|███████▊  | 31/40 [00:39<00:11,  1.23s/it]
+ 80%|████████  | 32/40 [00:40<00:09,  1.24s/it]
+ 82%|████████▎ | 33/40 [00:41<00:08,  1.25s/it]
+ 85%|████████▌ | 34/40 [00:43<00:07,  1.26s/it]
+ 88%|████████▊ | 35/40 [00:44<00:06,  1.27s/it]
+[2026-11-17 23:37:08] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+.27s/it]
+ 92%|█████████▎| 37/40 [00:47<00:03,  1.27s/it]
+ 95%|█████████▌| 38/40 [00:48<00:02,  1.28s/it]
+ 98%|█████████▊| 39/40 [00:49<00:01,  1.28s/it]
+100%|██████████| 40/40 [00:50<00:00,  1.28s/it]
+100%|██████████| 40/40 [00:50<00:00,  1.27s/it]
+[11-17 23:37:10] [DenoisingStage] average time per step: 1.2728 seconds
+[11-17 23:37:10] [DenoisingStage] finished in 50.9135 seconds
+[11-17 23:37:10] [DecodingStage] started...
+[11-17 23:37:12] Output saved to [1;36moutputs/42abb7ff-66b0-4ba4-a989-18bdcc19208e.mp4[0;0m
+[11-17 23:37:12] [DecodingStage] finished in 1.9387 seconds
+[11-17 23:37:12] Pixel data generated successfully in [92m52.99[0;0m seconds
+[11-17 23:37:12] Peak memory usage: 68952.00 MB
+[2026-11-17 23:37:12] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/42abb7ff-66b0-4ba4-a989-18bdcc19208e HTTP/1.1[0m" [32m200 OK[0m
+[11-17 23:37:12] Sequence dimension shard is enabled, disabling frame adjustment for better performance
+[11-17 23:37:12] Adjusting number of frames from 81 to 81 based on model
+[2026-11-17 23:37:12] [32mINFO[0m:     203.0.113.1:40000 - "[1mPOST /v1/videos HTTP/1.1[0m" [32m200 OK[0m
+[11-17 23:37:12] Sampling params:
+                       width: 832
+                      height: 480
+                  num_frames: 81
+                         fps: 16
+                      prompt: <redacted, len=209>
+                  neg_prompt: <redacted, len=0>
+                        seed: 11
+                 infer_steps: 40
+      num_outputs_per_prompt: 1
+              guidance_scale: 4.0
+     embedded_guidance_scale: 6.0
+                    n_tokens: None
+                  flow_shift: 12.0
+                  image_path: None
+                 save_output: True
+            output_file_path: outputs/f15ae171-54c3-4156-bd11-8005030cfa61.mp4
+        
+[11-17 23:37:12] Running pipeline stages: ['InputValidationStage', 'TextEncodingStage', 'LatentPreparationStage', 'TimestepPreparationStage', 'denoising_stage', 'decoding_stage']
+[11-17 23:37:12] [InputValidationStage] started...
+[11-17 23:37:12] [InputValidationStage] finished in 0.0000 seconds
+[11-17 23:37:12] [TextEncodingStage] started...
+[11-17 23:37:13] [TextEncodingStage] finished in 0.1185 seconds
+[11-17 23:37:13] [LatentPreparationStage] started...
+[11-17 23:37:13] [LatentPreparationStage] finished in 0.0001 seconds
+[11-17 23:37:13] [TimestepPreparationStage] started...
+[11-17 23:37:13] [TimestepPreparationStage] finished in 0.0002 seconds
+[11-17 23:37:13] [DenoisingStage] started...
+[2026-11-17 23:37:16] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:37:20] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:37:25] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:37:29] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:37:33] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+
+  0%|          | 0/40 [00:00<?, ?it/s]
+  2%|▎         | 1/40 [00:00<00:04,  9.42it/s]
+  5%|▌         | 2/40 [00:01<00:28,  1.35it/s]
+  8%|▊         | 3/40 [00:02<00:36,  1.01it/s]
+ 10%|█         | 4/40 [00:03<00:39,  1.11s/it]
+ 12%|█▎        | 5/40 [00:05<00:41,  1.17s/it]
+ 15%|█▌        | 6/40 [00:06<00:41,  1.21s/it]
+ 18%|█▊        | 7/40 [00:07<00:40,  1.23s/it]
+ 20%|██        | 8/40 [00:09<00:40,  1.25s/it]
+ 22%|██▎       | 9/40 [00:10<00:39,  1.27s/it]
+ 25%|██▌       | 10/40 [00:11<00:38,  1.27s/it]
+ 28%|██▊       | 11/40 [00:12<00:37,  1.28s/it]
+ 30%|███       | 12/40 [00:14<00:35,  1.28s/it]
+ 32%|███▎      | 13/40 [00:15<00:34,  1.29s/it]
+ 35%|███▌      | 14/40 [00:16<00:33,  1.29s/it]
+ 38%|███▊      | 15/40 [00:18<00:32,  1.29s/it]
+ 40%|████      | 16/40 [00:19<00:30,  1.29s/it]
+ 42%|████▎     | 17/40 [00:20<00:29,  1.29s/it]
+ 45%|████▌     | 18/40 [00:21<00:28,  1.29s/it]
+[2026-11-17 23:37:37] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:37:41] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:37:45] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:37:49] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:37:53] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+/40 [00:23<00:27,  1.29s/it]
+ 50%|█████     | 20/40 [00:24<00:25,  1.29s/it]
+ 52%|█████▎    | 21/40 [00:25<00:24,  1.30s/it]
+ 55%|█████▌    | 22/40 [00:27<00:23,  1.29s/it]
+ 57%|█████▊    | 23/40 [00:28<00:22,  1.30s/it]
+ 60%|██████    | 24/40 [00:29<00:20,  1.30s/it]
+ 62%|██████▎   | 25/40 [00:31<00:19,  1.30s/it]
+ 65%|██████▌   | 26/40 [00:32<00:18,  1.30s/it]
+ 68%|██████▊   | 27/40 [00:33<00:16,  1.30s/it]
+ 70%|███████   | 28/40 [00:34<00:15,  1.30s/it]
+ 72%|███████▎  | 29/40 [00:36<00:14,  1.30s/it]
+ 75%|███████▌  | 30/40 [00:37<00:12,  1.29s/it]
+ 78%|███████▊  | 31/40 [00:38<00:11,  1.29s/it]
+ 80%|████████  | 32/40 [00:40<00:10,  1.29s/it]
+ 82%|████████▎ | 33/40 [00:41<00:09,  1.29s/it]
+ 85%|████████▌ | 34/40 [00:42<00:07,  1.29s/it]
+[2026-11-17 23:37:57] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+[2026-11-17 23:38:01] [32mINFO[0m:     203.0.113.1:40000 - "[1mGET /v1/videos/f15ae171-54c3-4156-bd11-8005030cfa61 HTTP/1.1[0m" [32m200 OK[0m
+/it]
+ 90%|█████████ | 36/40 [00:45<00:05,  1.29s/it]
+ 92%|█████████▎| 37/40 [00:46<00:03,  1.29s/it]
+ 95%|█████████▌| 38/40 [00:47<00:02,  1.29s/it]
+ 98%|█████████▊| 39/40 [00:49<00:01,  1.29s/it]
+100%|██████████| 40/40 [00:50<00:00,  1.29s/it]
+100%|██████████| 40/40 [00:50<00:00,  1.26s/it]
+[11-17 23:38:03] [DenoisingStage] average time per step: 1.2598 seconds
+[11-17 23:38:03] [DenoisingStage] finished in 50.3946 seconds
+[11-17 23:38:03] [DecodingStage] started...
+[11-17 23:38:05] Output saved to [1;36moutputs/f15ae171-54c3-4156-bd11-8005030cfa61.mp4[0;0m
+[11-17 23:38:05] [DecodingStage] finished in 1.9244 seconds
+[11-17 23:38:05] Pixel data generated successfully in [92m52.45[0;0m seconds
+[11-17 23:38:05] Peak memory usage: 68952.00 MB
+[11-17 23:38:05] Sequence dimension shard is enabled, disabling frame adjustment for better performance
+[11-17 23:38:05] Adjusting number of frames from 81 to 81 based on model
+[2026-11-17 23:38:05] [32mINFO[0m:     203.0.113.1:40000 - "[1mPOST /v1/videos HTTP/1.1[0m" [32m200 OK[0m
