@@ -13123,4 +13123,4 @@
   scenario-type: [agentic-coding]
   description:
     - "Add a separate MiniMax-M3.1-Flash MI355X native vLLM Mooncake PD candidate behind ATOMesh: 1P2D TP4, prefill CPU offload, dp_sticky session routing, and concurrency 40/48/56/64/72/80."
-  pr-link: null
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5140
