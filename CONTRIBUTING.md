@@ -27,6 +27,8 @@ Every PR description must include an **AI model disclosure** section inside a co
 3. Ping a core maintainer on Slack for final approval, after obtaining the checklist sign-off when required.
 4. An authorized maintainer posts `/use <run_id>` (see below) and the PR is merged via the reuse path.
 
+H3 video deployments follow the same flow. The [H3 submission guide](video-generation/SUBMITTING.md) lists their video-specific steps in order.
+
 **Performance changelog:** A PR that changes what any benchmark runs **MUST** append one new entry covering the affected config keys to the physical end of `inferencex-e2e/perf-changelog.yaml`; `python -m infx.matrix.changed --base origin/main` (run from `inferencex-e2e/`) lists them. A PR that changes no benchmark point adds none. Historical entries **MUST NOT** be edited.
 
 For full config retirement, list the deleted config keys with `retired: true`. The planner verifies that every selected key existed in the base revision and is absent from the current master configs, retains the entry in changelog metadata, and schedules no benchmarks or evals for it. Retirement entries cannot use scenario filters, `append-only`, or eval-selection fields or modifiers; partial scenario retirement uses a regular entry for the surviving config.
@@ -163,7 +165,7 @@ The verdict records only the commit actually assessed; it does not carry approva
 
 A full benchmark sweep is expensive GPU time, and the runners are shared by every open PR, so an approved PR's sweep runs only once, for PR validation. `main` never reruns it after merge; the reuse path publishes that PR sweep instead:
 
-- After your PR has an eligible green full sweep, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line. The pinned run may come from any PR; if its commit is not part of this PR, reuse is still accepted but flagged as a warning.
+- After your PR has an eligible green full sweep, a maintainer with write access to the repository comments `/use <run_id>` on the PR to select that run. Keep the command and run ID on the same line. The pinned run may come from any PR; if its commit is not part of this PR, reuse is still accepted but flagged as a warning.
 - External PRs sweep through `trusted-external-sweep.yml`, which dispatches `e2e-tests.yml`; pin that run explicitly with `/use <run_id>`, because automatic selection and `merge_with_reuse` only find `run-sweep.yml` runs.
 - `/reuse-sweep-run <run_id>` remains supported with identical behavior. Bare `/reuse-sweep-run` selects automatically; bare `/use` is rejected.
 - The merge-to-`main` run then validates and ingests the PR sweep's artifacts; `main` never re-runs the sweep itself.
@@ -171,7 +173,7 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - Retirement-only changes are the no-results exception described above: merge directly after review and required checks, without `/use`. Empty or mixed changelogs do not qualify.
 - Reuse does not require retaining a primary label, but it is rejected while the PR carries `evals-only` or `agentx-fast`, and `merge_with_reuse` refuses a PR with more than one primary label. The bot reacts to the command with 👍 when accepted or 👎 when rejected, with details in the Actions run summary, and posts a warning comment when the pinned run's commit is outside the PR; source artifacts are revalidated at merge.
 - A missing authorized reuse command produces a Check 4 **WARN**, not a rejection. The warning stays visible in the sign-off verdict; posting an authorized command is still required to reuse artifacts.
-- From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
+- From the repository root, `uv run --project inferencex-e2e --extra workflows python -m infx.workflows.merge_with_reuse <pr-number>` is the supported merge path. It syncs the branch with `main`, posts the command, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
 ## Adding points to the latest curve with `append-only`
 

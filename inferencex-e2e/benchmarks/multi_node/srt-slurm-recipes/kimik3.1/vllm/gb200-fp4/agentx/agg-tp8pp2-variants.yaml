@@ -1,0 +1,137 @@
+schema: 2
+
+base:
+  identity:
+    model: {}
+    container: {}
+
+  slurm:
+    time_limit: "8:00:00"
+
+  health_check:
+    interval_seconds: 10
+    max_attempts: 720
+
+  resources:
+    gpu_type: "gb200"
+    gpus_per_node: 4
+
+  environment:
+    # Identical prefixes must hash to identical block keys run-to-run.
+    PYTHONHASHSEED: "0"
+
+  frontend:
+    type: vllm
+    enable_multiple_frontends: false
+
+  engine:
+    type: vllm
+    connector:
+
+  roles:
+    agg:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_RPC_TIMEOUT: "600000"
+        # AIPerf reuses a session's connection across turns; outlast uvicorn's 5 s idle timeout.
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "600"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        HF_HUB_CACHE: "/hf_hub_cache"
+        HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+      args:
+        served-model-name: "moonshotai/Kimi-K3.1-Pro"
+        # One TP8 group (~1.5 TB) is below the checkpoint's 1874 GB minimum on GB200, so PP2
+        # splits the layers across two TP8 groups; DCP must equal TP for K3.1.
+        tensor-parallel-size: 8
+        pipeline-parallel-size: 2
+        decode-context-parallel-size: 8
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        moe-backend: auto
+        gpu-memory-utilization: 0.88
+        max-model-len: 1048576
+        max-num-batched-tokens: 8192
+        kv-cache-dtype: fp8
+        mamba-ssm-cache-dtype: float32
+        enable-prefix-caching: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        # 112742379520 bytes per rank is the dram-utilization 0.5 share of a 4-GPU tray.
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112742379520,"lazy_offload":false}}'
+
+  srun_options:
+    container-remap-root: ""
+
+  telemetry:
+    collector_join_timeout_seconds: 12
+
+  benchmark:
+    placement:
+      node: head
+    env:
+      AIPERF_SERVER_METRICS_URLS: "http://localhost:8000/metrics"
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+
+# Admission is 2x CONC. Graph capture covers max-num-seqs x (1 + draft tokens).
+override_tp8pp2_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 12
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+override_tp8pp2_c4:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 48
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+override_tp8pp2_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 96
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":5,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+override_tp8pp2_c24:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 48
+        max-cudagraph-capture-size: 240
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+override_tp8pp2_c32:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 320
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+override_tp8pp2_c48:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 96
+        max-cudagraph-capture-size: 480
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+override_tp8pp2_c56:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 112
+        max-cudagraph-capture-size: 560
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'

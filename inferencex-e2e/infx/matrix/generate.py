@@ -30,6 +30,9 @@ from .validation import (
 
 seq_len_stoi = {"1k1k": (1024, 1024), "8k1k": (8192, 1024)}
 
+# Every scenario type a changelog entry can select; unscoped generation leaves video out.
+SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding", "video-generation")
+
 MIN_EVAL_CONC = 16
 DEFAULT_EVAL_FRAMEWORK = "lm-eval"
 AUTOMATIC_AGENTIC_VENDOR_EVALS = {
@@ -992,7 +995,7 @@ def _fixed_sequence_entries(
     is_multinode = config.get(Fields.MULTINODE.value, False)
     disagg = config.get(Fields.DISAGG.value, False)
     isl, osl = sequence[Fields.ISL.value], sequence[Fields.OSL.value]
-    require_power = sequence.get(Fields.REQUIRE_POWER.value, sequence.get("require_power", False))
+    require_power = sequence.get(Fields.REQUIRE_POWER.value, False)
     if require_power and (isl, osl) != (8192, 1024):
         raise ValueError("require-power rollout supports only fixed-sequence 8192/1024")
     model_code = config[Fields.MODEL_PREFIX.value]
@@ -1167,7 +1170,7 @@ def _agentic_entries(
             entry[Fields.POWER.value] = True
         if benchmark.get(Fields.CPU_POWER.value):
             entry[Fields.CPU_POWER.value] = True
-        if benchmark.get(Fields.REQUIRE_POWER.value, benchmark.get("require_power", False)):
+        if benchmark.get(Fields.REQUIRE_POWER.value):
             entry[Fields.REQUIRE_POWER.value] = True
         entry.update(
             {
@@ -1797,7 +1800,7 @@ def main() -> list[dict]:
     parent_parser.add_argument(
         "--scenario-type",
         nargs="+",
-        choices=["fixed-seq-len", "agentic-coding", "video-generation"],
+        choices=list(SCENARIO_TYPES),
         required=False,
         help="Scenario type(s) to include. If not specified, fixed-seq-len and agentic-coding are generated; video-generation runs only when named.",
     )

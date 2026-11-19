@@ -6,8 +6,7 @@ import math
 # Combine is always BF16 and an FP8 dispatch is modeled exactly (the oracle applies the same
 # quant->dequant round-trip), so one frozen gate covers every precision. The models reproduce each
 # kernel's rounding, leaving only accumulation-order ambiguity: at most topk (8) BF16 stores at one
-# ulp (2^-8) each. The pairwise topk-slot-tree (depth 3) compounds at most 3 roundings against the
-# 8 this budget was sized for, so it fits without widening; a new model must be checked against it.
+# ulp (2^-8) each. A new model must be checked against that budget.
 # Below the magnitude floor the gate is effectively absolute.
 COMBINE_REL_TOL = 8 * 2.0 ** -8
 COMBINE_MAG_FLOOR = 2e-2
@@ -207,16 +206,7 @@ class RankFP32(RankSum):
         )
 
 
-class TopkSlotTree(RankSum):
-    """A payload-dtype accumulator reduced by a pairwise tree (FlashInfer <= 0.6.15)."""
-
-    def reduce(self, torch, x, destination, valid, present, rank_message, scale_up_domain):
-        return topk_slot_tree_combine(
-            torch, destination, valid, self._messages(torch, x, present, rank_message), x.dtype
-        )
-
-
-_RANK_SUM_REDUCTIONS = {"domain-fp32": DomainFP32, "rank-fp32": RankFP32, "topk-slot-tree": TopkSlotTree}
+_RANK_SUM_REDUCTIONS = {"domain-fp32": DomainFP32, "rank-fp32": RankFP32}
 
 
 def combine_model(semantics, reduction="domain-fp32") -> CombineModel:
@@ -228,28 +218,6 @@ def combine_model(semantics, reduction="domain-fp32") -> CombineModel:
     if reduction not in _RANK_SUM_REDUCTIONS:
         raise ValueError(f"unknown combine reduction {reduction!r}")
     return _RANK_SUM_REDUCTIONS[reduction]()
-
-
-def topk_slot_tree_combine(torch, destination, valid, messages, dtype):
-    """Reduce per-rank messages the way FlashInfer's payload-dtype accumulator does.
-
-    acc[k] = message of destination[k] (0 if a lower k claimed that rank), then
-    (a0+=a1)(a2+=a3)(a4+=a5)(a6+=a7); (a0+=a2)(a4+=a6); (a0+=a4), rounding at every level.
-    Operands stay at their ORIGINAL top-k slot, so the tree shape depends on the routing. Memory is
-    O(ep_size * tokens * hidden), ~8 GiB at EP16/8192 tokens: the term to stream before EP32.
-    """
-    tokens = torch.arange(destination.shape[0], device=destination.device)
-    zero = torch.zeros_like(messages[0])
-    slots = []
-    for slot in range(destination.shape[1]):
-        rank_id, claimed = _unique_rank_slots(destination, valid, slot)
-        slots.append(torch.where(claimed.unsqueeze(1), messages[rank_id, tokens], zero))
-    while len(slots) > 1:
-        merged = [(slots[i] + slots[i + 1]).to(dtype).float() for i in range(0, len(slots) - 1, 2)]
-        if len(slots) % 2:
-            merged.append(slots[-1])
-        slots = merged
-    return slots[0]
 
 
 def topk_rank_fp32_combine(torch, destination, valid, messages):

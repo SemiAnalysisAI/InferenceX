@@ -1,10 +1,21 @@
 """Exercise the verifier's deterministic facts against controlled inputs."""
 
 import json
+import subprocess
 
 import pytest
+import yaml
 
 from infx.klaud.models import Feed
+from infx.matrix.validation import VIDEO_SPEC_DIR
+from infx.tests.srt_recipes import (
+    VIDEO_SPEC,
+    fixed_seq_entry,
+    single_node_fragment,
+    video_entry,
+    video_fragment,
+    write_shared_blocks,
+)
 from infx.workflows import signoff_facts
 
 SERIES = ["--model", "m", "--precision", "fp4", "--framework", "sglang", "--hardware", "b200"]
@@ -204,33 +215,113 @@ def gen(name, tp, conc, fingerprint):
     }
 
 
-def measured(fingerprint, conc, tput, intvty, date="2026-10-20"):
+def measured(fingerprint, conc, tput, intvty, date="2026-10-20", **metrics):
+    agentic = any(name.startswith("p90_") for name in metrics)
     return {
         "recipe_fingerprint": fingerprint,
         "conc": conc,
         "date": date,
-        "metrics": {"tput_per_gpu": tput, "mean_intvty": intvty},
+        "benchmark_type": "agentic_traces" if agentic else "fixed_seq",
+        "metrics": {"tput_per_gpu": tput, "mean_intvty": intvty, **metrics},
     }
 
 
 def test_points_diff_flags_undominated_removals_and_reports_retuned_deltas():
-    base = matrix([gen("x", 4, 8, "f4"), gen("x", 4, 64, "f4"), gen("y", 2, 32, "old")])
-    head = matrix([gen("y", 2, 32, "new"), gen("x", 4, 1, "f4")])
+    base = matrix(
+        [
+            gen("x", 4, 8, "f4"),
+            gen("x", 4, 64, "f4"),
+            gen("y", 2, 32, "old"),
+            gen("z", 8, 16, "z-old"),
+        ]
+    )
+    head = matrix([gen("y", 2, 32, "new"), gen("x", 4, 1, "f4"), gen("z", 8, 16, "z-new")])
+    fixed = {"median_intvty": 50, "median_e2el": 10, "median_ttft": 0.5}
+    agentx = {"p90_itl": 0.02, "p90_e2el": 30, "p90_ttft": 2.0, "p90_e2e_norm_intvty": 20}
     ingested = [
         measured("f4", 8, 100, 500),
         measured("f4", 64, 900, 100),
-        measured("old", 32, 1000, 150),
+        measured("old", 32, 1000, 150, **fixed),
+        measured("z-old", 16, 500, 40, **agentx),
     ]
-    new_run = [measured("new", 32, 1100, 150, "2026-10-22")]
+    # y is faster but its TTFT is 20% worse, z's normalized interactivity 15% worse.
+    new_run = [
+        measured(
+            "new", 32, 1100, 150, "2026-10-22", median_intvty=48, median_e2el=10.5, median_ttft=0.6
+        ),
+        measured(
+            "z-new",
+            16,
+            475,
+            40,
+            "2026-10-22",
+            p90_itl=0.021,
+            p90_e2el=32,
+            p90_ttft=1.8,
+            p90_e2e_norm_intvty=17,
+        ),
+    ]
     [change] = signoff_facts.points_diff(base, head, ingested, new_run)
     assert change["undominated_removed"] == ["x tp4 ep1 dpaFalse conc 8"]
     assert [item["dominated_by"] for item in change["removed"] if item["conc"] == 64] == [
         "y tp2 ep1 dpaFalse conc 32"
     ]
     assert change["unmeasured_removed"] == []
-    assert change["retuned_deltas"] == [
-        {"label": "y tp2 ep1 dpaFalse conc 32", "tput_per_gpu_pct": 10.0, "mean_intvty_pct": 0.0}
+    assert {delta.pop("label"): delta for delta in change["retuned_deltas"]} == {
+        "y tp2 ep1 dpaFalse conc 32": {
+            "tput_per_gpu_pct": 10.0,
+            "mean_intvty_pct": 0.0,
+            "intvty_pct": -4.0,
+            "e2el_pct": 5.0,
+            "ttft_pct": 20.0,
+            "e2e_norm_intvty_pct": None,
+        },
+        "z tp8 ep1 dpaFalse conc 16": {
+            "tput_per_gpu_pct": -5.0,
+            "mean_intvty_pct": 0.0,
+            "intvty_pct": -4.76,
+            "e2el_pct": 6.67,
+            "ttft_pct": -10.0,
+            "e2e_norm_intvty_pct": -15.0,
+        },
+    }
+    assert sorted(change["regressions"], key=lambda item: item["label"]) == [
+        {"label": "y tp2 ep1 dpaFalse conc 32", "metric": "ttft", "old": 0.5, "new": 0.6, "pct": 20.0},
+        {
+            "label": "z tp8 ep1 dpaFalse conc 16",
+            "metric": "e2e_norm_intvty",
+            "old": 20,
+            "new": 17,
+            "pct": -15.0,
+        },
     ]
+
+
+def test_ingested_agentx_rows_take_normalized_interactivity_from_derived_metrics(monkeypatch):
+    requested = []
+
+    def derived(ids):
+        requested.extend(ids)
+        return {7: 12.5}, ["url"]
+
+    monkeypatch.setattr(signoff_facts.api, "normalized_interactivity", derived)
+    agentx = {"p90_itl": 0.02}
+    latest = measured("a", 4, 100, 50, "2026-10-21", **agentx) | {"id": "7"}
+    stale = measured("a", 4, 100, 50, "2026-10-01", **agentx) | {"id": "6"}
+    fixed = measured("b", 4, 100, 50) | {"id": "8"}
+    assert signoff_facts.add_normalized_interactivity([stale, latest, fixed]) is None
+    assert requested == [7]
+    assert signoff_facts.published_metrics.x_axes(latest)["e2e_norm_intvty"] == 12.5
+
+
+def test_unreadable_derived_metrics_are_reported_not_raised(monkeypatch):
+    def unreadable(ids):
+        raise signoff_facts.api.ReadError("invalid-derived-payload")
+
+    monkeypatch.setattr(signoff_facts.api, "normalized_interactivity", unreadable)
+    row = measured("a", 4, 100, 50, p90_itl=0.02) | {"id": "7"}
+    assert signoff_facts.add_normalized_interactivity([row]) == "invalid-derived-payload"
+    assert "p90_e2e_norm_intvty" not in row["metrics"]
 
 
 def test_image_refs_normalize_registry_separator():
@@ -268,3 +359,41 @@ def test_eval_gap_estimates_zero_standard_errors_from_sample_size():
 def test_digest_pins_are_inspected_by_digest(monkeypatch, image, inspected):
     monkeypatch.setattr(signoff_facts, "_inspect", lambda reference: {"inspected": reference})
     assert signoff_facts.inspect_image(image)["inspected"] == inspected
+
+
+def test_matrix_at_generates_llm_points_only_and_runs_no_revision_code(tmp_path, monkeypatch):
+    project = tmp_path / "inferencex-e2e"
+    recipes = project / "benchmarks/single_node/srt-slurm-recipes/fixture"
+    write_shared_blocks(project)
+    (project / "configs/runners.yaml").write_text(yaml.safe_dump({
+        "labels": {"cluster:fixture": ["node-a"]},
+        "clusters": {"fixture": {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm",
+                                 "slurm": {"partition": "batch", "exclusive": True}}},
+    }))  # fmt: skip
+    (project / "configs/nvidia-master.yaml").write_text(
+        yaml.safe_dump({"llm": fixed_seq_entry("stable.yaml", [2]), "video": video_entry()})
+    )
+    (project / "configs/amd-master.yaml").write_text("{}\n")
+    recipes.mkdir(parents=True)
+    (recipes / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
+    (recipes / "video.yaml").write_text(yaml.safe_dump(video_fragment()))
+    # git archive rejects a DATA_PATHS entry that the tree lacks.
+    (project / "benchmarks/multi_node/srt-slurm-recipes").mkdir(parents=True)
+    (project / "benchmarks/multi_node/srt-slurm-recipes/.keep").touch()
+    specs = tmp_path / VIDEO_SPEC_DIR
+    specs.mkdir(parents=True)
+    (specs / "video_spec.py").write_text('raise RuntimeError("video_spec.py from the revision tree ran")\n')
+    (specs / VIDEO_SPEC).write_text("{}\n")
+    for args in (["init", "-q"], ["add", "."], ["commit", "-qm", "base"]):
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+            cwd=tmp_path, check=True, capture_output=True,
+        )  # fmt: skip
+    monkeypatch.chdir(tmp_path)
+
+    matrix, errors = signoff_facts.matrix_at("HEAD", tmp_path / "work")
+
+    assert errors == {}
+    assert {
+        key: ([conc for _, conc in points], messages) for key, (points, messages) in matrix.items()
+    } == {"llm": ([2], []), "video": ([], [])}

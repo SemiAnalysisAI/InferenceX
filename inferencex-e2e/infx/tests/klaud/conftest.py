@@ -14,3 +14,9 @@ def unknown_api_budget(monkeypatch):
 def no_running_sessions(monkeypatch):
     """Keep ``select`` off the real planner run listing; tests that count sessions override it."""
     monkeypatch.setattr(klaud, "running_sessions", lambda _repository: 0)
+
+
+@pytest.fixture(autouse=True)
+def no_read_backoff(monkeypatch):
+    """Keep retried GitHub reads from waiting; tests that check the delays record them."""
+    monkeypatch.setattr(github, "sleep", lambda _seconds: None)

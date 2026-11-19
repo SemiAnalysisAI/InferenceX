@@ -51,3 +51,8 @@ def test_selections_srtctl_rejects_are_rejected(raw, selector):
         selected_recipes(raw, selector)
     with pytest.raises(ValueError):
         expand_variants(raw, selector)
+
+
+def test_a_zip_index_past_the_last_variant_names_the_variant_count():
+    with pytest.raises(ValueError, match=r"zip_override_conc\[3\]: zip_override_conc has 3 variants"):
+        expand_variants(BUNDLE, "zip_override_conc[3]")
