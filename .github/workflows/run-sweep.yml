@@ -39,6 +39,7 @@ jobs:
         runs-on: ubuntu-latest
         permissions:
             contents: read
+            pull-requests: read # Read a stacked parent PR's head.
         if: >-
             github.event.pull_request.head.repo.full_name == github.repository &&
             (
@@ -52,6 +53,8 @@ jobs:
             )
         outputs:
             skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
+            plan-base-ref: ${{ steps.stack_base.outputs.base-ref }}
+            stack-parent-pr: ${{ steps.stack_base.outputs.parent-pr }}
         steps:
             - name: Reject conflicting sweep labels
               env:
@@ -93,8 +96,25 @@ jobs:
             - name: Set up uv
               uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
+            - name: Resolve stacked append-only base
+              id: stack_base
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+              run: |
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
+                  uv run --no-project --exclude-newer PT12H --python 3.12 \
+                    --with "pydantic>=2" --with pyyaml python -m infx.workflows.stack_base \
+                    --repo "${GITHUB_REPOSITORY}" \
+                    --pr-number "${PR_NUMBER}" \
+                    --base-ref "origin/${GITHUB_BASE_REF}" \
+                    --head-ref "${PR_HEAD_SHA}" \
+                    --changelog-file perf-changelog.yaml
+
             - name: Validate perf-changelog matrix
               env:
+                  PLAN_BASE_REF: ${{ steps.stack_base.outputs.base-ref }}
                   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
@@ -104,7 +124,7 @@ jobs:
                       uv run --no-project --exclude-newer PT12H --python 3.12
                       --with "pydantic>=2" --with pyyaml python -m infx.workflows.validate_perf_changelog
                       --changelog-file perf-changelog.yaml
-                      --base-ref "origin/${GITHUB_BASE_REF}"
+                      --base-ref "${PLAN_BASE_REF}"
                       --head-ref "${PR_HEAD_SHA}"
                   )
                   if [ "$ALL_EVALS" = "true" ]; then
@@ -232,9 +252,19 @@ jobs:
                   anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
                   github-token: ${{ github.token }}
 
+            - name: Fetch stacked parent head
+              if: needs.check-changelog.outputs.stack-parent-pr != ''
+              env:
+                  PARENT_PR: ${{ needs.check-changelog.outputs.stack-parent-pr }}
+                  PLAN_BASE_REF: ${{ needs.check-changelog.outputs.plan-base-ref }}
+              run: |
+                  git cat-file -e "${PLAN_BASE_REF}^{commit}" 2>/dev/null ||
+                    git fetch --no-tags origin "+refs/pull/${PARENT_PR}/head"
+
             - id: setup
               env:
                   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PLAN_BASE_REF: ${{ needs.check-changelog.outputs.plan-base-ref || format('origin/{0}', github.base_ref) }}
                   PRIORITY_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
@@ -245,7 +275,7 @@ jobs:
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                       python -m infx.matrix.plan
                       --changelog-file "${GITHUB_WORKSPACE}/inferencex-e2e/perf-changelog.yaml"
-                      --base-ref "origin/${GITHUB_BASE_REF}"
+                      --base-ref "${PLAN_BASE_REF}"
                       --head-ref "${PR_HEAD_SHA}"
                   )
                   if [ "$ALL_EVALS" = "true" ]; then

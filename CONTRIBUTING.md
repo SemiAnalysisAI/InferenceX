@@ -214,6 +214,29 @@ control-flow isolation.
   append-only: true
 ```
 
+### Stacking append-only points on an unmerged parent PR
+
+To sweep append-only points on a curve that an open parent PR introduces, before the
+parent merges, branch the child PR from the parent and target `main`. The child's diff
+against `main` then carries the parent's regular entry too, which an append-only sweep
+would reject. `run-sweep.yml` instead plans the child against the parent's head SHA
+(`infx.workflows.stack_base`) when all of the following hold:
+
+- every appended entry linking another PR names the same open, same-repository parent
+  PR that targets the same base branch, and the parent's entry uses its canonical
+  `https://github.com/SemiAnalysisAI/InferenceX/pull/<number>` link, not `XXX`;
+- every other appended entry is the child's own and has `append-only: true`;
+- the parent is up to date with `main` (merge `main` into the parent, then the parent
+  into the child), and the child contains the parent's current head.
+
+When the parent's entries are themselves all append-only, the child plans against
+`main` as before, since that sweep is already valid. The sweep then runs only the
+child's new points. Merge the parent first with its own
+`/use <run_id>`, then merge the child with `/use <child_run_id>`: Merge Ingest plans the
+child's merge commit against `main`, which now contains the parent, so the child ingests
+as append-only and InferenceX-app extends the parent's curve. If the parent changes, merge
+it into the child again; the sweep rejects a child that no longer contains the parent head.
+
 ## AMD cluster: never leave root-owned files in runner workspaces
 
 Multi-node benchmarks on the AMD MI355X TW cluster submit Slurm jobs whose containers often run as **root**. If those containers write files (typically `benchmark_logs/logs/slurm_job-*`) into the GitHub Actions runner workspace and the job is **cancelled** before teardown runs, the root-owned directories are stranded. The runner user cannot delete them, so `actions/checkout` fails with:
