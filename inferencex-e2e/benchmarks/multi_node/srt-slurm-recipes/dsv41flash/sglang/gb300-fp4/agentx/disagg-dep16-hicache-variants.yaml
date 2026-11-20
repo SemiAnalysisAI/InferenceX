@@ -99,7 +99,6 @@ base:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
         tensor-parallel-size: 2
-        tokenizer-backend: fastokens
         attn-dp-size: 2
         expert-parallel-size: 2
         enable-dp-lm-head: true
@@ -161,7 +160,6 @@ base:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
         tensor-parallel-size: 16
-        tokenizer-backend: fastokens
         load-balance-method: total_tokens
         attn-dp-size: 16
         expert-parallel-size: 16

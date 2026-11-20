@@ -131,7 +131,6 @@ override_tp4_c1:
         prefill-decode-interval: 16
         schedule-policy: lpm
         swa-prefix-tails: 128
-        tokenizer-backend: fastokens
         enable-metrics-for-all-schedulers: true
       env:
         SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
@@ -164,7 +163,6 @@ override_tp4_mk8:
         prefill-decode-interval: 192
         schedule-policy: lpm
         swa-prefix-tails: 128
-        tokenizer-backend: fastokens
         enable-metrics-for-all-schedulers: true
       env:
         SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
@@ -197,7 +195,6 @@ override_tp4_cap2:
         prefill-decode-interval: 96
         schedule-policy: lpm
         swa-prefix-tails: 4096
-        tokenizer-backend: fastokens
         enable-metrics-for-all-schedulers: true
       env:
         SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
@@ -230,7 +227,6 @@ override_tp4_cap6:
         prefill-decode-interval: 96
         schedule-policy: lpm
         swa-prefix-tails: 4096
-        tokenizer-backend: fastokens
         enable-metrics-for-all-schedulers: true
       env:
         SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
