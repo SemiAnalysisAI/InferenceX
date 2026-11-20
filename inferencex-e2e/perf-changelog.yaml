@@ -13115,7 +13115,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Serve every point with --tokenizer-backend fastokens."
+    - "Serve every point with --tokenizer-backend fastokens and --image-processor-backend pil."
     - "TP2 c16 caps --max-running-requests at 2 instead of 4."
     - "Add TP2 c24 with the c16 settings and --max-running-requests 4."
     - "Add DP2 c80, c96 and c128 behind sglang-router, with the DP2 c64 settings and --max-running-requests equal to the concurrency."

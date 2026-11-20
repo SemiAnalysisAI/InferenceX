@@ -33,6 +33,9 @@ base:
         tool-call-parser: auto
         # Needs an image that ships fastokens (sglang#47923).
         tokenizer-backend: fastokens
+        # AgentX sends text only. With auto, one DP rank can stall at startup on the
+        # shared-cache lock that guards the V4.1 Rust image processor build.
+        image-processor-backend: pil
         # Draft passes under long-context load outlast the 1800 s default watchdog.
         watchdog-timeout: 3600
         enable-metrics: true
