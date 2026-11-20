@@ -13229,5 +13229,5 @@
   description:
     - "Add TP4 concurrency 4, 16, 24, 32 and 48 to the MI355X vLLM curve, on the same image as the existing points. TP4 caps the running requests at 1, 2, 4, 6 and 8 for concurrency 4, 16, 24, 32 and 48 (32768-token prefill chunks at 4, 8192 elsewhere), so every decode step fits the 48-row mono decode launch; sessions past the cap queue."
     - "The existing points (TP4 concurrency 1-2, TP2 concurrency 1-64, TP8 concurrency 1, DP2 concurrency 128-384) keep their recipes and do not rerun."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5158
   append-only: true
