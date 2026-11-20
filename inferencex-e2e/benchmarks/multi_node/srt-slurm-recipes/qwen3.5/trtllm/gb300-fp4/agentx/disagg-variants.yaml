@@ -290,6 +290,9 @@ base:
     args:
       router-mode: kv
       router-session-affinity-ttl-secs: '14400'
+      # The frontend builds its router plugins from its own policy at startup; a decode worker set
+      # that advertises this classifier fails to register unless the frontend has built it too.
+      router-policy-config: /configs/dynamo-router-policy-output-length.yaml
     placement:
       node: first_decode
   benchmark:
@@ -481,6 +484,9 @@ override_1p4d_tep2_tep8_c96:
 
 override_2p1d_tep2_tep8_c192:
   name: disagg-gb300-2p1d-tep2-tep8-c192-b64-mnt896-mtp6
+  frontend:
+    args:
+      router-policy-config:
   roles:
     prefill:
       workers: 2
@@ -571,6 +577,9 @@ override_2p3d_tep2_tep8_c384:
 
 override_3p2d_tep2_tep8_c456:
   name: disagg-gb300-3p2d-tep2-tep8-c456-b64-mnt896-mtp6
+  frontend:
+    args:
+      router-policy-config:
   roles:
     prefill:
       nodes: 2
@@ -596,6 +605,9 @@ override_3p2d_tep2_tep8_c456:
 
 override_3p2d_tep2_tep8_c512:
   name: disagg-gb300-3p2d-tep2-tep8-c512-b32-mnt896-mtp6
+  frontend:
+    args:
+      router-policy-config:
   roles:
     prefill:
       nodes: 2
@@ -648,6 +660,9 @@ override_3p2d_tep2_tep8_c512:
 
 override_4p1d_tep2_dep8_c840:
   name: disagg-gb300-4p1d-tep2-dep8-c840-b48-mnt336-mtp6
+  frontend:
+    args:
+      router-policy-config:
   roles:
     prefill:
       nodes: 2
