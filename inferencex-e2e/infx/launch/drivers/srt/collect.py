@@ -12,7 +12,7 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -147,8 +147,11 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     return power_rc
 
 
-def stage_video_identity(run: SrtRun, bound: Path) -> None:
-    """Retain the selected workload before startup, using the binder's declared identity."""
+def stage_video_identity(run: SrtRun, bound: Path) -> dict[str, Any]:
+    """Retain the selected workload before startup, using the binder's declared identity.
+
+    Returns the workload plan it retained.
+    """
     environment = yaml.safe_load(bound.read_text())["benchmark"]["env"]
     selected = load_spec(
         run.request.env["VIDEO_SPEC"], root=run.workspace, set_id=environment["VIDEO_SET"]
@@ -165,6 +168,7 @@ def stage_video_identity(run: SrtRun, bound: Path) -> None:
         },
     }
     write_json(run.workspace / "video-identity.json", identity)
+    return plan
 
 
 def write_video_job_status(logs: Path, job_id: str, status: JobStatus) -> None:

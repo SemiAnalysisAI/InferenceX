@@ -45,7 +45,7 @@ from infx.launch.request import (
     SingleNodeRequest,
     VideoRequest,
 )
-from infx.srt_slurm.video import PACKAGE_MOUNT, load_spec, video_package
+from infx.srt_slurm.video import PACKAGE_MOUNT, video_package
 from infx.srt_slurm.workload import BOUND_RECIPE, selects_dedicated_discovery
 
 if TYPE_CHECKING:
@@ -136,10 +136,9 @@ def run_video(launch: Launch) -> int:
             return rc
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
         event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
-        collect.stage_video_identity(run, Path(bound))
-        spec = load_spec(request.video_spec, root=run.workspace, set_id=request.video_set)
+        plan = collect.stage_video_identity(run, Path(bound))
         models.download_video_model(
-            run.cluster, run.env, hf_cache, request.model, spec["plan"]["model_revision"]
+            run.cluster, run.env, hf_cache, request.model, plan["model_revision"]
         )
         fetched = root / "fetched-outputs"
         submitted = submit.Submitted(manifest=run.workspace / submit.VIDEO_SUBMISSION)
