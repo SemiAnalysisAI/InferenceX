@@ -237,6 +237,16 @@ child's merge commit against `main`, which now contains the parent, so the child
 as append-only and InferenceX-app extends the parent's curve. If the parent changes, merge
 it into the child again; the sweep rejects a child that no longer contains the parent head.
 
+After merging, wait for the parent's Merge Ingest to succeed before merging a child.
+The app orders reused runs by merge time, and nothing blocks merging a child first; doing
+so mixes the parent's regular entry into the child's push and nothing ingests. The
+parent is squash-merged, so a child (and each sibling after another merges) conflicts
+on recipe and master-config files that `merge_with_reuse` does not resolve. Rebuild
+the child as current `main` plus only its own additions, and confirm with
+`python -m infx.matrix.plan --base-ref origin/main --head-ref HEAD` that only its
+append-only points are planned. Changelog entries have no concurrency filter, so
+append-only is the only way to sweep a subset of a curve's points.
+
 ## AMD cluster: never leave root-owned files in runner workspaces
 
 Multi-node benchmarks on the AMD MI355X TW cluster submit Slurm jobs whose containers often run as **root**. If those containers write files (typically `benchmark_logs/logs/slurm_job-*`) into the GitHub Actions runner workspace and the job is **cancelled** before teardown runs, the root-owned directories are stranded. The runner user cannot delete them, so `actions/checkout` fails with:
