@@ -12655,3 +12655,9 @@
   description:
     - Evaluate 1152-token prefix matching on both roles with extra prefill checkpoint retention disabled. Preserve the released DSpark K3 golden curve, image, SimpleCPU WRITE c128 configuration, standard warmup and 3600-second profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Use native discovery and direct backend readiness for MoRIIO; omit the optional model-list probe that Router 0.1.17 serves from its empty static worker registry. Keep the image, engine settings and full benchmark unchanged.
+  pr-link: XXX
