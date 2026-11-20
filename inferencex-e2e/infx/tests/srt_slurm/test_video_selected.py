@@ -9,6 +9,7 @@ import yaml
 
 from infx.config import repository_root
 from infx.srt_slurm import video
+from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, VIDEO_BLOCK
 
 ROOT = repository_root()
 ENV = {
@@ -186,3 +187,47 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     assert "VIDEO_RECIPE_ENV_KEYS" not in launch["environment"]
     assert child["gpu_uuids"].split(",") == launch["gpu_uuids"] == spec["gpu_uuids"]
     assert launch["model_revision"] == spec["baseline"]["model_revision"]
+
+
+def test_fragment_service_merges_over_the_shared_service_of_its_name(tmp_path):
+    shared = {
+        "name": "video-server", "type": "generic", "nodes": 1,
+        "env": {"VIDEO_SERVER_PORT": "30283", "HF_HUB_OFFLINE": "1"},
+        "readiness": {"http": {"port": 30283, "path": "/health"}, "interval_seconds": 5},
+    }
+    blocks = {VIDEO_BLOCK: {"services": [shared]}, NATIVE_TELEMETRY_BLOCK: {}}
+    for block, content in blocks.items():
+        (tmp_path / block).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / block).write_text(yaml.safe_dump(content))
+    fragment = tmp_path / "agg-tp1.yaml"
+
+    def services(*declared):
+        fragment.write_text(yaml.safe_dump({"schema": 2, "services": list(declared)}))
+        return video.compose_video_recipe(fragment, root=tmp_path)["services"]
+
+    lean = {
+        "name": "video-server", "args": ["--tp-size", "1"],
+        "env": {"VIDEO_RUNTIME_REVISION": "b" * 40}, "readiness": {"timeout_seconds": 60},
+    }
+    complete = {
+        "name": "video-server", "type": "generic", "nodes": 1, "args": ["--tp-size", "1"],
+        "env": {
+            "VIDEO_SERVER_PORT": "30283", "HF_HUB_OFFLINE": "1",
+            "VIDEO_RUNTIME_REVISION": "b" * 40,
+        },
+        "readiness": {
+            "http": {"port": 30283, "path": "/health"}, "interval_seconds": 5,
+            "timeout_seconds": 60,
+        },
+    }
+    assert services(lean) == services(complete) == [complete]
+
+    sidecar = {"name": "sidecar", "command": ["true"]}
+    online = {**lean, "nodes": 2, "env": {"HF_HUB_OFFLINE": "0"}}
+    assert services(online, sidecar) == [
+        {
+            **complete, "nodes": 2,
+            "env": {"VIDEO_SERVER_PORT": "30283", "HF_HUB_OFFLINE": "0"},
+        },
+        sidecar,
+    ]
