@@ -35,7 +35,7 @@ base:
         # Explicitly disable the prohibited draft precision conversion path.
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
         # Samples verify tokens on the top-k support before temperature and top-p; same distribution.
-        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_OPT_SPEC_COMPACT_VERIFY_SAMPLING: '1'
       args:
         served-model-name: nvidia/Qwen3.8-Flash-Next-NVFP4
         revision: fc694b54fb0174e0913e6adf86691ef85a4ead47
@@ -152,11 +152,11 @@ override_c2:
       env:
         # Graphs the speculative post-verify step (sampling, acceptance, Mamba commit); the rest are its fast paths.
         SGLANG_ENABLE_EAGLE_POST_VERIFY_CUDA_GRAPH: '1'
-        SGLANG_Q35MF_MKH_N3B: '1'
-        SGLANG_Q35MF_MKH_N3C: '1'
-        SGLANG_Q35MF_BK_VEC_COPY: '1'
-        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
-        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_OPT_SPEC_VERIFY_REUSE_STAGED_INPUTS: '1'
+        SGLANG_OPT_SPEC_POST_VERIFY_ONE_LAUNCH_LOAD: '1'
+        SGLANG_OPT_SMALL_FIELD_COPY_VECTORIZED: '1'
+        SGLANG_OPT_SCHEDULER_SHM_SYNC: '1'
+        SGLANG_OPT_SPEC_PACKED_VERIFY_BCAST: '1'
         SGLANG_OPT_CUDA_GRAPH_FILL_FAST_PATH: '1'
       args: *gpu_only_args
   benchmark:
@@ -216,8 +216,15 @@ override_c48:
 override_c80:
   roles:
     agg:
+      env:
+        # Fused single-cluster routing at small batches, warp-per-token scores at large ones.
+        FLASHINFER_ROUTING_FORCE_BLOCK_PER_TOKEN: '0'
       args:
         <<: *hicache_fp8_kv_args
+        # Device KV and Mamba pools still fit the CUDA graphs and the draft at this size.
+        mem-fraction-static: 0.90
+        # Admit up to six queued prefills into one chunk.
+        prefill-max-requests: 6
         max-mamba-cache-size: 640
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
@@ -225,8 +232,11 @@ override_c80:
         cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128]
         # Cache only the prompt on finish; the AgentX replay never re-sends model output.
         strip-thinking-cache: true
-        # At most two Mamba states per conversation path; stale interior states skip host write-back.
-        mamba-max-states-per-path: 2
+        # Checkpoint Mamba state at every prefill chunk with no per-path cap, so a resumed turn restores
+        # its own prefix instead of falling back to the last branch point (replaces mamba-max-states-per-path).
+        hybrid-cache-checkpoints-level: 3
+        # FP8 QSA indexer keys, as the GB300 recipe uses.
+        qsa-indexer-dtype: fp8_e4m3
   benchmark:
     env:
       CONC: '80'

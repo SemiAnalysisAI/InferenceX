@@ -3989,7 +3989,7 @@ qwen3.5-fp4-b300-dynamo-sglang-agentic-pareto:
           dp-attn: false
 
 qwen3.8next-fp4-b300-sglang-agentic-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261028-586355a8@sha256:b4f09a2ccbcfcc262d49600c3cd7f8581a793ea7d104947257b6a95500953b90
+  image: lmsysorg/sglang:nightly-dev-cu13-20261119-6b374a55@sha256:cda9ed841f850ee6eb1892b50264af9c76de3add8dd476c2ebc0dbf4c0b3f62c
   model: nvidia/Qwen3.8-Flash-Next-NVFP4
   model-prefix: qwen3.8next
   runner: cluster:b300-dsxe
