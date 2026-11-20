@@ -38,6 +38,7 @@ DCP_FLAGS = {
     "sglang": ("dcp-size", "decode-context-parallel-size"),
     "vllm": ("decode-context-parallel-size",),
     "atom": ("decode-context-parallel-size",),
+    "tokenspeed": ("decode-context-parallel-size",),
 }
 
 
