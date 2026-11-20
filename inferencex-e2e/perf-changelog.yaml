@@ -13223,6 +13223,28 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5144
 
 - config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update SGLang image from v0.5.23-rocm10-mi35x-20261031 to v0.5.23-rocm10-mi35x-20261110."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5000
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM ROCm nightly image from edad8b03 to f5d93296, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5014
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang image from v0.5.22-rocm10-mi30x to v0.5.23-rocm10-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5074
+
+- config-keys:
     - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
