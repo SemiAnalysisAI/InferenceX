@@ -13211,3 +13211,11 @@
     - "Append TP4 at concurrency 24 with the latency_specialized decode to the existing curve: 48 running requests, prefill every 128 decode steps, decode-replay graphs to 4096 tokens."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5146
   append-only: true
+
+- config-keys:
+    - qwen3.5-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from sglang-rocm v0.5.23-rocm10-mi30x-20261109 to v0.5.23-rocm10-mi30x-20261119."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5159
