@@ -13221,3 +13221,15 @@
     - "Pin the runner image by digest, tokenspeed-smg 1.16.0.post20261118, the checkpoint and DSpark draft revisions, and the November 19 TokenSpeed 0.1.1.post20261119, kernel 0.1.5.post20261119, kernel-amd 0.1.4.post20261119 and engine 0.1.1.post20261119 wheels by release URL and SHA256, and tokenspeed-scheduler 0.1.58 from PyPI. tokenspeed-nightly-rocm.sh keeps the image's ROCm torch. Bind TokenSpeed's decode-context-parallel-size to the matrix dcp-size."
     - "Select golden DSpark acceptance (probabilistic draft, block verification) and the greedy sampler for TokenSpeed DSPARK throughput, removing speculative sampling and block verification; evals verify for real with the triton sampler, speculative sampling and block verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5144
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP2 c64, TP2 DPA c128, TP2 DPA EP2 c128 and TP4 DPA EP4 c128 and c256; drop TP2 DPA c32."
+    - "Cap running requests at TP2 c8 (2), TP2 c64 (32) and TP4 c4, c8 and c16 (1, 2 and 4); TP2 c8 and c64 use prefill-decode-interval 48 and 32, TP2 c64 the AMD monokernel."
+    - "TP2 c32 uses prefill-decode-interval 32 instead of 8."
+    - "DP attention points from c128 use shortest-prefill-first, the shared Engram host table and, with EP, SGLANG_DP_SHARED_EXPERT_LOCAL=1; TP4 DPA EP4 c256 adds a 65536-token prefill chunk, a 0.85 prefill-delayer low watermark and 12288 SWA prefix tails."
+    - "Every point uses --tokenizer-backend fastokens and --image-processor-backend pil."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5034
