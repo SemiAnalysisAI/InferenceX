@@ -5,8 +5,8 @@ base:
   identity:
     model: {}
     frameworks:
-      dynamo: "1.8.0.dev20261117"
-      sglang: "0.0.0.dev1+gecd3d75a2"
+      dynamo: "1.8.0.dev20261119"
+      sglang: "0.0.0.dev1+g03fde9cc3"
   dynamo:
     install: false
     request_plane: tcp
@@ -115,6 +115,7 @@ override_tp4_c1:
     agg:
       gpus: 4
       args:
+        engram-config: '{"placement":"cpu"}'
         tensor-parallel-size: 4
         expert-parallel-size: 1
         mem-fraction-static: 0.91
@@ -134,8 +135,6 @@ override_tp4_c1:
         enable-metrics-for-all-schedulers: true
       env:
         SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
-        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: hop_a,moe,gate,attn,embed,two_shot,markov,draft_lm_head,aux_mean_stats,gate_wide,shared_ll,hop_a_batch2,engram,attn_qkv_a,attn_qkv_a_bf16,index_q_mxfp8_in,attn_indexer,hc_prenorm,hop_b,hop_b_wide,early_trigger,hop_b_start_trigger,draft,draft_moe,draft_gate,draft_tail,draft_post,draft_seam,draft_attn,draft_qfront,draft_wo_a,draft_swapab,draft_qkv_a,draft_prenorm,draft_qkv_a_ll,draft_wo_b_ll,sched_ahead,req_pos_once,kv_before_wait,target_lm_head,hop_b_quad_trigger,lm_head_pinned_tactic
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: "1"
         SGLANG_SIMULATE_ACC_GREEDY: "0"
@@ -149,6 +148,7 @@ override_tp4_mk8:
     agg:
       gpus: 4
       args:
+        engram-config: '{"placement":"cpu"}'
         tensor-parallel-size: 4
         expert-parallel-size: 1
         mem-fraction-static: 0.91
@@ -168,8 +168,6 @@ override_tp4_mk8:
         enable-metrics-for-all-schedulers: true
       env:
         SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
-        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: hop_a,moe,gate,attn,embed,two_shot,markov,draft_lm_head,aux_mean_stats,gate_wide,shared_ll,hop_a_batch2,engram,attn_qkv_a,attn_qkv_a_bf16,index_q_mxfp8_in,attn_indexer,hc_prenorm,hop_b,hop_b_wide,early_trigger,hop_b_start_trigger,draft,draft_moe,draft_gate,draft_tail,draft_post,draft_seam,draft_attn,draft_qfront,draft_wo_a,draft_swapab,draft_qkv_a,draft_prenorm,draft_qkv_a_ll,draft_wo_b_ll,sched_ahead,req_pos_once,kv_before_wait,target_lm_head,hop_b_quad_trigger,lm_head_pinned_tactic
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: "1"
         SGLANG_SIMULATE_ACC_GREEDY: "0"
@@ -183,6 +181,7 @@ override_tp4_cap2:
     agg:
       gpus: 4
       args:
+        engram-config: '{"placement":"cpu"}'
         tensor-parallel-size: 4
         expert-parallel-size: 1
         mem-fraction-static: 0.91
@@ -202,8 +201,6 @@ override_tp4_cap2:
         enable-metrics-for-all-schedulers: true
       env:
         SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
-        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: hop_a,moe,gate,attn,embed,two_shot,markov,draft_lm_head,aux_mean_stats,gate_wide,shared_ll,hop_a_batch2,engram,attn_qkv_a,attn_qkv_a_bf16,index_q_mxfp8_in,attn_indexer,hc_prenorm,hop_b,hop_b_wide,early_trigger,hop_b_start_trigger,draft,draft_moe,draft_gate,draft_tail,draft_post,draft_seam,draft_attn,draft_qfront,draft_wo_a,draft_swapab,draft_qkv_a,draft_prenorm,draft_qkv_a_ll,draft_wo_b_ll,sched_ahead,req_pos_once,kv_before_wait,target_lm_head,hop_b_quad_trigger,lm_head_pinned_tactic
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: "1"
         SGLANG_SIMULATE_ACC_GREEDY: "0"
@@ -217,6 +214,7 @@ override_tp4_cap6:
     agg:
       gpus: 4
       args:
+        engram-config: '{"placement":"cpu"}'
         tensor-parallel-size: 4
         expert-parallel-size: 1
         mem-fraction-static: 0.91
@@ -236,8 +234,6 @@ override_tp4_cap6:
         enable-metrics-for-all-schedulers: true
       env:
         SGLANG_SPEC_TP_SYNC: rng,-dspark-accept-sample
-        SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
-        SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT: per_rank
         SGLANG_NVIDIA_MEGAKERNEL_SLOTS: hop_a,moe,gate,attn,embed,two_shot,markov,draft_lm_head,aux_mean_stats,gate_wide,shared_ll,hop_a_batch2,engram,attn_qkv_a,attn_qkv_a_bf16,index_q_mxfp8_in,attn_indexer,hc_prenorm,hop_b,hop_b_wide,early_trigger,hop_b_start_trigger,draft,draft_moe,draft_gate,draft_tail,draft_post,draft_seam,draft_attn,draft_qfront,draft_wo_a,draft_swapab,draft_qkv_a,draft_prenorm,draft_qkv_a_ll,draft_wo_b_ll,sched_ahead,req_pos_once,kv_before_wait,target_lm_head,hop_b_quad_trigger,lm_head_pinned_tactic
         SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: "1"
         SGLANG_SIMULATE_ACC_GREEDY: "0"

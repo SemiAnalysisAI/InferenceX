@@ -5,8 +5,8 @@ base:
   identity:
     model: {}
     frameworks:
-      dynamo: "1.8.0.dev20261117"
-      sglang: "0.0.0.dev1+gecd3d75a2"
+      dynamo: "1.8.0.dev20261119"
+      sglang: "0.0.0.dev1+g03fde9cc3"
   dynamo:
     install: false
     request_plane: tcp
@@ -100,9 +100,8 @@ base:
         trust-remote-code: true
         tensor-parallel-size: 2
         tokenizer-backend: fastokens
-        data-parallel-size: 2
+        attn-dp-size: 2
         expert-parallel-size: 2
-        enable-dp-attention: true
         enable-dp-lm-head: true
         enable-dp-attention-local-control-broadcast: true
         moe-a2a-backend: megamoe
@@ -139,7 +138,6 @@ base:
       gpus: 16
       env:
         PYTHONUNBUFFERED: "1"
-        SGLANG_OPT_DSV41_ENGRAM_PEER_SHARDS: "1"
         SGLANG_DSV4_KV_LAYOUT: v41_new
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
@@ -165,9 +163,8 @@ base:
         tensor-parallel-size: 16
         tokenizer-backend: fastokens
         load-balance-method: total_tokens
-        data-parallel-size: 16
+        attn-dp-size: 16
         expert-parallel-size: 16
-        enable-dp-attention: true
         enable-dp-lm-head: true
         enable-dp-attention-local-control-broadcast: true
         enable-fp32-lm-head: true
@@ -195,6 +192,7 @@ base:
         weight-loader-drop-cache-after-load: false
         model-loader-extra-config: '{"enable_multithread_load":true}'
         skip-tokenizer-init: true
+        engram-config: '{"lookup":"peer_read"}'
       kv_events: false
   sbatch_directives:
     mem: "0"
@@ -233,7 +231,7 @@ override_5p1d_dep2_dep32_b18_c4000:
         SGLANG_OPT_DSV41_BLOCKWISE_REJECTION: "1"
       args:
         tensor-parallel-size: 32
-        data-parallel-size: 32
+        attn-dp-size: 32
         expert-parallel-size: 32
         ep-num-redundant-experts: 32
         load-balance-method: total_requests
@@ -258,7 +256,7 @@ override_12p1d_dep2_dep32_b72_c10288:
         SGLANG_OPT_DSV41_BLOCKWISE_REJECTION: "1"
       args:
         tensor-parallel-size: 32
-        data-parallel-size: 32
+        attn-dp-size: 32
         expert-parallel-size: 32
         ep-num-redundant-experts: 32
         load-balance-method: total_requests
