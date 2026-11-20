@@ -13221,3 +13221,12 @@
     - "Pin the runner image by digest, tokenspeed-smg 1.16.0.post20261118, the checkpoint and DSpark draft revisions, and the November 19 TokenSpeed 0.1.1.post20261119, kernel 0.1.5.post20261119, kernel-amd 0.1.4.post20261119 and engine 0.1.1.post20261119 wheels by release URL and SHA256, and tokenspeed-scheduler 0.1.58 from PyPI. tokenspeed-nightly-rocm.sh keeps the image's ROCm torch. Bind TokenSpeed's decode-context-parallel-size to the matrix dcp-size."
     - "Select golden DSpark acceptance (probabilistic draft, block verification) and the greedy sampler for TokenSpeed DSPARK throughput, removing speculative sampling and block verification; evals verify for real with the triton sampler, speculative sampling and block verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5144
+
+- config-keys:
+    - glm5.3-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.3-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Add the GLM-5.3 NVFP4 GB300 Dynamo-SGLang AgentX aggregated recipe (TP4 and TP8 at conc 1) and disaggregated recipe (six PP4-prefill points at conc 30 to 264), ported from GLM-5.2 GB300 with NEXTN K=3 MTP and weights loaded from /data/models at the pinned revision."
+    - "Every point sets power: true, so GB300 multi-node default power collection measures DCGM GPU power with AgentX accounting and does not treat it as best effort."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4706
+  scenario-type: [agentic-coding]
