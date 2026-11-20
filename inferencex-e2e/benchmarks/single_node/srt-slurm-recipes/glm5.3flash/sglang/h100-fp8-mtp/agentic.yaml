@@ -69,7 +69,9 @@ override_hicache:
     agg:
       args:
         enable-hierarchical-cache: true
-        hicache-size: 32
+        hicache-size: 64
+        # At concurrency 4-10 the KV pool fills first while most Mamba state slots sit idle.
+        mamba-full-memory-ratio: 0.5
   benchmark:
     env:
       KV_OFFLOADING: dram
