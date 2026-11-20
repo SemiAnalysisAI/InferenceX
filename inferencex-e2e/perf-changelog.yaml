@@ -13227,9 +13227,10 @@
   scenario-type:
     - agentic-coding
   description:
-    - "No image change: rocm/atom-dev:nightly_202611131030, as added by #5092."
+    - "No image change: rocm/atom-dev:nightly_202611131030 (ATOM 0.1.10.dev122+g9fec99786, AITER 43840aee7), as added by #5092."
     - "No point changes: the seventeen points from #5092 (TP4 at CONC 1, 4, 8, 16, 24, 32, 40, 48, 56, 64 and 80; TP2 at CONC 12, 16, 20, 24, 32 and 40), all re-measured with INT4 quick all-reduce."
-    - "Set AITER_QUICK_REDUCE_QUANTIZATION=INT4 at every point, so tensor-parallel all-reduce runs AITER quick all-reduce with INT4 quantization instead of BF16 (#5092 left it unset, which AITER reads as NONE). All other server settings are unchanged."
+    - "Set AITER_QUICK_REDUCE_QUANTIZATION=INT4 at every point (#5092 left it unset, which AITER reads as NONE; ATOM forces INT4 only for llama). Tensor-parallel all-reduces of at least 2 MB at TP4 or 1 MB at TP2 (about 256 or 128 tokens of the 4096-wide hidden state: prefill chunks and large MTP verify batches) now run AITER quick all-reduce with INT4 quantization; smaller ones stay on the full-precision custom all-reduce. All other server settings are unchanged."
     - "INT4 quick all-reduce matches qwen3.5-fp8-mi355x-atom-agentic-mtp; qwen3.5 is in the MODELS.md all-reduce policy baseline matrix, so the integer all-reduce restriction for new models does not apply."
+    - "No upstream framework change: same image and ATOM/AITER commits as #5092."
     - "The MTP draft runs as shipped, unchanged from #5092: its attention, experts, shared expert and fc stay BF16 and its KV cache is FP8 like the target's."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4310
