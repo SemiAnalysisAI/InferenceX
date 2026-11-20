@@ -40,7 +40,7 @@ base:
         SGLANG_FLASHINFER_AUTOTUNE_CACHE: '1'
         SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
       args:
-        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
         enable-cache-report: true
         model-path: /model/
         trust-remote-code: true

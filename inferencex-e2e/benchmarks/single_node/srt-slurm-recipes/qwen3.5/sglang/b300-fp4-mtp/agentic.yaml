@@ -17,7 +17,7 @@ base:
       nodes: 1
       workers: 1
       args:
-        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+        served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
         trust-remote-code: true
         data-parallel-size: 1
         enable-symm-mem: true
@@ -32,7 +32,7 @@ base:
         mem-fraction-static: 0.8
         stream-interval: 50
         scheduler-recv-interval: 10
-        tokenizer-path: nvidia/Qwen3.5-397B-A17B-NVFP4
+        tokenizer-path: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
         reasoning-parser: qwen3
         tool-call-parser: qwen3_coder
         speculative-algorithm: NEXTN
@@ -56,9 +56,10 @@ base:
 # One variant per point. Admission is 2x CONC and the graph batch is CONC,
 # capped at 64. TP4 tokenizes with six workers to keep 256k warmups inside the
 # client timeout; TP2 keeps SGLang's single tokenizer, which avoids a startup
-# race with HiCache shared-memory initialization. HiCache sizes the target KV
-# and Mamba host pools independently, and the NEXTN draft adds 1/15 of the
-# target: (599 GB - 1 GB/rank) * 15 / TP2 / 31 = 144 GB per pool.
+# race with HiCache shared-memory initialization. On SGLang v0.5.19,
+# hicache-size is the per-rank total of the KV host pool (NEXTN draft layers
+# packed in) and the Mamba host pool. Each rank keeps a 1 GB reserve, so it is
+# (TOTAL_CPU_DRAM_GB - TP) / TP = (599 - 2) / 2 = 298 GB.
 override_tp4_c1:
   roles:
     agg:
@@ -436,7 +437,7 @@ override_tp2_c36_hicache:
         cuda-graph-max-bs: 36
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 144
+        hicache-size: 298
         hicache-io-backend: 'kernel'
         hicache-mem-layout: 'page_first'
         hicache-write-policy: 'write_through_selective'
@@ -457,7 +458,7 @@ override_tp2_c44_hicache:
         cuda-graph-max-bs: 44
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 144
+        hicache-size: 298
         hicache-io-backend: 'kernel'
         hicache-mem-layout: 'page_first'
         hicache-write-policy: 'write_through_selective'
@@ -478,7 +479,7 @@ override_tp2_c52_hicache:
         cuda-graph-max-bs: 52
         page-size: 64
         enable-hierarchical-cache: true
-        hicache-size: 144
+        hicache-size: 298
         hicache-io-backend: 'kernel'
         hicache-mem-layout: 'page_first'
         hicache-write-policy: 'write_through_selective'
