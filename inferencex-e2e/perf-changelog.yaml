@@ -13204,5 +13204,5 @@
     - agentic-coding
   description:
     - "Append TP4/EP4 at concurrency 58 to the existing curve on the same lmsysorg/sglang-rocm:muse-spark-open-mi355-1106 image: the concurrency 40 recipe plus SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1 (frees SWA slots that left the window, so the SWA pool does not saturate above concurrency 40) and HSA_ENABLE_SCRATCH_ASYNC_RECLAIM=0."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5155
   append-only: true
