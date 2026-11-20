@@ -214,6 +214,45 @@ control-flow isolation.
   append-only: true
 ```
 
+### Stacking append-only points on an unmerged parent PR
+
+To sweep append-only points on a curve that an open parent PR introduces, before the
+parent merges, branch the child PR from the parent and target `main`. The child's diff
+against `main` then carries the parent's regular entry too, which an append-only sweep
+would reject. `run-sweep.yml` instead plans the child against the parent's head SHA
+(`infx.workflows.stack_base`) when all of the following hold:
+
+- every appended entry linking another PR names the same open, same-repository parent
+  PR that targets the same base branch, and the parent's entry uses its canonical
+  `https://github.com/SemiAnalysisAI/InferenceX/pull/<number>` link, not `XXX`;
+- every other appended entry is the child's own and has `append-only: true`;
+- the parent is up to date with `main` (merge `main` into the parent, then the parent
+  into the child), and the child contains the parent's current head.
+
+When the parent's entries are themselves all append-only, the child plans against
+`main` as before, since that sweep is already valid. The sweep then runs only the
+child's new points. Merge the parent first with its own
+`/use <run_id>`, then merge the child with `/use <child_run_id>`: Merge Ingest plans the
+child's merge commit against `main`, which now contains the parent, so the child ingests
+as append-only and InferenceX-app extends the parent's curve. If the parent changes, merge
+it into the child again; the sweep rejects a child that no longer contains the parent head.
+
+After merging, wait for the parent's Merge Ingest to succeed before merging a child.
+The app orders reused runs by merge time, and nothing blocks merging a child first; doing
+so mixes the parent's regular entry into the child's push and nothing ingests. The
+parent is squash-merged, so a child (and each sibling after another merges) conflicts
+on recipe and master-config files that `merge_with_reuse` does not resolve. Rebuild
+the child as current `main` plus only its own additions, and confirm with
+`python -m infx.matrix.plan --base-ref origin/main --head-ref HEAD` that only its
+append-only points are planned. Changelog entries have no concurrency filter, so
+append-only is the only way to sweep a subset of a curve's points.
+
+## Deprecating benchmark configs
+
+- Delete retired entries (or, for partial retirement, only the retired scenarios) from the master config; never archive. Delete recipes, setup scripts, and assets no active config uses, rather than moving them to `deprecated/`.
+- In the same PR, reconcile retirement statements in [`MODELS.md`](inferencex-e2e/docs/MODELS.md) with active configs and routing, preserving documented exceptions and planned (not completed) retirements.
+- Remove unused retired-model rows from launch workload tables (`infx/launch/policy.py`, `infx/launch/drivers/srt/{lanes,models,power}.py`) and cluster `models.entries`, and fix guidance that recommends retired coverage. Audit callers before removing shared helpers; SPEED-Bench collectors and historical readers may still need them.
+
 ## AMD cluster: never leave root-owned files in runner workspaces
 
 Multi-node benchmarks on the AMD MI355X TW cluster submit Slurm jobs whose containers often run as **root**. If those containers write files (typically `benchmark_logs/logs/slurm_job-*`) into the GitHub Actions runner workspace and the job is **cancelled** before teardown runs, the root-owned directories are stranded. The runner user cannot delete them, so `actions/checkout` fails with:
