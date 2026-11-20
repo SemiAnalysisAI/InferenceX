@@ -13210,4 +13210,4 @@
     - "All-reduce is not quantized: AITER_QUICK_REDUCE_QUANTIZATION is left unset, so tensor-parallel all-reduce runs in BF16. No online quantization and no shared-expert fusion. Throughput runs use the minimax-m3.1-flash__dspark__native__probabilistic-block golden AL (4.04 at seven draft tokens)."
     - "Relevant ATOM changes in the image: ROCm/ATOM#3310 (NVFP4 KV and index caches), #3308 (mono decode with the MXFP8 shared expert), #3576 with ROCm/aiter#8285 (indexer CP over the NVFP4 caches) and #3591 (LMCache offload with an NVFP4 KV and a DSpark draft of its own dtype)."
     - "Draft data types: the DSpark draft runs as shipped, MXFP8 (1x32 UE8M0 scales) attention and MLP linears with BF16 fc, Markov and confidence heads, sharing the target's embedding and LM head. Its KV cache is ATOM's default beside an NVFP4 target, BF16 in a pool of its own; --spec-decode-kv-cache-dtype is not set."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5157
