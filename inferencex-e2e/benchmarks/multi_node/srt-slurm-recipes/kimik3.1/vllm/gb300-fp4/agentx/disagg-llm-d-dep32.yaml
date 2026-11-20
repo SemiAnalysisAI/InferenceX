@@ -29,6 +29,10 @@ base:
   services:
   - name: mooncake-master
     type: mooncake-master
+    # The first container start on a node unpacks the image and has taken over the default 120 s.
+    readiness:
+      port: 8700
+      timeout_seconds: 300
     args:
     - "--default_kv_lease_ttl=60000"
     - "--eviction_high_watermark_ratio=0.95"
