@@ -38,7 +38,8 @@ base:
         max-num-batched-tokens: 32768
         enable_prefix_caching: true
         # The checkpoint's bundled DSpark draft (dspark/, MXFP8 linears), seven
-        # tokens, with ATOM's default draft KV (BF16 beside an NVFP4 target).
+        # tokens, with ATOM's default draft KV (BF16 beside an NVFP4 target)
+        # up to CONC 32.
         # Throughput runs get the golden AL
         # (minimax-m3.1-flash__dspark__native__probabilistic-block, K7) from
         # infx/srt_slurm/synthetic_acceptance.py; evals keep real acceptance.
@@ -149,6 +150,10 @@ override_tp4_c48_lmcache:
       args:
         max-num-seqs: 96
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32,40,48,56,64,80,96]'
+        # FP8 draft KV, as the merged vLLM and SGLang M3.1 recipes run beside
+        # an NVFP4 target: 8% smaller blocks, so the GPU prefix cache holds 9%
+        # more tokens. The draft's weights stay MXFP8 as shipped.
+        spec-decode-kv-cache-dtype: fp8
         extra-kv-connectors:
           - kv_connector: lmcache_offload
             kv_role: offload
