@@ -188,6 +188,13 @@ override_tp4_c16:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
         monokernel: true
+        # A full decode graph for every request count up to CONC. The graphs
+        # derived from max-cudagraph-capture-size 1024 (6 tokens per request
+        # with 5 drafts) skip 5, 9 and 13 requests, so those decode batches
+        # padded to the next graph. vLLM refuses the request-count field beside
+        # max-cudagraph-capture-size.
+        max-cudagraph-capture-size: null
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","decode_cudagraph_capture_request_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,18,20,22,24,28,32,40,48,56,64,80,96,112,128]}'
   benchmark:
     env:
       CONC: '16'

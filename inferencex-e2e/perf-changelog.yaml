@@ -13151,3 +13151,12 @@
     - "Disagg: prefill Engram tables split over the prefill GPUs in HBM, KV offload up to 170 GiB per prefill rank."
     - "Disagg: 5P1D DEP32 at concurrency 3200, 7P1D DEP16 at 6600, 12P1D DEP32 at 10288 (replacing 6P1D, 9P1D and 16P1D)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5015
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:nightly-rocm100-edad8b03c5285a1c12e7e4f83c1af709b319a01b to vllm/vllm-openai-rocm:nightly-rocm100-f5d93296c8ec82b7e7dabdb308d24d43cb1907bf (digest sha256:1b1b0c7c62d8ba3503d4f2e448795ed00e261bc73ad681f6811c3690613c7084), the 2026-11-11 ROCm 10.0 nightly, the first image on this config with vllm-project/vllm#63406's decode_cudagraph_capture_request_sizes."
+    - "TP4 c16 only: capture a full decode CUDA graph for 1-16, 18, 20, 22, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112 and 128 requests through compilation-config decode_cudagraph_capture_request_sizes, and drop max-cudagraph-capture-size, which vLLM refuses beside it. The graphs derived from max-cudagraph-capture-size 1024 skip 5, 9 and 13 requests, so those uniform decode batches padded to the next graph. cudagraph_mode stays FULL_DECODE_ONLY."
+    - "No other point changes: TP8, TP4 and TP2 at concurrency 1, 2, 4, 8, 16 and 32 (18 points), all re-measured on the new image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5152
