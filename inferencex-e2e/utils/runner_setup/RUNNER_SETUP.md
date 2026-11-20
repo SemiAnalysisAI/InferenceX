@@ -368,11 +368,52 @@ HF cache grows with datasets/tokenizers.
 When provisioning a **new cluster**, decide these locations up front and encode them in
 the new `clusters.<id>` record.
 
+## Reboot-safe listeners
+
+Where the login node grants sudo, run each listener as a systemd unit instead of in tmux, as
+`mi355x-amds` does with `inferencex-mi355x-runner-NN.service`. One unit per runner:
+
+```ini
+[Unit]
+Description=InferenceX GitHub Actions runner <BASE_RUNNER_NAME>_<NN>
+RequiresMountsFor=<shared storage mount>
+Wants=network-online.target
+After=network-online.target sackd.service munge.service
+
+[Service]
+User=<runner uid>
+Group=<runner gid>
+WorkingDirectory=<BASE_DIR>/gharunner<NN>/actions-runner
+ExecStart=<BASE_DIR>/gharunner<NN>/actions-runner/bin/runsvc.sh
+Restart=on-failure
+RestartSec=5s
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=5min
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save it under `/etc/systemd/system/`, run `systemctl daemon-reload`, stop that runner's tmux
+pane (two listeners cannot share one registration), then `systemctl enable --now` the unit.
+
+- Use numeric IDs: with an SSSD or LDAP account, a failed name lookup at boot would keep the
+  unit from starting.
+- Ordering after the Slurm auth daemon (`sackd` or `munge`; systemd ignores the one that is
+  not installed) keeps Slurm commands working while systemd stops the listener at shutdown.
+- Before a planned reboot, stop each unit once its runner is idle: a reboot fails every job
+  still running.
+
 ## Gotchas
 
-- **Runners do not survive reboots.** They run via `./run.sh` in tmux, not as a systemd
-  service. After node maintenance, re-run `start_runners.sh` (it kills and recreates
-  the session, which is safe for idle runners).
+- **tmux runners do not survive reboots.** `start_runners.sh` runs `./run.sh` in tmux, so any
+  reboot of the login node, including a provider's patch reboot, leaves the pool offline until
+  someone re-runs it (it kills and recreates the session, which is safe for idle runners).
+  Where the login node grants sudo, use [systemd units](#reboot-safe-listeners) instead. The
+  hourly pool-outage check in
+  [`runner-offline-digest.yml`](../../../.github/workflows/runner-offline-digest.yml) posts to
+  Slack when every runner of a `cluster:` pool is offline, and again when it recovers.
 - **Large fleets vs. tmux panes:** `start_runners.sh` puts every runner in one tiled
   window. With ~15+ runners, panes can get too small and `split-window` may fail with
   `no space for new pane`. Split into ranges across multiple sessions via the optional
