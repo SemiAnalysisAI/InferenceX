@@ -64,6 +64,7 @@ python ubenchX/l2_distance/amd/bench.py                # AMD: CU-to-CU, chain = 
 python ubenchX/l2_distance/amd/bench.py --chain-mb 64  # AMD: chain in the Infinity Cache
 python ubenchX/l2_distance/amd/plot_distance.py ubenchX/l2_distance/amd/results/distance.csv
 python ubenchX/l2_distance/amd/plot_distance.py --iods 4 results/distance.csv   # MI300X: four IODs
+python ubenchX/l2_distance/amd/plot_latency_bars.py                            # latency per level across SKUs
 ```
 
 `l2_distance/nvidia` is the CUDA SM-to-SM benchmark; `l2_distance/amd` is its
@@ -95,4 +96,6 @@ limits the timed hops per CU, and `--warm-hops` sets the untimed traversal that
 fills the cache before timing. The pairwise CSV (`cu_a, cu_b, mean_abs_diff,
 xcd_a, xcd_b`) goes to stdout; `results/cu_info.csv` holds the per-CU XCD, SE,
 CU id and mean latency, and `results/latency_profile.csv` the sorted profile of
-the first CU.
+the first CU. `plot_latency_bars.py` reads every `results/*_cu_info_*.csv`
+and draws the mean hop latency per cache level for each SKU, in shader-clock
+cycles and in nanoseconds.
