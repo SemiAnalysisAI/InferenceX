@@ -88,6 +88,12 @@ def bootstrap(runtime: Runtime) -> int:
         )
     if not (_executable(runtime.agentx) and _executable(runtime.hf)):
         raise BenchError(f"isolated AgentX environment is incomplete at {runtime.venv}")
+    # Ablation: overlay agentx-harness PR #45 (rebased on agentx-v1.0.14) onto the 1.0.14 install.
+    site_packages = runtime.venv / "lib" / f"python{PYTHON_VERSION}" / "site-packages"
+    overlay = Path(__file__).with_name("pr45_overlay")
+    for src in sorted(overlay.rglob("*.py")):
+        shutil.copyfile(src, site_packages / src.relative_to(overlay))
+        print(f"AGENTX_PR45_OVERLAY {src.relative_to(overlay)}", flush=True)
     return 0
 
 
