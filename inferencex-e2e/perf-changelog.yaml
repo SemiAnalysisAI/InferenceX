@@ -12649,3 +12649,9 @@
   description:
     - Evaluate periodic prefill checkpoint retention with the clean SPF and native DMA-BUF image, prefix match unit 128, prefill batch 18432, and unchanged K3 released-draft golden acceptance. Run standard warmup and full 3600-second c128 SimpleCPU WRITE profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Evaluate 1152-token prefix matching on both roles with extra prefill checkpoint retention disabled. Preserve the released DSpark K3 golden curve, image, SimpleCPU WRITE c128 configuration, standard warmup and 3600-second profiling.
+  pr-link: XXX

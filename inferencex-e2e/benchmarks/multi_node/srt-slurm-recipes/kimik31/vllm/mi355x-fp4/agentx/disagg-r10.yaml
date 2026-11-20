@@ -78,7 +78,7 @@ roles:
         "kv_role": "kv_both", "kv_connector_extra_config": {"cpu_bytes_to_use_per_rank": 224875000000, "lazy_offload": false}}]}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
-      prefix-match-unit: 128
+      prefix-match-unit: 1152
       cp-kv-cache-interleave-size: 1
       quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
       mamba-ssm-cache-dtype: float32
@@ -86,7 +86,7 @@ roles:
       block-size: 64
       scheduling-policy: shortest-prefill-first
       enable-prompt-tokens-details: true
-      prefix-cache-retention-interval: 9216
+      prefix-cache-retention-interval: 0
     env:
       PATH: /configs/k31-worker-bin:/opt/runtime-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       HOME: /private-state/k31-clean-home
@@ -188,7 +188,7 @@ roles:
         "kv_connector_extra_config": {"backend": "rdma", "read_mode": false, "use_dmabuf_kv": true}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
-      prefix-match-unit: 128
+      prefix-match-unit: 1152
       cp-kv-cache-interleave-size: 1
       quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
       mamba-ssm-cache-dtype: float32
@@ -287,7 +287,7 @@ environment:
   TOTAL_CPU_DRAM_GB: '1799'
   DECODE_CPU_DRAM_GB: '0'
   KV_P2P_TRANSFER: moriio
-  K31_CLEAN_RUN_ID: k31-retention-1120
+  K31_CLEAN_RUN_ID: k31-unit1152-1120
 telemetry:
   storage_subdir: power
   startup_timeout_seconds: 300
