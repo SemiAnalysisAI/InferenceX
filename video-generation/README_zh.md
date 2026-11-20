@@ -33,8 +33,8 @@ Sol-Engine。范围负责人：`@edwingao28`。
 | 2 | 镜像按 SHA256 digest 固定，引擎按 40 位 commit（`VIDEO_RUNTIME_REVISION`）固定，模型按 revision 固定。 | 任何人都能精确复跑同一个点。 | [`srt_selected.py:266`][image]、[`srt_slurm/video.py:336`][engine]、[`srt_slurm/video.py:149`][model] | 阻断 | recipe CODEOWNERS | 生效 |
 | 3 | 每个部署只用一个节点。每种 GPU 数量是独立部署，各有自己的 `video/agg-<layout>.yaml` 配方。 | 每种并行布局各自通过 sweep 认证。 | [`validation.py:918`][single-node]（视频只有单节点场景）；[`validation.py:452`][naming] | 阻断 | `@edwingao28` | 生效 |
 | 4 | 并发 1。 | 规则 12 的失败容忍度与样本总数都以一次一个请求为前提。 | 缺口：[`validation.py:488`][conc] 接受任意不重复的正并发；目前每一行都是 `[1]` | 阻断 | `@edwingao28` | 生效 |
-| 5 | 所有引擎都用 libx264 `ultrafast`、CRF 18、yuv420p 编码；H3 另有 32 kHz 立体声 AAC 音频。 | 编码时间计入测量延迟。 | H3：[`h3-v2.yaml:157`][encoding] 把编码参数计入计划哈希，[`media.py:581`][sei] 从 x264 SEI 头读取 CRF 与 preset。Wan2.2 有缺口：`wan22.yaml` 是 schema 1，[`runner.py:183`][encoding-v2] 既不下发也不检查编码参数 | 阻断 | `@functionstackx` | 生效 |
-| 6 | 请求之间不复用工作：prompt embedding（conditioning）缓存关闭。 | 每个请求都完成全部计算。 | H3：[`srt_slurm/video.py:329`][cache] 要求各引擎的关闭开关。Wan2.2 有缺口：该检查只作用于 schema 2 的 spec | 阻断 | `@functionstackx` | 生效 |
+| 5 | 所有引擎都用 libx264 `ultrafast`、CRF 18、yuv420p 编码；H3 另有 32 kHz 立体声 AAC 音频。 | 编码时间计入测量延迟。 | H3：[`h3-v2.yaml:157`][encoding] 把编码参数计入计划哈希，[`media.py:581`][sei] 从 x264 SEI 头读取 CRF 与 preset。Wan2.2 有缺口：`wan22.yaml` 是 schema 1，[`runner.py:183`][encoding-v2] 既不下发也不检查编码参数；Wan2.2 在 v0.2 迁到 schema 2，计划哈希会变，需要重新 sweep | 阻断 | `@functionstackx` | 生效 |
+| 6 | 请求之间不复用工作：prompt embedding（conditioning）缓存关闭。 | 每个请求都完成全部计算。 | H3：[`srt_slurm/video.py:329`][cache] 要求各引擎的关闭开关。Wan2.2 有缺口：该检查只作用于 schema 2 的 spec，待规则 5 所述的 v0.2 迁移 | 阻断 | `@functionstackx` | 生效 |
 | 7 | 只允许无损档，见[下方列表](#无损档)。 | 有损加速会改变输出，需要配对质量分，而 v0.1 还没有。 | SGLang：引擎日志 attestation [`attestation.py:36`][policy]，由 [`srt_bundle.py:378`][attest-gate] 把关。vLLM-Omni 与 Sol-Engine 有缺口：[`attestation.py:66`][policies] 只有 SGLang 的策略，且 [`video_artifacts.py:146`][attest-presence] 会放行没有 attestation 的 bundle | 阻断 | `@functionstackx` | 生效 |
 | 8 | 未登记在 registry 中的优化一律按有损处理；由 registry 而不是提交者判定。 | 新技术未经审查不能进入无损排名。 | App [`optimizations.ts:26`][registry]。缺口：InferenceX 没有代码记录一次运行用了哪些优化，因此所有已发布运行都显示为无损 | 阻断 | `@SemiAnalysisAI/core` | 生效 |
 | 9 | 所有配置都写在配方和 master 配置行里：不改 launcher 或客户端，不修补缓存，不在配方之外加启动参数，设置中不放密钥。 | 配方 fingerprint 能完整描述部署。 | [`srt_slurm/video.py:102`][env] 拒绝 launcher 专用和疑似凭据的环境变量名。缺口：检测不到打过补丁的镜像 | 阻断 | recipe CODEOWNERS | 生效 |
@@ -46,7 +46,7 @@ Sol-Engine。范围负责人：`@edwingao28`。
 | 15 | 一位合格的 CODEOWNER 提交 PR Review Checklist，再由一位 core 维护者 approve。 | 每次规则改动和结果都有第二个人审。 | `main` 的 ruleset 要求 `@SemiAnalysisAI/core` 的一次 approve。缺口：不要求 code-owner review，admin 合并可以绕过 ruleset | 阻断 | `@SemiAnalysisAI/core` | 生效 |
 | 16 | 参考 PSNR 只报告，从不卡复用或合并；`quality_status` 保持 `unjudged`。Wan2.2 没有参考视频，其视频保持未评分。 | 无损引擎和并行布局相对同一参考的 PSNR 本来就差异很大。 | [`quality.py:192`][unjudged]；没有 workflow 把该分数当作门槛 | 参考 | `@functionstackx` | 生效 |
 | 17 | VLM judge 为每段测量视频评分，分数显示在视频旁边。它不阻止发布。 | 技术检查判断不了视频是否符合 prompt。 | 缺口：本仓库还没有 judge | 参考 | `@edwingao28` | 生效 |
-| 18 | 所有引擎（SGLang、vLLM-Omni 与 Sol-Engine 一样）遵守同一套规则：PR rebase 到 `main`，使用按 digest 固定的公开镜像，并通过引擎日志 attestation。 | 所有引擎用同一个证据标准。 | digest 见 [`srt_selected.py:266`][image]；attestation 见 [`srt_bundle.py:378`][attest-gate]。缺口：[`srt_slurm/video.py:253`][runtime] 只接受 `sglang` 与 `vllm-omni`，attestation 策略也只有 SGLang（见规则 7） | 阻断 | `@edwingao28` | 生效 |
+| 18 | 所有引擎（SGLang、vLLM-Omni 与 Sol-Engine 一样）遵守同一套规则：PR rebase 到 `main`，使用按 digest 固定的公开镜像，并通过引擎日志 attestation。 | 所有引擎用同一个证据标准。 | digest 见 [`srt_selected.py:266`][image]；attestation 见 [`srt_bundle.py:378`][attest-gate]。缺口：[`srt_slurm/video.py:253`][runtime] 只接受 `sglang` 与 `vllm-omni`，attestation 策略也只有 SGLang（见规则 7）。Sol-Engine 的 binder 支持由其自己的 PR 加入；vLLM-Omni 与 Sol-Engine 的 attestation 策略由 InferenceX 添加 | 阻断 | `@edwingao28` | 生效 |
 
 ### 无损档
 
