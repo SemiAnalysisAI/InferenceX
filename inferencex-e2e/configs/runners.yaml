@@ -594,6 +594,7 @@ clusters:
         visibility: shared
         import: compute
         lock-timeout-s: 3600
+        single-node-import: true
       srt-slurm:
         extra:
           default_gpu_exporter:
