@@ -832,6 +832,38 @@ override_1p_dep8_dep16_linker_d1115_layerwise:
         unified-cache-external-linker-config: '{"load_mode":"layer_wise","enable_group_semantics":false}'
     decode: *linker-dep16-decode-d1115
 
+override_6p_tep2_dep16_linker_prefetch:
+  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-6p-tep2-dep16-linker-prefetch
+  # The 6 x TEP2 point with prefetch linker loads instead of layer-wise; the
+  # image caps prefetch admission. Everything else matches override_6p_tep2_dep16_linker.
+  identity:
+    frameworks:
+      sglang: "0.0.0.dev1+g209741ec5"
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+  services: *linker-services
+  roles:
+    prefill:
+      <<: *tep2-prefill
+      args:
+        tensor-parallel-size: 2
+        data-parallel-size: null
+        expert-parallel-size: 2
+        enable-dp-attention: null
+        enable-dp-lm-head: null
+        chunked-prefill-size: 16384
+        max-running-requests: 128
+        mem-fraction-static: 0.85
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
+    decode: *linker-dep16-decode
+
 override_3p_dep4_dep8:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-3p-dep4-dep8
   roles:
