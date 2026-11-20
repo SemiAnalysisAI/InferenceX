@@ -100,6 +100,8 @@ override_c1:
         enable-amd-monokernel: true
         max-running-requests: 1
         cuda-graph-max-bs-decode: 1
+        # Mamba state at every prefill chunk; level 2 keeps one state per path and recomputes more prompt tokens.
+        hybrid-cache-checkpoints-level: 3
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_USE_AITER: '1'
@@ -120,6 +122,7 @@ override_c2:
         enable-amd-monokernel: true
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
+        hybrid-cache-checkpoints-level: 3
       env:
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_USE_AITER: '1'
