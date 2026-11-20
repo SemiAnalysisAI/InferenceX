@@ -13221,3 +13221,13 @@
     - "Pin the runner image by digest, tokenspeed-smg 1.16.0.post20261118, the checkpoint and DSpark draft revisions, and the November 19 TokenSpeed 0.1.1.post20261119, kernel 0.1.5.post20261119, kernel-amd 0.1.4.post20261119 and engine 0.1.1.post20261119 wheels by release URL and SHA256, and tokenspeed-scheduler 0.1.58 from PyPI. tokenspeed-nightly-rocm.sh keeps the image's ROCm torch. Bind TokenSpeed's decode-context-parallel-size to the matrix dcp-size."
     - "Select golden DSpark acceptance (probabilistic draft, block verification) and the greedy sampler for TokenSpeed DSPARK throughput, removing speculative sampling and block verification; evals verify for real with the triton sampler, speculative sampling and block verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5144
+
+- config-keys:
+    - glm5.2-fp4-h100-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add GLM-5.2 single-node 8k1k on H100 with vLLM (vllm/vllm-openai:v0.33.0). The 756 GB FP8 checkpoint does not fit 8x80 GB, so it serves nvidia/GLM-5.2-NVFP4 with Marlin MoE on Hopper; SGLang's modelopt_fp4 path OOMed creating the expert weights."
+    - "Flags follow recipes.vllm.ai's GLM-5.2 NVFP4 command without MTP: TP8 with expert parallel, FP8 KV, max-model-len 9472, gpu-memory-utilization 0.88 and 8192 batched tokens (0.95 with 16384 OOMed in FlashInfer warmup), prefix caching off; concurrency 4, 8 and 16 (the ~9 GiB KV pool holds ~19 requests) with max-num-seqs matched to concurrency."
+    - "Adds a TP8 arm without expert parallel (experts TP-sharded on Marlin) at concurrency 4, 8 and 16 beside the expert-parallel arm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5079
