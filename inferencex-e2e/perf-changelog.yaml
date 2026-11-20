@@ -13119,6 +13119,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4969
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B AgentX on MI355X via ATOM on rocm/atom-dev:nightly_202611131030 (ATOM 0.1.10.dev122+g9fec99786 and AITER 43840aee7, built from ROCm/ATOM main; the atomesh frontend container_image pins its digest sha256:91c7d38b58bff7930d5de864fde7e434364922535f678fefdaf809a5c486b845), serving amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 (revision 410f915f) as shipped: PTPC FP8 attention projections, MXFP4 routed and shared experts, BF16 routers, shared_expert_gate, lm_head and MTP layer."
+    - "Seventeen points with MTP at 3 draft tokens, at dram-utilization 1.0: TP4 at CONC 1, 4, 8, 16, 24, 32 and 40 on the GPU prefix cache and CONC 48, 56, 64 and 80 with LMCache 0.5.6.dev139+gf22dec28 DRAM offload; TP2 at CONC 12 on the GPU prefix cache and CONC 16, 20, 24, 32 and 40 with the same LMCache DRAM offload."
+    - "Every point runs FP8 KV cache, prefix caching, max-num-seqs 1024, CUDA graphs for every batch size up to max(8, 2 x CONC), GDN state checkpoints every 16384 prompt tokens written mid-step (ATOM_GDN_STATE_MIDSTEP=1, ATOM_STATE_CHECKPOINT_END_MARGIN=5, ATOM_STATE_CHECKPOINT_DEMAND=0), FlyDSL paged decode, the QK-norm/RoPE/cache-quant fusion, and the prefill delayer at interval 4 with a 5000 ms queue cap; CONC 32 and up, at TP4 and TP2, set the delayer stall and TTFT caps to 15 ticks."
+    - "The LMCache points add the lmcache_offload connector with a 253 GiB LMCache CPU pool per rank (chunk 256, loads from 8192 tokens, LMCACHE_NUMA_MODE=auto), of which the GDN state tier may keep up to 110 GiB; the state shares that pool, so a TP4 server holds 1,012 GiB (1,087 GB) of host DRAM against its 1,499 GB share and a TP2 server 506 GiB (543 GB) against its 749 GB share."
+    - "All-reduce is not quantized: AITER_QUICK_REDUCE_QUANTIZATION is left unset, which AITER reads as NONE, and the opt-in FlyDSL all-reduce (AITER_FLY_AR) is off, so tensor-parallel all-reduce runs in BF16. The GDN conv and recurrent state are stored in BF16, the ATOM default for qwen3_5_moe_text, while the checkpoint specifies mamba_ssm_dtype float32. Throughput runs use the qwen3.5-397b-a17b-nvfp4__mtp__native__default-default golden AL (3.39)."
+    - "The recipe follows the MXFP4 submission configuration that ROCm/ATOM PR 3255 proposes for recipes/Agentic-Qwen3.5.md, which also drops the INT4 quick all-reduce that the merged FP8 recipe sets, and needs ROCm/ATOM PRs 2549, 2588, 2589, 2590, 2591, 2599, 2609, 3106 and 3108 and ROCm/aiter PR 6981 (tuned MXFP4 MoE rows for the TP4 expert shape), all in this image."
+    - "The MTP draft runs as shipped: the checkpoint excludes every mtp.* layer from quantization and ATOM re-indexes those excludes to the draft's absolute layer numbers, so its attention, experts, shared expert and fc stay BF16; the draft KV cache is FP8 like the target's."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5092
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang-agentic-mtp
   scenario-type: [agentic-coding]
   description:
@@ -13197,6 +13211,16 @@
     - "Append TP4 at concurrency 24 with the latency_specialized decode to the existing curve: 48 running requests, prefill every 128 decode steps, decode-replay graphs to 4096 tokens."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5146
   append-only: true
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro MXFP4 MI355X AgentX on TokenSpeed at concurrency 1, 4, 8, 16, 24, 32 and 48: attention and MoE TP8 with EP1, the released Inferact/Kimi-K3.1-Pro-DSpark draft on the MHA drafter backend (7 drafts at concurrency 1 to 8, 5 at 16 to 48), FP8 KV cache with the MXFP4 DSA indexer key cache, 1,048,560-token context. From concurrency 8, `kvstore-size: 128` provisions a 128 GB per GPU Host L2 KV store pinned from the GTT pool (HSA_USERPTR_FOR_PAGED_MEM=0), KV parallel 8 with DCP8 and prefill graphs up to 3072 tokens (concurrency 1 and 4 run without host KV offload); every point has its own running-request cap and prefill/decode intervals, with short-prefill-first at 24 and 32 and mixed batches at 32 and 48."
+    - "Pin the runner image by digest, tokenspeed-smg 1.16.0.post20261118, the checkpoint and DSpark draft revisions, and the November 19 TokenSpeed 0.1.1.post20261119, kernel 0.1.5.post20261119, kernel-amd 0.1.4.post20261119 and engine 0.1.1.post20261119 wheels by release URL and SHA256, and tokenspeed-scheduler 0.1.58 from PyPI. tokenspeed-nightly-rocm.sh keeps the image's ROCm torch. Bind TokenSpeed's decode-context-parallel-size to the matrix dcp-size."
+    - "Select golden DSpark acceptance (probabilistic draft, block verification) and the greedy sampler for TokenSpeed DSPARK throughput, removing speculative sampling and block verification; evals verify for real with the triton sampler, speculative sampling and block verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5144
 
 - config-keys:
     - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
