@@ -215,6 +215,7 @@ def test_single_node_does_not_report_success_without_a_completed_window(
     [
         ("sglang", "true", [], {"--backend": "vllm", "--use-chat-template": True}),
         ("tokenspeed", "true", [], {"--backend": "vllm", "--use-chat-template": True}),
+        ("vllm", "false", [], {"--backend": "vllm"}),
         ("trt", "false", ["--trust-remote-code"], {"--backend": "openai", "--trust-remote-code": True}),
     ],
 )
