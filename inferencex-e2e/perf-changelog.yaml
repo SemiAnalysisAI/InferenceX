@@ -13221,3 +13221,15 @@
     - "Pin the runner image by digest, tokenspeed-smg 1.16.0.post20261118, the checkpoint and DSpark draft revisions, and the November 19 TokenSpeed 0.1.1.post20261119, kernel 0.1.5.post20261119, kernel-amd 0.1.4.post20261119 and engine 0.1.1.post20261119 wheels by release URL and SHA256, and tokenspeed-scheduler 0.1.58 from PyPI. tokenspeed-nightly-rocm.sh keeps the image's ROCm torch. Bind TokenSpeed's decode-context-parallel-size to the matrix dcp-size."
     - "Select golden DSpark acceptance (probabilistic draft, block verification) and the greedy sampler for TokenSpeed DSPARK throughput, removing speculative sampling and block verification; evals verify for real with the triton sampler, speculative sampling and block verification."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5144
+
+- config-keys:
+    - minimaxm31flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add MiniMax-M3.1-Flash (amd/MiniMax-M3.1-Flash-Quark-MXFP4) AgentX on MI325X (gfx942) with the digest-pinned vllm/vllm-openai-rocm:nightly-rocm100-153dc046462c4724a9a4eb393cadd60169ed943c image (vLLM 0.34.0rc1.dev398+g153dc0464) and native DSpark 7, from the MI355X vLLM recipe."
+    - "TP4 at concurrency 1, 2, 4, 8 and 16 with the KV cache on the GPUs, and at concurrency 32 with the SimpleCPUOffloadConnector tier (eager, LRU eviction, cpu_bytes_to_use 800 GB, dram-utilization 0.662): 64,247 CPU blocks (about 8.2M tokens) beside the 6.2M-token GPU KV cache. Admission is 2x CONC."
+    - "gfx942 differences from the MI355X recipe: FP8 KV and index caches served by the Triton sparse attention and indexer (the NVFP4 caches need gfx950, and decode indexer CP belongs to the NVFP4 indexer), and moe-backend triton_unfused (MXFP4 expert weights as stored, BF16 activations), because the AITER MXFP4 kernels that run on gfx942 do not take the checkpoint's uninterleaved SwiGLU expert layout."
+    - "No DBO and no VLLM_USE_V2_MODEL_RUNNER: this image refuses dual batch overlap for a multimodal model config and has only the V2 runner."
+    - "Draft settings as on MI355X: the dspark/ draft that ships in the checkpoint, with no draft precision setting other than the FP8 draft KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5161
