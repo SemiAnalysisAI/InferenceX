@@ -97,6 +97,7 @@ base:
         DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        disable-multimodal: true
         trust-remote-code: true
         tensor-parallel-size: 2
         attn-dp-size: 2
@@ -158,6 +159,7 @@ base:
         DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        disable-multimodal: true
         trust-remote-code: true
         tensor-parallel-size: 16
         load-balance-method: total_tokens

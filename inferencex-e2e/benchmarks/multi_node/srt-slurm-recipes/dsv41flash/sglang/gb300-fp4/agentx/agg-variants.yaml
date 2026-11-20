@@ -81,6 +81,7 @@ base:
         DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: "10000"
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        disable-multimodal: true
         trust-remote-code: true
         mem-fraction-static: 0.8
         chunked-prefill-size: 16384
