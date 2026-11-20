@@ -13140,3 +13140,14 @@
     - "Upstream changes in the new image on this config's gfx942 path: vllm-project/vllm#65249 enables prefix-cache SWA replay on gfx942 (vllm-project/vllm#64094 does the same on gfx950), vllm-project/vllm#66397 builds the DeepSeek-V4.1 replay metadata builders at warmup on ROCm, vllm-project/vllm#63367 shards the Engram gate across TP ranks, vllm-project/vllm#66400 drops the sparse MLA metadata host sync, and vllm-project/vllm#66596 bumps AITER to v0.1.29."
     - "No data-type or precision change to the DSpark draft: vLLM builds it with the checkpoint's own quantization config (FP8 32x32 UE8M0 projections, MXFP4 routed experts, BF16 norms and heads) and the target's fp8_ds_mla KV cache, it shares the target's BF16 embedding and LM head (draft_lm_head_quantization from vllm-project/vllm#64368 is unset), and the recipe sets no draft dtype or quantization."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5058
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Image vllm/vllm-openai:cu134-nightly-aarch64-01fba62-1111d (vLLM main 01fba62 with the merged vllm#66552)."
+    - "Agg: TP4 with the latency_specialized decode and prefill every 24 decode steps at concurrency 1, 4 and 8 (replacing 1 and 16)."
+    - "Disagg: prefill Engram tables split over the prefill GPUs in HBM, KV offload up to 170 GiB per prefill rank."
+    - "Disagg: 5P1D DEP32 at concurrency 3200, 7P1D DEP16 at 6600, 12P1D DEP32 at 10288 (replacing 6P1D, 9P1D and 16P1D)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5015
