@@ -154,9 +154,6 @@ override_c12:
         mem-fraction-static: 0.88
         max-running-requests: 24
         cuda-graph-max-bs-decode: 24
-        # Every size to the admission, so decode batches never pad.
-        cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-          20, 21, 22, 23, 24]
         max-mamba-cache-size: 960
         mamba-radix-cache-strategy: extra_buffer_lazy
         mamba-track-interval: 262144
@@ -196,6 +193,7 @@ override_c24:
         <<: *fp8_args
         max-running-requests: 48
         cuda-graph-max-bs-decode: 48
+        # Every size to the admission, so decode batches never pad; c12 keeps the image's sizes.
         cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
           20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
           42, 43, 44, 45, 46, 47, 48]
