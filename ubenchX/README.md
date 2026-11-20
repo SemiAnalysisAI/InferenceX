@@ -82,9 +82,9 @@ Infinity Cache as well. Every XCD has a private, identically organised L2, so an
 L2-resident chain shows no cross-XCD structure, only the CU's position inside
 its XCD (the SE0/SE1 and SE2/SE3 halves). An Infinity-Cache-resident chain shows
 IOD locality instead: XCDs 0-3 against XCDs 4-7 on MI355X (two IODs), and the
-XCD pairs {0,1}, {2,3}, {4,5}, {6,7} on MI300X (four IODs), where the two XCDs
-of one IOD are indistinguishable and the cross-IOD distances fall into three
-tiers. `plot_distance.py` groups CUs by IOD (`--iods` consecutive groups of
+XCD pairs {0,1}, {2,3}, {4,5}, {6,7} on MI300X and MI325X (four IODs), where
+the two XCDs of one IOD are indistinguishable and the cross-IOD distances fall
+into three tiers. `plot_distance.py` groups CUs by IOD (`--iods` consecutive groups of
 XCD ids, 2 by default, 4 for MI300X; `--iod-groups` takes an explicit
 assignment, or `cluster` to derive the groups from the data), then by XCD and
 shader engine. On parts with 64 KB of LDS (MI300X) a 4 MB chain is timed in
