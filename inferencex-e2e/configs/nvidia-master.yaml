@@ -7045,7 +7045,7 @@ dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
 
 dsv41flash-fp4-gb300-dynamo-trt-agentic-dspark-disagg:
   image: nvcr.io/nvidia/tensorrt-llm/release:1.4.0rc5.dev202611190007@sha256:a73ba95732d2cf11670843440e0baa02fd1f16f5d0454337e587cef2c9efe119
-  model: nvidia/DeepSeek-V4.1-Flash-NVFP4
+  model: nvidia/DeepSeek-V4.1-Flash-1017-NVFP4
   model-prefix: dsv41flash
   runner: cluster:gb300-nv
   precision: fp4

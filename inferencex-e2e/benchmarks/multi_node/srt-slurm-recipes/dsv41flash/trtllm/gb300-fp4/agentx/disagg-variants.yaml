@@ -61,7 +61,7 @@ base:
       active-prefill-tokens-threshold-frac: "None"
   engine:
     type: trtllm
-    served_model_name: nvidia/DeepSeek-V4.1-Flash-NVFP4
+    served_model_name: nvidia/DeepSeek-V4.1-Flash-1017-NVFP4
     numa_cpu_bind: true
     # Worker memory comes from the GPU's own NUMA node first instead of interleaving across both.
     numa_memory_bind: preferred
