@@ -31,7 +31,7 @@ from infx.tests.historical_revision import (
     commit_history,
     forbid_current_config_parsing,
 )
-from infx.tests.srt_recipes import shared_blocks, single_node_fragment
+from infx.tests.srt_recipes import VIDEO_RECIPE, shared_blocks, single_node_fragment
 
 
 @pytest.mark.parametrize("current_head,expected", [("ours", True), ("other", False)])
@@ -2697,8 +2697,8 @@ def family_configs():
     return master, runners
 
 
-def write_fixture_recipe(root: Path) -> None:
-    recipe = root / "benchmarks/single_node/srt-slurm-recipes/fixture/recipe.yaml"
+def write_fixture_recipe(root: Path, name: str = "recipe.yaml") -> None:
+    recipe = root / "benchmarks/single_node/srt-slurm-recipes/fixture" / name
     recipe.parent.mkdir(parents=True, exist_ok=True)
     recipe.write_text("{}\n")
 
@@ -2782,7 +2782,12 @@ def test_final_matrix_of_a_curve_needs_one_changelog_entry_for_all_its_keys(
     assert sorted(
         (row["spec-decoding"], row["conc"]) for row in canonical["single_node"]["all"]
     ) == [("mtp", 4), ("none", 2), ("none", 6)]
-    matrix = {**canonical, "changelog_metadata": {"head_ref": head, "entries": [entry]}}
+    # Sweeps set up before scores left the workflows still carry "priority" on every job.
+    matrix = {
+        **canonical,
+        "single_node": {"all": [{**row, "priority": "1.000"} for row in canonical["single_node"]["all"]]},
+        "changelog_metadata": {"head_ref": head, "entries": [entry]},
+    }
     if accepted:
         validation.check_matrix(matrix, canonical, head, family)
         # A key the baseline froze nothing for still needs every final point.
@@ -3681,7 +3686,7 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
     master["video"] = {
         **master["fixture"], "runner": "cluster:fixture",
         "scenarios": {"video-generation": [{"spec": "clip.yaml", "set": "shared-v1", "search-space": [
-            {"gpus": 2, "conc-list": [1, 4], "srt-recipe": "recipe.yaml"}]}]},
+            {"gpus": 2, "conc-list": [1, 4], "srt-recipe": VIDEO_RECIPE}]}]},
     }
     project = tmp_path / "inferencex-e2e"
     configs = project / "configs"
@@ -3689,6 +3694,7 @@ def test_live_families_preserve_public_identity_after_move(tmp_path, family_conf
     (configs / "nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (configs / "runners.yaml").write_text(yaml.safe_dump(runners))
     write_fixture_recipe(project)
+    write_fixture_recipe(project, VIDEO_RECIPE)
 
     families = klaud.live_families(tmp_path if from_repository_root else project)
 
