@@ -172,6 +172,9 @@ base:
           VLLM_RPC_TIMEOUT: "600000"
           TILELANG_CLEANUP_TEMP_FILES: "1"
           VLLM_USE_NCCL_SYMM_MEM: "0"
+          # An external-LB rank is a server of its own that sees only its GPU, so every rank on a node
+          # reports device 0 and PyTorch's symmetric-memory rendezvous takes them for one device.
+          TORCH_SYMM_MEM_ALLOW_OVERLAPPING_DEVICES: "1"
           NCCL_CUMEM_ENABLE: "1"
           NCCL_MNNVL_ENABLE: "1"
           NCCL_NVLS_ENABLE: "1"
