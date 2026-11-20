@@ -61,6 +61,8 @@ base:
         tokenizer-worker-num: 6
         enable-metrics: true
         enable-cache-report: true
+        # Patch 30: serve the checkpoint as a text model; the server skips the vision tower's weights.
+        language-model-only: true
       env:
         PYTHONNOUSERSITE: '1'
         ROCM_QUICK_REDUCE_QUANTIZATION: NONE

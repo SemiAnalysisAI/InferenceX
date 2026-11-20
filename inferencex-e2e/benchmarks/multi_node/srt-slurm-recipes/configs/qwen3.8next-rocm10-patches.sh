@@ -105,6 +105,7 @@ apply /sgl-workspace/sglang 27-sglang-51023-decode-fp8-quant-fuse.patch
 # header names the upstream drafts.
 apply /sgl-workspace/sglang 28-sglang-gdn-split-prefill.patch
 apply /sgl-workspace/sglang 29-sglang-gdn-prefill-fused.patch
+apply /sgl-workspace/sglang 30-sglang-51663-language-model-only.patch
 
 # The monokernel patch must be the code python imports (an editable install of the checkout).
 python3 - <<'PY'
