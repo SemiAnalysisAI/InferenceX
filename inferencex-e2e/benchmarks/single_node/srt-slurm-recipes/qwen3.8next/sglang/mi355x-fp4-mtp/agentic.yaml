@@ -76,6 +76,11 @@ base:
         SGLANG_AITER_GDN_CONV: '1'
         SGLANG_AITER_GDN_PREFILL: '1'
         SGLANG_AITER_GDN_PREFILL_H: fused
+        # Patch 28: that fused chunked prefill, for a batch of 1,024 tokens or more, as prep kernels in parallel over
+        # the chunks plus a serial state kernel, bit for bit the same. Patch 29: the prefill conv, one FP8 quant for
+        # in_proj_qkvz and in_proj_ba, the gated norm with the out_proj quant, and the gating on new kernels.
+        SGLANG_AMD_GDN_PREFILL: '1'
+        SGLANG_AMD_GDN_PREFILL_FUSED: '1'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'

@@ -101,6 +101,10 @@ apply /sgl-workspace/sglang 23-sglang-51198-moe-stage2-fp8.patch
 # 26 brings patch 15's two files to sglang#50863's head, so 15 stays and 26 applies after it.
 apply /sgl-workspace/sglang 26-sglang-50863-hc-prefill-triton-head.patch
 apply /sgl-workspace/sglang 27-sglang-51023-decode-fp8-quant-fuse.patch
+# 28 and 29 are the forms of the GDN split prefill and the GDN fused prefill that the validation windows ran; each
+# header names the upstream drafts.
+apply /sgl-workspace/sglang 28-sglang-gdn-split-prefill.patch
+apply /sgl-workspace/sglang 29-sglang-gdn-prefill-fused.patch
 
 # The monokernel patch must be the code python imports (an editable install of the checkout).
 python3 - <<'PY'

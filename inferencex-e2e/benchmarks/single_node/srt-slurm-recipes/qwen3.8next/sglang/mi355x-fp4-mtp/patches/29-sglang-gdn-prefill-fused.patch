@@ -1,0 +1,927 @@
+# [AMD] GDN prefill on new kernels: the causal conv, one FP8 quant for in_proj_qkvz and in_proj_ba, the gated norm with
+# the out_proj quant, and the gating, SGLANG_AMD_GDN_PREFILL_FUSED
+# Upstream: ROCm/aiter#8328 (draft, head eb26f422ac: the conv kernel, opt-in AITER_CONV1D_PREFILL_VEC) and
+# sgl-project/sglang#51658 (draft, head da90865db3, on #51023: the quant and gating fusions). This file is the form the
+# validation windows ran, with the conv kernel in SGLang's tree.
+# Generated against the 20261117 image's SGLang checkout (c67db7c762) with patches 01-07, 09, 11, 13-16, 21, 24, 23,
+# 26, 27 and 28 applied; source files only (its test dropped).
+# SGLANG_AMD_GDN_PREFILL_FUSED=1: the GDN prefill takes these kernels; unset or 0 keeps the image's path.
+# Apply in /sgl-workspace/sglang with git apply.
+
+diff --git a/python/sglang/kernels/ops/attention/linear/gdn_prefill_conv_kernels.py b/python/sglang/kernels/ops/attention/linear/gdn_prefill_conv_kernels.py
+new file mode 100644
+index 0000000..71db436
+--- /dev/null
++++ b/python/sglang/kernels/ops/attention/linear/gdn_prefill_conv_kernels.py
+@@ -0,0 +1,333 @@
++"""FlyDSL depthwise causal prefill conv for GDN (SGLANG_AMD_GDN_PREFILL_FUSED).
++
++Same per-element arithmetic as AITER's prefill conv
++(``aiter/ops/flydsl/kernels/causal_conv1d_prefill.py``,
++``create_causal_conv1d_prefill_kernel``): fp32 taps summed from a zero (or
++bias) base in tap order, SiLU as acc / (1 + exp(-acc)), one rounding to the
++input dtype per output, and the conv state written by the first token run of
++each sequence after its old window is read. What differs:
++
++* Each thread owns VEC = 8 adjacent channels, so a token is one 16-byte load
++  and one 16-byte store (AITER: 2-byte accesses, 2 channels a thread).
++* A run is ``tokens`` tokens; its width - 1 halo rows are read once a run, and
++  the loads of the next ``prefetch`` tokens are issued before the current ones
++  are computed.
++* bf16 SiLU may take a cheaper form (``_silu_fast``): raw v_exp_f32 and
++  v_rcp_f32. A lane keeps it only where the result is farther than
++  FAST_TIE_MARGIN fp32 ulps from a bf16 rounding tie and |acc| is in
++  (FAST_ABS_MIN, FAST_ABS_MAX); otherwise the thread's whole vector takes the
++  exact expression. ``compile_silu_check`` counts the inputs where
++  bf16(fast-with-fallback) != bf16(exact) over all 2^32 fp32 bit patterns.
++
++The kernel is compute-bound on that SiLU at the served shape (about 31 VALU
++instructions an element with the exact expression), hence the fast form.
++"""
++
++import functools
++
++import flydsl.compiler as flyc
++import flydsl.expr as fx
++import torch
++from flydsl.expr import const_expr, range_constexpr, rocdl
++from flydsl.expr.typing import T
++
++VEC = 8
++# -log2(e) as fp32 head + tail: the head alone is 1.3e-8 off relative, which
++# near |acc| = 64 moves exp(-acc) by 7-14 fp32 ulps.
++NEG_LOG2E_HI = -1.4426950216293335
++NEG_LOG2E_LO = -1.925963033500011e-08
++LN2 = 0.6931471805599453
++FAST_ABS_MAX = 64.0
++FAST_ABS_MIN = 2.0**-60
++FAST_TIE_MARGIN = 8
++
++
++def _silu_exact(acc):
++    """AITER's SiLU: acc / (1 + exp(-acc)), IEEE division."""
++    return acc / (fx.Vector.filled(VEC, 1.0, fx.Float32) + fx.exp(-acc))
++
++
++def _lanes(vec, fn):
++    return fx.Vector.from_elements(
++        [fx.Float32(fn(fx.Float32(vec[i]).ir_value())) for i in range_constexpr(VEC)],
++        dtype=fx.Float32,
++    )
++
++
++def _silu_fast(acc, margin=FAST_TIE_MARGIN):
++    """(fast SiLU, count of lanes that need the exact one).
++
++    exp(-acc) = exp2(hi + lo): hi = fp32(acc * c_hi), lo = its rounding error
++    plus acc * c_lo, folded in as e * (1 + lo * ln2); then v_rcp_f32 and one
++    multiply. The caller's kernel body branches on the count: FlyDSL rewrites
++    runtime ifs only there.
++    """
++    c = fx.Vector.filled(VEC, NEG_LOG2E_HI, fx.Float32)
++    hi = acc * c
++    lo = fx.math.fma(acc, fx.Vector.filled(VEC, NEG_LOG2E_LO, fx.Float32), fx.math.fma(acc, c, -hi))
++    e = _lanes(hi, lambda v: rocdl.exp2(T.f32, v))
++    e = fx.math.fma(e, lo * fx.Vector.filled(VEC, LN2, fx.Float32), e)
++    r = _lanes(fx.Vector.filled(VEC, 1.0, fx.Float32) + e, lambda v: rocdl.rcp(T.f32, v))
++    y = acc * r
++    low = y.bitcast(fx.Int32) & fx.Vector.filled(VEC, 0xFFFF, fx.Int32)
++    dist = abs(low - fx.Vector.filled(VEC, 0x8000, fx.Int32))
++    mag = abs(acc)
++    bad = (
++        (dist <= fx.Vector.filled(VEC, margin, fx.Int32))
++        | (mag >= fx.Vector.filled(VEC, FAST_ABS_MAX, fx.Float32))
++        | (mag <= fx.Vector.filled(VEC, FAST_ABS_MIN, fx.Float32))
++    )
++    return y, bad.select(1, 0).reduce("add")
++
++
++def _view(t, base):
++    """Buffer-resource iterator at element ``base`` of flat tensor ``t``."""
++    v = fx.make_view(fx.get_iter(t) + base, fx.make_layout(1, 1))
++    return fx.get_iter(fx.rocdl.make_buffer_tensor(v))
++
++
++def _ld(it, off, dt):
++    view = fx.make_view(it + off, fx.make_layout(VEC, 1))
++    frag = fx.make_rmem_tensor(VEC, dt)
++    fx.copy(fx.make_copy_atom(fx.rocdl.BufferCopy(VEC * dt.width), dt), view, frag)
++    return frag.load()
++
++
++def _st(it, off, vec, dt):
++    view = fx.make_view(it + off, fx.make_layout(VEC, 1))
++    frag = fx.make_rmem_tensor(VEC, dt)
++    frag.store(vec)
++    fx.copy(fx.make_copy_atom(fx.rocdl.BufferCopy(VEC * dt.width), dt), frag, view)
++
++
++@functools.lru_cache(maxsize=64)
++def compile_gdn_prefill_conv(
++    dim: int,
++    width: int,
++    ws: tuple,
++    ss: tuple,
++    has_bias: bool,
++    has_cache: bool,
++    has_indices: bool,
++    has_initial: bool,
++    silu: bool,
++    pad_slot,
++    block: int,
++    tokens: int,
++    prefetch: int,
++    dtype: torch.dtype,
++    fast_silu: bool,
++):
++    """Launcher over a grid (runs, sequences, channel blocks). x and out are
++    [dim, total] with unit channel stride, passed flat with their token strides;
++    the weight, state and stride tuples are compiled in."""
++    element = {torch.bfloat16: fx.BFloat16, torch.float16: fx.Float16}[dtype]
++    groups = tokens // prefetch
++    halo = width - 1
++
++    @flyc.jit
++    def load_channels(tensor: fx.Tensor, offset: fx.Int64, stride: fx.Int64):
++        return fx.Vector.from_elements(
++            [tensor[offset + lane * stride] for lane in range_constexpr(VEC)]
++        )
++
++    @flyc.kernel(known_block_size=[block, 1, 1])
++    def gdn_prefill_conv_kernel(
++        x: fx.Tensor,
++        w: fx.Tensor,
++        bias: fx.Tensor,
++        state: fx.Tensor,
++        starts: fx.Tensor,
++        indices: fx.Tensor,
++        initial: fx.Tensor,
++        out: fx.Tensor,
++        x_stride: fx.Int32,
++        out_stride: fx.Int32,
++    ):
++        seq = fx.block_idx.y
++        chunk = fx.block_idx.x
++        c = (fx.block_idx.z * block + fx.thread_idx.x) * VEC
++        start = fx.Int64(starts[seq])
++        length = fx.Int64(starts[seq + 1]) - start
++        offset = chunk * tokens
++        slot = fx.Int64(seq)
++        if const_expr(has_indices):
++            slot = fx.Int64(indices[seq])
++        valid_slot = fx.Int32(1)
++        if const_expr(pad_slot is not None):
++            valid_slot = fx.Int32(slot != pad_slot)
++        if (c < dim) & (offset < length) & (valid_slot != 0):
++            use_history = fx.Int32(0)
++            if const_expr(has_initial):
++                use_history = fx.Int32(initial[seq])
++            raw_weights = [
++                load_channels(w, c * ws[0] + j * ws[1], fx.Int64(ws[0]))
++                for j in range_constexpr(width)
++            ]
++            # Runs after the first read their halo from x: the input
++            # descriptor starts width - 1 rows before the run.
++            hb = (chunk == 0).select(fx.Int64(0), fx.Int64(halo))
++            xs = fx.Int64(x_stride)
++            cc = fx.Int64(c)
++            x_it = _view(x, (start + fx.Int64(offset) - hb) * xs)
++            o_it = _view(out, (start + fx.Int64(offset)) * fx.Int64(out_stride))
++            history = []
++            for j in range_constexpr(halo):
++                hvalue = fx.Vector.filled(VEC, 0.0, fx.Float32)
++                if chunk == 0:
++                    if const_expr(has_cache):  # noqa: SIM102
++                        if use_history != 0:
++                            hvalue = load_channels(
++                                state,
++                                slot * ss[0] + c * ss[1] + j * ss[2],
++                                fx.Int64(ss[1]),
++                            ).to(fx.Float32)
++                else:
++                    hvalue = _ld(x_it, fx.Int32(fx.Int64(j) * xs + cc), element).to(
++                        fx.Float32
++                    )
++                history.append(hvalue)
++            weights = [raw_weights[j].to(fx.Float32) for j in range_constexpr(width)]
++            base = fx.Vector.filled(VEC, 0.0, fx.Float32)
++            if const_expr(has_bias):
++                base = load_channels(bias, fx.Int64(c), fx.Int64(1)).to(fx.Float32)
++            if const_expr(has_cache):  # noqa: SIM102
++                if chunk == 0:
++                    for j in range_constexpr(halo):
++                        tail = length - halo + j
++                        value = fx.Vector.filled(VEC, 0.0, fx.Float32)
++                        if tail >= 0:
++                            # Own descriptor at the tail row: its distance from
++                            # the run can exceed a 32-bit buffer offset.
++                            t_it = _view(x, (start + tail) * xs)
++                            value = _ld(t_it, fx.Int32(cc), element).to(fx.Float32)
++                        else:
++                            for h in range_constexpr(halo):
++                                if tail + halo == h:
++                                    value = history[h]
++                        for lane in range_constexpr(VEC):
++                            state[slot * ss[0] + (c + lane) * ss[1] + j * ss[2]] = (
++                                element(value[lane])
++                            )
++
++            def issue(group):
++                loads = []
++                for p in range_constexpr(prefetch):
++                    position = fx.Int64(offset + group * prefetch + p)
++                    safe = (position < length).select(position, length - 1)
++                    row = hb + safe - fx.Int64(offset)
++                    loads.append(_ld(x_it, fx.Int32(row * xs + cc), element))
++                return loads
++
++            current = issue(0)
++            for gi in range_constexpr(groups):
++                upcoming = issue(gi + 1) if gi + 1 < groups else None
++                for p in range_constexpr(prefetch):
++                    t = gi * prefetch + p
++                    value = current[p].to(fx.Float32)
++                    acc = base
++                    for j in range_constexpr(halo):
++                        acc = acc + history[j] * weights[j]
++                    acc = acc + value * weights[width - 1]
++                    if const_expr(silu):
++                        if const_expr(fast_silu):
++                            y, nbad = _silu_fast(acc)
++                            if nbad != 0:
++                                y = _silu_exact(acc)
++                            acc = y
++                        else:
++                            acc = _silu_exact(acc)
++                    if offset + t < length:
++                        _st(
++                            o_it,
++                            fx.Int32(fx.Int64(t) * fx.Int64(out_stride) + cc),
++                            fx.Vector.from_elements(
++                                [element(acc[lane]) for lane in range_constexpr(VEC)],
++                                dtype=element,
++                            ),
++                            element,
++                        )
++                    for j in range_constexpr(halo - 1):
++                        history[j] = history[j + 1]
++                    history[halo - 1] = value
++                current = upcoming
++
++    @flyc.jit
++    def launch(
++        x: fx.Tensor,
++        w: fx.Tensor,
++        bias: fx.Tensor,
++        state: fx.Tensor,
++        starts: fx.Tensor,
++        indices: fx.Tensor,
++        initial: fx.Tensor,
++        out: fx.Tensor,
++        batch: fx.Int32,
++        max_len: fx.Int32,
++        x_stride: fx.Int32,
++        out_stride: fx.Int32,
++        stream: fx.Stream,
++    ):
++        gdn_prefill_conv_kernel(
++            x, w, bias, state, starts, indices, initial, out, x_stride, out_stride
++        ).launch(
++            grid=(
++                (max_len + tokens - 1) // tokens,
++                batch,
++                (dim + block * VEC - 1) // (block * VEC),
++            ),
++            block=(block, 1, 1),
++            stream=stream,
++        )
++
++    return launch
++
++
++@functools.lru_cache(maxsize=8)
++def compile_silu_check(margin=FAST_TIE_MARGIN, iters=8, block=256):
++    """Launcher of a kernel that, per thread, counts the inputs among ``iters``
++    x VEC consecutive fp32 bit patterns from ``base`` where
++    bf16(fast-with-fallback) != bf16(exact) bitwise (NaN payloads included),
++    and how many of its vectors took the exact fallback."""
++
++    @flyc.kernel(known_block_size=[block, 1, 1])
++    def silu_check_kernel(counts: fx.Tensor, falls: fx.Tensor, base: fx.Int32):
++        tid = fx.block_idx.x * block + fx.thread_idx.x
++        mism = fx.Int32(0)
++        nfall = fx.Int32(0)
++        for it in range_constexpr(iters):
++            b0 = base + (tid * iters + it) * VEC
++            acc = fx.Vector.from_elements(
++                [fx.Int32(b0 + i) for i in range_constexpr(VEC)], dtype=fx.Int32
++            ).bitcast(fx.Float32)
++            exact = _silu_exact(acc)
++            y, nbad = _silu_fast(acc, margin=margin)
++            took = fx.Int32(0)
++            if nbad != 0:
++                y = _silu_exact(acc)
++                took = fx.Int32(1)
++            # bf16 per lane, as the conv kernel rounds its outputs.
++            ref = fx.Vector.from_elements(
++                [fx.BFloat16(exact[i]) for i in range_constexpr(VEC)], dtype=fx.BFloat16
++            ).bitcast(fx.Int16)
++            got = fx.Vector.from_elements(
++                [fx.BFloat16(y[i]) for i in range_constexpr(VEC)], dtype=fx.BFloat16
++            ).bitcast(fx.Int16)
++            mism = mism + (ref != got).select(1, 0).reduce("add")
++            nfall = nfall + took
++        counts[tid] = mism
++        falls[tid] = nfall
++
++    @flyc.jit
++    def launch(
++        counts: fx.Tensor,
++        falls: fx.Tensor,
++        base: fx.Int32,
++        nblocks: fx.Int32,
++        stream: fx.Stream,
++    ):
++        silu_check_kernel(counts, falls, base).launch(
++            grid=(nblocks, 1, 1), block=(block, 1, 1), stream=stream
++        )
++
++    return launch
+diff --git a/python/sglang/kernels/ops/attention/linear/gdn_prefill_fused.py b/python/sglang/kernels/ops/attention/linear/gdn_prefill_fused.py
+new file mode 100644
+index 0000000..78bbff7
+--- /dev/null
++++ b/python/sglang/kernels/ops/attention/linear/gdn_prefill_fused.py
+@@ -0,0 +1,323 @@
++"""GDN prefill kernels behind SGLANG_AMD_GDN_PREFILL_FUSED.
++
++Each one returns the image's result bit for bit with fewer kernel cycles:
++
++1. ``gdn_prefill_conv``: AITER's FlyDSL prefill causal conv
++   (``causal_conv1d_prefill_flydsl_fn``) with 16-byte accesses and, for a bf16
++   SiLU, a cheaper SiLU kept per element only where its bf16 rounding equals
++   the exact one's (gdn_prefill_conv_kernels.py). Raises ValueError for
++   operands it does not cover, a subset of AITER's own accepted set.
++2. ``fused_gdn_gating_blocked``: ``fused_gdn_gating``'s kernel body on blocks of
++   tokens instead of one token (and 8 heads) a program.
++3. ``gdn_norm_gate_fp8``: the GDN output's gated RMSNorm
++   (layernorm_gated._layer_norm_fwd_1pass_kernel on its [4, 128] one-warp
++   tile) and out_proj's per-token FP8 quant (_per_token_group_quant_8bit) in
++   one kernel, a token a program, without the bf16 round trip through memory.
++
++The model side (qwen3_5.py) also quantizes the in_proj input once for both
++in_proj_qkvz and in_proj_ba (the same per-token quant of the same tensor).
++"""
++
++import os
++
++import torch
++import triton
++import triton.language as tl
++
++FLAG = "SGLANG_AMD_GDN_PREFILL_FUSED"
++
++
++def gdn_prefill_fused_enabled() -> bool:
++    """SGLANG_AMD_GDN_PREFILL_FUSED: unset or 0 -> False, 1 -> True, else ValueError."""
++    mode = os.environ.get(FLAG, "0")
++    if mode not in ("0", "1"):
++        raise ValueError(f"{FLAG} must be 0 or 1, got {mode!r}")
++    return mode == "1"
++
++
++# ---------------------------------------------------------------- conv
++
++_CONV_BLOCK, _CONV_TOKENS, _CONV_PREFETCH = 256, 16, 4
++
++
++def _flat(t: torch.Tensor) -> torch.Tensor:
++    """1-D view from t's first element over its strided extent."""
++    span = 1 + sum((n - 1) * s for n, s in zip(t.shape, t.stride()))
++    return t.as_strided((span,), (1,))
++
++
++def _check_conv_operands(
++    x, weight, bias, conv_states, query_start_loc, seq_lens_cpu,
++    cache_indices, has_initial_state, activation,
++):
++    """AITER causal_conv1d_prefill_flydsl_fn's operand checks, then this kernel's
++    narrower ones (16-bit dtypes, unit channel stride, 16-byte aligned rows)."""
++    if x.ndim != 2 or weight.ndim != 2:
++        raise ValueError("expected x [channels,total_tokens], weight [channels,width]")
++    dim, total = x.shape
++    width = weight.shape[1]
++    batch = len(seq_lens_cpu)
++    if weight.shape[0] != dim or width not in (2, 3, 4, 5):
++        raise ValueError("weight must have matching channels and width 2..5")
++    if activation not in (None, False, True, "silu", "swish"):
++        raise ValueError("activation must be None, silu, or swish")
++    if not x.is_cuda or x.dtype not in (torch.bfloat16, torch.float16):
++        raise ValueError("expected a GPU BF16/FP16 tensor")
++    if 1 not in weight.stride():
++        raise ValueError("weight needs a unit-stride axis")
++    tensors = [weight, query_start_loc, bias, conv_states, cache_indices, has_initial_state]
++    if any(t is not None and t.device != x.device for t in tensors):
++        raise ValueError("all tensors must be on the input device")
++    if weight.dtype != x.dtype or (conv_states is not None and conv_states.dtype != x.dtype):
++        raise ValueError("input, weight, and state must have matching dtype")
++    if query_start_loc.shape != (batch + 1,) or not query_start_loc.is_contiguous():
++        raise ValueError("query_start_loc must be contiguous [batch+1]")
++    if query_start_loc.dtype not in (torch.int32, torch.int64):
++        raise ValueError("query_start_loc must contain integers")
++    for name, tensor in (("cache_indices", cache_indices), ("has_initial_state", has_initial_state)):
++        if tensor is not None and (tensor.shape != (batch,) or not tensor.is_contiguous()):
++            raise ValueError(f"{name} must be contiguous [batch]")
++    if cache_indices is not None and cache_indices.dtype not in (torch.int32, torch.int64):
++        raise ValueError("cache_indices must contain integers")
++    if bias is not None and (bias.shape != (dim,) or not bias.is_contiguous()):
++        raise ValueError("bias must be contiguous [channels]")
++    if conv_states is not None and (
++        conv_states.ndim != 3 or conv_states.shape[1] != dim or conv_states.shape[2] < width - 1
++    ):
++        raise ValueError("state must be [slots,channels,at_least_width-1]")
++    if conv_states is not None and 1 not in conv_states.stride():
++        raise ValueError("state needs at least one unit-stride axis")
++    if conv_states is not None and cache_indices is None and conv_states.shape[0] < batch:
++        raise ValueError("state needs at least batch slots without cache_indices")
++    if has_initial_state is not None and conv_states is None:
++        raise ValueError("initial history requires conv_states")
++    if any(n < 0 for n in seq_lens_cpu) or sum(seq_lens_cpu) > total:
++        raise ValueError("invalid sequence lengths")
++    # This kernel: 8 channels = one 16-byte access a token.
++    if dim % 8 or x.stride(0) != 1 or x.stride(1) % 8 or x.data_ptr() % 16:
++        raise ValueError("needs unit channel stride and 16-byte aligned token rows")
++    if (_CONV_TOKENS + width) * x.stride(1) + dim >= 2**31:
++        raise ValueError("token stride too large for 32-bit buffer offsets")
++
++
++def gdn_prefill_conv(
++    x,
++    weight,
++    bias,
++    conv_states,
++    query_start_loc,
++    seq_lens_cpu,
++    cache_indices=None,
++    has_initial_state=None,
++    activation="silu",
++    pad_slot_id=-1,
++):
++    """``causal_conv1d_fn`` contract (output returned, conv_states updated in
++    place), bit-equal to AITER's causal_conv1d_prefill_flydsl_fn."""
++    from aiter.ops.flydsl.kernels.tensor_shim import _run_compiled
++
++    from sglang.kernels.ops.attention.linear.gdn_prefill_conv_kernels import (
++        compile_gdn_prefill_conv,
++    )
++
++    _check_conv_operands(
++        x, weight, bias, conv_states, query_start_loc, seq_lens_cpu,
++        cache_indices, has_initial_state, activation,
++    )
++    out = torch.empty_like(x)  # AITER's allocation: [dim, total], unit channel stride
++    if out.stride(0) != 1 or out.stride(1) % 8:
++        raise ValueError("output needs unit channel stride")
++    dim = x.shape[0]
++    max_len = max(seq_lens_cpu, default=0)
++    if not max_len or not dim:
++        return out
++    silu = activation in (True, "silu", "swish")
++    launch = compile_gdn_prefill_conv(
++        dim,
++        weight.shape[1],
++        weight.stride(),
++        conv_states.stride() if conv_states is not None else (0, 0, 0),
++        bias is not None,
++        conv_states is not None,
++        cache_indices is not None,
++        has_initial_state is not None,
++        silu,
++        pad_slot_id,
++        _CONV_BLOCK,
++        _CONV_TOKENS,
++        _CONV_PREFETCH,
++        x.dtype,
++        silu and x.dtype == torch.bfloat16,
++    )
++    args = (
++        _flat(x),
++        _flat(weight),
++        bias if bias is not None else _flat(x),
++        _flat(conv_states) if conv_states is not None else _flat(x),
++        query_start_loc,
++        cache_indices if cache_indices is not None else query_start_loc,
++        has_initial_state if has_initial_state is not None else query_start_loc,
++        _flat(out),
++        len(seq_lens_cpu),
++        max_len,
++        x.stride(1),
++        out.stride(1),
++        torch.cuda.current_stream(),
++    )
++    # One compiled callable per operand dtype set (int32/int64 indices, bool or
++    # integer initial flags); sizes and token strides are runtime values.
++    key = (x.device.index, tuple(a.dtype for a in args[:8]))
++    _run_compiled(launch, *args, specialization_key=key)
++    return out
++
++
++# -------------------------------------------------------------- gating
++
++_GATE_TOKENS = 32
++
++
++@triton.jit
++def _fused_gdn_gating_blocked_kernel(
++    g,
++    beta_output,
++    A_log,
++    a,
++    b,
++    dt_bias,
++    n_tokens,
++    stride_a,
++    stride_b,
++    NUM_HEADS: tl.constexpr,
++    beta: tl.constexpr,
++    threshold: tl.constexpr,
++    BT: tl.constexpr,
++    BH: tl.constexpr,
++):
++    # fused_gdn_gating_kernel's expressions on [BT tokens, BH heads].
++    t = tl.program_id(0) * BT + tl.arange(0, BT)[:, None]
++    head_off = tl.arange(0, BH)[None, :]
++    hmask = head_off < NUM_HEADS
++    mask = (t < n_tokens) & hmask
++    off = t * NUM_HEADS + head_off
++    blk_A_log = tl.load(A_log + head_off, mask=hmask)
++    blk_a = tl.load(a + t * stride_a + head_off, mask=mask)
++    blk_b = tl.load(b + t * stride_b + head_off, mask=mask)
++    blk_bias = tl.load(dt_bias + head_off, mask=hmask)
++    x = blk_a.to(tl.float32) + blk_bias.to(tl.float32)
++    softplus_x = tl.where(beta * x <= threshold, (1 / beta) * tl.log(1 + tl.exp(beta * x)), x)
++    blk_g = -tl.exp(blk_A_log.to(tl.float32)) * softplus_x
++    tl.store(g + off, blk_g.to(g.dtype.element_ty), mask=mask)
++    blk_beta_output = tl.sigmoid(blk_b.to(tl.float32))
++    tl.store(beta_output + off, blk_beta_output.to(b.dtype.element_ty), mask=mask)
++
++
++def fused_gdn_gating_blocked(A_log, a, b, dt_bias, beta=1.0, threshold=20.0):
++    """fused_gdn_gating (kernels/ops/attention/linear/fused_gdn_gating.py) with
++    the same outputs, ``_GATE_TOKENS`` tokens a program."""
++    batch, num_heads = a.shape
++    g = torch.empty(1, batch, num_heads, dtype=torch.float32, device=a.device)
++    beta_output = torch.empty(1, batch, num_heads, dtype=torch.float32, device=b.device)
++    _fused_gdn_gating_blocked_kernel[(triton.cdiv(batch, _GATE_TOKENS),)](
++        g,
++        beta_output,
++        A_log,
++        a,
++        b,
++        dt_bias,
++        batch,
++        a.stride(0),
++        b.stride(0),
++        num_heads,
++        beta,
++        threshold,
++        _GATE_TOKENS,
++        triton.next_power_of_2(num_heads),
++        num_warps=4,
++    )
++    return g, beta_output
++
++
++# ------------------------------------------------------- norm + FP8 quant
++
++
++@triton.jit
++def _norm_gate_rows(X, Z, W, tok, s, stride_x_row, stride_z_token, stride_z_head, eps,
++                    N: tl.constexpr, HEADS: tl.constexpr, SUB: tl.constexpr,
++                    ACTIVATION: tl.constexpr):
++    """bf16-rounded y of heads [s * SUB, (s + 1) * SUB) of token ``tok`` as fp32:
++    _layer_norm_fwd_1pass_kernel's IS_RMS_NORM, NORM_BEFORE_GATE, 3-D z path."""
++    h = s * SUB + tl.arange(0, SUB)
++    cols = tl.arange(0, N)
++    x = tl.load(X + (tok * HEADS + h)[:, None] * stride_x_row + cols[None, :]).to(tl.float32)
++    var = tl.sum(x * x, axis=1) / N
++    rstd = tl.rsqrt(var + eps)
++    w = tl.load(W + cols).to(tl.float32)
++    y = x * rstd[:, None] * w[None, :]
++    z = tl.load(Z + tok * stride_z_token + h[:, None] * stride_z_head + cols[None, :]).to(
++        tl.float32)
++    if ACTIVATION == "swish" or ACTIVATION == "silu":
++        y *= z * tl.sigmoid(z)
++    elif ACTIVATION == "sigmoid":
++        y *= tl.sigmoid(z)
++    return y.to(tl.bfloat16).to(tl.float32), h
++
++
++@triton.jit
++def _gdn_norm_gate_fp8_kernel(X, Z, W, Q, S, stride_x_row, stride_z_token, stride_z_head,
++                              stride_q_row, eps, q_eps, q_min, q_max,
++                              N: tl.constexpr, HEADS: tl.constexpr, SUB: tl.constexpr,
++                              ACTIVATION: tl.constexpr):
++    # One token a program, its HEADS = 3 * SUB rows as three SUB-row tiles on
++    # SUB / 4 warps: each row gets the image norm's [4, N] one-warp column
++    # split ([1, 8] a thread, [4, 16] a warp), so rows reduce in its order.
++    # The tiles stay in registers for the token's amax, then quantize as
++    # _per_token_group_quant_8bit does.
++    tok = tl.program_id(0).to(tl.int64)
++    cols = tl.arange(0, N)
++    y0, h0 = _norm_gate_rows(X, Z, W, tok, 0, stride_x_row, stride_z_token, stride_z_head,
++                                 eps, N, HEADS, SUB, ACTIVATION)
++    y1, h1 = _norm_gate_rows(X, Z, W, tok, 1, stride_x_row, stride_z_token, stride_z_head,
++                                 eps, N, HEADS, SUB, ACTIVATION)
++    y2, h2 = _norm_gate_rows(X, Z, W, tok, 2, stride_x_row, stride_z_token, stride_z_head,
++                                 eps, N, HEADS, SUB, ACTIVATION)
++    amax = tl.maximum(tl.maximum(tl.abs(y0), tl.abs(y1)), tl.abs(y2))
++    y_s = tl.maximum(tl.max(amax), q_eps) / q_max
++    y_s_inv = 1.0 / y_s
++    base = Q + tok * stride_q_row + cols[None, :]
++    tl.store(base + h0[:, None] * N, tl.clamp(y0 * y_s_inv, q_min, q_max).to(Q.dtype.element_ty))
++    tl.store(base + h1[:, None] * N, tl.clamp(y1 * y_s_inv, q_min, q_max).to(Q.dtype.element_ty))
++    tl.store(base + h2[:, None] * N, tl.clamp(y2 * y_s_inv, q_min, q_max).to(Q.dtype.element_ty))
++    tl.store(S + tok, y_s)
++
++
++def gdn_norm_gate_fp8_supported(rows: int, num_heads: int, head_dim: int, device) -> bool:
++    """Whether gdn_norm_gate_fp8 equals the image's norm + quant on ``rows``
++    (tokens x heads) norm rows: head dim 128, three 4/8/16-row tiles of heads,
++    and the image norm on its [4, 128] one-warp tile. Its 1- and 2-row tiles
++    give each thread 2 or 4 columns, not 8, so a row's sum reduces in another
++    order."""
++    from sglang.kernels.ops.attention.fla.layernorm_gated import calc_rows_per_block
++
++    return (
++        head_dim == 128
++        and num_heads in (12, 24, 48)
++        and calc_rows_per_block(rows, device) == 4
++    )
++
++
++def gdn_norm_gate_fp8(o, weight, z, eps, activation):
++    """RMSNormGated(o, z) (norm before gate, no groups, bf16 out) followed by
++    per_token_group_quant_fp8 over each token's heads: (q [T, H * N] FP8,
++    s [T, 1] fp32). o [T * H, N] and z [T, H, N] need unit last strides."""
++    from sglang.kernels.ops.quantization.fp8_kernel import fp8_dtype, fp8_max
++
++    T, H, N = z.shape
++    sub = H // 3
++    q = torch.empty((T, H * N), dtype=fp8_dtype, device=o.device)
++    s = torch.empty((T, 1), dtype=torch.float32, device=o.device)
++    _gdn_norm_gate_fp8_kernel[(T,)](
++        o, z, weight, q, s, o.stride(0), z.stride(0), z.stride(1), q.stride(0),
++        eps, 1e-10, -fp8_max, fp8_max,
++        N=N, HEADS=H, SUB=sub, ACTIVATION=activation, num_warps=sub // 4,
++    )
++    return q, s
+diff --git a/python/sglang/srt/layers/attention/linear/gdn_backend.py b/python/sglang/srt/layers/attention/linear/gdn_backend.py
+index fbf6691..5df939d 100644
+--- a/python/sglang/srt/layers/attention/linear/gdn_backend.py
++++ b/python/sglang/srt/layers/attention/linear/gdn_backend.py
+@@ -423,6 +423,47 @@ def _prefill_causal_conv1d(*args, **kwargs):
+     return causal_conv1d_fn(*args, **kwargs)
+ 
+ 
++_AMD_CONV_UNAVAILABLE = False
++# Calls of each SGLANG_AMD_GDN_PREFILL_FUSED path in this process.
++_AMD_FUSED_CALLS: dict[str, int] = {}
++
++
++def _amd_fused_path_ran(path: str) -> None:
++    """Count a call of an SGLANG_AMD_GDN_PREFILL_FUSED path; log calls 1, 10,
++    100, ... so the server log shows the path running."""
++    n = _AMD_FUSED_CALLS.get(path, 0) + 1
++    _AMD_FUSED_CALLS[path] = n
++    if str(n).rstrip("0") == "1":
++        logger.info("SGLANG_AMD_GDN_PREFILL_FUSED: %s call %d", path, n)
++
++
++def _amd_prefill_causal_conv1d(*args, **kwargs):
++    """SGLANG_AMD_GDN_PREFILL_FUSED: gdn_prefill_conv, bit-equal to the AITER
++    conv, where _prefill_causal_conv1d would run the AITER conv; otherwise, and
++    for operands gdn_prefill_conv declines, _prefill_causal_conv1d itself."""
++    global _AMD_CONV_UNAVAILABLE
++    if not _AMD_CONV_UNAVAILABLE and _aiter_gdn_prefill_conv() is not None:
++        try:
++            from sglang.kernels.ops.attention.linear.gdn_prefill_fused import (
++                gdn_prefill_conv,
++            )
++
++            out = gdn_prefill_conv(*args, **kwargs)
++        except ImportError as exc:
++            logger.warning(
++                "SGLANG_AMD_GDN_PREFILL_FUSED: GDN prefill conv unavailable (%s); "
++                "keeping the AITER convolution",
++                exc,
++            )
++            _AMD_CONV_UNAVAILABLE = True
++        except ValueError as exc:
++            logger.debug("SGLANG_AMD_GDN_PREFILL_FUSED conv declined: %s", exc)
++        else:
++            _amd_fused_path_ran("conv")
++            return out
++    return _prefill_causal_conv1d(*args, **kwargs)
++
++
+ class GDNKernelDispatcher:
+     """Dispatches GDN kernel calls to the appropriate backend per mode."""
+ 
+@@ -730,6 +771,9 @@ class GDNAttnBackend(MambaAttnBackendBase):
+     # SGLANG_AMD_GDN_VERIFY, read in __init__; the default covers backends
+     # built without it.
+     _amd_gdn_verify: bool = False
++    # SGLANG_AMD_GDN_PREFILL_FUSED, read in __init__; False for backends built
++    # without it (object.__new__ in tests).
++    _amd_gdn_fused: bool = False
+ 
+     def _create_kernel_dispatcher(self, backends):
+         return GDNKernelDispatcher(backends.decode, backends.prefill, backends.verify)
+@@ -759,6 +803,12 @@ class GDNAttnBackend(MambaAttnBackendBase):
+         )
+         self._use_strided_target_verify_qkv = False
+         self._amd_gdn_verify = gdn_verify_amd_enabled()
++        from sglang.kernels.ops.attention.linear.gdn_prefill_fused import (
++            gdn_prefill_fused_enabled,
++        )
++
++        # Raises on a value other than 0/1 when the backend is built.
++        self._amd_gdn_fused = gdn_prefill_fused_enabled()
+         # A prefill batch never holds more requests than the pool.
+         self.prefill_graph_max_seqs = min(
+             self.req_to_token_pool.size, envs.SGLANG_GDN_PREFILL_GRAPH_MAX_SEQS.get()
+@@ -1362,7 +1412,11 @@ class GDNAttnBackend(MambaAttnBackendBase):
+             # CUDA conv assumes packed slots); the AITER conv never sees them.
+             conv_fn = causal_conv1d_fn_triton if strided_slots else causal_conv1d_fn
+         else:
+-            conv_fn = _prefill_causal_conv1d
++            conv_fn = (
++                _amd_prefill_causal_conv1d
++                if self._amd_gdn_fused
++                else _prefill_causal_conv1d
++            )
+         return conv_fn(
+             mixed_qkv.transpose(0, 1),
+             layer.conv_weights,
+@@ -1376,10 +1430,16 @@ class GDNAttnBackend(MambaAttnBackendBase):
+             **conv_kwargs,
+         ).transpose(0, 1)[: mixed_qkv.shape[0]]
+ 
+-    @staticmethod
+     def _prefill_gates(
+-        layer: RadixLinearAttention, a: torch.Tensor, b: torch.Tensor
++        self, layer: RadixLinearAttention, a: torch.Tensor, b: torch.Tensor
+     ) -> tuple[torch.Tensor, torch.Tensor]:
++        if self._amd_gdn_fused:
++            from sglang.kernels.ops.attention.linear.gdn_prefill_fused import (
++                fused_gdn_gating_blocked,
++            )
++
++            _amd_fused_path_ran("gating")
++            return fused_gdn_gating_blocked(layer.A_log, a, b, layer.dt_bias)
+         return fused_gdn_gating(layer.A_log, a, b, layer.dt_bias)
+ 
+     @staticmethod
+diff --git a/python/sglang/srt/models/qwen3_5.py b/python/sglang/srt/models/qwen3_5.py
+index 8c13ae6..dc77ccb 100644
+--- a/python/sglang/srt/models/qwen3_5.py
++++ b/python/sglang/srt/models/qwen3_5.py
+@@ -353,6 +353,25 @@ def _smallm_fp8_gemm_takes(linear: nn.Module, num_tokens: int) -> bool:
+     )
+ 
+ 
++def _amd_per_token_fp8_input(linear: nn.Module) -> bool:
++    """Whether ``linear`` takes a per-token (fp8, scale) pair at any token count:
++    _fp8_tuple_input's checks without its token cap. The scheme hands the pair
++    to the GEMM its own per-token quant would feed."""
++    scheme = getattr(linear, "scheme", None)
++    return (
++        _use_aiter
++        # gfx950: the producers quantize to e4m3fn
++        and _is_gfx95
++        and type(scheme).__name__ == "QuarkW8A8Fp8"
++        and scheme.per_token
++        and scheme.weight_qscheme == "per_channel"
++        # None where a narrow partition is served dequantized (bf16).
++        and linear.weight_scale is not None
++        and not torch.compiler.is_compiling()
++        and not get_forward().sp_active
++    )
++
++
+ def _select_fused_ar_input_for_linear(hidden_states, linear: nn.Module):
+     if not isinstance(hidden_states, tuple):
+         return hidden_states
+@@ -377,7 +396,16 @@ if _is_npu:
+     )
+ 
+ 
++# _forward_input_proj's packed in_proj_qkvz + in_proj_ba GEMM serves up to this
++# many tokens on AMD/aiter.
++_PACKED_IN_PROJ_MAX_TOKENS = 64
++
++
+ class Qwen3_5GatedDeltaNet(nn.Module):
++    # SGLANG_AMD_GDN_PREFILL_FUSED, read in __init__; False for modules built
++    # without it (__new__ in tests).
++    _amd_gdn_fused: bool = False
++
+     def __init__(
+         self,
+         config: Qwen3_5TextConfig,
+@@ -411,6 +439,12 @@ class Qwen3_5GatedDeltaNet(nn.Module):
+ 
+         self.conv_kernel_size = config.linear_conv_kernel_dim
+         self.layer_id = layer_id
++        from sglang.kernels.ops.attention.linear.gdn_prefill_fused import (
++            gdn_prefill_fused_enabled,
++        )
++
++        # Raises on a value other than 0/1 when the model is built.
++        self._amd_gdn_fused = gdn_prefill_fused_enabled()
+         self.activation = config.hidden_act
+         self.output_gate_type = config.output_gate_type
+         self.layer_norm_epsilon = config.rms_norm_eps
+@@ -897,7 +931,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
+             x = hidden_states[0] if isinstance(hidden_states, tuple) else hidden_states
+             if (
+                 x.dtype == torch.bfloat16
+-                and 0 < x.shape[0] <= 64
++                and 0 < x.shape[0] <= _PACKED_IN_PROJ_MAX_TOKENS
+                 and not torch.compiler.is_compiling()
+             ):
+                 if self._fused_in_proj_scale is not None:
+@@ -1029,9 +1063,36 @@ class Qwen3_5GatedDeltaNet(nn.Module):
+         2. Core attention (custom op)
+         3. Output projection
+         """
+-        projected_states_qkvz, projected_states_ba = self._forward_input_proj(
+-            hidden_states
++        amd_prefill = (
++            self._amd_gdn_fused
++            and forward_batch.logical_forward_mode.is_extend_without_speculative()
+         )
++        if (
++            amd_prefill
++            and isinstance(hidden_states, torch.Tensor)
++            and hidden_states.dtype == torch.bfloat16
++            and hidden_states.shape[0] > _PACKED_IN_PROJ_MAX_TOKENS
++            and _amd_per_token_fp8_input(self.in_proj_qkvz)
++            and _amd_per_token_fp8_input(self.in_proj_ba)
++        ):
++            # Both projections quantize this same tensor per token; quantize once.
++            from sglang.kernels.ops.quantization.fp8_kernel import (
++                per_token_group_quant_fp8,
++            )
++            from sglang.srt.layers.attention.linear.gdn_backend import (
++                _amd_fused_path_ran,
++            )
++
++            fp8_pair = per_token_group_quant_fp8(
++                hidden_states, group_size=hidden_states.shape[-1]
++            )
++            _amd_fused_path_ran("shared in_proj quant")
++            projected_states_qkvz, _ = self.in_proj_qkvz(fp8_pair)
++            projected_states_ba, _ = self.in_proj_ba(fp8_pair)
++        else:
++            projected_states_qkvz, projected_states_ba = self._forward_input_proj(
++                hidden_states
++            )
+ 
+         use_strided_prefill_z = False
+         packed_verify = False
+@@ -1127,6 +1188,33 @@ class Qwen3_5GatedDeltaNet(nn.Module):
+             core_attn_out = core_attn_out_pad
+ 
+         nv = self.num_v_heads // self.attn_tp_size
++        if (
++            use_strided_prefill_z
++            and self._amd_gdn_fused
++            and _amd_per_token_fp8_input(self.out_proj)
++        ):
++            from sglang.kernels.ops.attention.linear.gdn_prefill_fused import (
++                gdn_norm_gate_fp8,
++                gdn_norm_gate_fp8_supported,
++            )
++
++            if gdn_norm_gate_fp8_supported(
++                core_attn_out.shape[0], nv, self.head_v_dim, core_attn_out.device
++            ):
++                from sglang.srt.layers.attention.linear.gdn_backend import (
++                    _amd_fused_path_ran,
++                )
++
++                # self.norm, then out_proj's per-token quant, in one kernel.
++                fp8_pair = gdn_norm_gate_fp8(
++                    core_attn_out,
++                    self.norm.weight,
++                    z,
++                    self.norm.eps,
++                    self.norm.activation,
++                )
++                _amd_fused_path_ran("norm + out_proj quant")
++                return self.out_proj(fp8_pair)[0]
+         if (
+             not use_strided_prefill_z
+             and _fp8_tuple_input(self.out_proj, len(z) // nv, z.dtype)
