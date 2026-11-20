@@ -71,8 +71,10 @@ def _validate_kv_offload_env(
         if backend_name or backend_metadata is not None:
             raise SystemExit("KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none")
     else:
-        if not backend_name or backend_name == "none" or backend_metadata is None:
+        if not backend_name or backend_name == "none":
             raise SystemExit("KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled")
+        if backend_metadata is None:
+            raise SystemExit("KV_OFFLOAD_BACKEND_METADATA is required when KV_OFFLOADING is enabled")
         if backend_metadata["name"] != backend_name:
             raise SystemExit("KV_OFFLOAD_BACKEND must match KV_OFFLOAD_BACKEND_METADATA.name")
     return kv_offloading, backend_metadata

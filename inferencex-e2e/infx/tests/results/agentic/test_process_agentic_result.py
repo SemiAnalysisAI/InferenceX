@@ -34,6 +34,7 @@ from infx.results.agentic import (
     build_result,
     _optional_component_metadata,
     _optional_kv_offload_backend_metadata,
+    _validate_kv_offload_env,
 )
 from infx.results.agentic.server_metrics import compute_server_metrics
 
@@ -456,6 +457,34 @@ def test_processor_emits_kv_offload_backend_metadata(
     )
 
     assert agg["kv_offload_backend"] == metadata
+
+
+@pytest.mark.parametrize(
+    ("env", "message"),
+    [
+        ({"KV_OFFLOADING": "dram"}, "KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled"),
+        (
+            {"KV_OFFLOADING": "dram", "KV_OFFLOAD_BACKEND": "none"},
+            "KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled",
+        ),
+        (
+            {"KV_OFFLOADING": "dram", "KV_OFFLOAD_BACKEND": "lmcache"},
+            "KV_OFFLOAD_BACKEND_METADATA is required when KV_OFFLOADING is enabled",
+        ),
+        (
+            {
+                "KV_OFFLOADING": "dram",
+                "KV_OFFLOAD_BACKEND": "lmcache",
+                "KV_OFFLOAD_BACKEND_METADATA": '{"name":"mooncake"}',
+            },
+            "KV_OFFLOAD_BACKEND must match KV_OFFLOAD_BACKEND_METADATA.name",
+        ),
+    ],
+)
+def test_kv_offload_env_names_the_missing_variable(env, message):
+    with pytest.raises(SystemExit) as error:
+        _validate_kv_offload_env(env)
+    assert error.value.code == message
 
 
 def test_processor_latency_units_are_seconds(tmp_path: Path):
