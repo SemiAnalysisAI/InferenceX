@@ -130,9 +130,9 @@ override_tp4_c32:
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32,40,48,56,64]'
       env:
         ATOM_M3_INDEXER_CP: '1'
-        # Prefill delayer: hold a new prefill for up to 8 scheduler passes while
-        # the batch decodes, until it fills 5% of the token budget or decode
-        # stalls for 2 passes.
+        # Prefill delayer: after a prefill step, the next 8 scheduler passes are
+        # decode only; then a waiting prefill runs once the queued prompt tokens
+        # reach 5% of max-num-batched-tokens, or after 2 passes with no new work.
         ATOM_PREFILL_DECODE_INTERVAL: '8'
         ATOM_PREFILL_DELAYER_TARGET_FILL: '0.05'
         ATOM_PREFILL_DELAYER_STALL_TICKS: '2'
