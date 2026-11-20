@@ -100,15 +100,13 @@ base:
         parameters:
           addEstimatedOutputTokens: false
           syncCrossReplicaState: false
-      - type: session-affinity-scorer
+      - type: approx-prefix-cache-producer
         parameters:
-          profileName: prefill
-          strategy: session_id
-          sessionIdConfig:
-            sources:
-            - header: x-session-id
-            evictionTtlSeconds: 1
-            evictionSweepSeconds: 1
+          autoTune: false
+          blockSizeTokens: 256
+          maxPrefixTokensToMatch: 262144
+          lruCapacityPerServer: 8192
+      - type: prefix-cache-scorer
       - type: active-request-scorer
         parameters:
           idleThreshold: 0
@@ -137,7 +135,7 @@ base:
           weight: 16
         - pluginRef: queue-scorer
           weight: 8
-        - pluginRef: session-affinity-scorer
+        - pluginRef: prefix-cache-scorer
           weight: 4
         - pluginRef: max-score-picker
       - name: decode
