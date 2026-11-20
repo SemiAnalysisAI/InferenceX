@@ -3,7 +3,7 @@ identity:
   model:
     revision: 6d0a0202956796543364d666ab19c6ad1a494ee1
   frameworks:
-    vllm: 0.0.0+k31.64e9878711e9
+    vllm: 0.0.0+k31.b30e0a445fe5
     vllm-router: 0.1.17
 slurm:
   time_limit: 08:00:00
@@ -27,7 +27,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:17a44de58cd2d1b6ecac3aed20e940c2cde83d60624243ed6a9a1a2028b45478
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:61a942435384383a1c6429c142cfe4d0b8f7626ea2e062cb2ce96d3cfe795fef
   args:
     policy: consistent_hash
     prefill-policy: consistent_hash
@@ -67,15 +67,18 @@ roles:
       decode-context-parallel-size: 8
       dcp-comm-backend: a2a
       max-num-seqs: 48
-      max-num-batched-tokens: 16384
+      max-num-batched-tokens: 18432
       compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":4096,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[256,512,768,1024,1536,2048,3072,4096]}'
       speculative-config: '{"model": "Inferact/Kimi-K3.1-Pro-DSpark", "num_speculative_tokens": 3, "method": "dspark", "attention_backend":
         "TRITON_ATTN", "draft_sample_method": "probabilistic", "rejection_sample_method": "block", "revision": "e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f"}'
       additional-config: '{"kda_prefill_backend": "fused", "k31_pd_preparation": true}'
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false,"defer_timeout":300}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":224875000000,"lazy_offload":false}}]}}'
+      kv-transfer-config: '{"kv_connector": "MultiConnector", "kv_role": "kv_both", "kv_load_failure_policy": "fail", "kv_connector_extra_config":
+        {"connectors": [{"kv_connector": "MoRIIOConnector", "kv_role": "kv_producer", "kv_load_failure_policy": "fail", "kv_connector_extra_config":
+        {"backend": "rdma", "read_mode": false, "defer_timeout": 300, "use_dmabuf_kv": true}}, {"kv_connector": "SimpleCPUOffloadConnector",
+        "kv_role": "kv_both", "kv_connector_extra_config": {"cpu_bytes_to_use_per_rank": 224875000000, "lazy_offload": false}}]}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
-      prefix-match-unit: 512
+      prefix-match-unit: 128
       cp-kv-cache-interleave-size: 1
       quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
       mamba-ssm-cache-dtype: float32
@@ -83,6 +86,7 @@ roles:
       block-size: 64
       scheduling-policy: shortest-prefill-first
       enable-prompt-tokens-details: true
+      prefix-cache-retention-interval: 9216
     env:
       PATH: /configs/k31-worker-bin:/opt/runtime-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       HOME: /private-state/k31-clean-home
@@ -152,6 +156,9 @@ roles:
       VLLM_ROCM_K3_MOE_ROW_TAIL: '1'
       VLLM_ROCM_K3_MOE_ROW_TAIL_MIN_TOKENS: '8192'
       K31_ROUTER_ONLY: '0'
+      MORI_DISABLE_AUTO_XGMI: '1'
+      MORI_IO_QP_MAX_RD_ATOMIC: '1'
+      OMP_NUM_THREADS: '8'
   decode:
     nodes: 1
     workers: 1
@@ -177,10 +184,11 @@ roles:
       speculative-config: '{"model": "Inferact/Kimi-K3.1-Pro-DSpark", "num_speculative_tokens": 3, "method": "dspark", "attention_backend":
         "TRITON_ATTN", "draft_sample_method": "probabilistic", "rejection_sample_method": "block", "revision": "e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f"}'
       additional-config: '{"kda_prefill_backend": "fused", "k31_moe_front_pair": true, "k31_pd_preparation": true}'
-      kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false}}'
+      kv-transfer-config: '{"kv_connector": "MoRIIOConnector", "kv_role": "kv_consumer", "kv_load_failure_policy": "fail",
+        "kv_connector_extra_config": {"backend": "rdma", "read_mode": false, "use_dmabuf_kv": true}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
-      prefix-match-unit: 512
+      prefix-match-unit: 128
       cp-kv-cache-interleave-size: 1
       quantization-config: '{"targets":{"*in_proj_qkvgfab":"fp8_per_channel"}}'
       mamba-ssm-cache-dtype: float32
@@ -257,6 +265,9 @@ roles:
       VLLM_K31_BEAT_DRAFTMETA: '1'
       VLLM_K31_CPRR_NATIVE96: '1'
       K31_ROUTER_ONLY: '0'
+      MORI_DISABLE_AUTO_XGMI: '1'
+      MORI_IO_QP_MAX_RD_ATOMIC: '1'
+      OMP_NUM_THREADS: '8'
 benchmark:
   env:
     AGENTIC_MODEL_READY_TIMEOUT_SECONDS: '300'
@@ -276,7 +287,7 @@ environment:
   TOTAL_CPU_DRAM_GB: '1799'
   DECODE_CPU_DRAM_GB: '0'
   KV_P2P_TRANSFER: moriio
-  K31_CLEAN_RUN_ID: k31-di-1119
+  K31_CLEAN_RUN_ID: k31-retention-1120
 telemetry:
   storage_subdir: power
   startup_timeout_seconds: 300

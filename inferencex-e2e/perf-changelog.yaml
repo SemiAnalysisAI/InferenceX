@@ -12643,3 +12643,9 @@
   description:
     - Run the clean mum-tracking-di image with released DSpark and its canonical K3 golden acceptance curve. Preserve 1P1D c128, prefill SimpleCPU, role-specific memory/graph settings, WRITE TC104, full warmup and 3600-second profiling. Use official Router 0.1.17 and image verification without role source overlays.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Evaluate periodic prefill checkpoint retention with the clean SPF and native DMA-BUF image, prefix match unit 128, prefill batch 18432, and unchanged K3 released-draft golden acceptance. Run standard warmup and full 3600-second c128 SimpleCPU WRITE profiling.
+  pr-link: XXX
