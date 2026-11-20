@@ -14,7 +14,6 @@ work attestation from the engine's own startup arguments and log.
 from __future__ import annotations
 
 import csv
-import hashlib
 import math
 import os
 import shutil
@@ -25,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from infx.bench.video import (
+    EVIDENCE_KIND,
     JOB_STATUS,
     cell_dir,
     read_object,
@@ -33,22 +33,14 @@ from infx.bench.video import (
     write_json,
 )
 
+from ._io import file_sha256 as _hash
 from .attestation import POLICIES, attest
 
-EVIDENCE_KIND = "srt_slurm_h3_service"
 TASK_ID = "video-generation"
 MODE = "serving-smoke"
 BUNDLE_TYPE = "h3_serving_smoke_matrix"
 RECEIPT_BUNDLE_TYPE = "srt_slurm_h3_service_receipt"
 POWER_SCHEMA = "1.0.0"
-
-
-def _hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _iso(unix: float) -> str:

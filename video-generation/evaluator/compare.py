@@ -6,7 +6,6 @@ Threshold decisions are deliberately separate from release qualification.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import statistics
@@ -15,8 +14,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from specs.video_spec import canonical_json_bytes, plan_sha256, schema_version
+from specs.video_spec import canonical_json_bytes, canonical_sha256, plan_sha256, schema_version
 
+from ._io import file_sha256
 from .media import analyze_media, compare_media
 from .runner import WAN22_MODEL_ID, _slots, requested_encoding, valid_numerical_identity
 
@@ -36,11 +36,6 @@ def _finite(value: Any, *, minimum: float | None = None) -> bool:
         and math.isfinite(value)
         and (minimum is None or value >= minimum)
     )
-
-
-def _sha256(path: Path) -> str:
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def _reject_nonfinite(value: str) -> None:
@@ -162,7 +157,7 @@ def _artifact(run_dir: Path, record: dict) -> Path | None:
         not isinstance(digest, str)
         or len(digest) != 64
         or any(character not in "0123456789abcdef" for character in digest)
-        or _sha256(path) != digest
+        or file_sha256(path) != digest
     ):
         raise ValueError(f"{record['slot_id']}: artifact SHA256 mismatch")
     return path
@@ -256,7 +251,7 @@ def _load_run(directory: Path) -> tuple[dict, dict[str, dict]]:
     unsigned_configuration = {
         key: value for key, value in configuration.items() if key != "configuration_sha256"
     }
-    configuration_digest = hashlib.sha256(canonical_json_bytes(unsigned_configuration)).hexdigest()
+    configuration_digest = canonical_sha256(unsigned_configuration)
     if not (run.get("configuration_sha256") or configuration.get("configuration_sha256")):
         raise ValueError("run must declare its configuration SHA256")
     for declared in (run.get("configuration_sha256"), configuration.get("configuration_sha256")):
@@ -367,7 +362,7 @@ def _load_run(directory: Path) -> tuple[dict, dict[str, dict]]:
         if _finite(wall, minimum=0.000001) and wall + tolerance < attempted_seconds:
             raise ValueError("measured wall time is shorter than summed serial attempted latencies")
     run["_directory"] = directory
-    run["_bundle_sha256"] = _sha256(path)
+    run["_bundle_sha256"] = file_sha256(path)
     run["_warmups_succeeded"] = warmups_succeeded
     return run, measurements
 
@@ -688,7 +683,7 @@ def _active_media_code() -> dict:
 
     return {
         "implementation_version": media.IMPLEMENTATION_VERSION,
-        "source_sha256": _sha256(Path(media.__file__)),
+        "source_sha256": file_sha256(Path(media.__file__)),
     }
 
 

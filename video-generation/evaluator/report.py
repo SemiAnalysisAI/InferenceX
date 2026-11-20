@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from .compare import _sha256
+from ._io import file_sha256
 
 
 _CSS = """
@@ -65,14 +65,14 @@ def _copy_artifact(source: Path, digest: str, assets: Path) -> Path:
     if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
         raise ValueError("report artifact requires a valid SHA256")
     source = source.resolve(strict=True)
-    if not source.is_file() or _sha256(source) != digest:
+    if not source.is_file() or file_sha256(source) != digest:
         raise ValueError("report source artifact changed after comparison")
     suffix = source.suffix.lower()
     if suffix not in {".mp4", ".webm", ".mov", ".mkv", ".avi"}:
         suffix = ".media"
     target = assets / f"{digest}{suffix}"
     if target.exists() or target.is_symlink():
-        if target.is_symlink() or not target.is_file() or _sha256(target) != digest:
+        if target.is_symlink() or not target.is_file() or file_sha256(target) != digest:
             raise ValueError("existing content-addressed report asset has different content")
         return target
     # Exclusive creation prevents replacement of a preexisting report asset.
@@ -86,7 +86,7 @@ def _copy_artifact(source: Path, digest: str, assets: Path) -> Path:
             target.unlink()
             raise ValueError("report source changed while copying")
     except FileExistsError:
-        if target.is_symlink() or _sha256(target) != digest:
+        if target.is_symlink() or file_sha256(target) != digest:
             raise ValueError("report asset collision")
     return target
 

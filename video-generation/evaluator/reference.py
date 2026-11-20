@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 from specs import video_spec
 
+from ._io import file_sha256
+
 REFERENCE = Path(__file__).resolve().parents[1] / "reference"
 COMPONENTS = (
     "text_encoder",
@@ -27,11 +29,6 @@ COMPONENTS = (
     "scheduler",
     "audio_scheduler",
 )
-
-
-def digest(path: Path) -> str:
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def select_cases(plan: dict, names: list[str]) -> list[dict]:
@@ -70,7 +67,7 @@ def runtime_identity(plan: dict) -> dict:
     return {
         "versions": versions,
         "diffusers_source": source,
-        "linux_lock_sha256": digest(REFERENCE / "requirements-linux.txt"),
+        "linux_lock_sha256": file_sha256(REFERENCE / "requirements-linux.txt"),
     }
 
 
@@ -147,7 +144,7 @@ def save_media(
             container.mux(packet)
         for packet in sound.encode():
             container.mux(packet)
-    return {p.name: digest(p) for p in sorted(directory.iterdir())}
+    return {p.name: file_sha256(p) for p in sorted(directory.iterdir())}
 
 
 def generate(args: argparse.Namespace, plan: dict, cases: list[dict], identity: dict) -> None:
@@ -175,7 +172,8 @@ def generate(args: argparse.Namespace, plan: dict, cases: list[dict], identity: 
             "requested_revision": plan["model_revision"],
             "weights_verified_by_helper": False,
             "metadata_sha256": {
-                str(p.relative_to(snapshot)): digest(p) for p in sorted(snapshot.rglob("*.json"))
+                str(p.relative_to(snapshot)): file_sha256(p)
+                for p in sorted(snapshot.rglob("*.json"))
             },
             "qualification_requires": "matching external model staging/checksum receipt",
         },
@@ -279,7 +277,7 @@ def generate(args: argparse.Namespace, plan: dict, cases: list[dict], identity: 
         receipt.write_text(json.dumps(record, indent=2) + "\n")
         files = sorted(p for p in args.output.rglob("*") if p.is_file())
         (args.output / "SHA256SUMS").write_text(
-            "".join(f"{digest(p)}  {p.relative_to(args.output)}\n" for p in files)
+            "".join(f"{file_sha256(p)}  {p.relative_to(args.output)}\n" for p in files)
         )
 
 

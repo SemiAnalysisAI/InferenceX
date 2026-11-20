@@ -10,6 +10,7 @@ from typing import Any
 from infx.bench import env
 
 JOB_STATUS = "native-job-status.json"
+EVIDENCE_KIND = "srt_slurm_h3_service"
 CREDENTIAL_ENV = re.compile(
     r"(?:^|_)(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|AUTH|BEARER|"
     r"API_KEY|ACCESS_KEY|PRIVATE_KEY|SSH_KEY)(?:_|$)",

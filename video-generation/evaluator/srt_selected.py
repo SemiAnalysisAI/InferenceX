@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ctypes
-import hashlib
 import json
 import os
 import re
@@ -178,7 +177,7 @@ def benchmark_window(run: dict, *, utc_minus_monotonic: float) -> dict:
         "energy_normalization": "clips",
         "clock": {"utc_minus_monotonic_seconds": utc_minus_monotonic},
         "run_path": "baseline/run.json",
-        "run_sha256": hashlib.sha256(video_spec.canonical_json_bytes(run)).hexdigest(),
+        "run_sha256": video_spec.canonical_sha256(run),
     }
 
 

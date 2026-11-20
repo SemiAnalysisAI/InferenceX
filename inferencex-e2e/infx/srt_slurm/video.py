@@ -82,6 +82,7 @@ _RESERVED_ENV = (
         "SRT_MEASUREMENT_WINDOW_DIR",
     }
 ) - {"VIDEO_RUNTIME_REVISION"}
+_REVISION = re.compile(r"[0-9a-f]{40}")
 
 
 def _declared_server_env_keys(recipe: Mapping[str, Any], server: Mapping[str, Any]) -> list[str]:
@@ -146,7 +147,7 @@ def spec_model_path(hf_hub_cache: str, model: str, revision: str) -> str:
     """Where the HF hub cache the job mounts holds ``model`` at ``revision``."""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*", model):
         raise ValueError(f"MODEL must be an org/name Hugging Face repo id: {model!r}")
-    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+    if not _REVISION.fullmatch(revision):
         raise ValueError(f"spec model.revision must be a 40-hex commit: {revision!r}")
     cache = PurePosixPath(hf_hub_cache)
     if not cache.is_absolute():
@@ -334,7 +335,7 @@ def bind_video(
         ) != "0":
             raise ValueError("fairness workload requires OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0")
     revision = str((service.get("env") or {}).get("VIDEO_RUNTIME_REVISION", ""))
-    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+    if not _REVISION.fullmatch(revision):
         raise ValueError("video service requires a pinned VIDEO_RUNTIME_REVISION")
     values = {
         "MODEL": model,

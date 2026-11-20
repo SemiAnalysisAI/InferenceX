@@ -23,7 +23,7 @@ def canonical_json_bytes(value: Any) -> bytes:
     ).encode("utf-8")
 
 
-def _sha256(value: Any) -> str:
+def canonical_sha256(value: Any) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 
 
@@ -269,7 +269,7 @@ def plan_for(
 
 def plan_sha256(plan: dict[str, Any]) -> str:
     """The ``plan_sha256`` the runner records for this plan."""
-    return _sha256(plan)
+    return canonical_sha256(plan)
 
 
 def spec_sha256(spec: dict[str, Any]) -> str:
@@ -281,7 +281,7 @@ def spec_sha256(spec: dict[str, Any]) -> str:
     }
     if schema_version(spec) == 2:
         identity["fairness"] = spec["fairness"]
-    return _sha256(identity)
+    return canonical_sha256(identity)
 
 
 def main(argv: list[str]) -> None:

@@ -23,7 +23,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from infx.bench.video import cell_dir, read_object, run_complete, window_file
+from infx.bench.video import EVIDENCE_KIND, cell_dir, read_object, run_complete, window_file
 from infx.results.power import multinode
 from infx.results.power.audit import audit_summary
 from infx.results.power.common import _write_json_atomic
@@ -83,7 +83,7 @@ def build_aggregate(
     return {
         "schema_version": 1,
         "scenario_type": SCENARIO_TYPE,
-        "evidence_kind": "srt_slurm_h3_service",
+        "evidence_kind": EVIDENCE_KIND,
         **{key: identity.get(key) for key in IDENTITY},
         "model_id": plan.get("model_id"),
         "model_revision": plan.get("model_revision"),

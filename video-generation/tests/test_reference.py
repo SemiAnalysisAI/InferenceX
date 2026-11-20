@@ -8,7 +8,8 @@ import av
 import numpy as np
 import pytest
 from evaluator import reference
-from evaluator.reference import digest, save_media, select_cases
+from evaluator._io import file_sha256
+from evaluator.reference import save_media, select_cases
 from specs import video_spec
 
 
@@ -29,7 +30,7 @@ def test_reference_retains_float_media_and_encodes_explicit_streams(tmp_path: Pa
     assert set(hashes) == {"video.npy", "audio.npy", "reference.mp4"}
     np.testing.assert_array_equal(np.load(target / "video.npy", allow_pickle=False), video)
     np.testing.assert_array_equal(np.load(target / "audio.npy", allow_pickle=False), audio)
-    assert all(digest(target / name) == expected for name, expected in hashes.items())
+    assert all(file_sha256(target / name) == expected for name, expected in hashes.items())
     with av.open(str(target / "reference.mp4")) as container:
         stream = container.streams.video[0]
         assert stream.codec_context.name == "h264"
@@ -113,9 +114,9 @@ def test_reference_retains_startup_failures_without_attesting_weights(
     assert record["cases"] == []
     assert record["quality_status"] == "unjudged"
     assert record["model_snapshot"]["weights_verified_by_helper"] is False
-    assert record["model_snapshot"]["metadata_sha256"]["modular_model_index.json"] == digest(
+    assert record["model_snapshot"]["metadata_sha256"]["modular_model_index.json"] == file_sha256(
         snapshot / "modular_model_index.json"
     )
     assert (
         args.output / "SHA256SUMS"
-    ).read_text() == f"{digest(args.output / 'reference.json')}  reference.json\n"
+    ).read_text() == f"{file_sha256(args.output / 'reference.json')}  reference.json\n"
