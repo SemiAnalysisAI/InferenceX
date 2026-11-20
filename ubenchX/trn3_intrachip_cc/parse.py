@@ -16,7 +16,8 @@ import os
 import pandas as pd
 
 CLOCK_GHZ = 1.2
-OPS = {"allg_sbuf": ("all_gather", "SBUF"), "allr_sbuf": ("all_reduce", "SBUF"), "redsct_sbuf": ("reduce_scatter", "SBUF"), "all_gather_hbm": ("all_gather", "HBM"),
+OPS = {"allg_sbuf": ("all_gather", "SBUF"), "allr_sbuf": ("all_reduce", "SBUF"), "redsct_sbuf": ("reduce_scatter", "SBUF"),
+       "a2a_sbuf": ("all_to_all", "SBUF"), "all_gather_hbm": ("all_gather", "HBM"),
        "all_reduce_hbm": ("all_reduce", "HBM"), "reduce_scatter_hbm": ("reduce_scatter", "HBM"),
        "alltoall_hbm": ("all_to_all", "HBM")}
 

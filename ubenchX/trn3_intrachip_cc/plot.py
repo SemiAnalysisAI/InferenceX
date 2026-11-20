@@ -3,8 +3,8 @@
   python ubenchX/trn3_intrachip_cc/plot.py cc.csv [more.csv ...] out.png [--label "run name"]
 
 nccom-test on one Trainium3 chip at LNC=2, 4 ranks = all 4 logical cores. One panel per op, busbw (GB/s) vs size.
-Color: HBM buffers vs SBUF buffers (--sb2sb, up to 8 MiB, above which SBUF collectives do not run; all_to_all is
-HBM-only). Labels: each line's peak and the first point after the drop. Marker: the algorithm the library picked (nccom-test --show-algorithm).
+Color: HBM buffers vs SBUF buffers (--sb2sb, up to 8 MiB, above which SBUF collectives do not run; SBUF all_to_all
+needs the pre-release runtime). Labels: each line's peak and the first point after the drop. Marker: the algorithm the library picked (nccom-test --show-algorithm).
 HBM runs to 4 GiB; where the library switches to its Ring algorithm (512 MiB to 2 GiB) busbw drops ~3x, drawn as a dashed
 segment into down-triangles. Later CSVs replace earlier ones per (placement, op, buffer, size). Size convention
 (nccom-test): all_gather = output bytes, reduce_scatter = input bytes, all_reduce / all_to_all = buffer bytes per rank.

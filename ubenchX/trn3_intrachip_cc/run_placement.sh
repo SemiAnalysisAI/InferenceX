@@ -17,8 +17,8 @@
 # Sizes: the nccl-tests grid (-b 8 -e 4G -f 2), powers of two, in HBM; in SBUF (--sb2sb) LNC x 256 B (one bf16 per
 # partition per physical core) .. 8 MiB (x2), above which the SBUF collectives do not run. Sizes below one bf16
 # element per rank of a group (2 B x group size) cannot be split and are not launched; SBUF all_gather starts at
-# LNC x 256 B per rank. SBUF runs all_gather, all_reduce and
-# reduce_scatter (all_to_all is HBM-only in nki.collectives and nccom-test).
+# LNC x 256 B per rank. SBUF runs all_gather, all_reduce, reduce_scatter and alltoall; SBUF alltoall needs the
+# pre-release runtime (trn3-ubench:neuron-2x): SDK 2.33's nccom-test rejects --sb2sb alltoall, so a2a_sbuf fails there.
 set -u
 PL=$1; CHIP=$2; OUT=/InferenceX/$3/$PL
 mkdir -p "$OUT"; cd /tmp
@@ -55,6 +55,8 @@ run allg_sbuf all_gather -b $AGMIN -e 8MB -f 2 --sb2sb --output-shape "[1,131072
 run allr_sbuf all_reduce -b $SMIN -e 8MB -f 2 --sb2sb --input-shape "[1,131072][$FREE,128]" --cc-dim 0 --sweep-dim 0
 # reduce_scatter in SBUF splits along partitions only (NKI collective_dim 0), which is nccom-test --cc-dim 1
 run redsct_sbuf reduce_scatter -b $SMIN -e 8MB -f 2 --sb2sb --input-shape "[1,131072][$FREE,128]" --cc-dim 1 --sweep-dim 0
+# alltoall: --cc-dim 0 and 1 measure the same (lnc1_r8, lnc2_r4)
+run a2a_sbuf alltoall -b $SMIN -e 8MB -f 2 --sb2sb --input-shape "[1,131072][$FREE,128]" --cc-dim 0 --sweep-dim 0
 for op in all_gather all_reduce reduce_scatter alltoall; do   # nccom-test's name is "alltoall"
   MIN=$SPLIT_MIN; [ $op = all_reduce ] && MIN=8
   if [ ${#FLAGS[@]} -gt 0 ]; then
