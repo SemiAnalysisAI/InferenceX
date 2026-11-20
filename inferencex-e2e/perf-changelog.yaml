@@ -13117,3 +13117,14 @@
     - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the H100 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 2, 4 and 8 GPUs: DiT TP2 with Ulysses 1, 2 and 4, since H3 does not fit one 80 GB GPU, with text-encoder TP and tiled VAE patch parallelism across all GPUs, and with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
     - "The H3 snapshot staged on h100-dsxe lacks Ref2VA/model_index.json, which the vLLM-Omni model view requires, so its launcher downloads the pinned snapshot without the Ref2VA weights into its hub cache before it submits a video job, as on a100-cw; the download keeps its xet cache in a temporary directory, since the runner's HF_HOME is a read-only model store."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4969
+
+- config-keys:
+    - qwen3.8next-fp4-b300-tokenspeed-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP1/EP1 B300 TokenSpeed AgentX MTP coverage at concurrency 1, 2, 4, 8, 20, 36, 56, 80 and 108, with running-request caps 104, 104, 104, 2, 6, 12, 35, 72 and 104."
+    - "Pin the CUDA 13 / PyTorch 2.14.0 / FlashInfer 0.7.4 amd64 runner image and the SHA256-verified TokenSpeed, kernel and engine 20261117 wheels; install scheduler 0.1.58 and SMG 1.16.0.post20261115."
+    - "Use FP8 E4M3 target/draft KV, BF16 SSM state, three MTP steps, 256K context, 16K prefill chunks, 236 GB Host L2 and a 4 GB retraction snapshot pool within a 241 GB per-GPU CPU DRAM allocation."
+    - "Enable target prefill graphs through 8192 tokens and the wheel's automatic drafter extend graphs, without the removed enable-drafter-prefill-graph flag."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5116
