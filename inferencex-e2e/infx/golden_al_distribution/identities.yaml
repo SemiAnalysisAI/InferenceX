@@ -128,11 +128,11 @@ kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block:
     draft_kv_cache_dtype: {value: fp8, source: explicit}
     kv_cache_dtype: {value: fp8, source: explicit}
 
-kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block:
+kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block:
   select: {model_prefixes: [kimik3.1], method: dspark, draft_sample: probabilistic}
   collection:
     engine: vllm
-    draft: Inferact/Kimi-K3.1-Pro-DSpark-preview
+    draft: Inferact/Kimi-K3.1-Pro-DSpark
     draft_sample: {value: probabilistic, source: explicit}
     verify: {value: block, source: explicit}
     adaptive: {value: false, source: documented}
