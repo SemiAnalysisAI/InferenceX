@@ -162,9 +162,3 @@ override_1p1d_d4:
       args:
         tp-size: 4
         dp-size: 4
-
-# Two PP4 prefills on one node and an 8-GPU decode (16 GPUs).
-override_2p1d:
-  roles:
-    prefill:
-      workers: 2

@@ -799,10 +799,9 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
 # Infera router (infera-sglang). Workers start through infera.engine.sglang and register in
 # etcd; the router routes kv-aware with prefill session affinity and decode input demand.
 # Prefill is TP1 x PP4 on four GPUs with write-back HiCache (250 GB per stage); decode is
-# TP + DP attention; EAGLE MTP 5/1/6 on both roles; KV over Mooncake. Three shapes:
+# TP + DP attention; EAGLE MTP 5/1/6 on both roles; KV over Mooncake. Two shapes:
 # (1) 1P1D, 8-GPU decode (12 GPUs), decode request weight 1,000,000, conc [32, 48, 64, 88];
-# (2) 1P1D, 4-GPU decode (8 GPUs), conc [64, 80];
-# (3) 2P1D, two prefills on one node and an 8-GPU decode (16 GPUs), conc [176].
+# (2) 1P1D, 4-GPU decode (8 GPUs), conc [64, 80].
 glm5.2-fp4-mi355x-infera-sglang-agentic-disagg:
   image: lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261117@sha256:e016f33423250be30bde9e0888d159b67b01e00944de1edc11f36dd1f3dd0269
   model: amd/GLM-5.2-MXFP4
@@ -851,22 +850,6 @@ glm5.2-fp4-mi355x-infera-sglang-agentic-disagg:
         decode:
           num-worker: 1
           tp: 4
-          ep: 1
-          dp-attn: true
-      - spec-decoding: mtp
-        conc-list: [176]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        srt-recipe: disagg-variants.yaml:override_2p1d
-        prefill:
-          num-worker: 2
-          tp: 1
-          pp: 4
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          tp: 8
           ep: 1
           dp-attn: true
 
