@@ -13214,9 +13214,9 @@
 
 - config-keys:
     - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dcp8-disagg
-    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep16-disagg
     - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep32-disagg
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-agg
   scenario-type: [agentic-coding]
   description:
-    - "Add Kimi-K3.1-Pro FP4/FP8-KV AgentX disaggregated recipes on GB300 behind llm-d-router v1.0.0 (llmd-vllm) with load-aware and session-affinity routing, NIXL P/D transfer, embedded Mooncake RDMA prefix-cache sharing (4 GB local buffer, 160 GB segment), and DSpark speculative decoding across DCP8 (1P5D at c44 and c56, 1P3D at c56, 2P1D hybrid DP4xTP8xDCP8 at c256, and 3P1D hybrid DP4xTP8xDCP8 at c448), DEP16 (1P1D external-LB at c352), and DEP32 (2P1D external-LB at c960) topologies."
+    - "Add Kimi-K3.1-Pro FP4/FP8-KV AgentX recipes on GB300 behind llm-d-router v1.0.0 (llmd-vllm) with load-aware routing, embedded Mooncake RDMA prefix-cache sharing (4 GB local buffer, 160 GB segment), and DSpark speculative decoding across DCP8 disaggregated (1P5D at c44 and c56, 1P3D at c56, 2P1D hybrid DP4xTP8xDCP8 at c256, and 3P1D hybrid DP4xTP8xDCP8 at c448 with NIXL P/D transfer and session-affinity prefill routing), DEP32 disaggregated (2P1D external-LB at c960 with NIXL P/D transfer), and TP16/DCP16 aggregated (c1 with 7 draft tokens) topologies."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5149
