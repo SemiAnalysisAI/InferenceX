@@ -59,6 +59,7 @@ override_tp4_c4_hicache:
         expert-parallel-size: 4
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
+        prefill-decode-interval: 64
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
@@ -76,6 +77,7 @@ override_tp4_c8_hicache:
         expert-parallel-size: 4
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
+        prefill-decode-interval: 128
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
@@ -93,6 +95,7 @@ override_tp4_c10_hicache:
         expert-parallel-size: 4
         max-running-requests: 20
         cuda-graph-max-bs-decode: 20
+        prefill-decode-interval: 128
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
@@ -110,6 +113,7 @@ override_tp4_c12_hicache:
         expert-parallel-size: 4
         max-running-requests: 24
         cuda-graph-max-bs-decode: 24
+        prefill-decode-interval: 128
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
@@ -127,6 +131,7 @@ override_tp4_c14_hicache:
         expert-parallel-size: 4
         max-running-requests: 28
         cuda-graph-max-bs-decode: 28
+        prefill-decode-interval: 128
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
