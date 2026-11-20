@@ -29,6 +29,8 @@ base:
         PYTHONNOUSERSITE: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
         SGLANG_USE_AITER: '1'
+        # The image's aiter has no gfx942 Triton blockscale configs for most of this model's linear shapes.
+        SGLANG_AITER_GFX942_BLOCKSCALE_USE_CK: '1'
         AITER_ONLINE_TUNE: '0'
         ROCM_QUICK_REDUCE_QUANTIZATION: 'NONE'
         SGLANG_DSA_FUSE_TOPK: 'false'
