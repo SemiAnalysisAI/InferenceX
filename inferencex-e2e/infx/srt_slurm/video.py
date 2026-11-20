@@ -133,13 +133,23 @@ def check_video_fragment(raw: Mapping[str, Any], source: Path) -> None:
 
 
 def compose_video_recipe(path: Path, *, root: Path) -> dict[str, Any]:
-    """The fragment at ``path`` over the shared video and native telemetry blocks."""
+    """The fragment at ``path`` over the shared video and native telemetry blocks.
+
+    Each fragment service also merges over the shared service of the same name.
+    """
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
     check_video_fragment(raw, path)
     shared = merge_blocks(_block(root / VIDEO_BLOCK), _block(root / NATIVE_TELEMETRY_BLOCK))
-    return merge_blocks(shared, raw)
+    recipe = merge_blocks(shared, raw)
+    if isinstance(raw.get("services"), list):
+        by_name = {service["name"]: service for service in shared.get("services", [])}
+        recipe["services"] = [
+            merge_blocks(by_name.get(service.get("name"), {}), service)
+            for service in raw["services"]
+        ]
+    return recipe
 
 
 def spec_model_path(hf_hub_cache: str, model: str, revision: str) -> str:
