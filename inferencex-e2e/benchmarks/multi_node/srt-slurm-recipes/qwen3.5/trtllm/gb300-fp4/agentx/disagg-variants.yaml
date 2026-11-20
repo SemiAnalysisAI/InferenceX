@@ -675,6 +675,12 @@ override_4p1d_tep2_dep8_c840:
           kv_cache_bounce_size_mb: 2048
         kv_cache_config:
           remote_cache_config:
+            # NIXL (RDMA over IB) instead of fabric: on this cluster, host-memory fabric handles exported
+            # from some nodes cannot be imported (CUDA_ERROR_INVALID_HANDLE), and with only 0.18 of a
+            # donor node spare, losing one decode node's donors leaves the prefill claims unmet.
+            transport:
+              kind: nixl
+              compact_host_memory:
             level:
               size: 171798691840
               expected:
@@ -710,6 +716,10 @@ override_4p1d_tep2_dep8_c840:
         kv_cache_config:
           free_gpu_memory_fraction: 0.85
           remote_cache_config:
+            # Must match the prefill side: every rank sharing the rendezvous directory uses one transport.
+            transport:
+              kind: nixl
+              compact_host_memory:
             donor:
               size: 188978561024
           defer_generation_only_release:
