@@ -140,7 +140,7 @@ override_tp4_c32:
     env:
       CONC: '32'
 
-# The LMCache points keep evicted prefixes in a 200 GiB CPU pool per rank
+# The LMCache point keeps evicted prefixes in a 200 GiB CPU pool per rank
 # (target KV, index cache and the draft's pool).
 
 override_tp4_c48_lmcache:
@@ -149,7 +149,7 @@ override_tp4_c48_lmcache:
       args:
         max-num-seqs: 96
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32,40,48,56,64,80,96]'
-        extra-kv-connectors: &lmcache_offload
+        extra-kv-connectors:
           - kv_connector: lmcache_offload
             kv_role: offload
       env:
@@ -161,26 +161,5 @@ override_tp4_c48_lmcache:
   benchmark:
     env:
       CONC: '48'
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '869'
-
-override_tp4_c64_lmcache:
-  roles:
-    agg:
-      args:
-        max-num-seqs: 128
-        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32,40,48,56,64,80,96,112,128]'
-        extra-kv-connectors: *lmcache_offload
-      env:
-        ATOM_M3_INDEXER_CP: '1'
-        LMCACHE_LOCAL_CPU: 'True'
-        LMCACHE_NUMA_MODE: auto
-        LMCACHE_MAX_LOCAL_CPU_SIZE: '200'
-        # One KV block per chunk, so a GPU prefix hit that ends off a 256-token
-        # boundary still loads the CPU rest.
-        LMCACHE_CHUNK_SIZE: '128'
-  benchmark:
-    env:
-      CONC: '64'
       KV_OFFLOADING: dram
       TOTAL_CPU_DRAM_GB: '869'
