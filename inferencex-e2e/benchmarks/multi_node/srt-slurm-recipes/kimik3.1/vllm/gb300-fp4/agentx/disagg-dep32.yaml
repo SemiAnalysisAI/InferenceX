@@ -45,8 +45,8 @@ base:
     type: mooncake-master
     args:
     - "--default_kv_lease_ttl=60000"
-    - "--eviction_high_watermark_ratio=0.95"
-    - "--eviction_ratio=0.10"
+    - "--eviction_high_watermark_ratio=0.98"
+    - "--eviction_ratio=0.05"
     options:
       store_config:
         metadata_server: "P2PHANDSHAKE"
