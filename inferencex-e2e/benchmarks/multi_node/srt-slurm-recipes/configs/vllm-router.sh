@@ -17,5 +17,4 @@ pid = int(sys.argv[1])
 soft, hard = resource.prlimit(pid, resource.RLIMIT_MEMLOCK)
 if soft != hard:
     resource.prlimit(pid, resource.RLIMIT_MEMLOCK, (hard, hard))
-print(f"RLIMIT_MEMLOCK of pid {pid}: soft {soft} -> {hard}")
 PY
