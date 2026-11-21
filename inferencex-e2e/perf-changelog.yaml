@@ -13265,3 +13265,11 @@
   description:
     - "Update the vLLM image from cu134-nightly-cf5cea2d to cu134-nightly-f5d93296."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5141
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the vLLM image from minimax-m31-flash-arm64-cu134 to minimax-m31-flash-arm64-cu135-ddd43a5."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5166
