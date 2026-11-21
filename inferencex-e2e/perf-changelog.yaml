@@ -13213,6 +13213,60 @@
   append-only: true
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro MXFP4 MI355X AgentX on TokenSpeed at concurrency 1, 4, 8, 16, 24, 32 and 48: attention and MoE TP8 with EP1, the released Inferact/Kimi-K3.1-Pro-DSpark draft on the MHA drafter backend (7 drafts at concurrency 1 to 8, 5 at 16 to 48), FP8 KV cache with the MXFP4 DSA indexer key cache, 1,048,560-token context. From concurrency 8, `kvstore-size: 128` provisions a 128 GB per GPU Host L2 KV store pinned from the GTT pool (HSA_USERPTR_FOR_PAGED_MEM=0), KV parallel 8 with DCP8 and prefill graphs up to 3072 tokens (concurrency 1 and 4 run without host KV offload); every point has its own running-request cap and prefill/decode intervals, with short-prefill-first at 24 and 32 and mixed batches at 32 and 48."
+    - "Pin the runner image by digest, tokenspeed-smg 1.16.0.post20261118, the checkpoint and DSpark draft revisions, and the November 19 TokenSpeed 0.1.1.post20261119, kernel 0.1.5.post20261119, kernel-amd 0.1.4.post20261119 and engine 0.1.1.post20261119 wheels by release URL and SHA256, and tokenspeed-scheduler 0.1.58 from PyPI. tokenspeed-nightly-rocm.sh keeps the image's ROCm torch. Bind TokenSpeed's decode-context-parallel-size to the matrix dcp-size."
+    - "Select golden DSpark acceptance (probabilistic draft, block verification) and the greedy sampler for TokenSpeed DSPARK throughput, removing speculative sampling and block verification; evals verify for real with the triton sampler, speculative sampling and block verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5144
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update SGLang image from v0.5.23-rocm10-mi35x-20261031 to v0.5.23-rocm10-mi35x-20261110."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5000
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM ROCm nightly image from edad8b03 to f5d93296, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5014
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang image from v0.5.22-rocm10-mi30x to v0.5.23-rocm10-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5074
+
+- config-keys:
+    - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang image from v0.5.22-rocm10-mi30x to v0.5.23-rocm10-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5107
+
+- config-keys:
+    - musespark-fp4-b300-sglang-agentic-dflash
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261030-302b78cc to nightly-dev-cu13-20261118-ecd3d75a."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5134
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the vLLM image from cu134-nightly-cf5cea2d to cu134-nightly-f5d93296."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5141
+
+- config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp
