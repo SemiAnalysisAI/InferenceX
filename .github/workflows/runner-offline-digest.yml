@@ -3,6 +3,7 @@ name: Runner Offline Digest
 on:
   schedule:
     - cron: '13 14 * * *'
+    - cron: '43 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -15,7 +16,7 @@ concurrency:
 jobs:
   digest:
     name: digest
-    if: github.repository == 'SemiAnalysisAI/InferenceX'
+    if: github.repository == 'SemiAnalysisAI/InferenceX' && github.event.schedule != '43 * * * *'
     runs-on: ubuntu-latest
     steps:
       - name: List offline runners
@@ -97,3 +98,91 @@ jobs:
           fi
 
           echo "Posted parent + thread reply (ts=$THREAD_TS) to $CHANNEL"
+
+  pool-outage:
+    name: pool outage
+    if: github.repository == 'SemiAnalysisAI/InferenceX' && github.event.schedule == '43 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Restore alerted pools
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/runner-pools
+          key: runner-pools-offline-${{ github.run_id }}
+          restore-keys: runner-pools-offline-
+
+      - name: Find pools with every runner offline
+        id: pools
+        env:
+          GH_TOKEN: ${{ secrets.RUNNERS_PAT }} # zizmor: ignore[secrets-outside-env]
+          REPO: ${{ github.repository }}
+          STATE: ${{ runner.temp }}/runner-pools/offline.json
+        run: |
+          set -eo pipefail
+
+          RUNNERS=$(gh api --paginate "/repos/$REPO/actions/runners?per_page=100" --jq '.runners[]' | jq -s '.')
+          POOLS=$(jq -c '
+            [.[] | {status, pool: ([.labels[].name | select(startswith("cluster:"))] | first)}
+              | select(.pool != null)]
+            | group_by(.pool)
+            | map({pool: .[0].pool, total: length, online: (map(select(.status == "online")) | length)})
+          ' <<<"$RUNNERS")
+          OFFLINE=$(jq -c '[.[] | select(.online == 0) | .pool]' <<<"$POOLS")
+          if [[ -f "$STATE" ]]; then
+            ALERTED=$(cat "$STATE")
+          else
+            ALERTED='[]'
+          fi
+          echo "Pools with every runner offline: $OFFLINE (last alerted: $ALERTED)"
+
+          TEXT=$(jq -rn --argjson pools "$POOLS" --argjson offline "$OFFLINE" --argjson alerted "$ALERTED" '
+            (reduce $pools[] as $p ({}; .[$p.pool] = $p)) as $by
+            | [(($offline - $alerted)[] | ":rotating_light: `\(.)`: all \($by[.].total) runners offline"),
+               (($alerted - $offline)[] | if $by[.] then
+                  ":white_check_mark: `\(.)`: back online (\($by[.].online)/\($by[.].total) runners)"
+                else
+                  ":white_check_mark: `\(.)`: no runners registered"
+                end)]
+            | join("\n")
+          ')
+          if [[ -n "$TEXT" ]]; then
+            mkdir -p "$(dirname "$STATE")"
+            echo "$OFFLINE" > "$STATE"
+            {
+              echo 'text<<TEXT_EOF'
+              echo "$TEXT"
+              echo 'TEXT_EOF'
+            } >> "$GITHUB_OUTPUT"
+            echo "$TEXT"
+          fi
+
+      - name: Post Slack alert
+        if: steps.pools.outputs.text != ''
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }} # zizmor: ignore[secrets-outside-env]
+          CHANNEL: C09PULGMVNG
+          TEXT: ${{ steps.pools.outputs.text }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -eo pipefail
+
+          MESSAGE=$(printf '*Runner pools* in `%s` (<%s|run>)\n%s' "$REPO" "$RUN_URL" "$TEXT")
+          resp=$(curl -sS -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            --data "$(jq -n --arg ch "$CHANNEL" --arg t "$MESSAGE" '{channel: $ch, text: $t}')")
+
+          if [[ "$(jq -r '.ok' <<<"$resp")" != "true" ]]; then
+            echo "Slack post failed: $resp" >&2
+            exit 1
+          fi
+
+      # Saved only after a successful post, so a failed post alerts again next hour.
+      - name: Save alerted pools
+        if: steps.pools.outputs.text != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/runner-pools
+          key: runner-pools-offline-${{ github.run_id }}
