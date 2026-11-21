@@ -13281,7 +13281,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update the image from vllm/vllm-openai-rocm:kimi-k31-5c14fe8 (sha256:a61996b4) to vllm/vllm-openai-rocm:kimi-k31-712d9eb (sha256:7c167350), vLLM mum-tracking 712d9eb37, which is 5c14fe8de plus seungrokj/mum#30, seungrokj/mum#33, seungrokj/mum#35, seungrokj/mum#36 and seungrokj/mum#38."
+    - "Update the image from vllm/vllm-openai-rocm:kimi-k31-5c14fe8 (sha256:a61996b4) to vllm/vllm-openai-rocm:kimi-k31-712d9eb (sha256:7c167350), vLLM 712d9eb37 (the head of vllm-project/vllm k31-amd-tracking), which is 5c14fe8de plus seungrokj/mum#30, seungrokj/mum#33, seungrokj/mum#35, seungrokj/mum#36 and seungrokj/mum#38."
     - "Points are unchanged: TP8 at concurrency 1 (DCP1) and 4 (DCP8) with the KV cache on the GPUs, and TP8 DCP8 at concurrency 16, 24, 32 and 48 with vllm-simple DRAM KV offload."
     - "Switch the draft from Inferact/Kimi-K3.1-Pro-DSpark-preview (unpinned) to the released Inferact/Kimi-K3.1-Pro-DSpark at revision e4e6e626, the revision its golden acceptance curve was measured with. The released draft uses GQA sliding-window (2048-token) attention instead of MLA, which ROCM_AITER_MLA rejects, so concurrency 16-48 move the draft attention backend from ROCM_AITER_MLA to TRITON_ATTN and keep the fp8 draft KV cache."
     - "Concurrency 1 and 4 (latency_specialized) drop the draft attention_backend and kv_cache_dtype, so vLLM selects KIMI_K3_FLYDSL_SWA_GQA with a model-dtype (BF16) draft KV cache, which also enables VLLM_K31_BEAT_CTXKV (one-launch draft context K/V store; it requires a non-fp8 draft cache)."
