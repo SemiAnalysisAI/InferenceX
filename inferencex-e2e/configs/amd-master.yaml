@@ -1092,7 +1092,7 @@ glm5.3-fp4-mi355x-sglang-agentic-mtp:
 # The golden acceptance curve is the GLM-5.3 NVFP4 SGLang curve in
 # infx/golden_al_distribution/glm-5.3-nvfp4__mtp__native__default-default.yaml.
 glm5.3-fp8-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261105@sha256:33efb7dc35be2a099a21cd14e8d50eddaad0808b7ac71177f3aa1bdc990cfdec
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261119@sha256:55917fb2b7fc4bf8068a02afd5bd70573c83c50465879a60cc2277fafba9769a
   model: zai-org/GLM-5.3
   model-prefix: glm5.3
   runner: cluster:mi355x-amds
@@ -1103,7 +1103,14 @@ glm5.3-fp8-mi355x-sglang-agentic-mtp:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 10], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c1 }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [2], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c2 }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [4], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c4 }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [8], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c8 }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [10], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c10 }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [20], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c20 }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [30], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c30 }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [40], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c40 }
 glm5.3-fp8-mi355x-tilert-agentic:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
   model: zai-org/GLM-5.3
