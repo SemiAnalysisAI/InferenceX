@@ -13237,6 +13237,46 @@
   scenario-type: [agentic-coding]
 
 - config-keys:
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang image from v0.5.22-rocm10-mi30x to v0.5.23-rocm10-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5074
+
+- config-keys:
+    - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang image from v0.5.22-rocm10-mi30x to v0.5.23-rocm10-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5107
+
+- config-keys:
+    - musespark-fp4-b300-sglang-agentic-dflash
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261030-302b78cc to nightly-dev-cu13-20261118-ecd3d75a."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5134
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the vLLM image from cu134-nightly-cf5cea2d to cu134-nightly-f5d93296."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5141
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp
+  scenario-type: [agentic-coding]
+  description:
+    - "Move every key of the DeepSeek-V4.1-Flash MI355X vLLM AgentX curve to vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47 (2026-11-19, digest sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32) and rerun all 13 points, so the whole curve is on one image: TP4 c1-c2, TP2 c1-c64 and TP8 c1 (previously nightly-4fab5a07), DP2 c128 without KV offloading and DP2 c256/c384 with UMBP KV offloading (previously nightly-60bd6dd)."
+    - "Recipes, topology, concurrencies, speculative decoding and KV offloading are unchanged. Relative to nightly-60bd6dd, the image keeps the same ROCm 10.0, PyTorch 2.13.0, Triton, AITER v0.1.29 and MORI v1.2.3.post1 layers; only vLLM moves forward on main."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5151
+
+- config-keys:
     - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
     - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
   description:

@@ -315,7 +315,7 @@ qwen3.5-fp8-mi300x-sglang-agentic-mtp:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 16, 20, 24, 32], srt-recipe: agentic.yaml }
 
 glm5.3flash-fp8-mi300x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
+  image: lmsysorg/sglang:v0.5.23-rocm10-mi30x@sha256:84615bde43049c4380587b267b0163455c4916173535cb1c3574fc3e9f35abcf
   model: zai-org/GLM-5.3-Flash
   model-prefix: glm5.3flash
   runner: cluster:mi300x-amd
@@ -938,7 +938,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
   # ROCm 10.0 nightly carrying vllm-project/vllm#59039 (decoder SWA bounded
   # replay on ROCm), #61082 (mono decode on all 40 backbone layers) and #62131
   # (mono decode on the DSpark draft layers), all switched by --monokernel.
-  image: vllm/vllm-openai-rocm:nightly-4fab5a07475822c6eaa971dceb2e2220d0446808@sha256:6f126f27a3b58959da3c16076248fc99eb31e26d0a3ae9f8563bda7317d6a7e6
+  image: vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47@sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -956,12 +956,10 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2], srt-recipe: agentic.yaml }
       - { tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
-# Single-point TP8 c1 scan of DeepSeek-V4.1-Flash on MI355X with mono decode
-# (--monokernel) on the latest vLLM ROCm 10.0 nightly (2026-10-30), which carries
-# vllm-project/vllm#64101 (mono decode at TP8; earlier builds refuse --monokernel
-# outside TP2/TP4). Kept as its own key so the TP4/TP2 grid above does not rerun.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
-  image: vllm/vllm-openai-rocm:nightly-4fab5a07475822c6eaa971dceb2e2220d0446808@sha256:6f126f27a3b58959da3c16076248fc99eb31e26d0a3ae9f8563bda7317d6a7e6
+  # --monokernel at TP8 needs vllm-project/vllm#64101; earlier builds refuse it
+  # outside TP2/TP4.
+  image: vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47@sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -979,7 +977,7 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp:
   # Carries vllm-project/vllm#64715 (UMBP standalone for DeepSeek-V4.1-Flash), #66036
   # (per-tensor fp8_e4m3 KV for sparse MLA) and #67377 (AITER FlyDSL dense MXFP8
   # GEMMs); its MORI v1.2.3.post1 is built with UMBP.
-  image: vllm/vllm-openai-rocm:nightly-60bd6dd2edd175a1c55fd3488f871e4c3d2ef27d@sha256:67a3a0fb79893fc5a0fcff5f9b739ba8fec7e920875a12e0574c2e9f50cd814c
+  image: vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47@sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -1295,7 +1293,7 @@ kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark:
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [48], srt-recipe: agentic.yaml:override_tp8_dcp8_c48 }
 
 glm5.3flash-fp8-mi325x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-rocm10-mi30x@sha256:5658cd0d8de0c68de10d2e349296f55ceff98053182fa87b2a7e942e5e7f3c2a
+  image: lmsysorg/sglang:v0.5.23-rocm10-mi30x@sha256:84615bde43049c4380587b267b0163455c4916173535cb1c3574fc3e9f35abcf
   model: zai-org/GLM-5.3-Flash
   model-prefix: glm5.3flash
   runner: cluster:mi325x-amd

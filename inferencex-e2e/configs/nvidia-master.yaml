@@ -5893,7 +5893,7 @@ dsv41flash-fp4-h100-sglang-agentic-dspark-dpa:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 16, 20], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-gb200-vllm-agentic-dspark:
-  image: vllm/vllm-openai:cu134-nightly-cf5cea2da37d3dfed27d2e0aa3041c3e553c2d57@sha256:78d6583c2d9c63d69e4250733eb0aacaa30d9afd4f867b65f1b7f1f51e20da4a
+  image: vllm/vllm-openai:cu134-nightly-f5d93296c8ec82b7e7dabdb308d24d43cb1907bf@sha256:ad65ca93274c2f017a8753e05ed66dbf0a801787c09850602a7bbf5423557baa
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:gb200-nv
@@ -7878,7 +7878,7 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
           dp-attn: true
 
 musespark-fp4-b300-sglang-agentic-dflash:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc
+  image: lmsysorg/sglang:nightly-dev-cu13-20261118-ecd3d75a@sha256:2a7e6d43ada9311fcb7d7dd5781bda10aee1a24c40186a956c223f2036212514
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
   model-prefix: musespark
   runner: cluster:b300-dsxe
