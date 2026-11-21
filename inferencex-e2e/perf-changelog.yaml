@@ -13245,6 +13245,28 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5074
 
 - config-keys:
+    - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang image from v0.5.22-rocm10-mi30x to v0.5.23-rocm10-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5107
+
+- config-keys:
+    - musespark-fp4-b300-sglang-agentic-dflash
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261030-302b78cc to nightly-dev-cu13-20261118-ecd3d75a."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5134
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the vLLM image from cu134-nightly-cf5cea2d to cu134-nightly-f5d93296."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5141
+
+- config-keys:
     - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dcp8-disagg
     - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep32-disagg
     - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-agg
