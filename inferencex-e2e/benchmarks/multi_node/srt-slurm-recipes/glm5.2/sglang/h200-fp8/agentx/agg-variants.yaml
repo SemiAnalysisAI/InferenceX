@@ -7,8 +7,8 @@ base:
       revision: f33c6dc501ee5a2c7e35155653b1b1abbc320951
     container: {}
     frameworks:
-      dynamo: 1.5.0.dev20260913
-      sglang: 4358a1617cad734fc37bf53d9e5c2092bd43d075
+      dynamo: 1.8.0.dev20261119
+      sglang: a8ac86595c72cdd2f340a986020bdad69a06b65e
 
   dynamo:
     # This nightly includes the matching Dynamo adapter. Reinstalling an older
@@ -59,8 +59,8 @@ base:
         PYTHONUNBUFFERED: "1"
         SGLANG_OPT_USE_TOPK_V2: "1"
         SGLANG_TIMEOUT_KEEP_ALIVE: "900"
-        SGLANG_ENABLE_THINKING: "1"
-        SGLANG_REASONING_EFFORT: max
+        SGLANG_DEFAULT_THINKING: "1"
+        SGLANG_DSV4_REASONING_EFFORT: max
         SGLANG_ENABLE_UNIFIED_RADIX_TREE: "1"
         SGLANG_HICACHE_DEBUG_LOG: "1"
         SGLANG_HICACHE_DEBUG_SAMPLE_RATE: "16384"
