@@ -16,13 +16,19 @@ import os
 import pandas as pd
 
 
-def first_size(op: str, ranks: int, buf: str) -> int:
-    # run.sh's start: HBM 8 B, raised for ops that split the buffer to one bf16 element per rank; SBUF 512 B,
+def group_size(meta: dict) -> int:
+    # ranks per replica group for run.sh's RG; runs from before RG (rg_per_chip=0|1) started from the full rank count
+    ranks, nodes = int(meta["ranks"]), len(meta["nodes"].split(","))
+    return {"all": ranks, "chip": ranks * int(meta["lnc"]) // 8, "node": nodes}[meta["rg"]] if "rg" in meta else ranks
+
+
+def first_size(op: str, ranks: int, group: int, buf: str) -> int:
+    # run.sh's start: HBM 8 B, raised for ops that split the buffer to one bf16 element per rank of a group; SBUF 512 B,
     # all_gather two bf16 per partition per rank
     if buf == "sbuf":
         return 512 * ranks if op == "all_gather" else 512
     size = 8
-    while op != "all_reduce" and size < 2 * ranks:
+    while op != "all_reduce" and size < 2 * group:
         size *= 2
     return size
 
@@ -43,12 +49,12 @@ def main() -> None:
         after = [int(x) for x in meta["efa_tx_after"].split(",")]
         efa_gb = max(b - a_ for a_, b in zip(before, after)) / 1e9
         buf = meta.get("buf", "hbm")
-        size = first_size(meta["op"], ranks, buf)
+        size = first_size(meta["op"], ranks, group_size(meta), buf)
         for r in json.load(open(report)).get("results", []):
             ok = "size(B)" in r
             rows.append({
                 "topology": meta["name"].split("_lnc")[0], "nodes": len(meta["nodes"].split(",")),
-                "lnc": int(meta["lnc"]), "ranks": ranks, "op": meta["op"], "buffer": buf.upper(),
+                "lnc": int(meta["lnc"]), "ranks": ranks, "group": group_size(meta), "op": meta["op"], "buffer": buf.upper(),
                 "bytes": int(r["size(B)"]) if ok else size, "status": "ok" if ok else "failed",
                 "time_us": r.get("time:avg(us)"), "algbw_GBps": r.get("algbw(GB/s)"),
                 "busbw_GBps": r.get("busbw(GB/s)"), "algorithm": r.get("algorithm"),
