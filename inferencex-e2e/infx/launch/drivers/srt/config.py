@@ -346,8 +346,12 @@ def write_lane_config(
     checkout: Checkout,
     power: PowerDecision,
     model_paths: dict[str, str],
+    frontend_image: str | None = None,
 ) -> None:
-    """Stage a multi-node job's images, create its mounts, and write its srtslurm.yaml."""
+    """Stage a multi-node job's images, create its mounts, and write its srtslurm.yaml.
+
+    ``frontend_image`` is the image of its own the recipe's frontend runs in, if any.
+    """
     backend, request = run.backend, run.request
     container = backend.stage_image(
         request.image, framework=request.framework, model_prefix=request.model_prefix
@@ -361,6 +365,8 @@ def write_lane_config(
     if request.framework == "tilert":
         prefill_image = request.env["PREFILL_IMAGE"]
         containers[prefill_image] = backend.stage_image(prefill_image).reference
+    if frontend_image and frontend_image != request.image:
+        containers[frontend_image] = backend.stage_image(frontend_image).reference
     if power.dcgm:
         image, reference = stage_gpu_exporter(run)
         containers["dcgm-exporter"] = reference
