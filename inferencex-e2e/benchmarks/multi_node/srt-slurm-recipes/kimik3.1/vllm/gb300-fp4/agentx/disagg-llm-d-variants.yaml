@@ -490,6 +490,77 @@ override_1p3d_mns256_eval:
         enable-auto-tool-choice: true
 
 override_hyb4_3p1d:
+  frontend: &hyb_prefix_cache_frontend
+    epp_config:
+      plugins:
+      - type: metrics-data-source
+        parameters:
+          scheme: http
+          path: /metrics
+          insecureSkipVerify: true
+      - type: core-metrics-extractor
+        parameters:
+          engineConfigs:
+          - name: vllm
+            queuedRequestsSpec: "vllm:num_requests_waiting"
+            runningRequestsSpec: "vllm:num_requests_running"
+            kvUsageSpec: "vllm:kv_cache_usage_perc"
+            loraSpec: ""
+            cacheInfoSpec: ""
+      - type: always-disagg-pd-decider
+      - type: disagg-profile-handler
+        parameters:
+          deciders:
+            prefill: always-disagg-pd-decider
+      - type: prefill-filter
+      - type: decode-filter
+      - type: inflight-load-producer
+        parameters:
+          addEstimatedOutputTokens: false
+          syncCrossReplicaState: false
+      - type: approx-prefix-cache-producer
+        parameters:
+          autoTune: false
+          blockSizeTokens: 256
+          maxPrefixTokensToMatch: 262144
+          lruCapacityPerServer: 65536
+      - type: prefix-cache-scorer
+      - type: active-request-scorer
+        parameters:
+          idleThreshold: 0
+          inFlightLoadProducerName: inflight-load-producer
+      - type: queue-scorer
+      - type: kv-cache-utilization-scorer
+      - type: max-score-picker
+      - type: utilization-detector
+        parameters:
+          queueDepthThreshold: 100000
+          kvCacheUtilThreshold: 1.0
+          headroom: 1.0
+          metricsStalenessThreshold: "3600s"
+      schedulingProfiles:
+      - name: prefill
+        plugins:
+        - pluginRef: prefill-filter
+        - pluginRef: utilization-detector
+        - pluginRef: active-request-scorer
+          weight: 16
+        - pluginRef: queue-scorer
+          weight: 8
+        - pluginRef: prefix-cache-scorer
+          weight: 4
+        - pluginRef: max-score-picker
+      - name: decode
+        plugins:
+        - pluginRef: decode-filter
+        - pluginRef: utilization-detector
+        - pluginRef: active-request-scorer
+          weight: 5
+        - pluginRef: queue-scorer
+          weight: 3
+        - pluginRef: kv-cache-utilization-scorer
+          weight: 3
+        - pluginRef: max-score-picker
   engine:
     set_visible_devices: true
   roles:
@@ -526,6 +597,7 @@ override_hyb4_3p1d:
         compilation-config: *decode_graphs_1280
 
 override_hyb4_3p1d_eval:
+  frontend: *hyb_prefix_cache_frontend
   engine:
     set_visible_devices: true
   roles:
@@ -545,6 +617,7 @@ override_hyb4_3p1d_eval:
         enable-auto-tool-choice: true
 
 override_hyb4_2p1d_lpt4k:
+  frontend: *hyb_prefix_cache_frontend
   engine:
     # Lets vLLM bind each spawned worker to its GPU's NUMA node.
     set_visible_devices: true
@@ -570,6 +643,7 @@ override_hyb4_2p1d_lpt4k:
         compilation-config: '{"cudagraph_capture_sizes":[7,14,21,28,35,42,49,56,63,70,77,84,91,98,105,112,119,126,133,140,147,154,161,168,175,182,189,196,203,210,217,224,231,238,245,252,259,266,273,280,287,294,301,308,315,322,329,336,343,350,357,364,371,378,385,392,399,406,413,420,427,434,441,448,476,504,532,560,588,616,644,672,700,728,756,784,812,840,868,896,924,952,980,1008,1036,1064,1092,1120,1148,1176,1204,1232,1260,1288,1316,1344,1372,1400,1428,1456,1484,1512,1540,1568,1596,1624,1652,1680,1708,1736,1764,1792]}'
 
 override_hyb4_2p1d_lpt4k_eval:
+  frontend: *hyb_prefix_cache_frontend
   engine:
     set_visible_devices: true
   roles:
