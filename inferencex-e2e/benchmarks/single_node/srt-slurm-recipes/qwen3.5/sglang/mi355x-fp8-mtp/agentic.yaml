@@ -43,6 +43,7 @@ base:
         speculative-num-steps: 3
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 4
+        enable-amd-monokernel: true
         enable-metrics: true
         enable-cache-report: true
       env:
