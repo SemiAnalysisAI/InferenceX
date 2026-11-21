@@ -49,6 +49,8 @@ base:
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
         # Outlast AIPerf's 300 s client connection pool.
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
+        # v0.5.23 made the Rust radix TreeCore the default; keep the Python core.
+        SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND: python
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
