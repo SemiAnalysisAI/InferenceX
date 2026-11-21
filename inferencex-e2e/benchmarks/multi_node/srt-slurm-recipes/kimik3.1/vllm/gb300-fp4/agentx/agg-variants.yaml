@@ -182,7 +182,6 @@ override_agg16_c1:
         K31_PUB8_DPUSH: "1"
         K31_PUB8_AHEAD: "16"
         K31_NP1: "1"
-        K31_MK1: "1"
         K31_S31MK: "1"
         K31_S31FC: "1"
         K31_S31DG: "1"
