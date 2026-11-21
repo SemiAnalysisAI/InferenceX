@@ -3,7 +3,7 @@ identity:
   model:
     revision: 6d0a0202956796543364d666ab19c6ad1a494ee1
   frameworks:
-    vllm: 0.0.0+k31.b30e0a445fe5
+    vllm: 0.0.0+k31.ae3222d70ed2
     vllm-router: 0.1.17
 slurm:
   time_limit: 08:00:00
@@ -27,7 +27,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:61a942435384383a1c6429c142cfe4d0b8f7626ea2e062cb2ce96d3cfe795fef
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:b245377beb39eb95e5d7081cee447438817919df3499fea8009d654ff3681dc3
   args:
     policy: consistent_hash
     prefill-policy: consistent_hash
@@ -84,7 +84,7 @@ roles:
       mamba-ssm-cache-dtype: float32
       mamba-cache-mode: align
       block-size: 64
-      scheduling-policy: shortest-prefill-first
+      scheduling-policy: shortest_prefill_first
       enable-prompt-tokens-details: true
       prefix-cache-retention-interval: 0
     env:
@@ -145,8 +145,8 @@ roles:
       VLLM_ROCM_MEM_HEADROOM_GIB: '8'
       VLLM_ROCM_DCP_VUP_RS: '0'
       VLLM_ROCM_DSA_MULTISTREAM: '0'
-      TRITON_CACHE_DIR: /private-state/kernel-cache/di-64e9878711e9/triton
-      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/di-64e9878711e9/inductor
+      TRITON_CACHE_DIR: /private-state/kernel-cache/di-ae3222d70ed2/triton
+      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/di-ae3222d70ed2/inductor
       VLLM_K3_SP_PREFILL: '1'
       VLLM_K3_SP_PREFILL_MIN_TOKENS: '4096'
       VLLM_K31_BEAT_EAGERPREP: '1'
@@ -256,8 +256,8 @@ roles:
       VLLM_ROCM_MEM_HEADROOM_GIB: '8'
       VLLM_ROCM_DCP_VUP_RS: '1'
       VLLM_ROCM_DSA_MULTISTREAM: '1'
-      TRITON_CACHE_DIR: /private-state/kernel-cache/di-64e9878711e9/triton
-      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/di-64e9878711e9/inductor
+      TRITON_CACHE_DIR: /private-state/kernel-cache/di-ae3222d70ed2/triton
+      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/di-ae3222d70ed2/inductor
       VLLM_DCP_Q_REPLICATE: '1'
       VLLM_K31_CPRR_SPLIT96: '0'
       VLLM_K3_SP_PREFILL: '0'
@@ -270,12 +270,11 @@ roles:
       OMP_NUM_THREADS: '8'
 benchmark:
   env:
-    AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
     AIPERF_BENCHMARK_GRACE_PERIOD: '30'
     AGENTIC_WARMUP_GRACE_PERIOD: '300'
     AIPERF_FAILED_REQUEST_THRESHOLD: '0.1'
-    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '900'
-    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'false'
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '1800'
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
     AIPERF_EXPERIMENTAL_FAST: '0'
 setup_script: k31-r10.sh
@@ -286,7 +285,7 @@ environment:
   TOTAL_CPU_DRAM_GB: '1799'
   DECODE_CPU_DRAM_GB: '0'
   KV_P2P_TRANSFER: moriio
-  K31_CLEAN_RUN_ID: k31-unit1152-1120
+  K31_CLEAN_RUN_ID: k31-di-c144-1121
 telemetry:
   storage_subdir: power
   startup_timeout_seconds: 300

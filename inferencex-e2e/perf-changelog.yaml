@@ -12661,3 +12661,9 @@
   description:
     - Use native discovery and direct backend readiness for MoRIIO; omit the optional model-list probe that Router 0.1.17 serves from its empty static worker registry. Keep the image, engine settings and full benchmark unchanged.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Run c144 SimpleCPU 1P1D with the clean DI r03 image, upstream shortest_prefill_first, GEM VMM device binding and ROCr DRM-import fixes. Align the engine and native client settings with the running Crusoe qualification; preserve released DSpark K3 golden acceptance, prefix 1152, WRITE TC104, full warmup and 3600-second profiling.
+  pr-link: XXX
