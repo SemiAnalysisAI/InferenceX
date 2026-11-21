@@ -13275,3 +13275,10 @@
     - "Move every key of the DeepSeek-V4.1-Flash MI355X vLLM AgentX curve to vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47 (2026-11-19, digest sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32) and rerun all 13 points, so the whole curve is on one image: TP4 c1-c2, TP2 c1-c64 and TP8 c1 (previously nightly-4fab5a07), DP2 c128 without KV offloading and DP2 c256/c384 with UMBP KV offloading (previously nightly-60bd6dd)."
     - "Recipes, topology, concurrencies, speculative decoding and KV offloading are unchanged. Relative to nightly-60bd6dd, the image keeps the same ROCm 10.0, PyTorch 2.13.0, Triton, AITER v0.1.29 and MORI v1.2.3.post1 layers; only vLLM moves forward on main."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5151
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "MI300X TP4 points 1-16 users: enable mono decode on the first N decoder layers (--monokernel --monokernel-layers 32 at 1-8 users, 24 at 16 users; vllm-project/vllm PR by Amnaro AI Infra (ProsGrow), pending). The gfx942 kernels keep their own weight copies, and all 40 layers do not fit a 192 GB MI300X at TP4 next to the KV cache, so the upstream all-or-nothing switch could not be used at TP4. Measured on vLLM v0.33.0 with the same recipe otherwise: median interactivity 213.7 -> 391.4 tok/s/user at 1 user, 136.2 -> 243.9 at 8 users, 82.1 -> 131.4 at 16 users against this config's public rows of 2026-11-06. TP4 32 users and all TP8 points unchanged. Image unchanged in this PR; it moves to a nightly that contains the vLLM change before the sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD

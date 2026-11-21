@@ -135,6 +135,11 @@ override_tp4_c1:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        # Mono decode on the first N decoder layers only (vllm-project/vllm PR, --monokernel-layers):
+        # the gfx942 kernels keep their own weight copies, and all 40 layers do not fit a 192 GB
+        # MI300X at TP4 next to the KV cache. 32 layers at 1-8 users, 24 at 16; 32 users runs without.
+        monokernel: true
+        monokernel-layers: 32
   benchmark:
     env:
       CONC: '1'
@@ -146,6 +151,8 @@ override_tp4_c2:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        monokernel: true
+        monokernel-layers: 32
   benchmark:
     env:
       CONC: '2'
@@ -157,6 +164,8 @@ override_tp4_c4:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        monokernel: true
+        monokernel-layers: 32
   benchmark:
     env:
       CONC: '4'
@@ -168,6 +177,8 @@ override_tp4_c8:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        monokernel: true
+        monokernel-layers: 32
   benchmark:
     env:
       CONC: '8'
@@ -179,6 +190,8 @@ override_tp4_c16:
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":true}'
+        monokernel: true
+        monokernel-layers: 24
   benchmark:
     env:
       CONC: '16'
