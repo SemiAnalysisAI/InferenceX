@@ -51,6 +51,9 @@ base:
         # compiled for gfx942. Use the portable Torch path, no fused top-k.
         SGLANG_DSA_FUSE_TOPK: 'false'
         SGLANG_OPT_USE_TOPK_V2: 'false'
+        # The v0.5.23 MI30X image set this; sglang-rocm images leave it unset,
+        # which disables quick all-reduce (default NONE).
+        ROCM_QUICK_REDUCE_QUANTIZATION: 'INT8'
   benchmark:
     env:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'

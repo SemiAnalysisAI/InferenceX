@@ -13248,5 +13248,5 @@
     - glm5.2-fp8-mi325x-sglang-agentic-mtp
   scenario-type: [agentic-coding]
   description:
-    - "Update the SGLang image from v0.5.23-rocm720-mi30x to sglang-rocm v0.5.23-rocm720-mi30x-20261120."
+    - "Update SGLang image to sglang-rocm v0.5.23-rocm720-mi30x-20261120; restore ROCM_QUICK_REDUCE_QUANTIZATION=INT8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5162
