@@ -3,7 +3,6 @@ identity:
   model:
     revision: 6d0a0202956796543364d666ab19c6ad1a494ee1
   frameworks:
-    vllm: 0.0.0+k31.ae3222d70ed2
     vllm-router: 0.1.17
 slurm:
   time_limit: 08:00:00
@@ -48,6 +47,7 @@ engine:
   connector: moriio
 roles:
   prefill:
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:efee0072220102e0e264b442c6cae7e81b6c73f15e07634af9162253d068a979
     nodes: 1
     workers: 1
     gpus: 8
@@ -84,7 +84,7 @@ roles:
       mamba-ssm-cache-dtype: float32
       mamba-cache-mode: align
       block-size: 64
-      scheduling-policy: shortest_prefill_first
+      scheduling-policy: shortest-prefill-first
       enable-prompt-tokens-details: true
       prefix-cache-retention-interval: 0
     env:

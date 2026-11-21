@@ -12667,3 +12667,9 @@
   description:
     - Run c144 SimpleCPU 1P1D with the clean DI r03 image, upstream shortest_prefill_first, GEM VMM device binding and ROCr DRM-import fixes. Align the engine and native client settings with the running Crusoe qualification; preserve released DSpark K3 golden acceptance, prefix 1152, WRITE TC104, full warmup and 3600-second profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Run c128 SimpleCPU 1P1D with the measured active-SPF prefill image and unchanged decode image. Preserve K3 released-draft AL3.08, prefix1152, role-specific engine settings and WRITE TC104; use standard warmup and full 3600-second profiling.
+  pr-link: XXX
