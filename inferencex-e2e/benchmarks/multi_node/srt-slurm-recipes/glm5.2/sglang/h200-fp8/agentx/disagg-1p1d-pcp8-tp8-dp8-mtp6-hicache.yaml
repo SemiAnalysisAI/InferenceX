@@ -107,9 +107,8 @@ roles:
       tool-call-parser: glm47
       reasoning-parser: glm45
       tp-size: 8
-      dp-size: 8
+      attn-dp-size: 8
       ep-size: 1
-      enable-dp-attention: true
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: decode
       kv-cache-dtype: fp8_e4m3
