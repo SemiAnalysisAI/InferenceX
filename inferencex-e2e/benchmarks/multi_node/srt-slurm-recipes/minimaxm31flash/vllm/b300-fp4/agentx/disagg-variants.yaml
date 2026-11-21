@@ -9,6 +9,20 @@ base:
     install: true
     source:
       wheel: 1.6.0.dev20261023
+    request_plane: tcp
+    event_plane: zmq
+    # Native vLLM engines (Rust frontend, gRPC) behind Dynamo sidecars, which parse tools and reasoning,
+    # as in the agg recipe. The in-process dynamo.vllm worker does not import on this vLLM image.
+    sidecar: true
+    # Above the ephemeral port range, since vLLM-rs binds its gRPC port only after its engine starts.
+    sidecar_port: 65001
+    sidecar_args:
+    - --grpc-startup-deadline-secs
+    - '3600'
+    - --dyn-tool-call-parser
+    - minimax_m3
+    - --dyn-reasoning-parser
+    - minimax_m3
   resources:
     gpu_type: b300
     gpus_per_node: 8
@@ -26,13 +40,6 @@ base:
     type: etcd
     placement:
       node: infra
-  - &nats
-    name: nats
-    type: nats
-    placement:
-      node: infra
-    options:
-      max_payload_mb: 32
   - &mooncake-master
     name: mooncake-master
     type: mooncake-master
@@ -206,6 +213,7 @@ base:
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
+        VLLM_RS_TOKEN_IDS_AS_BYTES: '1'
         VLLM_MOONCAKE_LOAD_RECV_THREADS: '8'
         # Register GPU KV only on the NICs beside its GPU, so a transfer never crosses the socket.
         MC_EFA_NIC_SELECTION: local
@@ -264,6 +272,7 @@ base:
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
         DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
+        VLLM_RS_TOKEN_IDS_AS_BYTES: '1'
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
         VLLM_MAX_ASYNC_KV_ADMITS_PER_STEP: '4'
         NCCL_CUMEM_ENABLE: '1'
@@ -336,7 +345,6 @@ override_1p1d_dep2_tp4_bs4:
 override_2p1d_dep2_dep8_bs3:
   services:
   - *etcd
-  - *nats
   - *mooncake-master
   # 1395 GiB beside prefill, the DRAM share of its two workers, and 2400 GiB of the decode node's 2793.
   - name: mooncake-store-prefill-numa0
@@ -431,7 +439,6 @@ override_2p1d_dep2_dep8_bs3:
 override_8p1d_dep2_dep8_bs8:
   services:
   - *etcd
-  - *nats
   - *mooncake-master
   # 1800 GiB on each prefill node and 2000 GiB on the decode node, 5600 GiB in all.
   - name: mooncake-store-prefill-numa0
