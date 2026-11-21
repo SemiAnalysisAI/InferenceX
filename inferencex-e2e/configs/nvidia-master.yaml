@@ -8573,7 +8573,7 @@ minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
         decode: { num-worker: 1, tp: 8, ep: 8, dp-attn: true }
 
 kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg:
-  image: vllm/vllm-openai:kimi-k31-arm64-cu130@sha256:52b793567651780dc529647a211a3d15cec11ebc872ac7492636d7d75340eab4
+  image: vllm/vllm-openai:kimi-k31-mc-f4c9618-arm64@sha256:ff01a72d688a352648aa9a789e688a3cf2918b9599dca9430301b509bc0fdf9d
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:gb200-nv
@@ -8644,7 +8644,7 @@ kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg:
         worker: { num-worker: 1, tp: 8, pp: 2, dcp-size: 8, ep: 1, dp-attn: false }
 
 kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg:
-  image: vllm/vllm-openai:kimi-k31-arm64-cu130@sha256:52b793567651780dc529647a211a3d15cec11ebc872ac7492636d7d75340eab4
+  image: vllm/vllm-openai:kimi-k31-mc-f4c9618-arm64@sha256:ff01a72d688a352648aa9a789e688a3cf2918b9599dca9430301b509bc0fdf9d
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:gb200-nv
