@@ -6,14 +6,14 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: "0.1.dev25356+gdbbc9e310"
-      dynamo: "229be5cff1156859b0e3e43b598ee800b2f81ccc"
+      vllm: "0.1.dev25380+gf4c96184b"
+      dynamo: "ec06c09e7232e24f6faeec4069acdc61e4379916"
 
-  # Dynamo v1.7.0-kimi-k3.1-pro-dev.1, which registers the kimi_k31 model type.
+  # Dynamo main ec06c09e72, the source of the 1.8.0.dev20261119 nightly (dynamo-tokenizers 4.3.0).
   dynamo:
     install: true
     source:
-      rev: "229be5cff1156859b0e3e43b598ee800b2f81ccc"
+      rev: "ec06c09e7232e24f6faeec4069acdc61e4379916"
 
   # The DSpark draft is read from the shared Hub cache.
   environment:
@@ -143,7 +143,7 @@ base:
         # next to other requests each prompt's chunk stops at 4096 tokens.
         max-num-batched-tokens: 16384
         long-prefill-token-threshold: 4096
-        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
 
   sbatch_directives:
     mem: "0"
@@ -174,11 +174,32 @@ override_agg16_c1:
     agg:
       nodes: 4
       gpus: 16
+      # Opt-in c=1 decode paths of this image (default off): published-mailbox MoE tail (PUB8),
+      # one-pass decode prep (NP1), fused drafter layers (DRF/S31), KDA/attention kernels for 8 rows.
+      env: &override_agg16_c1_env
+        K31_PUB8: "1"
+        K31_PUB8_JOIN: "1"
+        K31_PUB8_DPUSH: "1"
+        K31_PUB8_AHEAD: "16"
+        K31_NP1: "1"
+        K31_MK1: "1"
+        K31_S31MK: "1"
+        K31_S31FC: "1"
+        K31_S31DG: "1"
+        K31_KDA8: "1"
+        K31_S24FM: "1"
+        K31_S24FL_HEADS: "12,6"
+        K31_S22SP: "1"
+        K31_DRF_ATTN: "1"
+        K31_DRF_ACT: "1"
+        K31_DRF_NORM: "1"
       args: &override_agg16_c1_args
         tensor-parallel-size: 16
         gpu-memory-utilization: 0.90
         decode-context-parallel-size: 16
-        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        # The released drafter's KV block at TP16 x DCP16.
+        prefix-match-unit: 768
         max-num-seqs: 1
         max-cudagraph-capture-size: 2048
         compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,8,14,16,28,32,56,64,128,256,512,1024,2048]}'
@@ -188,6 +209,7 @@ override_agg16_c1_eval:
     agg:
       nodes: 4
       gpus: 16
+      env: *override_agg16_c1_env
       args:
         <<: *override_agg16_c1_args
         reasoning-parser: kimi_k3

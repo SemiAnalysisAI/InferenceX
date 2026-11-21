@@ -13275,3 +13275,19 @@
     - "Move every key of the DeepSeek-V4.1-Flash MI355X vLLM AgentX curve to vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47 (2026-11-19, digest sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32) and rerun all 13 points, so the whole curve is on one image: TP4 c1-c2, TP2 c1-c64 and TP8 c1 (previously nightly-4fab5a07), DP2 c128 without KV offloading and DP2 c256/c384 with UMBP KV offloading (previously nightly-60bd6dd)."
     - "Recipes, topology, concurrencies, speculative decoding and KV offloading are unchanged. Relative to nightly-60bd6dd, the image keeps the same ROCm 10.0, PyTorch 2.13.0, Triton, AITER v0.1.29 and MORI v1.2.3.post1 layers; only vLLM moves forward on main."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5151
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep32-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the Kimi-K3.1-Pro GB300 Dynamo+vLLM AgentX dcp8-disagg, dep32-disagg and agg configs to vllm/vllm-openai:kimi-k31-mc-f4c9618 (vLLM 0.1.dev25380+gf4c96184b) with Dynamo ec06c09e72 (the source of the 1.8.0.dev20261119 nightly)."
+    - "DSpark uses the released draft Inferact/Kimi-K3.1-Pro-DSpark (revision e4e6e626), so synthetic acceptance follows its golden AL curve (4 draft tokens 3.46, 5 draft tokens 3.81, 7 draft tokens 4.16). prefix-match-unit is 1408 on the TP8/DCP8 and hybrid points, 768 on agg c1 and 512 on dep32-disagg."
+    - "Expert-parallel load balancing (enable-eplb, symm_mem copy, no redundant experts, re-placement every 3000 steps from a 1000-step window) on the dep32-disagg prefill and decode engines, the hybrid 3P1D prefill and decode engines, and the hybrid 2P1D prefill engines."
+    - "DEP32 2P1D at concurrency 960: 5 draft tokens with decode graphs in multiples of 6 up to 192, DSpark sliding-window tail store and hits (VLLM_DFLASH_SWA_TAIL_STORE=1, VLLM_DFLASH_SWA_TAIL_HITS=1, VLLM_SWA_FINE_GRAINED_HITS=1), and a 2048 MB sparse-indexer logits budget per call on prefill."
+    - "Hybrid 3P1D at concurrency 448 and 2P1D at concurrency 256: 5 draft tokens (2P1D was 6) with decode graphs in multiples of 6 up to 1536."
+    - "TP8/DCP8 1P5D: concurrency 44 with 5 draft tokens, and concurrency 104 with 4 draft tokens and an adaptive 4096-token long-prefill threshold on the prefill engine; both decode engines turn on the image's opt-in TP8 x DCP8 decode paths (K31_* env). They replace 1P5D at 44 and 56 and 1P3D at 56."
+    - "Aggregated TP16/DCP16 at concurrency 1: 7 draft tokens with the image's opt-in c=1 decode paths (K31_* env) and prefix-match-unit 768."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5109
