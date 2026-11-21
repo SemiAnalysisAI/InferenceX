@@ -956,24 +956,24 @@ dsv41flash-fp4-mi325x-vllm-disagg-agentic-dspark:
       # Decode max-num-seqs is NOT the usual 2 x concurrency at conc 128: the decode
       # engine dies above ~132 concurrent requests with an HSA out-of-resources queue
       # abort, so the conc-128 points are capped at 132 and 112 rather than 256.
-      - { spec-decoding: dspark, kv-offloading: none, conc-list: [32],
+      - { spec-decoding: mtp, kv-offloading: none, conc-list: [32],
           srt-recipe: 'disagg-variants.yaml:override_1p1d_tp4_c32_seqs64',
           prefill: { num-worker: 1, tp: 1, ep: 1, dp-attn: true },
           decode:  { num-worker: 1, tp: 4, ep: 1, dp-attn: false } }
-      - { spec-decoding: dspark, kv-offloading: none, conc-list: [64],
+      - { spec-decoding: mtp, kv-offloading: none, conc-list: [64],
           srt-recipe: 'disagg-variants.yaml:override_1p1d_tp4_c64_seqs128',
           prefill: { num-worker: 1, tp: 1, ep: 1, dp-attn: true },
           decode:  { num-worker: 1, tp: 4, ep: 1, dp-attn: false } }
-      - { spec-decoding: dspark, kv-offloading: none, conc-list: [128],
+      - { spec-decoding: mtp, kv-offloading: none, conc-list: [128],
           srt-recipe: 'disagg-variants.yaml:override_1p1d_tp4_c128_seqs112_vram',
           prefill: { num-worker: 1, tp: 1, ep: 1, dp-attn: true },
           decode:  { num-worker: 1, tp: 4, ep: 1, dp-attn: false } }
       # The two engram-offload points on decode: 3.8x more KV, lower interactivity.
-      - { spec-decoding: dspark, kv-offloading: none, conc-list: [128],
+      - { spec-decoding: mtp, kv-offloading: none, conc-list: [128],
           srt-recipe: 'disagg-variants.yaml:override_1p1d_tp4_c128_seqs112',
           prefill: { num-worker: 1, tp: 1, ep: 1, dp-attn: true },
           decode:  { num-worker: 1, tp: 4, ep: 1, dp-attn: false } }
-      - { spec-decoding: dspark, kv-offloading: none, conc-list: [128],
+      - { spec-decoding: mtp, kv-offloading: none, conc-list: [128],
           srt-recipe: 'disagg-variants.yaml:override_1p1d_tp4_c128_seqs132',
           prefill: { num-worker: 1, tp: 1, ep: 1, dp-attn: true },
           decode:  { num-worker: 1, tp: 4, ep: 1, dp-attn: false } }
