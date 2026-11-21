@@ -59,6 +59,14 @@ def _copy_tree_into(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination, symlinks=True, dirs_exist_ok=True)
 
 
+def verify_node_health(run: SrtRun, job: Job, status: JobStatus, logs: Path) -> int:
+    report = run.workspace / "slurm-node-health.json"
+    rc = run.backend.check_node_health(job, status, report)
+    if status.succeeded and logs.is_dir():
+        shutil.copyfile(report, logs / report.name)
+    return rc
+
+
 def finish_single_node(run: SrtRun, submitted: Submitted, fetched: Path) -> int:
     """Exit cleanup of a single-node point: cancel a live job, then stage its artifacts.
 
@@ -291,6 +299,8 @@ def collect(
         if not logs.is_dir():
             event.fail("LogsMissing", f"Logs directory not found at {logs}")
             return 1
+        node_rc = verify_node_health(run, job, status, logs)
+        rc = rc or node_rc
         if not request.eval_only and (power.agentx or power.adapter):
             require(request, "CONC_LIST")
             audit = (run.workspace, request.result_filename, checkout.commit, request.conc_list)
