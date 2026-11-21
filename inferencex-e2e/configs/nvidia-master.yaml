@@ -7791,7 +7791,7 @@ glm5.2-fp4-b300-dynamo-sglang-agentic-agg-tp4:
           dp-attn: true
 
 musespark-fp4-b300-sglang-agentic-dflash:
-  image: lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc
+  image: lmsysorg/sglang:nightly-dev-cu13-20261118-ecd3d75a@sha256:2a7e6d43ada9311fcb7d7dd5781bda10aee1a24c40186a956c223f2036212514
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
   model-prefix: musespark
   runner: cluster:b300-dsxe
