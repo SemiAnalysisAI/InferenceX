@@ -295,6 +295,8 @@ async def async_request_openai_completions(
                             elif error := data.get("error"):
                                 output.error = json.dumps(error)
                                 break
+                        else:
+                            break
                     if output.error:
                         output.success = False
                     elif first_chunk_received:
@@ -396,6 +398,8 @@ async def async_request_openai_chat_completions(
                                 break
 
                             most_recent_timestamp = timestamp
+                        else:
+                            break
 
                     output.generated_text = generated_text
                     if not output.error and ttft == 0.0:
