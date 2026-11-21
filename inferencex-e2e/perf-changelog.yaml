@@ -13265,3 +13265,16 @@
   description:
     - "Update the vLLM image from cu134-nightly-cf5cea2d to cu134-nightly-f5d93296."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5141
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-disagg-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 MI325X vLLM AgentX 1P1D NIXL disaggregation. One prefill worker on 2 GPUs (TP1 + DP2 attention) feeds one TP4 decode worker, 6 chips total, on image vllm/vllm-openai-rocm:nightly-7c3a9302f5ac2441ad199134129e973d22a46797."
+    - "Measured against the published mi325x_vllm aggregated frontier on the same agentic traces and the same all-chips basis (prefill plus decode): 450.78 tok/s/chip at P90 interactivity 23.87 vs 354.8 (1.27x), 411.48 at 32.36 vs 315.8 (1.30x), 308.29 at 48.43 vs 249.6 (1.23x), and 192.71 at 80.52 vs 192.7 (parity). A conc-128 point with decode capped at 132 reaches 458.51 at 21.39, left of where the published curve ends."
+    - "Interactivity ~80 is the crossover. Below concurrency 32 the fixed 2-chip prefill cost stops paying for itself: effective decode concurrency falls to 17 at conc 32 and 4 at conc 16, so conc 16 lands at 0.96x and is not included."
+    - "Prefill is held at a fixed shape across every concurrency (max-num-seqs 64, max-num-batched-tokens 8192, engram cpu_offload true), following the InferenceX GB300 dsv41flash reference recipe, which also scales prefill by adding workers rather than resizing one. engram cpu_offload on prefill is structural: with it false the 2-GPU prefill OOMs. max-num-batched-tokens must stay 8192; 32768 crashes in warmup with hipErrorLaunchOutOfResources, and agentic GSM8K does not catch it because its ~1k-token prompts never build a large prefill batch."
+    - "Decode max-num-batched-tokens is 10 x max-num-seqs, matching the GB300 pure-decode rule. The cudagraph grid is step 6 (dspark 5 speculative tokens plus 1) up to max-num-seqs x 6. monokernel is enabled but inert at these batch sizes, since its fused paths cap at 32 tokens (about 5.3 dspark requests)."
+    - "Decode max-num-seqs at conc 128 is 112 or 132 rather than the usual 2 x concurrency: the decode engine dies above ~132 concurrent requests with an HSA_STATUS_ERROR_OUT_OF_RESOURCES queue abort (reported up the stack as hipErrorLaunchOutOfResources) while GPU KV cache is only 27% used, so the cap is a stability limit and not a memory-capacity one."
+    - "Two conc-128 points differ only by engram cpu_offload on decode. With it true the GPU KV cache grows from 9,568,927 to 36,330,056 tokens and TTFT p50 drops from 29.7 s to 11.0 s, trading P90 interactivity 32.36 for 23.87 and 411.48 tok/s/chip for 450.78. Both beat the baseline, at different points on the curve."
+  pr-link: TBD
