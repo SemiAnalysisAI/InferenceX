@@ -13275,3 +13275,10 @@
     - "Move every key of the DeepSeek-V4.1-Flash MI355X vLLM AgentX curve to vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47 (2026-11-19, digest sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32) and rerun all 13 points, so the whole curve is on one image: TP4 c1-c2, TP2 c1-c64 and TP8 c1 (previously nightly-4fab5a07), DP2 c128 without KV offloading and DP2 c256/c384 with UMBP KV offloading (previously nightly-60bd6dd)."
     - "Recipes, topology, concurrencies, speculative decoding and KV offloading are unchanged. Relative to nightly-60bd6dd, the image keeps the same ROCm 10.0, PyTorch 2.13.0, Triton, AITER v0.1.29 and MORI v1.2.3.post1 layers; only vLLM moves forward on main."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5151
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang-agentic-mtp
+  description:
+    - "Update SGLang image from v0.5.16-cu130 to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4482
+  scenario-type: [agentic-coding]
