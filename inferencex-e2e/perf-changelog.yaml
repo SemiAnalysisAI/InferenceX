@@ -13275,3 +13275,15 @@
     - "Move every key of the DeepSeek-V4.1-Flash MI355X vLLM AgentX curve to vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47 (2026-11-19, digest sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32) and rerun all 13 points, so the whole curve is on one image: TP4 c1-c2, TP2 c1-c64 and TP8 c1 (previously nightly-4fab5a07), DP2 c128 without KV offloading and DP2 c256/c384 with UMBP KV offloading (previously nightly-60bd6dd)."
     - "Recipes, topology, concurrencies, speculative decoding and KV offloading are unchanged. Relative to nightly-60bd6dd, the image keeps the same ROCm 10.0, PyTorch 2.13.0, Triton, AITER v0.1.29 and MORI v1.2.3.post1 layers; only vLLM moves forward on main."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5151
+
+- config-keys:
+    - kimik3.1-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Move the B300 Kimi-K3.1-Pro Dynamo+vLLM disaggregated configs to vllm/vllm-openai:kimi-k31-mc-f4c9618 (sha256:01257a77, vLLM 0.1.dev25380+gf4c96184b) and Dynamo ec06c09e72 built from source. The DSpark draft stays Inferact/Kimi-K3.1-Pro-DSpark at revision e4e6e626, so synthetic acceptance follows its golden AL curve."
+    - "Sweep 1P1D c1 (7 draft tokens), 1P3D c20 and c48 (5 draft tokens), 1P3D c96 (4 draft tokens) and 4P5D c660 (5 draft tokens). The 1P2D c64 and 2P3D c264 points are removed."
+    - "The 1P1D and 1P3D decode workers turn on the image's small-batch decode kernels of the latency_specialized backend (the K31_* environment switches); with 5 draft tokens K31_S30K=6 sizes them for 6 verify rows per request."
+    - "Every point now uses the settings #5108 used at its throughput points: the Mooncake store keeps the tail pages a request loaded and drops the older tails it consumed, store lookups start before admission (lookup_prefetch_limit 16, lookup_prefetch_ttl_s 30), prefill computes the sparse-attention indexer logits in BF16 and selects the indexer top-k with deep_select, and the Mooncake master evicts 2% of the store per round. Prefill and decode workers bind to their GPUs' NUMA nodes (numa-bind)."
+    - "4P5D c660 drafts 5 tokens, autotunes the decode FlashInfer kernels, captures decode graphs every 24 rows up to 768 and sets K31_CPU1 on prefill (less host work per eager prefill step, same outputs)."
+    - "Precision is unchanged: FP8 KV cache, MXFP4 indexer keys, BF16 indexer logits, FP32 KDA state."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
