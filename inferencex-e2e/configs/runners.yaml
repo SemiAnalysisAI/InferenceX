@@ -696,11 +696,12 @@ clusters:
       exclusive: false
       # 2026-11-05: c003's local NVMe extracted containers with zero-filled blocks (libcuda stub),
       # and c008 twice read back empty Triton cache files. Remove after ops checks both disks.
-      # 2026-11-20: r03-c013's /scratch ext4 is corrupt (a container extracted there failed to
+      # 2026-11-20/21: r03-c013's /scratch ext4 is corrupt (a container extracted there failed to
       # start with "/bin/bash: Exec format error"), and so are r01-c001's (extracted Python sources
-      # hold null bytes, libcudnn has an invalid ELF header) and r03-c014's (libcufile.so.0 has an
-      # invalid ELF header). Remove after ops repairs them.
-      exclude: [im-gb300-r01-c001, im-gb300-r01-c003, im-gb300-r01-c008, im-gb300-r03-c013, im-gb300-r03-c014]
+      # hold null bytes, libcudnn has an invalid ELF header), r01-c005's (pyxis unsquashfs failed
+      # with EUCLEAN "Structure needs cleaning"), and r03-c014's (libcufile.so.0 has an invalid ELF
+      # header). Remove after ops repairs them.
+      exclude: [im-gb300-r01-c001, im-gb300-r01-c003, im-gb300-r01-c005, im-gb300-r01-c008, im-gb300-r03-c013, im-gb300-r03-c014]
       volumes:
         hf-hub-cache: {path: /data/home/sa-shared/gharunners/hf-hub-cache}
         aiperf-cache: {path: /data/home/sa-shared/gharunners/ai-perf-cache}
