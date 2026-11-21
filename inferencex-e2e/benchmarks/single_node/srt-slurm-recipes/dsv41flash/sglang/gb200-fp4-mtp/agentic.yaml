@@ -156,6 +156,11 @@ override_tp4ep1_c32:
 override_dep4_hicache_c64:
   frontend:
     type: sglang-router
+    # SGLang images after b947a615 (#50671) no longer ship sgl-model-gateway, so run the
+    # frozen sglang-router 0.3.2 bundled in the 20261027-5884e4fe nightly (pinned by digest).
+    # The standalone v0.3.2 gateway image predates a9c97c9f (#41818), so --dp-aware reads
+    # dp_size 1 instead of attn_dp_size 4 and registers a single worker.
+    container_image: registry-1.docker.io#lmsysorg/sglang:sha256:61b9083bdcb7cf3741366f487cb996c05ea33ad2ddddc820d10cbc1c0cfb0a86
     args:
       policy: cache_aware
       request-id-headers: x-correlation-id
@@ -207,6 +212,11 @@ override_dep4_hicache_c64:
 override_dep4_hicache_c96:
   frontend:
     type: sglang-router
+    # SGLang images after b947a615 (#50671) no longer ship sgl-model-gateway, so run the
+    # frozen sglang-router 0.3.2 bundled in the 20261027-5884e4fe nightly (pinned by digest).
+    # The standalone v0.3.2 gateway image predates a9c97c9f (#41818), so --dp-aware reads
+    # dp_size 1 instead of attn_dp_size 4 and registers a single worker.
+    container_image: registry-1.docker.io#lmsysorg/sglang:sha256:61b9083bdcb7cf3741366f487cb996c05ea33ad2ddddc820d10cbc1c0cfb0a86
     args:
       policy: cache_aware
       request-id-headers: x-correlation-id
@@ -258,6 +268,11 @@ override_dep4_hicache_c96:
 override_dep4_hicache_c128:
   frontend:
     type: sglang-router
+    # SGLang images after b947a615 (#50671) no longer ship sgl-model-gateway, so run the
+    # frozen sglang-router 0.3.2 bundled in the 20261027-5884e4fe nightly (pinned by digest).
+    # The standalone v0.3.2 gateway image predates a9c97c9f (#41818), so --dp-aware reads
+    # dp_size 1 instead of attn_dp_size 4 and registers a single worker.
+    container_image: registry-1.docker.io#lmsysorg/sglang:sha256:61b9083bdcb7cf3741366f487cb996c05ea33ad2ddddc820d10cbc1c0cfb0a86
     args:
       policy: cache_aware
       request-id-headers: x-correlation-id
@@ -309,6 +324,11 @@ override_dep4_hicache_c128:
 override_dep4_hicache_c160:
   frontend:
     type: sglang-router
+    # SGLang images after b947a615 (#50671) no longer ship sgl-model-gateway, so run the
+    # frozen sglang-router 0.3.2 bundled in the 20261027-5884e4fe nightly (pinned by digest).
+    # The standalone v0.3.2 gateway image predates a9c97c9f (#41818), so --dp-aware reads
+    # dp_size 1 instead of attn_dp_size 4 and registers a single worker.
+    container_image: registry-1.docker.io#lmsysorg/sglang:sha256:61b9083bdcb7cf3741366f487cb996c05ea33ad2ddddc820d10cbc1c0cfb0a86
     args:
       policy: cache_aware
       request-id-headers: x-correlation-id
@@ -360,6 +380,11 @@ override_dep4_hicache_c160:
 override_dep4_hicache_c256:
   frontend:
     type: sglang-router
+    # SGLang images after b947a615 (#50671) no longer ship sgl-model-gateway, so run the
+    # frozen sglang-router 0.3.2 bundled in the 20261027-5884e4fe nightly (pinned by digest).
+    # The standalone v0.3.2 gateway image predates a9c97c9f (#41818), so --dp-aware reads
+    # dp_size 1 instead of attn_dp_size 4 and registers a single worker.
+    container_image: registry-1.docker.io#lmsysorg/sglang:sha256:61b9083bdcb7cf3741366f487cb996c05ea33ad2ddddc820d10cbc1c0cfb0a86
     args:
       policy: cache_aware
       request-id-headers: x-correlation-id
