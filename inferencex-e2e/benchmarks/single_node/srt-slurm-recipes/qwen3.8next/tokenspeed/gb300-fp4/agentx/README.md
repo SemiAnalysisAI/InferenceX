@@ -48,8 +48,8 @@ verification before the eval. Result metadata records MTP with a native draft.
 ## srt-slurm integration
 
 The shared srt-slurm pin is
-[`2d9079c67`](https://github.com/NVIDIA/srt-slurm/commit/2d9079c678e059c41d9186bbb7b14a16c414b8bc)
-(`2d9079c678e059c41d9186bbb7b14a16c414b8bc`), which includes
+[v2.73.0](https://github.com/NVIDIA/srt-slurm/releases/tag/v2.73.0)
+(`cc9db05dca9e775e9c5e2590f31099b39bae1032`), which includes
 [NVIDIA/srt-slurm#640](https://github.com/NVIDIA/srt-slurm/pull/640).
 Workers launch through
 `python3 -m tokenspeed.cli serve --headless` with SMG's ZMQ transport.
