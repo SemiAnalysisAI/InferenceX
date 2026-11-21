@@ -4677,7 +4677,7 @@ glm5.2-fp4-b300-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, dp-attn: true, conc-start: 8, conc-end: 256, srt-recipe: 8k1k.yaml }
-      - { tp: 8, ep: 1, dp-attn: false, conc-start: 4, conc-end: 128, srt-recipe: 8k1k.yaml }
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 4, conc-end: 256, srt-recipe: 8k1k.yaml }
 
 # GLM-5.2 FP8 AgentX on B300: TP8, 270 GB/rank HiCache, same upstream image.
 # Draft steps/caps vary by concurrency: c1 K6/cap2, c4 K4/cap3,
