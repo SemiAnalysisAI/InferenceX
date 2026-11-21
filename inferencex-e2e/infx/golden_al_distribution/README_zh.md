@@ -28,10 +28,14 @@ AL 取决于工作负载：草稿模型的预测在某些领域比其他领域�
 
 TokenSpeed MTP 和 DSPARK 配置同样根据 `speculative-num-steps` 自动选择黄金 AL，要求
 `speculative-num-draft-tokens` 等于步数加一，且 `speculative-eagle-topk: 1`。
+DSPARK 配置设置 `enable-speculative-sampling: true` 时为 `probabilistic` 草稿采样，
+未设置时为 `greedy`；设置了 `speculative-rejection-sample-method` 时以其为验证器。
 连接器为 AgentX 吞吐测试设置 `synthetic-acceptance-length` 和所需的
-`sampling-backend: greedy`；仅评测和固定序列长度运行会移除该接受长度，并选择
-`sampling-backend: flashinfer` 进行真实验证。TokenSpeed 连接器接受显式 MTP 或 DSPARK 参数，
-拒绝其他投机算法和 JSON `speculative-config` 简写。
+`sampling-backend: greedy`，并移除 `enable-speculative-sampling` 和
+`speculative-rejection-sample-method`：greedy 采样器不接受采样验证，合成接受长度也与块验证冲突。
+仅评测和固定序列长度运行会移除该接受长度并进行真实验证：MTP 使用
+`sampling-backend: flashinfer`，DSPARK 保留配置自身与平台相关的验证设置。
+TokenSpeed 连接器接受显式 MTP 和 DSPARK 参数，拒绝其他投机算法和 JSON `speculative-config` 简写。
 
 vLLM 通过合成拒绝采样支持这一策略。例如，EAGLE3 运行可以通过 `synthetic_acceptance_length` 注入所选 YAML 值：
 
