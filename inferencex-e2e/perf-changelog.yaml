@@ -12673,3 +12673,9 @@
   description:
     - Run c128 SimpleCPU 1P1D with the measured active-SPF prefill image and unchanged decode image. Preserve K3 released-draft AL3.08, prefix1152, role-specific engine settings and WRITE TC104; use standard warmup and full 3600-second profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Run c128 1P1D with distributed UMBP on both roles, including decode-cache stores and restore. Use the qualified active-admission image, 1799 GB HugeTLB pools per node, 128 GiB MR segments and registered hugepage scratch. Preserve role compute settings, released DSpark golden acceptance, WRITE TC104, Router 0.1.17, full warmup and 3600-second profiling.
+  pr-link: XXX

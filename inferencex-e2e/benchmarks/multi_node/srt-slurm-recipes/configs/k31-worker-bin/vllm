@@ -3,6 +3,7 @@ import json
 import os
 import resource
 import sys
+from pathlib import Path
 
 soft, hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
 print(json.dumps({"event": "worker_memlock_before", "pid": os.getpid(),
@@ -14,4 +15,15 @@ assert after == (hard, hard), after
 print(json.dumps({"event": "worker_memlock_after", "pid": os.getpid(),
                   "soft_bytes": after[0], "hard_bytes": after[1]}), flush=True)
 executable = "/opt/runtime-venv/bin/vllm"
+if os.environ["KV_OFFLOAD_BACKEND"] == "umbp":
+    sys.path.insert(0, "/infmax-workspace")
+    from infx.bench.umbp_health import supervise
+
+    raise SystemExit(supervise(
+        [executable, *sys.argv[1:]],
+        Path(os.environ["UMBP_ENDPOINT"] + ".health.json"),
+        float(os.environ["UMBP_HEALTH_POLL_SECONDS"]),
+        int(os.environ["UMBP_HEALTH_FAILURE_INTERVALS"]),
+        float(os.environ["UMBP_HEALTH_STOP_TIMEOUT"]),
+    ))
 os.execv(executable, [executable, *sys.argv[1:]])

@@ -8,3 +8,8 @@ if [[ "$K31_ROUTER_ONLY" == 1 ]]; then
 fi
 /opt/runtime-venv/bin/python /opt/k31-unified/verify-image.py
 mkdir -p "$HOME"
+
+check_env_vars KV_OFFLOAD_BACKEND
+if [[ $KV_OFFLOAD_BACKEND == umbp ]]; then
+    bash /configs/k31-r10-umbp-pool.sh
+fi
