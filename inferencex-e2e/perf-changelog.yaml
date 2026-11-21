@@ -13275,3 +13275,13 @@
     - "Move every key of the DeepSeek-V4.1-Flash MI355X vLLM AgentX curve to vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47 (2026-11-19, digest sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32) and rerun all 13 points, so the whole curve is on one image: TP4 c1-c2, TP2 c1-c64 and TP8 c1 (previously nightly-4fab5a07), DP2 c128 without KV offloading and DP2 c256/c384 with UMBP KV offloading (previously nightly-60bd6dd)."
     - "Recipes, topology, concurrencies, speculative decoding and KV offloading are unchanged. Relative to nightly-60bd6dd, the image keeps the same ROCm 10.0, PyTorch 2.13.0, Triton, AITER v0.1.29 and MORI v1.2.3.post1 layers; only vLLM moves forward on main."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5151
+
+- config-keys:
+    - glm5.2-fp4-b200-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add GLM-5.2 NVFP4 B200 single-node 8k1k on SGLang (lmsysorg/sglang:nightly-dev-cu13-20261027-5884e4fe, the image the B200 NVFP4 AgentX recipe uses)."
+    - "Recipe is the SGLang cookbook's verified B200 NVFP4 balanced cell without MTP: TP8 with 8-way DP attention, modelopt_fp4, chunked prefill 32768, max 256 running requests, FP8 KV, mem-fraction 0.85 (the cookbook 0.92 OOMs at CUDA-graph capture); concurrency 8 to 256 with decode CUDA graphs sized to concurrency."
+    - "Adds a plain TP8 arm (no DP attention, EP1) at concurrency 4 to 128 beside the DP-attention arm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5077
