@@ -12691,3 +12691,9 @@
   description:
     - Use the combined BF16 EP8 prefill and distributed UMBP image at c128. Enable shared-weight storage views and shared/routed overlap, disable prefill BCG, fix prefill KV to 29 GiB, and remove online KDA projection quantization. Keep decode TP8/DCP8, K3 golden acceptance and full 3600-second profiling. Allocate 899.5 GB per standalone pool with pool-only NIC0 and remote read retention disabled; retain SA HugeTLB setup.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Use the qualified EP8 distributed UMBP recovery image for c128. Explicitly recompute prefill requests after a terminal cache load failure without retrying external lookup for that request; retain fail policy on decode and persistent pool-failure supervision. Match the local 29 GiB prefill KV budget and 2 GiB allocator headroom, with native BF16 KDA projections, full warmup and 3600-second profiling.
+  pr-link: XXX

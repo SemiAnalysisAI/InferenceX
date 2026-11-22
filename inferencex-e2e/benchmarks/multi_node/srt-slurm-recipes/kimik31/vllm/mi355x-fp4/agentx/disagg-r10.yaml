@@ -24,7 +24,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:fcce1762129ddb8f5d8b1c7bbd55d3cb2598e0619f90de99a68d81901c67fab0
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:959f2866e7bccdcd9578df702f9a0302766802450fddcbfb688d432f0daba7df
   args:
     policy: consistent_hash
     prefill-policy: consistent_hash
@@ -45,7 +45,7 @@ engine:
   connector: moriio
 roles:
   prefill:
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:fcce1762129ddb8f5d8b1c7bbd55d3cb2598e0619f90de99a68d81901c67fab0
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:959f2866e7bccdcd9578df702f9a0302766802450fddcbfb688d432f0daba7df
     nodes: 1
     workers: 1
     gpus: 8
@@ -71,7 +71,7 @@ roles:
       speculative-config: '{"model": "Inferact/Kimi-K3.1-Pro-DSpark", "num_speculative_tokens": 3, "method": "dspark", "attention_backend": "TRITON_ATTN",
         "draft_sample_method": "probabilistic", "rejection_sample_method": "block", "revision": "e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f"}'
       additional-config: '{"kda_prefill_backend": "fused", "k31_pd_preparation": true}'
-      kv-transfer-config: '{"kv_connector": "MultiConnector", "kv_role": "kv_both", "kv_load_failure_policy": "fail", "kv_connector_extra_config": {"connectors":
+      kv-transfer-config: '{"kv_connector": "MultiConnector", "kv_role": "kv_both", "kv_load_failure_policy": "recompute", "kv_connector_extra_config": {"connectors":
         [{"kv_connector": "MoRIIOConnector", "kv_role": "kv_producer", "kv_load_failure_policy": "fail", "kv_connector_extra_config": {"backend": "rdma",
         "read_mode": false, "defer_timeout": 300, "use_dmabuf_kv": true}}, {"kv_connector": "UMBPStoreConnector", "kv_role": "kv_both", "kv_load_failure_policy":
         "fail", "kv_connector_extra_config": {"mode": "standalone", "endpoint": "/run/k31-umbp/pool.sock", "startup_timeout_ms": 300000, "timeout_ms": 300000,
@@ -142,7 +142,7 @@ roles:
       VLLM_K3_KDA_FB_STRIDED: '1'
       VLLM_K3_ATTN_RES_REGTILE: '1'
       VLLM_K3_LATENT_NORM_UP_PROJ: '1'
-      VLLM_ROCM_MEM_HEADROOM_GIB: '4'
+      VLLM_ROCM_MEM_HEADROOM_GIB: '2'
       VLLM_ROCM_DCP_VUP_RS: '0'
       VLLM_ROCM_DSA_MULTISTREAM: '0'
       TRITON_CACHE_DIR: /private-state/kernel-cache/ep-distributed-08842e850595/triton
@@ -333,7 +333,7 @@ roles:
       UMBP_ALLOW_4K_FALLBACK: '0'
       MORI_UMBP_LOG_LEVEL: info
       VLLM_SWA_FINE_GRAINED_PREFIX_HITS: '1'
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:fcce1762129ddb8f5d8b1c7bbd55d3cb2598e0619f90de99a68d81901c67fab0
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:959f2866e7bccdcd9578df702f9a0302766802450fddcbfb688d432f0daba7df
 benchmark:
   env:
     AIPERF_BENCHMARK_GRACE_PERIOD: '30'
@@ -347,7 +347,7 @@ setup_script: k31-r10.sh
 services:
 - name: umbp-master
   type: generic
-  container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:fcce1762129ddb8f5d8b1c7bbd55d3cb2598e0619f90de99a68d81901c67fab0
+  container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:959f2866e7bccdcd9578df702f9a0302766802450fddcbfb688d432f0daba7df
   placement:
     node: head
   start: before_workers
