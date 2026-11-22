@@ -47,14 +47,14 @@ engine:
   connector: moriio
 roles:
   prefill:
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:a0ee8dd55a45bf0e89dbd5557797dea221983c35dd7f9bca9f2ffb6f3d295ecd
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:19ce9cf00eed8be306d9510477950fd8228bf2a820f8f5c7cc394600eaf3962f
     nodes: 1
     workers: 1
     gpus: 8
     args:
       served-model-name: moonshotai/Kimi-K3.1-Pro
       trust-remote-code: true
-      moe-backend: auto
+      moe-backend: aiter_mega_moe
       tensor-parallel-size: 8
       load-format: fastsafetensors
       gpu-memory-utilization: 0.87
@@ -147,8 +147,8 @@ roles:
       VLLM_ROCM_MEM_HEADROOM_GIB: '8'
       VLLM_ROCM_DCP_VUP_RS: '0'
       VLLM_ROCM_DSA_MULTISTREAM: '0'
-      TRITON_CACHE_DIR: /private-state/kernel-cache/umbp42-f7ab8a01763e/triton
-      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/umbp42-f7ab8a01763e/inductor
+      TRITON_CACHE_DIR: /private-state/kernel-cache/umbp-replica-85afd034e014/triton
+      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/umbp-replica-85afd034e014/inductor
       VLLM_K3_SP_PREFILL: '1'
       VLLM_K3_SP_PREFILL_MIN_TOKENS: '4096'
       VLLM_K31_BEAT_EAGERPREP: '1'
@@ -168,6 +168,7 @@ roles:
       UMBP_DISTRIBUTED_LOCAL_FIRST: '1'
       UMBP_DISTRIBUTED_CACHE_REMOTE_FETCHES: '0'
       UMBP_DISTRIBUTED_RANGED_LOCALITY_PREFETCH: '0'
+      UMBP_DISTRIBUTED_RANGED_WHOLE_OBJECT_CACHE: '0'
       UMBP_DISTRIBUTED_RANGED_SCRATCH_BYTES: '2147483648'
       UMBP_DISTRIBUTED_RANGED_SCRATCH_USE_HUGEPAGES: '1'
       UMBP_DISTRIBUTED_RANGED_SCRATCH_NUMA: '1'
@@ -284,8 +285,8 @@ roles:
       VLLM_ROCM_MEM_HEADROOM_GIB: '8'
       VLLM_ROCM_DCP_VUP_RS: '1'
       VLLM_ROCM_DSA_MULTISTREAM: '1'
-      TRITON_CACHE_DIR: /private-state/kernel-cache/umbp42-f7ab8a01763e/triton
-      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/umbp42-f7ab8a01763e/inductor
+      TRITON_CACHE_DIR: /private-state/kernel-cache/umbp-replica-85afd034e014/triton
+      TORCHINDUCTOR_CACHE_DIR: /private-state/kernel-cache/umbp-replica-85afd034e014/inductor
       VLLM_DCP_Q_REPLICATE: '1'
       VLLM_K31_CPRR_SPLIT96: '0'
       VLLM_K3_SP_PREFILL: '0'
@@ -303,6 +304,7 @@ roles:
       UMBP_DISTRIBUTED_LOCAL_FIRST: '1'
       UMBP_DISTRIBUTED_CACHE_REMOTE_FETCHES: '0'
       UMBP_DISTRIBUTED_RANGED_LOCALITY_PREFETCH: '0'
+      UMBP_DISTRIBUTED_RANGED_WHOLE_OBJECT_CACHE: '0'
       UMBP_DISTRIBUTED_RANGED_SCRATCH_BYTES: '2147483648'
       UMBP_DISTRIBUTED_RANGED_SCRATCH_USE_HUGEPAGES: '1'
       UMBP_DISTRIBUTED_RANGED_SCRATCH_NUMA: '1'
@@ -319,7 +321,7 @@ roles:
       UMBP_ALLOW_4K_FALLBACK: '0'
       MORI_UMBP_LOG_LEVEL: info
       VLLM_SWA_FINE_GRAINED_PREFIX_HITS: '1'
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:a0ee8dd55a45bf0e89dbd5557797dea221983c35dd7f9bca9f2ffb6f3d295ecd
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:19ce9cf00eed8be306d9510477950fd8228bf2a820f8f5c7cc394600eaf3962f
 benchmark:
   env:
     AIPERF_BENCHMARK_GRACE_PERIOD: '30'
@@ -333,7 +335,7 @@ setup_script: k31-r10.sh
 services:
 - name: umbp-master
   type: generic
-  container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:a0ee8dd55a45bf0e89dbd5557797dea221983c35dd7f9bca9f2ffb6f3d295ecd
+  container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:19ce9cf00eed8be306d9510477950fd8228bf2a820f8f5c7cc394600eaf3962f
   placement:
     node: head
   start: before_workers
@@ -345,7 +347,7 @@ services:
   - '25191'
   env:
     MORI_UMBP_LOG_LEVEL: info
-    UMBP_ROUTE_PUT_SELECT_ALGO: most_available
+    UMBP_ROUTE_PUT_SELECT_ALGO: random
     UMBP_ROUTE_PUT_NODE_AFFINITY: none
   readiness:
     port: 25190
@@ -356,7 +358,7 @@ environment:
   TOTAL_CPU_DRAM_GB: '1799'
   DECODE_CPU_DRAM_GB: '1799'
   KV_P2P_TRANSFER: moriio
-  K31_CLEAN_RUN_ID: k31-umbp42-c128-1121
+  K31_CLEAN_RUN_ID: k31-umbp-replica-c128-1122
   UMBP_HEALTH_POLL_SECONDS: '1'
   UMBP_HEALTH_FAILURE_INTERVALS: '3'
   UMBP_HEALTH_STOP_TIMEOUT: '10'

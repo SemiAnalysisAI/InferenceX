@@ -4,6 +4,8 @@ source /infmax-workspace/benchmarks/check_env.sh
 check_env_vars MORI_RDMA_TC MORI_IO_TC MORI_IO_TC_DISABLE HEAD_NODE_IP NCCL_SOCKET_IFNAME NCCL_IB_HCA UMBP_ENDPOINT UMBP_DRAM_CAPACITY UMBP_DISTRIBUTED_DRAM_PAGE_SIZE UMBP_DRAM_USE_HUGEPAGES UMBP_DRAM_HUGEPAGE_SIZE UMBP_DRAM_NUMA_NODE UMBP_DRAM_MAX_MR_BYTES UMBP_POOL_MAX_RD_ATOMIC
 check_env_vars UMBP_DISTRIBUTED_RANGED_SCRATCH_BYTES UMBP_DISTRIBUTED_RANGED_SCRATCH_USE_HUGEPAGES UMBP_ALLOW_4K_FALLBACK
 check_env_vars UMBP_DISTRIBUTED_RANGED_SCRATCH_NUMA
+check_env_vars UMBP_DISTRIBUTED_CACHE_REMOTE_FETCHES UMBP_DISTRIBUTED_RANGED_LOCALITY_PREFETCH UMBP_DISTRIBUTED_RANGED_WHOLE_OBJECT_CACHE
+[[ $UMBP_DISTRIBUTED_CACHE_REMOTE_FETCHES == 0 && $UMBP_DISTRIBUTED_RANGED_LOCALITY_PREFETCH == 0 && $UMBP_DISTRIBUTED_RANGED_WHOLE_OBJECT_CACHE == 0 ]]
 [[ $UMBP_DISTRIBUTED_RANGED_SCRATCH_USE_HUGEPAGES == 1 && $UMBP_ALLOW_4K_FALLBACK == 0 ]]
 [[ $UMBP_DISTRIBUTED_RANGED_SCRATCH_NUMA == 1 ]]
 [[ $UMBP_POOL_MAX_RD_ATOMIC == 1 ]]
@@ -124,6 +126,11 @@ for ((attempt=0; attempt<900; attempt++)); do
             exit 1
         fi
         printf 'UMBP HugeTLB mapped bytes: %s\n' "$((hugetlb_kb * 1024))"
+        if ! grep -q 'cache_remote_fetches=false ranged_locality_prefetch=false ranged_whole_object_cache=false' "$log_dir/server.log"; then
+            echo "UMBP did not confirm disabled remote read retention; inspect $log_dir/server.log" >&2
+            kill -TERM "$server_pid"
+            exit 1
+        fi
         echo "UMBP pool ready at $UMBP_ENDPOINT; log: $log_dir/server.log"
         PYTHONPATH=/infmax-workspace /opt/runtime-venv/bin/python -m infx.bench umbp-health --pool-state "$UMBP_ENDPOINT.health.json" --record-pid "$server_pid"
         exit 0
