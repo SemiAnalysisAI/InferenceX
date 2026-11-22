@@ -76,8 +76,6 @@ base:
     connector:
     dp_launch_mode: per_node
 
-  # Each worker is one B300 node (TP8 x DCP8). KV moves between nodes over AWS EFA: NIXL on its
-  # LIBFABRIC backend for prefill to decode, and the Mooncake store on its EFA transport.
   roles:
     prefill:
       nodes: 1
@@ -108,13 +106,14 @@ base:
           MC_SLICE_SIZE: "1048576"
           # A rank registers tens of GB of GPU KV cache; a 4 GiB cap fails that registration over EFA.
           MC_MAX_MR_SIZE: "68719476736"
-          MC_EFA_NIC_SELECTION: "local"
-          # The 16 EFA devices of a B300 node.
-          MC_MS_FILTERS: "rdmap86s0,rdmap87s0,rdmap101s0,rdmap102s0,rdmap116s0,rdmap117s0,rdmap131s0,rdmap132s0,rdmap146s0,rdmap147s0,rdmap161s0,rdmap162s0,rdmap176s0,rdmap177s0,rdmap191s0,rdmap192s0"
-          FI_EFA_ENABLE_SHM_TRANSFER: "0"
           NIXL_DISABLE_CUDA_ADDR_WA: "1"
           NCCL_P2P_LEVEL: "NVL"
+          # Cluster settings for the b300-dsxe EFA fabric, not Kimi or vLLM settings: do not copy them
+          # into recipes for other clusters.
+          MC_EFA_NIC_SELECTION: "local"
+          MC_MS_FILTERS: '@fabric.rdma-devices'
           MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+          FI_EFA_ENABLE_SHM_TRANSFER: "0"
           WITH_NVIDIA_PEERMEM: "0"
           NCCL_NET_PLUGIN: "none"
           NCCL_TUNER_PLUGIN: "ofi"
@@ -298,8 +297,6 @@ override_1p1d_k7_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-# One prefill and three decode workers with 5 draft tokens (concurrency 20 and 48). Decode graphs every 6 rows up
-# to 384, and the small-batch decode kernels are laid out for 6 verify rows per request (K31_S30K=6).
 override_1p3d_k5:
   roles:
     prefill: &override_1p3d_k5_prefill
@@ -312,6 +309,7 @@ override_1p3d_k5:
       workers: 3
       env:
         <<: *ll_decode_env
+        # Lays the small-batch decode kernels out for the 6 verify rows of 5 draft tokens.
         K31_S30K: "6"
       args: &override_1p3d_k5_decode_args
         max-cudagraph-capture-size: 384
@@ -337,7 +335,6 @@ override_1p3d_k5_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-# One prefill and three decode workers with 4 draft tokens (concurrency 96).
 override_1p3d_k4:
   roles:
     prefill: &override_1p3d_k4_prefill
@@ -369,16 +366,13 @@ override_1p3d_k4_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-# Four prefill and five decode workers with 5 draft tokens, the highest-throughput point. Prefill sets
-# K31_CPU1 (lighter host-side work per eager prefill step). Decode admits up to 128 requests at 0.98 of GPU
-# memory, autotunes its FlashInfer kernels, has graphs every 24 rows up to 768, and sets BF16 indexer logits
-# explicitly.
 override_4p5d_k5:
   roles:
     prefill: &override_4p5d_k5_prefill
       nodes: 4
       workers: 4
       env:
+        # Lighter host-side work per eager prefill step; same outputs.
         K31_CPU1: "1"
       args: &override_4p5d_k5_prefill_args
         speculative-config: *spec_k5

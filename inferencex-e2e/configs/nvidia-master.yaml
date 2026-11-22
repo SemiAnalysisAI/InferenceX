@@ -6094,7 +6094,6 @@ kimik3.1-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         power: true
         prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
         decode: { num-worker: 1, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      # DSpark drafts 5 tokens at concurrency 20 and 48.
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
@@ -6104,7 +6103,6 @@ kimik3.1-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         power: true
         prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      # DSpark drafts 4 tokens at concurrency 96.
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
@@ -6114,7 +6112,6 @@ kimik3.1-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         power: true
         prefill: { num-worker: 1, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      # Highest throughput: four prefill and five decode workers, 5 draft tokens.
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
