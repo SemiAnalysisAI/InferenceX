@@ -12685,3 +12685,9 @@
   description:
     - Use the GEM-compatible UMBP image with complete remote ranged-read retention disabled on both pools. Select random object placement and explicit prefill MegaMoE; preserve c128, both-role store/restore, 1799 GB HugeTLB pools, released DSpark golden acceptance, role graph settings and full 3600-second profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Use the combined BF16 EP8 prefill and distributed UMBP image at c128. Enable shared-weight storage views and shared/routed overlap, disable prefill BCG, fix prefill KV to 29 GiB, and remove online KDA projection quantization. Keep decode TP8/DCP8, K3 golden acceptance and full 3600-second profiling. Allocate 899.5 GB per standalone pool with pool-only NIC0 and remote read retention disabled; retain SA HugeTLB setup.
+  pr-link: XXX
