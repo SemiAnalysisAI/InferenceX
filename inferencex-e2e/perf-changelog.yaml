@@ -13280,5 +13280,5 @@
     - qwen3.8next-fp4-b200-sglang-agentic-mtp
   scenario-type: [agentic-coding]
   description:
-    - "Update the SGLang image from v0.5.23-cu130 to nightly-dev-cu13-20261121-a8ac8659 and rename SGL_ENABLE_JIT_DEEPGEMM."
+    - "Update SGLang image from v0.5.23-cu130 to nightly-dev-cu13-20261121-a8ac8659 and keep hybrid cache checkpoint level 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5178

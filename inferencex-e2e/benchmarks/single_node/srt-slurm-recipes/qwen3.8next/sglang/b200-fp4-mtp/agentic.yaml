@@ -28,6 +28,8 @@ base:
         linear-attn-decode-backend: flashinfer
         # Flashinfer linear-attn decode on SM100+ requires a bfloat16 state.
         mamba-ssm-dtype: bfloat16
+        # Keep v0.5.23 checkpointing: every chunk, no per-path state cap.
+        hybrid-cache-checkpoints-level: 3
         speculative-algorithm: NEXTN
         speculative-num-steps: 3
         speculative-eagle-topk: 1
