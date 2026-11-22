@@ -13280,5 +13280,5 @@
     - qwen3.5-fp8-mi300x-sglang-agentic-mtp
   scenario-type: [agentic-coding]
   description:
-    - "Update the SGLang image from v0.5.23-rocm10-mi30x-20261109 to v0.5.23-rocm10-mi30x-20261121."
+    - "Update SGLang image v0.5.23-rocm10-mi30x-20261109 to -20261121; set hybrid-cache-checkpoints-level 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5176

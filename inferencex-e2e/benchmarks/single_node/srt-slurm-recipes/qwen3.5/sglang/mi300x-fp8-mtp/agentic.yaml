@@ -33,6 +33,9 @@ base:
         page-size: 16
         kv-cache-dtype: fp8_e4m3
         mamba-ssm-dtype: bfloat16
+        # SGLang #49886 defaults to level 2 (fork points and request ends
+        # only); level 3 keeps the per-chunk Mamba prefix-cache checkpoints.
+        hybrid-cache-checkpoints-level: 3
         tokenizer-worker-num: 6
         max-prefill-tokens: 32768
         scheduler-recv-interval: 30
