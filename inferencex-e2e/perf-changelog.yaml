@@ -13281,9 +13281,9 @@
   scenario-type: [agentic-coding]
   description:
     - "Move the B300 Kimi-K3.1-Pro Dynamo+vLLM disaggregated configs to vllm/vllm-openai:kimi-k31-mc-f4c9618 (sha256:01257a77, vLLM 0.1.dev25380+gf4c96184b) and Dynamo ec06c09e72 built from source. The DSpark draft stays Inferact/Kimi-K3.1-Pro-DSpark at revision e4e6e626, so synthetic acceptance follows its golden AL curve."
-    - "Sweep 1P1D c1 (7 draft tokens), 1P3D c20 and c48 (5 draft tokens), 1P3D c96 (4 draft tokens) and 4P5D c660 (5 draft tokens). The 1P2D c64 and 2P3D c264 points are removed."
+    - "Sweep 1P1D c1 (7 draft tokens), 1P3D c20 and c48 (5 draft tokens), 1P3D c96 (4 draft tokens) and 4P5D c600 (5 draft tokens). The 1P2D c64 and 2P3D c264 points are removed, and the 4P5D point moves from c660 to c600 to keep its p90 TTFT under 10 s."
     - "The 1P1D and 1P3D decode workers turn on the image's small-batch decode kernels of the latency_specialized backend (the K31_* environment switches); with 5 draft tokens K31_S30K=6 sizes them for 6 verify rows per request."
     - "Every point now uses the settings #5108 used at its throughput points: the Mooncake store keeps the tail pages a request loaded and drops the older tails it consumed, store lookups start before admission (lookup_prefetch_limit 16, lookup_prefetch_ttl_s 30), prefill computes the sparse-attention indexer logits in BF16 and selects the indexer top-k with deep_select, and the Mooncake master evicts 2% of the store per round. Prefill and decode workers bind to their GPUs' NUMA nodes (numa-bind)."
-    - "4P5D c660 drafts 5 tokens, autotunes the decode FlashInfer kernels, captures decode graphs every 24 rows up to 768 and sets K31_CPU1 on prefill (less host work per eager prefill step, same outputs)."
+    - "4P5D c600 drafts 5 tokens, autotunes the decode FlashInfer kernels, captures decode graphs every 24 rows up to 768 and sets K31_CPU1 on prefill (less host work per eager prefill step, same outputs)."
     - "Precision is unchanged: FP8 KV cache, MXFP4 indexer keys, BF16 indexer logits, FP32 KDA state."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5175
