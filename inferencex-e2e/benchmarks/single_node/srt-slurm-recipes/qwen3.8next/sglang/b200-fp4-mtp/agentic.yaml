@@ -42,7 +42,7 @@ base:
         TORCH_CUDA_ARCH_LIST: '10.0'
         PYTHONNOUSERSITE: '1'
         NCCL_NVLS_ENABLE: '1'
-        SGL_ENABLE_JIT_DEEPGEMM: 'false'
+        SGLANG_ENABLE_JIT_DEEPGEMM: 'false'
         SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
         SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '0'
         # Outlast AIPerf's 300 s client connection pool.
