@@ -13283,3 +13283,10 @@
   description:
     - "Add SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB200, aggregated and disaggregated, with DSpark block 7 and the minimax-msa kernels."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4695
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang image from v0.5.23-rocm720-mi30x to sglang-rocm v0.5.23-rocm720-mi30x-20261122."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5182
