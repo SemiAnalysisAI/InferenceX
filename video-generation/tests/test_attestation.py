@@ -75,6 +75,29 @@ def test_sglang_log_attests_that_every_request_did_the_declared_work(log, plan, 
     assert "203.0.113.1" not in json.dumps(document)
 
 
+def test_attestation_records_where_the_engine_placed_the_weights(tmp_path):
+    placement = {
+        "dit_cpu_offload": True,
+        "dit_layerwise_offload": False,
+        "layerwise_offload_components": None,
+        "text_encoder_cpu_offload": True,
+        "vae_cpu_offload": False,
+        "use_fsdp_inference": False,
+    }
+    text = LOG.read_text(encoding="utf-8").replace(
+        '"performance_mode": "speed"',
+        '"performance_mode": "memory", ' + json.dumps(placement)[1:-1],
+    )
+    log = tmp_path / "server.out"
+    log.write_text(text, encoding="utf-8")
+
+    document = attest("sglang", log, PLAN, RECORDS, "bf16")
+
+    assert (document["valid"], _failed(document)) == (True, set())
+    observed = document["server"]["observed"]
+    assert {key: observed[key] for key in placement} == placement
+
+
 @pytest.mark.parametrize(
     "fault,failed",
     [

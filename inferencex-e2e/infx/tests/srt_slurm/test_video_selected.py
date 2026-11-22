@@ -80,7 +80,7 @@ def native_fragment(tmp_path):
                 "evaluator.srt_selected", "serve", "--model-type", "diffusion",
                 "--model-path", "{model_path}", "--model-id", "{model_id}",
                 "--revision", "{model_revision}", "--port", "30283",
-                "--num-gpus", "{gpus_per_node}", "--host", "0.0.0.0",
+                "--num-gpus", "{gpus_per_node}", "--host", "0.0.0.0", "--performance-mode", "speed",
                 "--tp-size", "{gpus_per_node}", "--ulysses-degree", "{gpus_per_node}",
                 "--attention-backend", "fixture-backend",
             ],
@@ -110,6 +110,14 @@ def test_selected_engine_revision_must_match_bound_point(native_fragment):
     args = raw["services"][0]["args"]
     args[args.index("--revision") + 1] = "c" * 40
     with pytest.raises(ValueError, match="--revision"):
+        video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
+
+
+def test_sglang_recipe_must_choose_its_performance_mode(native_fragment):
+    raw, write = native_fragment
+    args = raw["services"][0]["args"]
+    del args[args.index("--performance-mode") : args.index("--performance-mode") + 2]
+    with pytest.raises(ValueError, match="--performance-mode"):
         video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
 
 
