@@ -270,9 +270,9 @@ override_tp4_c28:
         ep-size: 4
         max-num-seqs: 40
         cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 26, 28, 30, 32, 40, 48, 56]
-        prefill-decode-interval: 96
-        # At most 4 back-to-back prefill rounds while an overdue prompt holds the interval back.
-        max-consecutive-prefill-rounds: 4
+        prefill-decode-interval: 48
+        # At most 1 back-to-back prefill round while an overdue prompt holds the interval back.
+        max-consecutive-prefill-rounds: 1
         enable-short-prefill-first: true
         # Prefill in 24K chunks; owned-row prefill returns attention outputs by heads all-to-all.
         chunked-prefill-size: 24576
