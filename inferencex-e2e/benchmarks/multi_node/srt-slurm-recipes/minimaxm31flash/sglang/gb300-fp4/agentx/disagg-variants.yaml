@@ -5,8 +5,8 @@ base:
   identity:
     model: {}
     frameworks:
-      dynamo: "1.7.0.dev20261030"
-      sglang: "0.0.0.dev1+ge3718813e"
+      dynamo: "1.8.0.dev20261121"
+      sglang: "0.0.0.dev1+g93edbeb3a"
   dynamo:
     install: false
     request_plane: tcp
@@ -188,9 +188,6 @@ base:
 
 override_4p_dep4_dep16_si20_linker:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker
-  identity: &gb300-1117-identity
-    frameworks:
-      sglang: "0.0.0.dev1+g209741ec5"
   # Lists replace on merge, so this repeats every base service. Every decode
   # node and the infra node run 4 x 190 GB stores.
   services: &gb300-linker-services
@@ -321,7 +318,7 @@ override_4p_dep4_dep16_si20_linker:
         enable-unified-cache-external-linker: true
         unified-cache-external-linker-backend: mooncake
         unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
-    decode: &gb300-1117-dep16-decode
+    decode: &gb300-dep16-decode
       nodes: 4
       gpus: 16
       args:
@@ -331,22 +328,8 @@ override_4p_dep4_dep16_si20_linker:
         max-running-requests: 768
         stream-interval: 20
 
-override_2p_dep4_dep16_si20_linker:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-2p-dep4-dep16-si20-linker
-  identity: *gb300-1117-identity
-  services: *gb300-linker-services
-  roles:
-    prefill:
-      nodes: 2
-      workers: 2
-      gpus: 4
-      env: *gb300-linker-prefill-env
-      args: *gb300-dep4-linker-prefill-args
-    decode: *gb300-1117-dep16-decode
-
 override_3p_dep4_dep16_si20_linker:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-linker
-  identity: *gb300-1117-identity
   services: *gb300-linker-services
   roles:
     prefill:
@@ -355,4 +338,16 @@ override_3p_dep4_dep16_si20_linker:
       gpus: 4
       env: *gb300-linker-prefill-env
       args: *gb300-dep4-linker-prefill-args
-    decode: *gb300-1117-dep16-decode
+    decode: *gb300-dep16-decode
+
+override_6p_dep4_dep16_si20_linker:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep4-dep16-si20-linker
+  services: *gb300-linker-services
+  roles:
+    prefill:
+      nodes: 6
+      workers: 6
+      gpus: 4
+      env: *gb300-linker-prefill-env
+      args: *gb300-dep4-linker-prefill-args
+    decode: *gb300-dep16-decode

@@ -13277,6 +13277,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5151
 
 - config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
     - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
   description:
     - "Update image and points."
