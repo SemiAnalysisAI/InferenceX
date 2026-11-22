@@ -147,6 +147,7 @@ def resolve_conflict_bytes(
         base_entries,
         pr_entries,
         pr_number,
+        already_merged=main_entries[len(base_entries) :],
     )
     validate_raw_change(base_raw, pr_raw, len(additions), corrections)
     expected_link = f"https://github.com/{repo}/pull/{pr_number}"

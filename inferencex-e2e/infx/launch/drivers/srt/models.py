@@ -9,6 +9,7 @@ MODEL_PATH: the ``hf:<MODEL>`` its recipe is bound to maps to it.
 from __future__ import annotations
 
 import os
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -210,7 +211,7 @@ def single_node_hf_cache(cluster: Cluster, request: LaunchRequest) -> Path:
     return volume_path(cluster, "shared-hf-hub-cache" if shared else "hf-hub-cache")
 
 
-HUB_DOWNLOAD_CLUSTERS = frozenset({"a100-cw"})
+HUB_DOWNLOAD_CLUSTERS = frozenset({"a100-cw", "h100-dsxe"})
 """Clusters whose launcher downloads a video model into the hub cache before it submits.
 
 Their login node writes the same shared cache that the job then reads offline.
@@ -233,5 +234,8 @@ def download_video_model(
         "uv", "tool", "run", "--from", HF_HUB, "hf", "download", model, "--revision", revision,
         "--cache-dir", hf_cache, "--exclude", VIDEO_HUB_EXCLUDE,
     ]  # fmt: skip
-    if proc.run(download, env={**env, "HF_HUB_DISABLE_PROGRESS_BARS": "1"}).returncode:
-        raise LaunchError(f"could not download {model} at {revision} into {hf_cache}")
+    # A runner's HF_HOME can be a read-only model store, and the Hub client keeps its xet cache there.
+    with tempfile.TemporaryDirectory() as xet_cache:
+        hub_env = {**env, "HF_HUB_DISABLE_PROGRESS_BARS": "1", "HF_XET_CACHE": xet_cache}
+        if proc.run(download, env=hub_env).returncode:
+            raise LaunchError(f"could not download {model} at {revision} into {hf_cache}")
