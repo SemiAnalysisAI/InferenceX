@@ -13282,7 +13282,4 @@
   scenario-type: [agentic-coding]
   description:
     - "Add SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB200, aggregated and disaggregated, with DSpark block 7 and the minimax-msa kernels."
-    - "Agg on lmsysorg/sglang:nightly-cu134-20261030-e371881 (Dynamo 1.7.0.dev20261030): TP4 at conc 1-16, a TP4 MSA-V1 MonoKernel point at conc 1 (page size 128, one-step DSpark with 8 draft tokens), and TP4 with HiCache 180 GB per rank at conc 32-56."
-    - "Disagg on lmsysorg/sglang-staging:nightly-cu134-20261117-209741e with its bundled Dynamo 1.7.0.dev20261115: DEP8 prefill workers with a DEP16 decode (MegaMoE), Mooncake transfer, and the unified-cache external linker (Mooncake, prefetch loads) in place of HiCache. 1 prefill worker at conc 288-352, 2 at conc 448 and 480."
-    - "Linker storage: every prefill rank contributes a 190 GB segment, each of the 4 decode nodes hosts 4 x 190 GB stores, and the infra node 4 x 150 GB. Prefill: 8192 tokens per DP rank per chunk, mem-fraction-static 0.88. Decode: 48 requests per DP rank, mem-fraction-static 0.85."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4695
