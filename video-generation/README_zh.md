@@ -47,12 +47,18 @@ Sol-Engine。范围负责人：`@edwingao28`。
 | 16 | 参考 PSNR 只报告，从不卡复用或合并；`quality_status` 保持 `unjudged`。Wan2.2 没有参考视频，其视频保持未评分。 | 无损引擎和并行布局相对同一参考的 PSNR 本来就差异很大。 | [`quality.py:192`][unjudged]；没有 workflow 把该分数当作门槛 | 参考 | `@functionstackx` | 生效 |
 | 17 | VLM judge 为每段测量视频评分，分数显示在视频旁边。它不阻止发布。 | 技术检查判断不了视频是否符合 prompt。 | 缺口：本仓库还没有 judge | 参考 | `@edwingao28` | 生效 |
 | 18 | 所有引擎（SGLang、vLLM-Omni 与 Sol-Engine 一样）遵守同一套规则：PR rebase 到 `main`，使用按 digest 固定的公开镜像，并通过引擎日志 attestation。 | 所有引擎用同一个证据标准。 | digest 见 [`srt_selected.py:266`][image]；attestation 见 [`srt_bundle.py:378`][attest-gate]。缺口：[`srt_slurm/video.py:253`][runtime] 只接受 `sglang` 与 `vllm-omni`，attestation 策略也只有 SGLang（见规则 7）。Sol-Engine 的 binder 支持由其自己的 PR 加入；vLLM-Omni 与 Sol-Engine 的 attestation 策略由 InferenceX 添加 | 阻断 | `@edwingao28` | 生效 |
+| 19 | 每个 workload 写明每条视频的规模：latent token 数、DiT 前向次数（去噪步数 × guidance 分支数），以及估算的 DiT 计算量（线性层按 2 × DiT 参数量 × token 数，attention 按 4 × token 数² × hidden size × 层数）。dashboard 在 workload 摘要中显示这三项。它们只描述 workload，不参与排名；不同 workload 的结果不合并成一条曲线。 | 视频秒数不代表工作量。H3（5.17 s，约 31,000 个 token，49 次前向）和 Wan2.2（5.06 s，32,760 个 token，80 次前向）的视频秒数和 token 数几乎相同，但 Wan2.2 每条视频的 DiT 计算量约为 H3 的 1.4 倍。full attention 的计算量随 token 数平方增长，每条视频的 token 数又取决于各模型的 VAE 与 patch 大小。 | 缺口：spec、artifact 与 App 都还没有记录这三项 | 定义 | `@edwingao28` | 生效 |
 
 ### 无损档
 
 - 允许以下改动，因为它们只改变工作的调度方式，不改变计算内容：tensor、Ulysses、
   ring 与 CFG 并行；text encoder 的 tensor 并行；VAE tiling 与 patch 并行；
   attention 后端与 kernel 选择。
+- 同样允许改变权重的存放位置。CPU offload、layerwise offload 与 FSDP 分片只移动
+  权重，不改变结果，搬运耗时和其他工作一样计入延迟。SGLang 的 `--performance-mode`
+  取 `auto`（默认值）或 `memory` 时，会按 GPU 空闲显存自动决定这些设置，因此配方
+  须显式写明该模式。缺口：目前没有代码检查配方是否写明该模式；SGLang attestation
+  只记录 `performance_mode`，不记录它最终决定的 offload 设置（[`attestation.py:36`][policy]）。
 - 不允许：改动任何工作负载或编码参数；BF16 以外的任何精度，包括 FP8、FP4
   及其他量化；跨请求复用工作；TeaCache、FirstBlockCache 等步间缓存；稀疏
   attention；LoRA；配方之外的启动参数或补丁。

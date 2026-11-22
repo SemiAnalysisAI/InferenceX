@@ -52,12 +52,20 @@ it yet.
 | 16 | Reference PSNR is reported and never gates reuse or merge; `quality_status` stays `unjudged`. Wan2.2 has no reference, so its clips stay unscored. | Lossless engines and layouts already spread widely in PSNR against one reference. | [`quality.py:192`][unjudged]; no workflow reads the score as a gate | Advisory | `@functionstackx` | In force |
 | 17 | A VLM judge scores each measured clip, and the score is reported next to the clip. It does not block publication. | The technical checks cannot tell whether a clip shows its prompt. | Gap: no judge exists in this repository | Advisory | `@edwingao28` | In force |
 | 18 | Every engine, SGLang, vLLM-Omni and Sol-Engine alike, meets the same rules: a PR rebased on `main`, a public image pinned by digest, and a passing engine-log attestation. | One evidence bar for every engine. | [`srt_selected.py:266`][image] for the digest; [`srt_bundle.py:378`][attest-gate] for the attestation. Gap: [`srt_slurm/video.py:253`][runtime] accepts only `sglang` and `vllm-omni`, and the attestation policy is SGLang only (rule 7). Sol-Engine's own PR adds its binder support; InferenceX adds the vLLM-Omni and Sol-Engine attestation policies | Blocking | `@edwingao28` | In force |
+| 19 | Each workload states its size per clip: latent tokens, DiT forward passes (denoising steps × guidance branches) and estimated DiT FLOPs (2 × DiT parameters × tokens for the linear layers, plus 4 × tokens² × hidden size × layers for attention). The dashboard shows them in the workload summary. They describe the workload and never rank results; results from different workloads are never merged into one curve. | Video seconds do not measure work. H3 (5.17 s, about 31,000 tokens, 49 forward passes) and Wan2.2 (5.06 s, 32,760 tokens, 80 forward passes) have nearly the same video seconds and tokens, yet Wan2.2 needs about 1.4× the DiT compute per clip. Full attention grows with the square of the token count, and tokens per clip depend on each model's VAE and patch size. | Gap: no spec, artifact or App field records them | Definition | `@edwingao28` | In force |
 
 ### Lossless tier
 
 - Allowed, because they change how the work is scheduled, not what is computed:
   tensor, Ulysses, ring and CFG parallelism; text-encoder tensor parallelism; VAE
   tiling and patch parallelism; attention backend and kernel choice.
+- Also allowed: changing where the weights live. CPU offload, layerwise offload
+  and FSDP sharding move weights without changing the result, and the transfer
+  time counts toward latency like any other work. SGLang's `--performance-mode`
+  values `auto` (its default) and `memory` choose these settings from free GPU
+  memory, so the recipe sets the mode explicitly. Gap: nothing checks that the
+  recipe sets it, and the SGLang attestation records `performance_mode` but not
+  the offload settings it resolves ([`attestation.py:36`][policy]).
 - Not allowed: changing any workload or encoding setting; any precision other
   than BF16, including FP8, FP4 and other quantization; work reused across
   requests; step caching such as TeaCache or FirstBlockCache; sparse attention;
