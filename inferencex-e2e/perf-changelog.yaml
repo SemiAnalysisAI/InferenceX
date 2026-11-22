@@ -13277,6 +13277,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5151
 
 - config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-linker-d1115
+  scenario-type: [agentic-coding]
+  description:
+    - "Add SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB200, aggregated and disaggregated, with DSpark block 7 and the minimax-msa kernels."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4695
+
+- config-keys:
     - glm5.3flash-fp8-b200-sglang-agentic-mtp
   scenario-type: [agentic-coding]
   description:
