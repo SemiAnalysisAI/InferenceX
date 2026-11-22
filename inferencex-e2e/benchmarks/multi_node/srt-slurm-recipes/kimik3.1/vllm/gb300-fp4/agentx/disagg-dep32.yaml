@@ -222,7 +222,7 @@ override_1p1d_dep32:
       node: dedicated
   roles:
     prefill:
-      # One DEP32 prefill engine (28 experts per rank) instead of two DEP16 engines, so each rank has room for an 85 GiB KV cache.
+      # One DEP32 prefill engine (28 experts per rank) instead of two DEP16 engines, so each rank has room for an 80 GiB KV cache.
       nodes: 8
       workers: 1
       gpus: 32
@@ -236,7 +236,7 @@ override_1p1d_dep32:
         # Indexer logits budget per call, so a long-context prompt runs in fewer indexer chunks.
         VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "2048"
       args:
-        kv-cache-memory-bytes: 91268055040
+        kv-cache-memory-bytes: 85899345920
         data-parallel-size: 32
         block-size: 16384
         attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
@@ -272,7 +272,7 @@ override_1p1d_dep32:
 override_1p1d_dep32_eval:
   roles:
     prefill:
-      # One DEP32 prefill engine (28 experts per rank) instead of two DEP16 engines, so each rank has room for an 85 GiB KV cache.
+      # One DEP32 prefill engine (28 experts per rank) instead of two DEP16 engines, so each rank has room for an 80 GiB KV cache.
       nodes: 8
       workers: 1
       gpus: 32
@@ -286,7 +286,7 @@ override_1p1d_dep32_eval:
         # Indexer logits budget per call, so a long-context prompt runs in fewer indexer chunks.
         VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "2048"
       args:
-        kv-cache-memory-bytes: 91268055040
+        kv-cache-memory-bytes: 85899345920
         data-parallel-size: 32
         block-size: 16384
         attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
