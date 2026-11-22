@@ -1177,7 +1177,7 @@ musespark-fp4-mi355x-tokenspeed-agentic-dflash:
   precision: fp4
   framework: tokenspeed
   multinode: false
-  router: { name: smg, version: 1.16.0.post20261115 }
+  router: { name: smg, version: 1.16.0.post20261121 }
   srt-recipe-dir: musespark/tokenspeed/mi355x-fp4
   scenarios:
     agentic-coding:

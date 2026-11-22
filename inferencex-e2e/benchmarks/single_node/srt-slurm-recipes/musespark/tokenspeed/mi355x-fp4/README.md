@@ -8,16 +8,16 @@ KV cache is FP8 and the context is the checkpoint's native 1M tokens.
 
 Each concurrency has its own override:
 
-| Layout    | Concurrency | `max-num-seqs` | `prefill-decode-interval` | `prefill-decode-min-interval` | `stream-interval` | Decode monokernel | Host KV store  |
-| --------- | ----------- | -------------- | ------------------------- | ----------------------------- | ----------------- | ----------------- | -------------- |
-| TP8 / EP1 | 1           | 1              | 0                         | 0                             | default           | on                | off            |
-| TP8 / EP1 | 2, 4, 8, 16 | 2              | 384                       | 0                             | default           | on                | off            |
-| TP8 / EP1 | 6           | 1              | 384                       | 0                             | 50                | on                | off            |
-| TP8 / EP1 | 10          | 2              | 384                       | 0                             | 40                | on                | off            |
-| TP8 / EP1 | 28          | 8              | 256                       | 0                             | 20                | on                | off            |
-| TP4 / EP4 | 28          | 56             | 96                        | 48                            | 20                | off               | 250 GB per GPU |
-| TP4 / EP4 | 36          | 72             | 96                        | 48                            | 20                | off               | 250 GB per GPU |
-| TP4 / EP4 | 40          | 80             | 96                        | 48                            | 20                | off               | 250 GB per GPU |
+| Layout    | Concurrency | `max-num-seqs` | `prefill-decode-interval` | `max-consecutive-prefill-rounds` | `stream-interval` | Decode monokernel | Host KV store  |
+| --------- | ----------- | -------------- | ------------------------- | -------------------------------- | ----------------- | ----------------- | -------------- |
+| TP8 / EP1 | 1           | 1              | 0                         | default                          | default           | on                | off            |
+| TP8 / EP1 | 2, 4, 8, 16 | 2              | 384                       | default                          | default           | on                | off            |
+| TP8 / EP1 | 6           | 1              | 384                       | default                          | 50                | on                | off            |
+| TP8 / EP1 | 10          | 2              | 384                       | default                          | 40                | on                | off            |
+| TP8 / EP1 | 28          | 8              | 256                       | default                          | 20                | on                | off            |
+| TP4 / EP4 | 28          | 40             | 96                        | 1                                | 20                | off               | 250 GB per GPU |
+| TP4 / EP4 | 36          | 40             | 80                        | 1                                | 20                | off               | 250 GB per GPU |
+| TP4 / EP4 | 40          | 80             | 48                        | 2                                | 20                | off               | 250 GB per GPU |
 
 The TP8 points run attention TP8 and MoE TP8 with EP1 on eight GPUs, so every
 GPU holds all 256 experts and no tokens move between GPUs. `decode-monokernel`
@@ -30,19 +30,20 @@ lowers TPOT at the cost of time to first token. Concurrency 28 runs up to eight
 requests and takes the monokernel only while one or two are running.
 
 The TP4 points run attention TP4 with EP4 on four GPUs, 64 experts on each,
-on the regular decode path. They run up to twice the concurrency in requests,
-admit the shortest uncached prompt first, capture decode graphs for every
-batch size up to 40, and keep a host KV store.
+on the regular decode path. They admit the shortest uncached prompt first,
+prefill in 24K chunks, and keep a host KV store. In owned-row prefill each
+GPU's attention heads go to the rows' owners by all-to-all
+(`owned-attention-output`) instead of a reduce-scatter.
 
 With an interval of N, the scheduler runs up to N decode rounds after each
-prefill chunk; the minimum interval keeps at least that many decode rounds
-after every chunk, so back-to-back prefill cannot stall decode. Prefill runs
-in 8K chunks at every point.
+prefill chunk. When a prompt has waited a full interval, prefill rounds may run
+back to back; `max-consecutive-prefill-rounds` bounds how many before the
+decodes get the interval again. TP8 prefill runs in 8K chunks.
 
-The recipe installs the TokenSpeed `0.1.1.post20261117`, ROCm 7.2 kernel
-`0.1.5.post20261117`, kernel-amd `0.1.4.post20261117` and engine
-`0.1.1.post20261117` wheels by release URL and SHA256, with
-`tokenspeed-scheduler` `0.1.58` and `tokenspeed-smg` `1.16.0.post20261115`,
+The recipe installs the TokenSpeed `0.1.1.post20261122`, ROCm 7.2 kernel
+`0.1.5.post20261122`, kernel-amd `0.1.4.post20261122` and engine
+`0.1.1.post20261122` wheels by release URL and SHA256, with
+`tokenspeed-scheduler` `0.1.58` and `tokenspeed-smg` `1.16.0.post20261121`,
 the gateway that TokenSpeed release requires. The runner image, pinned by
 digest in the master config, provides ROCm torch; `tokenspeed-nightly-rocm.sh`
 installs the pinned packages without replacing it and checks that torch is

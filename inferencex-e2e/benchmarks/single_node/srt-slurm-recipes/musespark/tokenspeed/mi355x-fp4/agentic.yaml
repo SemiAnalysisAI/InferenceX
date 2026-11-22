@@ -6,11 +6,11 @@ base:
       revision: c7bc74fd64371315a091bc15f9723882eead0dc1
     container: {}
     frameworks:
-      tokenspeed: 0.1.1.post20261117
-      tokenspeed-kernel: 0.1.5.post20261117
-      tokenspeed-kernel-amd: 0.1.4.post20261117
+      tokenspeed: 0.1.1.post20261122
+      tokenspeed-kernel: 0.1.5.post20261122
+      tokenspeed-kernel-amd: 0.1.4.post20261122
       tokenspeed-scheduler: 0.1.58
-      tokenspeed-engine: 0.1.1.post20261117
+      tokenspeed-engine: 0.1.1.post20261122
   resources:
     gpu_type: mi355x
     gpus_per_node: 8
@@ -40,10 +40,10 @@ base:
   engine: tokenspeed
   setup_script: tokenspeed-nightly-rocm.sh
   environment:
-    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261117/tokenspeed-0.1.1.post20261117-py3-none-any.whl#sha256=79bbe2fc284d79656a1b6fd2f7b4f01fb105a027075a814ab2e31da8e3d6976f
-    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261117-rocm72/tokenspeed_kernel-0.1.5.post20261117-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=b0fc80b30f53a6dcb90bf7cfe49d4e69dd2b588842254ef81bf14227a1dad701
-    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261117/tokenspeed_kernel_amd-0.1.4.post20261117-py3-none-any.whl#sha256=fc85817b4c34f7bdeb5d3d80d29b9d20a293fff508f1a9c21b11a977df15ad63
-    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.1.post20261117/tokenspeed_engine-0.1.1.post20261117-cp312-abi3-manylinux_2_28_x86_64.whl#sha256=d72fd1649bc5437ee7d3d4e5532a5d9b952e45c6174276bcb111b2a67d722875
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261122/tokenspeed-0.1.1.post20261122-py3-none-any.whl#sha256=5f488d6da825c759e247e7fcb1312ae7252afd684cc3e99911c374e7a90730f6
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261122-rocm72/tokenspeed_kernel-0.1.5.post20261122-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=281901cfad61265d9be46135056b813499d54fff4c41d7a86d6596b50124ac66
+    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261122/tokenspeed_kernel_amd-0.1.4.post20261122-py3-none-any.whl#sha256=4cc7ce216640bd5cdcb51fa79428c8294ab9ac0be278c9a8b9c4b2ccdb6527ed
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.1.post20261122/tokenspeed_engine-0.1.1.post20261122-cp312-abi3-manylinux_2_28_x86_64.whl#sha256=684c5bc0c684f506497542bac234f19063c458f01256be70f51eff163c021932
     TOKENSPEED_SCHEDULER_VERSION: 0.1.58
   roles:
     agg:
@@ -268,12 +268,16 @@ override_tp4_c28:
         attn-tp-size: 4
         moe-tp-size: 1
         ep-size: 4
-        max-num-seqs: 56
-        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 56]
+        max-num-seqs: 40
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 26, 28, 30, 32, 40, 48, 56]
         prefill-decode-interval: 96
-        # At least 48 decode rounds after every prefill chunk: back-to-back prefill stalls decode.
-        prefill-decode-min-interval: 48
+        # At most 1 back-to-back prefill round while an overdue prompt holds the interval back.
+        max-consecutive-prefill-rounds: 1
         enable-short-prefill-first: true
+        # Prefill in 24K chunks; owned-row prefill returns attention outputs by heads all-to-all.
+        chunked-prefill-size: 24576
+        max-prefill-tokens: 24576
+        owned-attention-output: all-to-all
         # Host KV store, in GB per GPU.
         kvstore-size: 250
         stream-interval: 20
@@ -291,12 +295,16 @@ override_tp4_c36:
         attn-tp-size: 4
         moe-tp-size: 1
         ep-size: 4
-        max-num-seqs: 72
-        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 56]
-        prefill-decode-interval: 96
-        # At least 48 decode rounds after every prefill chunk: back-to-back prefill stalls decode.
-        prefill-decode-min-interval: 48
+        max-num-seqs: 40
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 26, 28, 30, 32, 40, 48, 56]
+        prefill-decode-interval: 80
+        # At most 1 back-to-back prefill round while an overdue prompt holds the interval back.
+        max-consecutive-prefill-rounds: 1
         enable-short-prefill-first: true
+        # Prefill in 24K chunks; owned-row prefill returns attention outputs by heads all-to-all.
+        chunked-prefill-size: 24576
+        max-prefill-tokens: 24576
+        owned-attention-output: all-to-all
         # Host KV store, in GB per GPU.
         kvstore-size: 250
         stream-interval: 20
@@ -315,11 +323,15 @@ override_tp4_c40:
         moe-tp-size: 1
         ep-size: 4
         max-num-seqs: 80
-        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 56]
-        prefill-decode-interval: 96
-        # At least 48 decode rounds after every prefill chunk: back-to-back prefill stalls decode.
-        prefill-decode-min-interval: 48
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 26, 28, 30, 32, 40, 48, 56]
+        prefill-decode-interval: 48
+        # At most 2 back-to-back prefill rounds while an overdue prompt holds the interval back.
+        max-consecutive-prefill-rounds: 2
         enable-short-prefill-first: true
+        # Prefill in 24K chunks; owned-row prefill returns attention outputs by heads all-to-all.
+        chunked-prefill-size: 24576
+        max-prefill-tokens: 24576
+        owned-attention-output: all-to-all
         # Host KV store, in GB per GPU.
         kvstore-size: 250
         stream-interval: 20
