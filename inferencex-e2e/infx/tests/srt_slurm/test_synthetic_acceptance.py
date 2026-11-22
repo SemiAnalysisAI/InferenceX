@@ -161,6 +161,51 @@ def test_tokenspeed_dflash_forces_greedy_throughput_and_restores_sampled_verific
     assert evaluation == recipe
 
 
+def tokenspeed_dspark(**args: Any) -> dict[str, Any]:
+    return {"roles": {"agg": {"args": {
+        "speculative-algorithm": "DSPARK",
+        "speculative-draft-model-path": "Inferact/Kimi-K3.1-Pro-DSpark-preview",
+        "speculative-num-steps": 5, "speculative-num-draft-tokens": 6,
+        "speculative-eagle-topk": 1, **args,
+    }}}}
+
+
+def test_tokenspeed_dspark_throughput_forces_greedy_and_evals_keep_block_verification(
+    tmp_path: Path, golden_dir: Path
+) -> None:
+    curve = "kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block.yaml"
+    (golden_dir / curve).write_text(yaml.safe_dump({"kimi-k3.1-pro": {"thinking_on": {5: 3.41}}}))
+    verification = {
+        "sampling-backend": "triton", "enable-speculative-sampling": True,
+        "speculative-rejection-sample-method": "block",
+    }
+    recipe = tokenspeed_dspark(**verification)
+    environment = {**ENV, "MODEL_PREFIX": "kimik3.1"}
+    throughput = apply_native(
+        recipe, build_overrides(recipe, "tokenspeed", environment, golden_dir=golden_dir)
+    )
+    assert throughput["roles"]["agg"]["args"] == {
+        **tokenspeed_dspark()["roles"]["agg"]["args"],
+        "synthetic-acceptance-length": 3.41, "sampling-backend": "greedy",
+    }
+    stale = tokenspeed_dspark(**verification, **{"synthetic-acceptance-length": 3.41})
+    evaluation = apply_native(stale, build_overrides(
+        stale, "tokenspeed", {**environment, "EVAL_ONLY": "true"},
+        golden_dir=tmp_path / "absent",
+    ))
+    assert evaluation == recipe
+
+
+def test_tokenspeed_greedy_dspark_has_no_kimi_k31_curve(golden_dir: Path) -> None:
+    recipe = tokenspeed_dspark(**{"sampling-backend": "greedy"})
+    with pytest.raises(
+        ValueError, match=r"No kimik3\.1 dspark golden curve .* draft sampling 'greedy'"
+    ):
+        build_overrides(
+            recipe, "tokenspeed", {**ENV, "MODEL_PREFIX": "kimik3.1"}, golden_dir=golden_dir
+        )
+
+
 @pytest.mark.parametrize("environment", [{"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}])
 def test_tokenspeed_non_synthetic_runs_remove_forced_acceptance(
     tmp_path: Path, environment: dict[str, str]
@@ -181,8 +226,10 @@ def test_tokenspeed_non_synthetic_runs_remove_forced_acceptance(
     ({"speculative-num-draft-tokens": 3}, "must equal"),
     ({"speculative-num-draft-tokens": True}, "must equal"),
     ({"speculative-eagle-topk": 2}, "topk 1"),
-    ({"speculative-algorithm": "EAGLE3"}, "MTP and DFLASH"),
-    ({"speculative-config": {"method": "mtp"}}, "explicit MTP flags"),
+    ({"speculative-algorithm": "DSPARK", "speculative-num-draft-tokens": 3}, "must equal"),
+    ({"speculative-algorithm": "DSPARK", "speculative-eagle-topk": 2}, "topk 1"),
+    ({"speculative-algorithm": "EAGLE3"}, "MTP, DFLASH and DSPARK"),
+    ({"speculative-config": {"method": "mtp"}}, "explicit MTP, DFLASH or DSPARK flags"),
 ])
 def test_tokenspeed_rejects_unsupported_speculation(golden_dir: Path, change, message) -> None:
     recipe = {"roles": {"agg": {"args": {

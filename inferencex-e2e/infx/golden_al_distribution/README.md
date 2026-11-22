@@ -33,15 +33,20 @@ SGLang MTP synthetic throughput, the connector rejects a generation role whose
 `speculative-num-steps + 1`. Manual acceptance-length settings are not needed.
 Eval-only runs remove synthetic settings and use real verification.
 
-TokenSpeed MTP and DFLASH recipes use the same automatic selection from
+TokenSpeed MTP, DFLASH and DSPARK recipes use the same automatic selection from
 `speculative-num-steps`, with `speculative-num-draft-tokens` equal to the step
-count plus one and `speculative-eagle-topk: 1`. The connector sets
-`synthetic-acceptance-length` and the required `sampling-backend: greedy` for
-AgentX throughput, and removes `enable-speculative-sampling`, which the greedy
-sampler rejects. Eval-only and fixed-sequence runs remove that length and
-select real verification: `sampling-backend: flashinfer` for MTP, and
-`sampling-backend: triton` with `enable-speculative-sampling: true` for DFLASH.
-TokenSpeed's connector accepts explicit MTP and DFLASH flags; other speculative
+count plus one and `speculative-eagle-topk: 1`. A DSPARK recipe drafts
+`probabilistic` with `enable-speculative-sampling: true` and `greedy` without
+it, and its verifier is `speculative-rejection-sample-method` when set. The
+connector sets `synthetic-acceptance-length` and the required
+`sampling-backend: greedy` for AgentX throughput and removes
+`enable-speculative-sampling` and `speculative-rejection-sample-method`: the
+greedy sampler rejects sampled verification, and the synthetic length conflicts
+with block verification. Eval-only and fixed-sequence runs remove that length
+and verify for real: MTP with `sampling-backend: flashinfer`, DFLASH with
+`sampling-backend: triton` and `enable-speculative-sampling: true`, DSPARK with
+the recipe's own, platform-specific verification settings. TokenSpeed's
+connector accepts explicit MTP, DFLASH and DSPARK flags; other speculative
 algorithms and the JSON `speculative-config` shorthand are rejected.
 
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
