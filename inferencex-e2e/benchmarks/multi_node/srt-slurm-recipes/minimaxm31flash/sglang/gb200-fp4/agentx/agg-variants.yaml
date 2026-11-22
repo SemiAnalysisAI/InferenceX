@@ -120,57 +120,6 @@ override_tp4_monokernel_c1:
         cuda-graph-max-bs-decode: 8
         mem-fraction-static: 0.8
 
-# The MonoKernel at conc 4 and 8 on the 2026-11-17 staging nightly with its
-# bundled Dynamo. Most decode steps at these concurrencies run one request,
-# which the MonoKernel serves; larger batches fall back per batch.
-override_tp4_monokernel_c4_n1117:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-agg-tp4-monokernel-c4-n1117
-  identity:
-    frameworks:
-      dynamo: "1.7.0.dev20261115"
-      sglang: "0.0.0.dev1+g209741ec5"
-  roles:
-    agg:
-      env: &monokernel-env
-        ALLOW_JIT: "1"
-        SGLANG_FORCE_COARSE_WAR_BARRIER: "1"
-      args:
-        tensor-parallel-size: 4
-        chunked-prefill-size: 32768
-        page-size: 128
-        speculative-num-steps: 1
-        speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 8
-        speculative-draft-kv-cache-dtype: auto
-        enable-nvidia-megakernel: true
-        disable-attn-tp-gather: true
-        max-running-requests: 8
-        cuda-graph-max-bs-decode: 8
-        mem-fraction-static: 0.8
-
-override_tp4_monokernel_c8_n1117:
-  name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-agg-tp4-monokernel-c8-n1117
-  identity:
-    frameworks:
-      dynamo: "1.7.0.dev20261115"
-      sglang: "0.0.0.dev1+g209741ec5"
-  roles:
-    agg:
-      env: *monokernel-env
-      args:
-        tensor-parallel-size: 4
-        chunked-prefill-size: 32768
-        page-size: 128
-        speculative-num-steps: 1
-        speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 8
-        speculative-draft-kv-cache-dtype: auto
-        enable-nvidia-megakernel: true
-        disable-attn-tp-gather: true
-        max-running-requests: 16
-        cuda-graph-max-bs-decode: 16
-        mem-fraction-static: 0.8
-
 override_tp4_c4:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-agg-tp4-c4
   roles:
