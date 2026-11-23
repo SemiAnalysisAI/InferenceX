@@ -715,9 +715,6 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
       # -13.51 GiB" and refused to start. A 192 GB card cannot hold this
       # checkpoint at TP2 with a usable KV pool; MI325X does it on 256 GB.
 
-# GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8
-# GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
-# and enables EAGLE MTP with the committed thinking-on golden AL.
 glm5.2-fp8-mi325x-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.23-rocm720-mi30x@sha256:a3a6eb293187b20012a5abc8f00423e6ab51d0169113a6e58a91da5614200170
   model: zai-org/GLM-5.2-FP8
@@ -731,7 +728,8 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5, 6, 8], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3], srt-recipe: agentic.yaml }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: mtp, conc-list: [4, 5, 6, 8], srt-recipe: agentic.yaml }
 
 # DeepSeek-V4.1-Flash AgentX on MI325X (gfx942), a copy of the validated MI355X vLLM
 # arm (run 34710937012) on the same ROCm nightly. gfx942 is not in the upstream
