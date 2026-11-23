@@ -13310,4 +13310,4 @@
     - "Concurrency 4 (latency_specialized): VLLM_KIMI_AKR_K1=1 and VLLM_KIMI_AKR_K2=1 turn on amd-kernels' specialized KDA decode and layer-tail kernels, which are off by default. Concurrency 16-48 do not run latency_specialized, so those two switches have no effect there. The remaining amd_kernels routes default to on."
     - "Concurrency 1 (DCP1): VLLM_KIMI_AKR=0 turns the amd_kernels routes off, because the DSA and draft-MLA routes require DCP = TP (the draft MLA path is validated on DCP8) and do not engage at DCP1. The point keeps the stock specialized decode path."
     - "Points, topology, speculative lengths, KV offloading and the other server arguments are unchanged. Not yet swept on this image."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5187
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5196
