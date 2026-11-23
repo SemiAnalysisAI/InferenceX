@@ -1108,6 +1108,7 @@ glm5.3-fp8-mi355x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [4], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c4 }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [8], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c8 }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [10], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c10 }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [16], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c16 }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [20], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c20 }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [30], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c30 }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [40], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c40 }

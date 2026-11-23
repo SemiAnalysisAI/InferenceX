@@ -97,6 +97,12 @@ override_tp8_c10:
       CONC: '10'
       KV_OFFLOADING: none
 
+override_tp8_c16:
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
 override_tp8_c20:
   benchmark:
     env:
