@@ -13298,3 +13298,16 @@
     - "Framework changes that matter here: mum#38 serves the released GQA sliding-window draft under latency_specialized (FlyDSL sliding-window GQA draft attention, TP-split draft fc and Markov head, AITER logits gather, one-launch draft context K/V store); mum#35 adds fine-grained prefix-cache lookups for sliding-window groups (VLLM_SWA_FINE_GRAINED_PREFIX_HITS, default on) and stores the sliding-window prompt-tail block in the vllm-simple CPU offload; mum#36 stops KV-connector chunks at scheduler-block boundaries under DCP; mum#33 adds FlyDSL sparse MLA for the 96 gathered heads of the DCP branch; mum#30 speeds up the K3 mono decode kernels, extends SP prefill token sharding to DCP1 (concurrency 1 inherits VLLM_K3_SP_PREFILL=1) and fuses the indexer prefill query quantization (bitwise identical)."
     - "Draft data types: unchanged. Both drafts ship all-BF16 with no quantization_config, and the draft runs with BF16 weights and activations at every point, sharing the target's BF16 embedding and lm_head. The draft KV cache stays fp8, the same as the target's, at concurrency 16-48, and moves from fp8 to the image's BF16 default at concurrency 1 and 4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Switch the image to benenzhu/benenzhu-amd:kk31-amd-kernels (digest TBD until the image is published for CI): the vllm/vllm-openai-rocm nightly-rocm100-647a76866b4559a74e27d1c6b55fbffe85c07ce4 toolchain (torch 2.13.0+rocm10.0.0, AITER 0.1.29.post1 plus PR 8177's FP4 MQA page strides, FlyDSL 0.5.0) with vLLM replaced by the kk31-amd-kernels branch (vllm-project/vllm PR 69172, the Kimi-K3.1 amd_kernels bridge on top of the k31-amd-tracking head 712d9eb37) built from source for gfx950, and amd-kernels (Inferact/amd-kernels PR 10) installed editable."
+    - "The image ships the rocm-systems 6a31027 libhsa-runtime64, which fixes the ~2 MiB device-memory cost per HIP graph of the nightly's ROCr; the GPU KV pool at concurrency 16 is 11.7M tokens."
+    - "Concurrency 16, 24, 32 and 48: the draft attention backend moves from TRITON_ATTN to KIMI_K3_FLYDSL_SWA_GQA (FP8 draft KV cache kept). The branch's FP8 fixes let the FlyDSL sliding-window kernel run with an FP8 cache."
+    - "Concurrency 4 (latency_specialized): VLLM_KIMI_AKR_K1=1 and VLLM_KIMI_AKR_K2=1 turn on amd-kernels' specialized KDA decode and layer-tail kernels, which are off by default. Concurrency 16-48 do not run latency_specialized, so those two switches have no effect there. The remaining amd_kernels routes default to on."
+    - "Concurrency 1 (DCP1): VLLM_KIMI_AKR=0 turns the amd_kernels routes off, because the DSA and draft-MLA routes require DCP = TP (the draft MLA path is validated on DCP8) and do not engage at DCP1. The point keeps the stock specialized decode path."
+    - "Points, topology, speculative lengths, KV offloading and the other server arguments are unchanged. Not yet swept on this image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5187
