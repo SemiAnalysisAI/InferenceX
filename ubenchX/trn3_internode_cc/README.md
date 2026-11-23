@@ -72,3 +72,15 @@ a run name to the titles and `--note` adds text to the subtitle, for example pac
   runs, `RG=chip` doubles its busbw (about 64 GB/s instead of 31-33).
 - `efa_tx_GB` in the CSV is the largest per-node EFA transmit over the whole run. Near zero means the run stayed
   on NeuronLink.
+
+## Results
+
+`results/` holds runs on a 4-node trn3.48xlarge UltraServer with revision-v2 silicon:
+
+- `*_2026-11-14_*`: the Neuron SDK 2.33 image.
+- `*_prerelease_*`: the pre-release Neuron build of 2026-11-18 (driver 2.x.13366.0, runtime-lib 2.x.96811.0,
+  collectives 2.x.95106.0, tools 2.0.32995.0). `*_internode_cc_rgnode.csv` adds alltoall with `RG=node`.
+
+The matching intra-chip results are in `../trn3_intrachip_cc/results/`. There, `*_prerelease_intrachip_cc_ext.csv` holds
+the single large sizes (`run_ext.sh`), `*_rdh.csv` the RDH channel-buffer sweep, and `*_sbuf_a2a.csv` the SBUF
+all_to_all sweep, which needs the pre-release runtime and ran on a different node of the same UltraServer.
