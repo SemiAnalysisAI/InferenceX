@@ -24,7 +24,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:844a2fb42f427e9b35e5e46794c8309feec3583bec25e18b3fbb44c183758178
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:ed36d804912358c1463f931a0f2cdf49d42aa2f7389e9f62ab52e22b8f478786
   args:
     policy: consistent_hash
     prefill-policy: consistent_hash
@@ -45,7 +45,7 @@ engine:
   connector: moriio
 roles:
   prefill:
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:844a2fb42f427e9b35e5e46794c8309feec3583bec25e18b3fbb44c183758178
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:ed36d804912358c1463f931a0f2cdf49d42aa2f7389e9f62ab52e22b8f478786
     nodes: 1
     workers: 1
     gpus: 8
@@ -56,7 +56,7 @@ roles:
       tensor-parallel-size: 8
       load-format: fastsafetensors
       gpu-memory-utilization: 0.87
-      kv-cache-memory-bytes: 45097156608
+      kv-cache-memory-bytes: 40802189312
       language-model-only: true
       max-model-len: 1048576
       enable-prefix-caching: true
@@ -136,7 +136,7 @@ roles:
       MORI_IO_ENABLE_NOTIFICATION: '0'
       THP_MEM_ALLOC_ENABLE: '1'
       MORI_IO_LOG_LEVEL: info
-      PYTORCH_CUDA_ALLOC_CONF: backend:native,expandable_segments:False,garbage_collection_threshold:0.995
+      PYTORCH_CUDA_ALLOC_CONF: backend:native,expandable_segments:False
       NCCL_BUFFSIZE: '1048576'
       VLLM_ROCM_ALL_GATHER_USE_PYNCCL: '1'
       VLLM_DCP_A2A_USE_PYNCCL: '1'
@@ -188,7 +188,7 @@ roles:
       UMBP_ALLOW_4K_FALLBACK: '0'
       MORI_UMBP_LOG_LEVEL: info
       VLLM_SWA_FINE_GRAINED_PREFIX_HITS: '1'
-      MORI_SHMEM_HEAP_SIZE: '4G'
+      MORI_SHMEM_HEAP_SIZE: '2G'
       VLLM_ROCM_K31_MEGA_MOE_MTPR: '4096'
       AITER_MEGA_MOE_PRELOAD: '1'
       AITER_MEGA_LARGE_M: '1'
@@ -336,7 +336,7 @@ roles:
       UMBP_ALLOW_4K_FALLBACK: '0'
       MORI_UMBP_LOG_LEVEL: info
       VLLM_SWA_FINE_GRAINED_PREFIX_HITS: '1'
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:844a2fb42f427e9b35e5e46794c8309feec3583bec25e18b3fbb44c183758178
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:ed36d804912358c1463f931a0f2cdf49d42aa2f7389e9f62ab52e22b8f478786
 benchmark:
   env:
     AIPERF_BENCHMARK_GRACE_PERIOD: '30'
@@ -350,7 +350,7 @@ setup_script: k31-r10.sh
 services:
 - name: umbp-master
   type: generic
-  container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:844a2fb42f427e9b35e5e46794c8309feec3583bec25e18b3fbb44c183758178
+  container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:ed36d804912358c1463f931a0f2cdf49d42aa2f7389e9f62ab52e22b8f478786
   placement:
     node: head
   start: before_workers

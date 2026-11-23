@@ -12709,3 +12709,9 @@
   description:
     - Align both roles with single-node K4 released DSpark speculation using the native golden acceptance curve. Increase decode batch and graph capacity to 720 tokens for 144 sequences at five verification tokens each. Retain the image, 42 GiB prefill KV, shared-expert DP MegaMoE, both 1799 GB distributed pools and full 3600-second profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Retain communicator reuse and startup fragmentation fixes while removing proactive allocator GC. Use the bounded MegaMoE combine scale-read fix, a 2 GiB prefill SHMEM heap, 38 GiB explicit KV and 5 GiB allocator headroom. Paired local cold-request gates show no compute regression; preserve K4 golden acceptance, both distributed UMBP pools, decode settings and full 3600-second profiling.
+  pr-link: XXX
