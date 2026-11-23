@@ -1,0 +1,251 @@
+schema: 2
+
+base:
+  name: kimik3.1-fp4-gb300-llmd-vllm-agentx-agg-dcp8
+  identity:
+    model: {}
+    container: {}
+    frameworks:
+      vllm: "0.1.dev25380+gf4c96184b"
+
+  dynamo:
+    install: false
+
+  environment:
+    HF_HUB_CACHE: /hf_hub_cache
+
+  slurm:
+    time_limit: "04:00:00"
+
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+
+  resources:
+    gpu_type: "gb300"
+    gpus_per_node: 4
+
+  services:
+  - name: mooncake-master
+    type: mooncake-master
+    # The first container start on a node unpacks the image and has taken over the default 120 s.
+    readiness:
+      port: 8700
+      timeout_seconds: 300
+    args:
+    - "--default_kv_lease_ttl=60000"
+    - "--eviction_high_watermark_ratio=0.95"
+    - "--eviction_ratio=0.10"
+    options:
+      store_config:
+        metadata_server: "P2PHANDSHAKE"
+        global_segment_size: "160GB"
+        local_buffer_size: "4GB"
+        protocol: "rdma"
+        device_name: "@fabric.rdma-devices"
+        mode: "embedded"
+        enable_offload: false
+
+  frontend:
+    type: llm-d
+    enable_multiple_frontends: false
+    container_image: "ghcr.io/llm-d/llm-d-router-consolidated:v1.0.0@sha256:644be0359dfb462527b7cb9a4e535b42fe8cc900ed382bd62bc06d6ba26a1810"
+    env:
+      GOGC: "400"
+      GOMEMLIMIT: "20GiB"
+    args:
+      v: 1
+      allow-experimental-plugins: true
+      grpc-max-recv-msg-size: "32MiB"
+      grpc-max-send-msg-size: "32MiB"
+      tracing: false
+      metrics-endpoint-auth: false
+    epp_config:
+      plugins:
+      - type: metrics-data-source
+        parameters:
+          scheme: http
+          path: /metrics
+          insecureSkipVerify: true
+      - type: core-metrics-extractor
+        parameters:
+          engineConfigs:
+          - name: vllm
+            queuedRequestsSpec: "vllm:num_requests_waiting"
+            runningRequestsSpec: "vllm:num_requests_running"
+            kvUsageSpec: "vllm:kv_cache_usage_perc"
+            loraSpec: ""
+            cacheInfoSpec: ""
+      - type: inflight-load-producer
+        parameters:
+          addEstimatedOutputTokens: false
+          syncCrossReplicaState: false
+      - type: active-request-scorer
+        parameters:
+          idleThreshold: 0
+          inFlightLoadProducerName: inflight-load-producer
+      - type: queue-scorer
+      - type: kv-cache-utilization-scorer
+      - type: max-score-picker
+      - type: utilization-detector
+        parameters:
+          queueDepthThreshold: 100000
+          kvCacheUtilThreshold: 1.0
+          headroom: 1.0
+          metricsStalenessThreshold: "3600s"
+      dataLayer:
+        injectDefaults: false
+        sources:
+        - pluginRef: metrics-data-source
+          extractors:
+          - pluginRef: core-metrics-extractor
+      schedulingProfiles:
+      - name: default
+        plugins:
+        - pluginRef: utilization-detector
+        - pluginRef: active-request-scorer
+          weight: 5
+        - pluginRef: queue-scorer
+          weight: 3
+        - pluginRef: kv-cache-utilization-scorer
+          weight: 3
+        - pluginRef: max-score-picker
+
+  engine:
+    type: vllm
+    connector:
+    dp_launch_mode: per_node
+
+  roles:
+    agg:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      env:
+        PYTHONHASHSEED: "42"
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+        VLLM_USE_DIRECT_DCP_A2A: "1"
+        VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
+        VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
+        VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+        VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: "0"
+        VLLM_RPC_TIMEOUT: "600000"
+        TILELANG_CLEANUP_TEMP_FILES: "1"
+        VLLM_USE_NCCL_SYMM_MEM: "0"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        VLLM_SERVER_DEV_MODE: "1"
+        VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_USE_RUST_FRONTEND: "1"
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
+        # Lookups lease only the store keys a hit loads.
+        VLLM_MOONCAKE_STORE_SELECTIVE_LEASE: "1"
+        MC_SLICE_SIZE: "1048576"
+        MC_MAX_MR_SIZE: "4294967296"
+        NCCL_P2P_LEVEL: "NVL"
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        WITH_NVIDIA_PEERMEM: "0"
+        NCCL_NET_PLUGIN: "none"
+        UCX_MEMTYPE_REG_WHOLE: "n"
+        UCX_TCP_AF_PRIO: "inet"
+        VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+        VLLM_SSM_CONV_STATE_LAYOUT: "DS"
+        TOKENSPEED_MLA_FP16_PARTIALS: "0"
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_ENABLE_GEMM_RS: "0"
+      args:
+        # DRAM offload through the Mooncake store only: no NIXL, no P/D.
+        kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}'
+        served-model-name: "moonshotai/Kimi-K3.1-Pro"
+        prefix-match-unit: 128
+        load-format: "fastsafetensors"
+        kv-cache-dtype: "fp8"
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        mamba-ssm-cache-dtype: "float32"
+        mamba-cache-dtype: "float32"
+        gpu-memory-utilization: 0.95
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        dcp-comm-backend: "a2a"
+        cp-kv-cache-interleave-size: 1
+        no-enable-flashinfer-autotune: true
+        enable-cumem-allocator: true
+        trust-remote-code: true
+        stream-interval: 10
+        language-model-only: true
+        enable-prefix-caching: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        use-replayssm: true
+        # A lone prompt prefills in 16384-token chunks (8 of the 2048-token Mamba blocks);
+        # next to other requests each prompt's chunk stops at 4096 tokens.
+        max-num-batched-tokens: 16384
+        long-prefill-token-threshold: 4096
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+
+  sbatch_directives:
+    mem: "0"
+    cpus-per-task: "144"
+    comment: >-
+      '{"OccupiedIdleGPUsJobReaper":{"exemptIdleTimeMins":"60","reason":"model_loading","description":"Very large model will
+      take extra loading time."}}'
+
+  srun_options:
+    mem: "0"
+    container-remap-root: ""
+
+  telemetry:
+    collector_join_timeout_seconds: 12
+
+  benchmark:
+    placement:
+      node: head
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+      AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "true"
+
+override_agg16_c1:
+  roles:
+    agg:
+      nodes: 4
+      gpus: 16
+      # Opt-in c=1 decode paths of this image (default off): published-mailbox MoE tail (PUB8),
+      # one-pass decode prep (NP1), fused drafter layers (DRF/S31), KDA/attention kernels for 8 rows.
+      env: &override_agg16_c1_env
+        K31_PUB8: "1"
+        K31_PUB8_JOIN: "1"
+        K31_PUB8_DPUSH: "1"
+        K31_PUB8_AHEAD: "16"
+        K31_NP1: "1"
+        K31_S31MK: "1"
+        K31_S31FC: "1"
+        K31_S31DG: "1"
+        K31_KDA8: "1"
+        K31_S24FM: "1"
+        K31_S24FL_HEADS: "12,6"
+        K31_S22SP: "1"
+        K31_DRF_ATTN: "1"
+        K31_DRF_ACT: "1"
+        K31_DRF_NORM: "1"
+      args: &override_agg16_c1_args
+        tensor-parallel-size: 16
+        gpu-memory-utilization: 0.90
+        decode-context-parallel-size: 16
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        # The released drafter's KV block at TP16 x DCP16.
+        prefix-match-unit: 768
+        max-num-seqs: 1
+        max-cudagraph-capture-size: 2048
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","cudagraph_capture_sizes":[7,8,14,16,28,32,56,64,128,256,512,1024,2048]}'
+
+override_agg16_c1_eval:
+  roles:
+    agg:
+      nodes: 4
+      gpus: 16
+      env: *override_agg16_c1_env
+      args:
+        <<: *override_agg16_c1_args
+        reasoning-parser: kimi_k3
+        tool-call-parser: kimi_k3
+        enable-auto-tool-choice: true
