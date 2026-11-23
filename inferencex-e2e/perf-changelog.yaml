@@ -13311,4 +13311,4 @@
     - "Prefill host KV tier is 128 GiB per rank on c1 and c30 and 192 GiB on c66, c520 and c624; decode host KV tier is 160 GiB per rank on c520 and c624 and 0 on c1, c30 and c66. dram-utilization is 0.571 for c1 and c30 and 0.856 for c66, c520 and c624."
     - "c520 and c624 route with a 4 h soft session affinity on the frontend and a dynamo-two-tier-cost-fn policy for the decode hop (balance_abs_threshold 1, balance_rel_threshold 1.1); c1, c30 and c66 route to the least-loaded decode worker without session affinity."
     - "UCX_TLS cuda_ipc,cuda_copy,sm,self,tcp on prefill and decode of every point so KV transfers use MNNVL."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5198
