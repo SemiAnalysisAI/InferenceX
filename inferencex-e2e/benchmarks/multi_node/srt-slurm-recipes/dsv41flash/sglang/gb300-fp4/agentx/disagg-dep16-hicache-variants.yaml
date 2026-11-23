@@ -5,8 +5,8 @@ base:
   identity:
     model: {}
     frameworks:
-      dynamo: "1.8.0.dev20261119"
-      sglang: "0.0.0.dev1+g03fde9cc3"
+      dynamo: "1.8.0.dev20261121"
+      sglang: "0.0.0.dev1+ge96e96757"
   dynamo:
     install: false
     request_plane: tcp
@@ -73,7 +73,6 @@ base:
       gpus: 2
       env:
         PYTHONUNBUFFERED: "1"
-        SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: "0"
         SGLANG_DSV4_KV_LAYOUT: v41_new
         SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "3600"
         SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "3600"
@@ -192,7 +191,6 @@ base:
         weight-loader-prefetch-checkpoints: true
         weight-loader-drop-cache-after-load: false
         model-loader-extra-config: '{"enable_multithread_load":true}'
-        skip-tokenizer-init: true
         engram-config: '{"lookup":"peer_read"}'
       kv_events: false
   sbatch_directives:
