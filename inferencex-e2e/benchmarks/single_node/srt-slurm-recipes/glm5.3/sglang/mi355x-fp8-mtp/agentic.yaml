@@ -84,39 +84,3 @@ override_tp8_c4:
     env:
       CONC: '4'
       KV_OFFLOADING: none
-
-override_tp8_c8:
-  benchmark:
-    env:
-      CONC: '8'
-      KV_OFFLOADING: none
-
-override_tp8_c10:
-  benchmark:
-    env:
-      CONC: '10'
-      KV_OFFLOADING: none
-
-override_tp8_c16:
-  benchmark:
-    env:
-      CONC: '16'
-      KV_OFFLOADING: none
-
-override_tp8_c20:
-  benchmark:
-    env:
-      CONC: '20'
-      KV_OFFLOADING: none
-
-override_tp8_c30:
-  benchmark:
-    env:
-      CONC: '30'
-      KV_OFFLOADING: none
-
-override_tp8_c40:
-  benchmark:
-    env:
-      CONC: '40'
-      KV_OFFLOADING: none
