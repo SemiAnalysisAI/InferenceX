@@ -76,6 +76,9 @@ base:
     mem: "0"
     container-writable: ""
     container-remap-root: ""
+  # The ionic driver charges each GPU KV registration against the soft RLIMIT_MEMLOCK (8 MiB from Slurm)
+  # before falling back to peer memory, and the remapped root has no CAP_IPC_LOCK.
+  setup_script: raise-memlock-soft-limit.sh
   extra_mount:
     # The node-local hub cache the single-node GLM-5.2 points already fill.
     - /var/lib/hf-hub-cache:/mnt/hf_home/hub
