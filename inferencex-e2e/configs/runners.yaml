@@ -678,6 +678,7 @@ clusters:
       entries:
         DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
         DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
+        DeepSeek-V4.1-Flash-1017-NVFP4: {root: data-models, dir: DeepSeek-V4.1-Flash-1017-NVFP4}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
         GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
         GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
