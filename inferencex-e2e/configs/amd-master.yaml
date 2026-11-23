@@ -1010,7 +1010,7 @@ minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 64], srt-recipe: agentic.yaml }
 
 kimik3.1-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:kimi-k31-5c14fe8@sha256:a61996b4c270ec09111802f62b44f5c20ad4cb73068be022b2804a287b924b9a
+  image: vllm/vllm-openai-rocm:kimi-k31-712d9eb@sha256:7c167350f127a3019ac2c2fc99f6d3229356e8e8e033a7634c3201f072f0ecf4
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds
