@@ -13300,9 +13300,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
 
 - config-keys:
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-agg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16dcp16-disagg
     - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-disagg
   scenario-type: [agentic-coding]
   description:
-    - "Add a second disaggregated vLLM design for Kimi-K3.1-Pro AgentX on GB200: a TP8 x PP2 x DCP8 prefill engine (16 GPUs) with sequence parallelism, expert-parallel MegaMoE, DCP ShardQ and an 800 GiB per-node host KV store, pushing KV over NIXL (NixlPushConnector) into one decode instance of 2 (16 GPUs, concurrency 160 and 200) or 4 (32 GPUs, concurrency 140, 170 and 210) TP8 x DCP8 engines that share one expert-parallel MegaMoE group."
-    - "Decode uses latency_specialized with the released Inferact/Kimi-K3.1-Pro-DSpark draft at revision e4e6e626 and 4 draft tokens; each conversation stays on one decode engine."
+    - "Add three vLLM designs for Kimi-K3.1-Pro AgentX on GB200, all on vllm/vllm-openai:kimi-k31-arm64-cu135-7074371 (digest sha256:4fc725bb), vLLM 70743717f8."
+    - "tp16-agg, concurrency 1, 4 and 8: one TP16 x DCP16 engine on 16 GPUs with the fused latency_specialized decode and the Kimi-K3.1-Pro-DSpark-preview draft on TOKENSPEED_MLA, 4 draft tokens."
+    - "tp16dcp16-disagg, concurrency 32 and 64: a TP16 x DCP16 prefill engine with expert-parallel MegaMoE and a TP16 x DCP16 decode engine with latency_specialized, 16 GPUs each, KV over NIXL (NixlConnector), same draft."
+    - "tp8pp2-disagg: a TP8 x PP2 x DCP8 prefill engine (16 GPUs) with sequence parallelism, expert-parallel MegaMoE, DCP ShardQ and an 800 GiB per-node host KV store, pushing KV over NIXL (NixlPushConnector) into one decode instance of 2 (16 GPUs, concurrency 160 and 200) or 4 (32 GPUs, concurrency 140, 170 and 210) TP8 x DCP8 engines that share one expert-parallel MegaMoE group. Decode uses latency_specialized with the released Inferact/Kimi-K3.1-Pro-DSpark draft at revision e4e6e626 and 4 draft tokens; each conversation stays on one decode engine."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5197
