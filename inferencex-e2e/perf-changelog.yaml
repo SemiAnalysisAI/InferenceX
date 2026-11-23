@@ -13298,3 +13298,13 @@
     - "Framework changes that matter here: mum#38 serves the released GQA sliding-window draft under latency_specialized (FlyDSL sliding-window GQA draft attention, TP-split draft fc and Markov head, AITER logits gather, one-launch draft context K/V store); mum#35 adds fine-grained prefix-cache lookups for sliding-window groups (VLLM_SWA_FINE_GRAINED_PREFIX_HITS, default on) and stores the sliding-window prompt-tail block in the vllm-simple CPU offload; mum#36 stops KV-connector chunks at scheduler-block boundaries under DCP; mum#33 adds FlyDSL sparse MLA for the 96 gathered heads of the DCP branch; mum#30 speeds up the K3 mono decode kernels, extends SP prefill token sharding to DCP1 (concurrency 1 inherits VLLM_K3_SP_PREFILL=1) and fuses the indexer prefill query quantization (bitwise identical)."
     - "Draft data types: unchanged. Both drafts ship all-BF16 with no quantization_config, and the draft runs with BF16 weights and activations at every point, sharing the target's BF16 embedding and lm_head. The draft KV cache stays fp8, the same as the target's, at concurrency 16-48, and moves from fp8 to the image's BF16 default at concurrency 1 and 4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-dep8
+  scenario-type: [agentic-coding]
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X at DEP8 (TP1 x DP8 with expert parallelism over the 8 ranks) behind a consistent-hash vLLM router at concurrency 256, 512 and 1024; concurrency below 256 keeps the TP2/TP4 entries. Image is vllm/vllm-openai-rocm:deepseek-v41-flash-8a13616 (vLLM ROCm nightly with the amd_kernels bridge and the prefill schedulers)."
+    - "Experts run on AITER MegaMoE over MoRI (--moe-backend aiter_mega_moe, --all2all-backend mori) with the per-tensor-scale FP8 KV cache (--kv-cache-dtype fp8_e4m3), engram tables in HBM sharded across the DP ranks, max-num-seqs 128 (160 at concurrency 1024)."
+    - "Prefill uses the cost-based cross-DP prefill hold (vllm-project/vllm#66927: --prefill-hold-ttft-target 15 with --prefill-hold-ttft-weight 1.0 at concurrency 256 and 0.5 at concurrency 512 and 1024, keeping default prefill-schedule-interval 1). All amd_kernels routes are enabled (--kernel-config) with the static 49-slot-per-rank expert placement expert_plan_S49.npz."
+    - "The router runs with a LD_PRELOAD shim that raises its listen() backlog from 128 to 4096 at every concurrency: vllm-router 0.1.14 hard-codes 128, which resets connections in the AgentX warm-up burst (reproducible at concurrency 1024, intermittent at 512)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5189
