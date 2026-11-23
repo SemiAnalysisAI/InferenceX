@@ -29,9 +29,9 @@ base:
         chunked-prefill-size: 32768
         mem-fraction-static: 0.85
         speculative-algorithm: EAGLE
-        speculative-num-steps: 5
+        speculative-num-steps: 3
         speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 6
+        speculative-num-draft-tokens: 4
         watchdog-timeout: 1800
         enable-metrics: true
       env:
