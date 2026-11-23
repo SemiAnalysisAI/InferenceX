@@ -16,7 +16,7 @@ Each concurrency has its own override:
 | TP8 / EP1 | 10          | 2              | 384                       | default                          | 40                | on                | off            |
 | TP8 / EP1 | 28          | 8              | 256                       | default                          | 20                | on                | off            |
 | TP4 / EP4 | 28          | 10             | 96                        | 1                                | 20                | off               | 360 GB per GPU |
-| TP4 / EP4 | 36          | 40             | 80                        | 1                                | 20                | off               | 310 GB per GPU |
+| TP4 / EP4 | 36          | 20             | 80                        | 1                                | 20                | off               | 310 GB per GPU |
 | TP4 / EP4 | 40          | 80             | 48                        | 2                                | 20                | off               | 310 GB per GPU |
 
 The TP8 points run attention TP8 and MoE TP8 with EP1 on eight GPUs, so every

@@ -299,7 +299,7 @@ override_tp4_c36:
         attn-tp-size: 4
         moe-tp-size: 1
         ep-size: 4
-        max-num-seqs: 40
+        max-num-seqs: 20
         cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 26, 28, 30, 32, 40, 48, 56]
         prefill-decode-interval: 80
         # At most 1 back-to-back prefill round while an overdue prompt holds the interval back.
