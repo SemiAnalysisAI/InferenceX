@@ -28,6 +28,7 @@ from .api import (
     PUBLIC,
     Capacity,
     ReadError,
+    display_models,
     fetch_capacity,
     fetch_catalog,
 )
@@ -66,6 +67,7 @@ INFRA_OUTCOMES = frozenset({"missing-assets", "weights-missing", *LIMIT_REASONS}
 INFRA_COOLDOWN_DAYS = 7
 LONG_HOLD_HOURS = 72
 LONG_HOLD_OUTCOMES = frozenset({"already-updated", "duplicate", "route-mismatch"})
+REPEAT_HOLD_OUTCOMES = frozenset({"failed", "incompatible", "inconclusive"})
 PAUSED_WEIGHTS = frozenset(ASSET_REASONS)
 UNDATED_IMAGE_HOLD_DAYS = 7
 DATED_TAG = re.compile(r"(?<!\d)20\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?!\d)")
@@ -356,27 +358,30 @@ def family_prefixes(family: str) -> set[str]:
     return {identity(member)[:16] for member in {family, *key_families(family)}}
 
 
-def offered_images(
-    items: list[dict], families: dict[tuple, dict[str, Family]]
-) -> dict[str, set[str]]:
-    """Return the image keys ``choose`` builds candidate IDs from under each family prefix."""
-    offered: dict[str, set[str]] = {}
-    for item in items:
-        if item["source-status"] != "baseline":
-            continue
-        image = identity(observation_key(item["source"])[-1])[:16]
-        for family in families.get(observation_key(item["source"]), {}):
-            for prefix in family_prefixes(family):
-                offered.setdefault(prefix, set()).add(image)
-    return offered
+def master_images(root: Path) -> dict[str, str]:
+    """Return the normalized image of each master config key at ``root``, by single-key family."""
+    from infx.config import project_root
+    from infx.matrix.validation import load_config_files
+
+    root = project_root(root)
+    images = {}
+    for path in sorted((root / "configs").glob("*-master.yaml")):
+        source = path.relative_to(root).as_posix()
+        for key, entry in load_config_files([str(path)], validate=False).items():
+            images[f"{source}:{key}"] = normalized_image(entry["image"])
+    return images
 
 
-def hold(label: str | None, phase: str | None, cooldown_hours: int) -> timedelta:
+def hold(
+    label: str | None, phase: str | None, previous: str | None, cooldown_hours: int
+) -> timedelta:
     """Return how long outcome ``label``, recorded in ``phase``, keeps its candidate out of plans.
 
-    Infrastructure outcomes (INFRA_OUTCOMES) hold for INFRA_COOLDOWN_DAYS. Outcomes a retry soon
-    would repeat (LONG_HOLD_OUTCOMES, infrastructure faults in INFRA_REASONS, incompatible at
-    resolve) hold for LONG_HOLD_HOURS, others for ``cooldown_hours``.
+    ``previous`` is the label of the candidate's session before it. Infrastructure outcomes
+    (INFRA_OUTCOMES) hold for INFRA_COOLDOWN_DAYS. Outcomes a retry soon would repeat
+    (LONG_HOLD_OUTCOMES, infrastructure faults in INFRA_REASONS, incompatible at resolve, and a
+    REPEAT_HOLD_OUTCOMES outcome following another) hold for LONG_HOLD_HOURS, others for
+    ``cooldown_hours``.
     """
     if label in INFRA_OUTCOMES:
         return timedelta(days=INFRA_COOLDOWN_DAYS)
@@ -384,6 +389,7 @@ def hold(label: str | None, phase: str | None, cooldown_hours: int) -> timedelta
         label in LONG_HOLD_OUTCOMES
         or label in INFRA_REASONS
         or (label == "incompatible" and phase == "resolve")
+        or (label in REPEAT_HOLD_OUTCOMES and previous in REPEAT_HOLD_OUTCOMES)
     ):
         return timedelta(hours=max(cooldown_hours, LONG_HOLD_HOURS))
     return timedelta(hours=cooldown_hours)
@@ -392,11 +398,13 @@ def hold(label: str | None, phase: str | None, cooldown_hours: int) -> timedelta
 def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
     """Return the recent outcomes that still hold candidates, families, weights, images or clusters.
 
-    Each candidate's newest session artifact counts and holds the candidate for ``hold``. While
-    held, missing weights and route mismatches (PAUSED_WEIGHTS) pause their (model, precision,
-    hardware) key, and a cluster time limit (LIMIT_REASONS) holds the branch prefixes of the
-    candidate's curve and of its keys whatever its image. An already-updated outcome holds its
-    image from its newest time, and INFRA_BACKOFF_OUTCOMES infrastructure failures within
+    Each candidate's newest session artifact counts and holds the candidate for ``hold``, given
+    the finished outcome of its previous attempt (the newest finished session of an earlier
+    planner run) when the newest one is in REPEAT_HOLD_OUTCOMES. While held, missing weights and
+    route mismatches (PAUSED_WEIGHTS) pause their (model, precision, hardware) key, and a cluster
+    time limit (LIMIT_REASONS) holds the branch prefixes of the candidate's curve and of its keys
+    whatever its image. An already-updated outcome holds its image from its newest time, and
+    INFRA_BACKOFF_OUTCOMES infrastructure failures within
     INFRA_BACKOFF_HOURS back off a target cluster. A wave's baseline deferral for a
     BASELINE_HOLD_REASONS reason holds the candidate for LONG_HOLD_HOURS unless a session of it
     started after that wave. Only scheduled auto-sweeps and Klaud Cold's resume runs hold
@@ -442,7 +450,7 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
             listings = dict(zip(ordered, pool.map(artifacts, ordered), strict=True))
         except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
             raise ReadError("candidate-history-unavailable") from error
-        latest: dict[str, tuple[dict, int]] = {}
+        sessions: dict[str, dict[int, tuple[dict, int]]] = {}
         for run_id in ordered:
             for artifact in listings[run_id]:
                 try:
@@ -455,16 +463,20 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
                         or utc(artifact["created_at"]) < window
                     ):
                         continue
-                    if match[1] not in latest or artifact["id"] > latest[match[1]][0]["id"]:
-                        latest[match[1]] = (artifact, run_id)
+                    sessions.setdefault(match[1], {})[artifact["id"]] = (artifact, run_id)
                 except (AttributeError, KeyError, TypeError, ValueError):
                     continue
+        ranked = {
+            candidate: [found[artifact_id] for artifact_id in sorted(found, reverse=True)]
+            for candidate, found in sessions.items()
+        }
+        latest = {candidate: found[0] for candidate, found in ranked.items()}
         deferring = [
             (created, run_id)
             for created, run_id in dated
             if plans[run_id] == run_id and now - created < timedelta(hours=LONG_HOLD_HOURS)
         ]
-        outcomes = pool.map(lambda pair: recorded_outcome(repository, pair[0]), latest.values())
+        pending = pool.map(lambda pair: recorded_outcome(repository, pair[0]), latest.values())
         records = dict(
             zip(
                 [run_id for _, run_id in deferring],
@@ -472,12 +484,31 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
                 strict=True,
             )
         )
+        outcomes = dict(zip(latest, pending, strict=True))
+
+        def previous_outcome(candidate: str) -> str | None:
+            attempts = {plans[ranked[candidate][0][1]]}
+            for artifact, run_id in ranked[candidate][1:]:
+                if plans[run_id] in attempts:
+                    continue
+                attempts.add(plans[run_id])
+                label = recorded_outcome(repository, artifact)[0]
+                if label not in {None, "no-outcome"}:
+                    return label
+            return None
+
+        repeats = [
+            candidate
+            for candidate, (label, _) in outcomes.items()
+            if label in REPEAT_HOLD_OUTCOMES and len(ranked[candidate]) > 1
+        ]
+        previous = dict(zip(repeats, pool.map(previous_outcome, repeats), strict=True))
         result: dict[str, str | None] = {}
         held_images: dict[str, datetime] = {}
         held_families: set[str] = set()
         planned_labels: dict[int, dict[str, str]] = {}
         for (candidate, (artifact, run_id)), (label, phase) in zip(
-            latest.items(), outcomes, strict=True
+            latest.items(), outcomes.values(), strict=True
         ):
             created = utc(artifact["created_at"])
             if label == "already-updated":
@@ -485,7 +516,7 @@ def recent_candidate_outcomes(repository: str, cooldown_hours: int) -> History:
                 held_images[image] = max(held_images.get(image, created), created)
             if label in INFRA_REASONS and now - created < timedelta(hours=INFRA_BACKOFF_HOURS):
                 planned_labels.setdefault(plans[run_id], {})[candidate] = label
-            if now - created >= hold(label, phase, cooldown_hours):
+            if now - created >= hold(label, phase, previous.get(candidate), cooldown_hours):
                 continue
             result[candidate] = label
             if label in LIMIT_REASONS:
@@ -717,17 +748,22 @@ class WaveCapacity:
     ) -> None:
         """Start from ``headroom`` of clusters of ``size`` nodes, with ``backoff`` clusters.
 
-        ``backlog`` counts the open finished Klaud PRs of each master config.
+        ``backlog`` counts the finished and running Klaud candidates of each master config.
         """
         self.headroom, self.size, self.backoff = dict(headroom), size, backoff
-        self.backlogged = {group for group, n in backlog.items() if n >= FINISHED_BACKLOG_CAP}
+        self.backlog = Counter(backlog)
         self.backed_off: set[str] = set()
+
+    @property
+    def backlogged(self) -> set[str]:
+        """The master configs with FINISHED_BACKLOG_CAP finished or running Klaud candidates."""
+        return {group for group, n in self.backlog.items() if n >= FINISHED_BACKLOG_CAP}
 
     def blocker(self, candidate: dict) -> str | None:
         """Return why the wave cannot take ``candidate`` now, or None.
 
-        That is "backlog" while its master config has FINISHED_BACKLOG_CAP finished PRs awaiting
-        review, then "backoff" or "capacity".
+        That is "backlog" while its master config has FINISHED_BACKLOG_CAP Klaud candidates
+        running or awaiting review, then "backoff" or "capacity".
         """
         clusters = candidate["clusters"]
         if config_group(candidate["family"]) in self.backlogged:
@@ -739,10 +775,11 @@ class WaveCapacity:
         return None
 
     def take(self, candidate: dict) -> None:
-        """Reserve ``candidate``'s full sweep on each target cluster for the rest of the wave."""
+        """Reserve ``candidate``'s full sweep and a backlog place for the rest of the wave."""
         for cluster in candidate["clusters"]:
             self.headroom[cluster] -= min(candidate["sweep-node-demand"], self.size[cluster])
         self.backed_off.update(self.backoff.intersection(candidate["clusters"]))
+        self.backlog[config_group(candidate["family"])] += 1
 
 
 def klaud_pulls(pulls: list[dict]) -> list[dict]:
@@ -759,12 +796,14 @@ def plan(
     are ordered toward idle clusters, cooled down by ``cooldown_hours`` and the recent-outcome
     holds, held while a maintainer recently closed their family's PR unless it was requeued,
     and capped at REVIEW_PER_SLOT per free slot plus REVIEW_MARGIN, at most
-    ``review_batch_size``. Candidates of master configs with FINISHED_BACKLOG_CAP finished PRs
-    awaiting review go last. Only open Klaud PRs are indexed. CLUSTER_STATE gives ``select``
-    the claimed families' committed demand, the clusters under infrastructure backoff and the
-    finished PRs of each master config, and gives ``regenerate-producers`` this plan's headroom
-    and cluster sizes. Stale finished PRs whose family the feed now offers on another image are
-    first closed for requeue, which frees their families from the next wave on.
+    ``review_batch_size``. Candidates of master configs with FINISHED_BACKLOG_CAP Klaud
+    candidates running or awaiting review go last. Only open Klaud PRs are indexed.
+    CLUSTER_STATE gives ``select`` the claimed families' committed demand, the clusters under
+    infrastructure backoff and the finished and claimed candidates of each master config, and
+    gives ``regenerate-producers`` this plan's headroom and cluster sizes. Stale finished PRs
+    that main superseded are first closed for requeue and left out of the index. Each candidate carries its ``baseline-model``, the display
+    model the public benchmarks API shows its source under, and a candidate the API shows under
+    no display model is left out.
     """
     from . import claims
     from .finished import finished, requeue_superseded
@@ -791,12 +830,10 @@ def plan(
     blocked = {candidate.family for owner in owners for candidate in owner.candidates}
     families = live_families(root)
     now = datetime.now(UTC)
-    requeue_superseded(
-        repository,
-        [pr for page in pulls for pr in page],
-        offered_images(items, families),
-        owners,
-        now,
+    superseded = set(
+        requeue_superseded(
+            repository, [pr for page in pulls for pr in page], master_images(root), owners, now
+        )
     )
     capacity = fetch_capacity(policy) or Capacity(idle={}, queued={}, size={})
     committed = committed_demand(blocked, families, capacity.size)
@@ -823,6 +860,12 @@ def plan(
         and not image_held(candidate, history.held_images, now)
         and not family_prefixes(candidate["family"]) & history.held_families
     ]
+    models = display_models()
+    candidates = [
+        {**candidate, "baseline-model": models[candidate["source"]["model"]]}
+        for candidate in candidates
+        if candidate["source"]["model"] in models
+    ]
     recent = {
         candidate: label
         for candidate, label in history.recent.items()
@@ -841,6 +884,7 @@ def plan(
             "finished": finished(repository, pr) is not None,
         }
         for pr in klaud_pulls([pr for page in pulls for pr in page])
+        if pr["number"] not in superseded
     ]
     if candidates:
         for pr in open_prs:
@@ -863,11 +907,18 @@ def plan(
                 }
             )
             pr["files-complete"] = sum(len(page) for page in pages) < 3000
+    awaiting = {pr["branch"].removeprefix("klaud/auto-") for pr in open_prs if pr["finished"]}
     backlog = Counter(
         group
         for pr in open_prs
         if pr["finished"]
         for group in {config_group(name) for name in pr.get("files", [])} - {None}
+    )
+    backlog.update(
+        config_group(candidate.family)
+        for owner in owners
+        for candidate in owner.candidates
+        if candidate.id not in awaiting
     )
     wave = WaveCapacity({}, {}, set(), backlog)
     candidates = sorted(candidates, key=lambda candidate: wave.blocker(candidate) == "backlog")
@@ -1293,8 +1344,8 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
     contexts = json.loads((directory / "candidates.json").read_text())
     review, _ = reviewed(contexts)
     excluded = {decision.family for decision in review.decisions if decision.decision != "proceed"}
-    models = {
-        decision.candidate_id: decision.baseline_model
+    proceeds = {
+        decision.candidate_id
         for decision in review.decisions
         if decision.decision == "proceed" and decision.family not in excluded
     }
@@ -1310,7 +1361,7 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
         if len(proceeding) >= (slots + PRODUCER_MARGIN if slots else 0):
             break
         if (
-            candidate["id"] in models
+            candidate["id"] in proceeds
             and candidate["family"] not in taken
             and not wave.blocker(candidate)
             and all(prepared[cluster] < PRODUCER_ALTERNATES for cluster in candidate["clusters"])
@@ -1321,9 +1372,8 @@ def regenerate_producers(directory: Path, max_candidates: int, active_sessions: 
     repository = os.environ["GITHUB_REPOSITORY"]
     families: dict[str, dict[str, dict]] = {}
     for candidate in proceeding:
-        model = models[candidate["id"]]
         try:
-            heads = publication(repository, candidate, model).heads
+            heads = publication(repository, candidate, candidate["baseline-model"]).heads
         except (OSError, ValueError, KeyError, TypeError):
             print(
                 f"::warning::Klaud: public producers of candidate {candidate['id']} are unavailable."
@@ -1361,7 +1411,8 @@ def select(
     the cap, and writes their context, ownership.json and selection.json under ``directory``.
     Those sessions are the larger of ``active_sessions``, counted by recovery before the
     review, and the ``running_sessions`` counted now. Selection stops if they are unreadable.
-    Candidates whose master config has FINISHED_BACKLOG_CAP finished PRs awaiting review wait.
+    Candidates whose master config has FINISHED_BACKLOG_CAP Klaud candidates running or awaiting
+    review, counting those this wave takes, wait.
     """
     from . import claims, validation
     from .reporting import (
@@ -1440,7 +1491,7 @@ def select(
                 os.environ["GITHUB_REPOSITORY"],
                 owned,
                 candidate,
-                decision.baseline_model,
+                candidate["baseline-model"],
                 Prose(
                     en="Verify the complete published baseline before candidate dispatch.",
                     zh="在调度候选任务前验证完整的已发布基线。",
@@ -1451,7 +1502,7 @@ def select(
             preflight = BaselinePreflight(
                 candidate_id=candidate["id"],
                 base=candidate["base"],
-                baseline_model=decision.baseline_model,
+                baseline_model=candidate["baseline-model"],
                 source_identity=identity(candidate["source"]),
                 baseline=baseline,
             )
@@ -1493,7 +1544,6 @@ def select(
         selected.append(
             {
                 **candidate,
-                "baseline-model": decision.baseline_model,
                 "pr-review": decision.model_dump(by_alias=True),
             }
         )
@@ -1565,7 +1615,7 @@ def select(
         summary += (
             f" {len(backlog_deferred)} reviewed candidates wait because"
             f" {', '.join(sorted(wave.backlogged))} already have {FINISHED_BACKLOG_CAP} or more"
-            " finished Klaud PRs awaiting review."
+            " Klaud candidates running or awaiting review."
         )
     if baseline_deferred:
         summary += f" {len(baseline_deferred)} candidates lacked a verifiable full baseline: " + (

@@ -18,6 +18,7 @@ concurrency:
 jobs:
   comment:
     name: comment
+    if: github.repository == 'SemiAnalysisAI/InferenceX'
     permissions:
       pull-requests: write # Publish PR feedback.
     runs-on: ubuntu-latest
