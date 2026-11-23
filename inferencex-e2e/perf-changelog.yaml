@@ -12703,3 +12703,9 @@
   description:
     - Use the reviewed communicator-reuse and startup allocator fixes with the existing EP8 UMBP recovery image. Increase prefill KV to 42 GiB with 5 GiB allocator headroom and native GC 0.995; retain shared-expert DP, overlap, BF16 projections and disabled prefill BCG. Restore 1799 GB distributed HugeTLB pools on each node and preserve decode settings, released-draft golden acceptance and full 3600-second profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p1d
+  description:
+    - Align both roles with single-node K4 released DSpark speculation using the native golden acceptance curve. Increase decode batch and graph capacity to 720 tokens for 144 sequences at five verification tokens each. Retain the image, 42 GiB prefill KV, shared-expert DP MegaMoE, both 1799 GB distributed pools and full 3600-second profiling.
+  pr-link: XXX
