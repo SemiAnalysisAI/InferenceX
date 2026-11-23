@@ -404,6 +404,20 @@ def test_sglang_decode_context_parallel_size_must_match_the_point(point, flag):
         runtime_arguments(f"{path}:base", env)
 
 
+def test_tokenspeed_decode_context_parallel_size_must_match_the_point(point):
+    path, recipe, env = point
+    recipe["engine"] = "tokenspeed"
+    recipe["roles"]["agg"]["args"] = {
+        "attn-tp-size": 4, "data-parallel-size": 1, "ep-size": 1,
+        "pipeline-parallel-size": 1, "decode-context-parallel-size": 4,
+    }
+    path.write_text(yaml.safe_dump({"base": recipe}))
+    env = {**env, "FRAMEWORK": "tokenspeed"}
+    runtime_arguments(f"{path}:base", {**env, "DCP_SIZE": "4"})
+    with pytest.raises(ValueError, match=r"DCP_SIZE: recipe/matrix '1' != '4'"):
+        runtime_arguments(f"{path}:base", env)
+
+
 @pytest.mark.parametrize("record,expected", [
     ({"status": "submitted", "slurm_job_id": "42", "output_dir": "/shared/42"}, ("42", "/shared/42")),
     ({"status": "error"}, None),
