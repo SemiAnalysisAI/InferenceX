@@ -12715,3 +12715,9 @@
   description:
     - Retain communicator reuse and startup fragmentation fixes while removing proactive allocator GC. Use the bounded MegaMoE combine scale-read fix, a 2 GiB prefill SHMEM heap, 38 GiB explicit KV and 5 GiB allocator headroom. Paired local cold-request gates show no compute regression; preserve K4 golden acceptance, both distributed UMBP pools, decode settings and full 3600-second profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p2d
+  description:
+    - Add global c64 1P2D with K4 golden acceptance and the qualified EP8 distributed UMBP image. Preserve prefill compute and 38 GiB KV; set each decode worker to 64 sequences with full verify graph coverage from 5 through 320 tokens. Use a 1799 GB HugeTLB pool on each of three nodes, standard warmup and 3600-second profiling.
+  pr-link: XXX
