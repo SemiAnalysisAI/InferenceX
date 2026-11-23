@@ -13307,4 +13307,4 @@
     - "Experts run on AITER MegaMoE over MoRI (--moe-backend aiter_mega_moe, --all2all-backend mori) with the per-tensor-scale FP8 KV cache (--kv-cache-dtype fp8_e4m3), engram tables in HBM sharded across the DP ranks, max-num-seqs 128 (160 at concurrency 1024)."
     - "Prefill uses the cross-DP delayer (--prefill-schedule-policy delayer, --prefill-max-wait-ms 5000, prefill-schedule-interval 96). All amd_kernels routes are enabled (--kernel-config) with the static 49-slot-per-rank expert placement expert_plan_S49.npz."
     - "At concurrency 1024 the router runs with a LD_PRELOAD shim that raises its listen() backlog from 128 to 4096, which otherwise resets connections in the warm-up burst."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PRNUM
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5185
