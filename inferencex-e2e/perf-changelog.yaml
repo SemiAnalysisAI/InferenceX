@@ -13307,4 +13307,4 @@
     - "Add a TP2/EP2 search-space entry with HiCache DRAM KV offload (kv-offloading: dram, backend hicache) at concurrency 16, 20 and 24, on the same lmsysorg/sglang:v0.5.23-cu130 image (digest-pinned). The existing GPU-KV entries (TP2 at 1/8/12/14/16, TP4 at 1/8) are unchanged; override_tp2_c16 now names KV_OFFLOADING none so that the c16 stock and HiCache points each select one variant."
     - "The new points store the KV cache in FP8 E4M3 (kv-cache-dtype fp8_e4m3) and add HiCache with hicache-size 50 per rank, kernel IO backend, page_first layout and write_back policy, inside the point's 308 GB DRAM share (dram-utilization 0.8). Every other server setting is the tp2 recipe; admission and decode CUDA graphs are 2x CONC (32, 40, 48)."
     - "No patch, no setup script and no new image."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5194
