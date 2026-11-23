@@ -22,13 +22,12 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 草案。范围：MiniMax-H3（[`specs/h3-v2.yaml`](specs/h3-v2.yaml) 的 `release-v1` 集合）
 与 Wan2.2-T2V-A14B（[`specs/wan22.yaml`](specs/wan22.yaml) 的 `release-v1` 集合），
 只含无损档，单节点 1、2、4 或 8 卡，并发 1，引擎为 SGLang、vLLM-Omni 与
-Sol-Engine。每个部署只跑其配置行列出的 GPU 数量：H3 在 H100 与 A100 上从 2 卡起，
+Sol-Engine。并非每个部署都跑全部四种卡数：H3 在 H100 与 A100 上从 2 卡起，
 Wan2.2 在 SGLang H100 上只跑 4 卡与 8 卡（见[部署列表][gpu-counts]）。范围负责人：`@edwingao28`。
 
 结果须满足下表每一条规则，才计入 VideoGenX v0.1。规则改动写进本表并升级版本号。
 “执行位置”链接到提交 `8dd3577` 中阻断或计算该规则的代码；“缺口”表示目前没有代码检查。
-“效力”指规则被检查之后起的作用。“状态”有三种：`已执行` 表示现在已有代码检查；
-`缺口（G#）` 表示规则已写明但尚未检查，编号见[待补缺口](#待补缺口)；`参考` 表示该规则从不卡结果。
+“状态”为 `已执行`、`缺口（G#）`（编号见[待补缺口](#待补缺口)）或 `参考`（该规则从不卡结果）。
 
 | # | 规则 | 原因 | 执行位置 | 效力 | 负责人 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -44,7 +43,7 @@ Wan2.2 在 SGLang H100 上只跑 4 卡与 8 卡（见[部署列表][gpu-counts]�
 | 10 | 每段视频都通过技术检查：完整解码；视频为 H.264 yuv420p 且分辨率稳定；帧数一致，fps 误差在 0.1% 以内且帧间隔均匀；时长误差在一帧以内；画面不是全黑或全白；需要动作的 prompt 相邻帧有变化。H3 音频为 32 kHz 立体声 AAC，时间戳连续，需要声音的 prompt 电平高于 −80 dBFS。 | 不合格的视频不能计入速度。 | [`runner.py:946`][expected] 从计划生成检查项；[`media.py:806`][clip-valid] 只有全部检查通过才判为有效 | 阻断 | `@functionstackx` | 已执行 |
 | 11 | 冻结帧比例只记录，不检查。 | 还没有校准过的阈值。 | [`media.py:753`][frozen] 只在计划设置了 `max_frozen_fraction` 时检查；两个 spec 都没有设置 | 参考 | `@functionstackx` | 参考 |
 | 12 | 部署须 warmup 视频有效、20 段测量视频全部有效（不容忍失败）、原生功耗有效，才算合格。 | 中位数基于完整的样本总体。 | [`runner.py:1124`][warmup] 在 warmup 失败后不进入测量；[`bench/video.py:28`][complete]；发布时由 [`video_artifacts.py:140`][power] 与 [`video_artifacts.py:183`][population] 检查 | 阻断 | `@functionstackx` | 已执行 |
-| 13 | 单段延迟即 `submit_to_media_seconds`：从提交请求开始，到下载完生成的 MP4 为止，包含编码和轮询。图表使用有效测量视频的中位数，不计 warmup。 | 所有引擎用同一个定义。 | 写入位置为 [`runner.py:1073`][latency]。InferenceX 在 [`serving.py:105`][median] 取中位数，App 在 [`tradeoff.ts:93`][app-latency] 逐段读取该字段。运行摘要中的 `latency_median_seconds`（[`runner.py:750`][latency-summary]）是另一个字段 `latency_seconds` 的中位数；只有当一次运行没有逐段的 `submit_to_media_seconds` 时，App 才会使用它（[`tradeoff.ts:120`][app-fallback]） | 定义 | `@functionstackx` | 已执行 |
+| 13 | 单段延迟即 `submit_to_media_seconds`：从提交请求开始，到下载完生成的 MP4 为止，包含编码和轮询。图表使用有效测量视频的中位数，不计 warmup。 | 所有引擎用同一个定义。 | 写入位置为 [`runner.py:1073`][latency]；中位数在 [`serving.py:105`][median] 计算；App 在 [`tradeoff.ts:93`][app-latency] 逐段读取。`summary.latency_median_seconds`（[`runner.py:750`][latency-summary]）是另一个字段 `latency_seconds` 的中位数，只有当一次运行没有逐段数值时 App 才使用它（[`tradeoff.ts:120`][app-fallback]） | 定义 | `@functionstackx` | 已执行 |
 | 14 | 认证运行是在 PR 某个提交上对最终 changelog 矩阵做的完整常规 sweep，且其 `validate-video-results` 任务通过。合并后发布的就是这次运行，`main` 上不重跑。 | 发布的数字就是审过的数字。 | [`plan.py:178`][append-only] 拒绝 append-only；[`video_artifacts.py:76`][full-sweep] 要求完整视频 sweep；[`run-sweep.yml:910`][validate-job] | 阻断 | `@SemiAnalysisAI/core` | 已执行 |
 | 15 | 一位合格的 CODEOWNER 提交 PR Review Checklist，再由一位 core 维护者 approve。 | 每次规则改动和结果都有第二个人审。 | `main` 的 ruleset 要求 `@SemiAnalysisAI/core` 的一次 approve。缺口：不要求 code-owner review，admin 合并可以绕过 ruleset | 阻断 | `@SemiAnalysisAI/core` | 缺口（G6） |
 | 16 | 参考 PSNR 只报告，从不卡复用或合并；`quality_status` 保持 `unjudged`。Wan2.2 没有参考视频，其视频保持未评分。 | 无损引擎和并行布局相对同一参考的 PSNR 本来就差异很大。 | [`quality.py:192`][unjudged]；没有 workflow 把该分数当作门槛 | 参考 | `@functionstackx` | 参考 |
@@ -68,8 +67,6 @@ Wan2.2 在 SGLang H100 上只跑 4 卡与 8 卡（见[部署列表][gpu-counts]�
   attention；LoRA；配方之外的启动参数或补丁。
 
 ### 待补缺口
-
-每个编号对应一处尚未补上的检查；表中“状态”列写明该规则还差哪些编号才算 `已执行`。
 
 - G0：[Test Video Harness][harness-paths] 的路径过滤没有覆盖测试 import 或本表引用的全部文件，
   例如 `inferencex-e2e/infx/bench/env.py` 与 `inferencex-e2e/infx/srt_slurm/video.py`。

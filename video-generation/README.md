@@ -25,17 +25,15 @@ artifact identity, reuse validation and post-merge publication.
 Draft. Scope: MiniMax-H3 ([`specs/h3-v2.yaml`](specs/h3-v2.yaml) set `release-v1`)
 and Wan2.2-T2V-A14B ([`specs/wan22.yaml`](specs/wan22.yaml) set `release-v1`),
 lossless tier only, one node with 1, 2, 4 or 8 GPUs, concurrency 1, on SGLang,
-vLLM-Omni and Sol-Engine. A deployment runs only the GPU counts its config row
-lists: H3 on H100 and A100 starts at 2 GPUs, and Wan2.2 on SGLang H100 runs 4 and
-8 ([deployments][gpu-counts]). Scope owner: `@edwingao28`.
+vLLM-Omni and Sol-Engine. Not every deployment runs all four counts: H3 on H100
+and A100 starts at 2 GPUs, and Wan2.2 on SGLang H100 runs 4 and 8
+([deployments][gpu-counts]). Scope owner: `@edwingao28`.
 
 A result counts toward VideoGenX v0.1 only when it meets every rule below. A rule
 change lands in this table and bumps the version. "Enforced by" links the code
 that blocks or computes the rule at commit `8dd3577`; "Gap" means no code checks
-it yet. Effect is what the rule does once it is checked. Status is `Enforced` when
-code checks the rule today, `Gap (G#)` when the rule is written but not yet
-checked, with the ID from [Open gaps](#open-gaps), and `Advisory` when the rule
-never gates.
+it yet. Status is `Enforced`, `Gap (G#)` with the ID from
+[Open gaps](#open-gaps), or `Advisory` for a rule that never gates.
 
 | # | Rule | Why | Enforced by | Effect | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -51,7 +49,7 @@ never gates.
 | 10 | Every clip passes the technical checks: it decodes fully; video is H.264 yuv420p at a stable resolution; frame count matches and fps is within 0.1% with even frame spacing; duration is within one frame; the picture is not blank; frames change where the prompt needs motion. H3 audio is AAC at 32 kHz stereo with continuous timestamps, above −80 dBFS where the prompt needs sound. | A clip that fails cannot count toward speed. | [`runner.py:946`][expected] builds the checks from the plan; [`media.py:806`][clip-valid] marks a clip valid only when every check passes | Blocking | `@functionstackx` | Enforced |
 | 11 | The frozen-frame fraction is recorded, not checked. | No calibrated threshold exists yet. | [`media.py:753`][frozen] checks it only when a plan sets `max_frozen_fraction`; neither spec does | Advisory | `@functionstackx` | Advisory |
 | 12 | A deployment qualifies only when its warmup clip is valid, all 20 measured clips are valid (no failure tolerance) and its native power is valid. | The median is taken over the complete population. | [`runner.py:1124`][warmup] stops before measuring after a failed warmup; [`bench/video.py:28`][complete]; [`video_artifacts.py:140`][power] and [`video_artifacts.py:183`][population] at publication | Blocking | `@functionstackx` | Enforced |
-| 13 | Latency per clip is `submit_to_media_seconds`: the time from submit until the finished MP4 is downloaded, including encoding and polling. Charts use the median over the valid measured clips; the warmup is not counted. | One definition for every engine. | Written at [`runner.py:1073`][latency]. InferenceX takes the median at [`serving.py:105`][median] and the App reads the field per clip at [`tradeoff.ts:93`][app-latency]. The run summary's `latency_median_seconds` ([`runner.py:750`][latency-summary]) is the median of a second field, `latency_seconds`; the App uses it only for a run with no per-clip `submit_to_media_seconds` ([`tradeoff.ts:120`][app-fallback]) | Definition | `@functionstackx` | Enforced |
+| 13 | Latency per clip is `submit_to_media_seconds`: the time from submit until the finished MP4 is downloaded, including encoding and polling. Charts use the median over the valid measured clips; the warmup is not counted. | One definition for every engine. | Written at [`runner.py:1073`][latency]; median taken at [`serving.py:105`][median]; read per clip by the App at [`tradeoff.ts:93`][app-latency]. `summary.latency_median_seconds` ([`runner.py:750`][latency-summary]) is the median of a second field, `latency_seconds`, which the App uses only when a run has no per-clip value ([`tradeoff.ts:120`][app-fallback]) | Definition | `@functionstackx` | Enforced |
 | 14 | The qualifying run is a full regular sweep of the final changelog matrix on a PR commit, and its `validate-video-results` job passes. After merge the same run is published; nothing reruns on `main`. | The published number is the reviewed number. | [`plan.py:178`][append-only] rejects append-only; [`video_artifacts.py:76`][full-sweep] requires a full video sweep; [`run-sweep.yml:910`][validate-job] | Blocking | `@SemiAnalysisAI/core` | Enforced |
 | 15 | One eligible CODEOWNER posts the PR Review Checklist and a core maintainer approves. | Every rule change and result gets a second reviewer. | The `main` ruleset requires one approval from `@SemiAnalysisAI/core`. Gap: code-owner review is not required, and an admin merge bypasses the ruleset | Blocking | `@SemiAnalysisAI/core` | Gap (G6) |
 | 16 | Reference PSNR is reported and never gates reuse or merge; `quality_status` stays `unjudged`. Wan2.2 has no reference, so its clips stay unscored. | Lossless engines and layouts already spread widely in PSNR against one reference. | [`quality.py:192`][unjudged]; no workflow reads the score as a gate | Advisory | `@functionstackx` | Advisory |
@@ -79,9 +77,6 @@ never gates.
   LoRA; launch flags or patches outside the recipe.
 
 ### Open gaps
-
-Each ID is one missing check; a row's Status names the IDs that keep it from
-`Enforced`.
 
 - G0: the [Test Video Harness][harness-paths] path filter omits files the harness
   imports or this table cites, such as `inferencex-e2e/infx/bench/env.py` and
