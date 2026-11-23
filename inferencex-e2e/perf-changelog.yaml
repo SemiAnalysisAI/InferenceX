@@ -13298,3 +13298,13 @@
     - "Framework changes that matter here: mum#38 serves the released GQA sliding-window draft under latency_specialized (FlyDSL sliding-window GQA draft attention, TP-split draft fc and Markov head, AITER logits gather, one-launch draft context K/V store); mum#35 adds fine-grained prefix-cache lookups for sliding-window groups (VLLM_SWA_FINE_GRAINED_PREFIX_HITS, default on) and stores the sliding-window prompt-tail block in the vllm-simple CPU offload; mum#36 stops KV-connector chunks at scheduler-block boundaries under DCP; mum#33 adds FlyDSL sparse MLA for the 96 gathered heads of the DCP branch; mum#30 speeds up the K3 mono decode kernels, extends SP prefill token sharding to DCP1 (concurrency 1 inherits VLLM_K3_SP_PREFILL=1) and fuses the indexer prefill query quantization (bitwise identical)."
     - "Draft data types: unchanged. Both drafts ship all-BF16 with no quantization_config, and the draft runs with BF16 weights and activations at every point, sharing the target's BF16 embedding and lm_head. The draft KV cache stays fp8, the same as the target's, at concurrency 16-48, and moves from fp8 to the image's BF16 default at concurrency 1 and 4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
+
+- config-keys:
+    - qwen3.8next-fp8-h200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a TP2/EP2 search-space entry with HiCache DRAM KV offload (kv-offloading: dram, backend hicache) at concurrency 16, 20 and 24, on the same lmsysorg/sglang:v0.5.23-cu130 image (digest-pinned). The existing GPU-KV entries (TP2 at 1/8/12/14/16, TP4 at 1/8) are unchanged; override_tp2_c16 now names KV_OFFLOADING none so that the c16 stock and HiCache points each select one variant."
+    - "The new points store the KV cache in FP8 E4M3 (kv-cache-dtype fp8_e4m3) and add HiCache with hicache-size 50 per rank, kernel IO backend, page_first layout and write_back policy, inside the point's 308 GB DRAM share (dram-utilization 0.8). Every other server setting is the tp2 recipe; admission and decode CUDA graphs are 2x CONC (32, 40, 48)."
+    - "No patch, no setup script and no new image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

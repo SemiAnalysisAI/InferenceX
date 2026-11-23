@@ -108,6 +108,7 @@ override_tp2_c16:
   benchmark:
     env:
       CONC: '16'
+      KV_OFFLOADING: none
 
 override_tp4_c1:
   roles:
@@ -128,3 +129,55 @@ override_tp4_c8:
   benchmark:
     env:
       CONC: '8'
+
+# TP2 at 16, 20 and 24 agents with an FP8 (E4M3) KV cache and HiCache host-DRAM
+# offload. The rest of the server is the tp2 recipe above. FP8 KV grows the GPU KV
+# pool 1.9x (2.10M to 3.96M tokens at c16); HiCache keeps evicted prefixes in host memory
+# (50 GB per rank, inside the point's 308 GB DRAM share) instead of dropping them. Admission is 2x CONC, as in tp2_c16.
+override_tp2_c16_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args: &tp2_hicache_args
+        tensor-parallel-size: 2
+        expert-parallel-size: 2
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        enable-linear-replayssm-spec: true
+        kv-cache-dtype: fp8_e4m3
+        enable-hierarchical-cache: true
+        hicache-size: 50
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_back
+  benchmark:
+    env: &tp2_hicache_client
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '308'
+      CONC: '16'
+
+override_tp2_c20_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        <<: *tp2_hicache_args
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+  benchmark:
+    env:
+      <<: *tp2_hicache_client
+      CONC: '20'
+
+override_tp2_c24_hicache:
+  roles:
+    agg:
+      gpus: 2
+      args:
+        <<: *tp2_hicache_args
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+  benchmark:
+    env:
+      <<: *tp2_hicache_client
+      CONC: '24'
