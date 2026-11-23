@@ -11,6 +11,8 @@ from pathlib import Path, PurePosixPath
 from infx.bench.video import read_object
 
 VIDEO_ARTIFACT = re.compile(r"h3-results-([0-9]+)-([0-9]+)-([0-9a-f]{64})")
+# G2: vLLM-Omni logs cannot tie requests to parameters, so it publishes unattested; remove in v0.2.
+UNATTESTED = frozenset({"vllm-omni"})
 
 
 def _inventory(root: Path) -> dict[str, str]:
@@ -143,10 +145,17 @@ def validate_video_artifacts(
                 or receipt.get("status") != "complete"
             ):
                 raise ValueError(f"{name}: unverified native measurement or power receipt")
-            # Presence-gated so older and policy-less bundles stay reusable; dropping it is not caught.
+            # The sweep manifest row, not the bundle, names the framework, so a dropped or
+            # foreign attestation is caught.
+            if row["framework"] not in UNATTESTED and "attestation" not in cell:
+                raise ValueError(f"{name}: missing engine work attestation")
             if "attestation" in cell or "attestation" in receipt:
                 attestation = read_object(bundle / _reference(inventory, cell.get("attestation")))
-                if attestation.get("valid") is not True:
+                if (
+                    attestation.get("valid") is not True
+                    or attestation.get("runtime") != row["framework"]
+                    or attestation.get("bundle_type") != "h3_work_attestation"
+                ):
                     raise ValueError(f"{name}: engine work attestation failed")
             plan = run.get("plan")
             plan_sha = hashlib.sha256(
