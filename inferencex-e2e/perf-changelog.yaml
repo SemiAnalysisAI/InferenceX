@@ -13298,3 +13298,12 @@
     - "Framework changes that matter here: mum#38 serves the released GQA sliding-window draft under latency_specialized (FlyDSL sliding-window GQA draft attention, TP-split draft fc and Markov head, AITER logits gather, one-launch draft context K/V store); mum#35 adds fine-grained prefix-cache lookups for sliding-window groups (VLLM_SWA_FINE_GRAINED_PREFIX_HITS, default on) and stores the sliding-window prompt-tail block in the vllm-simple CPU offload; mum#36 stops KV-connector chunks at scheduler-block boundaries under DCP; mum#33 adds FlyDSL sparse MLA for the 96 gathered heads of the DCP branch; mum#30 speeds up the K3 mono decode kernels, extends SP prefill token sharding to DCP1 (concurrency 1 inherits VLLM_K3_SP_PREFILL=1) and fuses the indexer prefill query quantization (bitwise identical)."
     - "Draft data types: unchanged. Both drafts ship all-BF16 with no quantization_config, and the draft runs with BF16 weights and activations at every point, sharing the target's BF16 embedding and lm_head. The draft KV cache stays fp8, the same as the target's, at concurrency 16-48, and moves from fp8 to the image's BF16 default at concurrency 1 and 4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261109 to lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261109 (amd64 digest sha256:1e1f3b01515f1da88cee3c835b0a703f151f4af43ff9fb4a72bd045d77c7ea00), the ROCm 10 build of the same-date daily, to measure what the ROCm version changes. The other MI355X arms stay on their current tags."
+    - "The two images differ by more than the ROCm runtime. The ROCm 10 image is Ubuntu 24.04 (the ROCm 7.2.0 image is Ubuntu 22.04), carries the prebuilt ROCm-fork Triton 4cff872c (wheel suffix .rocm10.0.0) instead of upstream Triton 42270451 built from source, and pins SGLang at 5325cfab (2026-11-09T08:38Z), while the ROCm 7.2.0 image built SGLang from main later that day. Both carry the same AITER commit 285579b6."
+    - "The recipe is unchanged: ROCM_QUICK_REDUCE_QUANTIZATION=NONE, SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION=1, mem-fraction-static 0.8, stream-interval 50, the HiCache write_through policy and the TP4 concurrency grid (c1 through c80) all stay as they are on main."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5188
