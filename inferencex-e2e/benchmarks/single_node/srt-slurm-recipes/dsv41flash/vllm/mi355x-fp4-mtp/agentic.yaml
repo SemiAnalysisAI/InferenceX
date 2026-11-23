@@ -50,6 +50,9 @@ base:
         # DSpark draft layers for decode steps of up to 48 rows (c8 with five
         # drafts); larger steps take the regular path.
         monokernel: true
+        # The image ships the amd_kernels bridge with every route on by default. Only the DEP8 points (override_dep8_*)
+        # turn it on; every other point keeps the stock vLLM path it was tuned and validated on.
+        kernel-config: '{"amd_kernels":{"enabled":false}}'
         disable-uvicorn-access-log: true
       env:
         VLLM_ROCM_USE_AITER: '1'
