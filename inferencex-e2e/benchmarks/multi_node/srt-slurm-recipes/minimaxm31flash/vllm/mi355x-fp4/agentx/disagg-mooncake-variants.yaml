@@ -1,7 +1,7 @@
 schema: 2
 
 base:
-  name: minimaxm31flash-fp4-mi355x-vllm-disagg-mooncake-agentic
+  name: minimaxm31flash-fp4-mi355x-vllm-agentic-dspark-disagg-mooncake
   identity:
     model: {}
     container: {}

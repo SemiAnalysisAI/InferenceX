@@ -13300,10 +13300,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
 
 - config-keys:
-    - minimaxm31flash-fp4-mi355x-vllm-disagg-agentic-dspark
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark-disagg
   scenario-type: [agentic-coding]
   description:
-    - "Add MiniMax-M3.1-Flash PD-disaggregated AgentX on MI355X under vllm-disagg, on the single-node lane's image vllm/vllm-openai-rocm:minimax-m31-flash-75bc8cf1: one TP4 prefill and two TP4 decode vLLM engines move KV over MooncakeConnector (RDMA) behind vllm-router 0.1.16 with consistent-hash routing, at concurrency 40, 48, 56, 64, 72 and 80 (DRAM utilization 0.9 at c40-c64, 1.0 at c72-c80)."
+    - "Rerun the single-node key minimaxm31flash-fp4-mi355x-vllm-agentic-dspark from #5035 unchanged, so both topologies are measured in one sweep."
+    - "Add MiniMax-M3.1-Flash PD-disaggregated AgentX on MI355X as minimaxm31flash-fp4-mi355x-vllm-agentic-dspark-disagg (framework vllm, disagg true), on the single-node key's image vllm/vllm-openai-rocm:minimax-m31-flash-75bc8cf1: one TP4 prefill and two TP4 decode vLLM engines move KV over MooncakeConnector (RDMA) behind vllm-router 0.1.16 with consistent-hash routing, at concurrency 40, 48, 56, 64, 72 and 80 (DRAM utilization 0.9 at c40-c64, 1.0 at c72-c80)."
     - "Both roles keep the single-node serving args: NVFP4 KV and indexer caches, DSpark with 7 speculative tokens, AITER MoE, block size 128 and 1M context."
     - "Prefill admits 2x CONC with DBO at 32768 batched tokens and holds a SimpleCPUOffloadConnector host KV tier of 1349 GB (1499 GB at c72 and c80); at c80 it schedules at most 4096 tokens of a prompt per step at 0.75 GPU memory utilization."
     - "Each decode engine runs without DBO at 8192 batched tokens, with max-num-seqs 5, 6, 7, 8, 10 and 10 from c40 to c80 and CUDA graphs captured in multiples of 8 up to 8x that batch."
