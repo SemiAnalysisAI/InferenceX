@@ -1234,7 +1234,10 @@ musespark-fp4-mi355x-tokenspeed-agentic-dflash:
   srt-recipe-dir: musespark/tokenspeed/mi355x-fp4
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.85
+    # dram-utilization 1.0 -> TOTAL_CPU_DRAM_GB=1499 per TP4 server
+    # (2861022 MiB * 1.0 * 4/8); the recipe's host KV store is at most
+    # 360 GB x 4 ranks = 1440 GB (concurrency 28). TP8 points have no store.
+    - dram-utilization: 1.0
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 10, 16, 28], srt-recipe: agentic.yaml }
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: kvstore }, spec-decoding: draft_model, conc-list: [28, 36, 40], srt-recipe: agentic.yaml }
