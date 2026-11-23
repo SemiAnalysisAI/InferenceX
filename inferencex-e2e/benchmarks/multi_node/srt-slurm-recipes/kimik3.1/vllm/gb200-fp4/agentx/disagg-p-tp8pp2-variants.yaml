@@ -1,0 +1,172 @@
+schema: 2
+
+base:
+  identity:
+    model: {}
+    container: {}
+
+  slurm:
+    time_limit: "6:00:00"
+
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+
+  resources:
+    gpu_type: "gb200"
+    gpus_per_node: 4
+
+  environment:
+    # Identical prefixes must hash to identical block keys run-to-run.
+    PYTHONHASHSEED: "0"
+
+  frontend:
+    type: vllm-router
+    enable_multiple_frontends: false
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+
+  setup_script: vllm-router.sh
+
+  engine:
+    type: vllm
+    connector:
+
+  roles:
+    prefill:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env: &kimi_env
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_RPC_TIMEOUT: "600000"
+        # Outlast the router's pooled-connection idle gaps (disable-retries makes a reset fatal).
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "600"
+        # NIXL moves the KDA short-conv state in three reads, which needs the DS layout.
+        VLLM_SSM_CONV_STATE_LAYOUT: "DS"
+        VLLM_SERVER_DEV_MODE: "1"
+        VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_USE_DIRECT_DCP_A2A: "1"
+        VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
+        VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
+        VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+        VLLM_USE_NCCL_SYMM_MEM: "0"
+        TOKENSPEED_MLA_FP16_PARTIALS: "0"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        UCX_MEMTYPE_CACHE: "n"
+        UCX_MEMTYPE_REG_WHOLE: "n"
+        HF_HUB_CACHE: "/hf_hub_cache"
+        HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+        VLLM_ENABLE_GEMM_RS: "1"
+        VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: "0"
+      args:
+        # 191662915584 bytes per rank is the dram-utilization 0.85 share of a 4-GPU tray.
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlPushConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":191662915584,"lazy_offload":false}}]}}'
+        served-model-name: "moonshotai/Kimi-K3.1-Pro"
+        tensor-parallel-size: 8
+        pipeline-parallel-size: 2
+        decode-context-parallel-size: 8
+        dcp-comm-backend: "a2a"
+        cp-kv-cache-interleave-size: 1
+        no-enable-flashinfer-autotune: true
+        enable-expert-parallel: true
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        moe-backend: deep_gemm_mega_moe
+        gpu-memory-utilization: 0.95
+        max-model-len: 1048576
+        max-num-batched-tokens: 16384
+        max-num-seqs: 256
+        max-cudagraph-capture-size: 320
+        stream-interval: 10
+        kv-cache-dtype: fp8
+        attention-config: '{"sparse_mla_shard_q":true}'
+        mamba-ssm-cache-dtype: float32
+        enable-prefix-caching: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode:
+      workers: 1
+      env:
+        <<: *kimi_env
+        VLLM_ENABLE_GEMM_RS: "0"
+        VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: "1"
+        VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+        VLLM_DP_SESSION_AFFINITY_KEY: "body"
+      args:
+        kv-transfer-config: '{"kv_connector":"NixlPushConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false}}'
+        served-model-name: "moonshotai/Kimi-K3.1-Pro"
+        tensor-parallel-size: 8
+        decode-context-parallel-size: 8
+        data-parallel-rpc-port: 13345
+        dcp-comm-backend: "a2a"
+        cp-kv-cache-interleave-size: 1
+        no-enable-flashinfer-autotune: true
+        enable-expert-parallel: true
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        moe-backend: deep_gemm_mega_moe
+        gpu-memory-utilization: 0.97
+        max-model-len: 1048576
+        max-num-batched-tokens: 1280
+        max-num-seqs: 256
+        stream-interval: 10
+        kv-cache-dtype: fp8
+        attention-config: '{"sparse_mla_shard_q":true}'
+        mamba-ssm-cache-dtype: float32
+        use-replayssm: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320,340,360,380,400,420,440,460,480,500,520,540,560,580,600,620,640,660,680,700,720,740,760,780,800,820,840,860,880,900,920,940,960,980,1000,1020,1040,1060,1080,1100,1120,1140,1160,1180,1200,1220,1240,1260,1280]}'
+        enable-prefix-caching: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        speculative-config: *spec
+
+  sbatch_directives:
+    mem: "0"
+    cpus-per-task: "144"
+
+  srun_options:
+    mem: "0"
+    container-remap-root: ""
+
+  telemetry:
+    collector_join_timeout_seconds: 12
+
+  benchmark:
+    placement:
+      node: head
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+
+override_1p1d_dp2:
+  roles:
+    decode:
+      nodes: 4
+      gpus: 16
+      env:
+        VLLM_DP_SESSION_AFFINITY_SIZE: "2"
+      args:
+        data-parallel-size: 2
+
+override_1p1d_dp4:
+  roles:
+    decode:
+      nodes: 8
+      gpus: 32
+      env:
+        VLLM_DP_SESSION_AFFINITY_SIZE: "4"
+      args:
+        data-parallel-size: 4

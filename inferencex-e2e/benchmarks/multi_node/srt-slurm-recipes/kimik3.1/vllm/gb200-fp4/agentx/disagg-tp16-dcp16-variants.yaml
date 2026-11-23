@@ -1,0 +1,167 @@
+schema: 2
+
+base:
+  identity:
+    model: {}
+    container: {}
+
+  slurm:
+    time_limit: "6:00:00"
+
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+
+  resources:
+    gpu_type: "gb200"
+    gpus_per_node: 4
+
+  environment:
+    # Identical prefixes must hash to identical block keys run-to-run.
+    PYTHONHASHSEED: "0"
+
+  frontend:
+    type: vllm-router
+    enable_multiple_frontends: false
+    args:
+      policy: consistent_hash
+      prometheus-host: 127.0.0.1
+      prometheus-port: 18000
+      request-timeout-secs: 14400
+      disable-retries: true
+
+  setup_script: vllm-router.sh
+
+  engine:
+    type: vllm
+    connector:
+
+  roles:
+    prefill:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env: &kimi_env
+        VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+        VLLM_RPC_TIMEOUT: "600000"
+        # Outlast the router's pooled-connection idle gaps (disable-retries makes a reset fatal).
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "600"
+        VLLM_SERVER_DEV_MODE: "1"
+        VLLM_USE_V2_MODEL_RUNNER: "1"
+        VLLM_USE_DIRECT_DCP_A2A: "1"
+        VLLM_USE_DIRECT_DCP_Q_GATHER: "1"
+        VLLM_USE_DIRECT_DCP_KV_GATHER: "1"
+        VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+        VLLM_USE_NCCL_SYMM_MEM: "0"
+        TOKENSPEED_MLA_FP16_PARTIALS: "0"
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        NCCL_NVLS_ENABLE: "1"
+        # NIXL moves the KDA short-conv state in three reads, which needs the DS layout.
+        VLLM_SSM_CONV_STATE_LAYOUT: "DS"
+        VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: "0"
+        UCX_MEMTYPE_CACHE: "n"
+        UCX_MEMTYPE_REG_WHOLE: "n"
+        HF_HUB_CACHE: "/hf_hub_cache"
+        HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+        VLLM_ENABLE_GEMM_RS: "1"
+      args:
+        # 112742379520 bytes per rank is the dram-utilization 0.5 share of a 4-GPU tray.
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112742379520,"lazy_offload":false}}]}}'
+        served-model-name: "moonshotai/Kimi-K3.1-Pro"
+        tensor-parallel-size: 16
+        decode-context-parallel-size: 16
+        dcp-comm-backend: "a2a"
+        cp-kv-cache-interleave-size: 1
+        no-enable-flashinfer-autotune: true
+        enable-expert-parallel: true
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        moe-backend: deep_gemm_mega_moe
+        gpu-memory-utilization: 0.95
+        max-model-len: 1048576
+        max-num-batched-tokens: 16384
+        stream-interval: 10
+        kv-cache-dtype: fp8
+        attention-config: &attn '{"indexer_kv_dtype":"mxfp4","tokenspeed_mla_min_split_kv":16}'
+        mamba-ssm-cache-dtype: float32
+        enable-prefix-caching: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","attention_backend":"TOKENSPEED_MLA","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        <<: *kimi_env
+        VLLM_ENABLE_GEMM_RS: "0"
+      args:
+        kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false}}'
+        served-model-name: "moonshotai/Kimi-K3.1-Pro"
+        tensor-parallel-size: 16
+        decode-context-parallel-size: 16
+        dcp-comm-backend: "a2a"
+        cp-kv-cache-interleave-size: 1
+        no-enable-flashinfer-autotune: true
+        trust-remote-code: true
+        language-model-only: true
+        load-format: fastsafetensors
+        moe-backend: auto
+        gpu-memory-utilization: 0.95
+        max-model-len: 1048576
+        # Bounds the MoE autotune workspace to decode-sized batches.
+        max-num-batched-tokens: 2048
+        stream-interval: 10
+        kv-cache-dtype: fp8
+        attention-config: *attn
+        mamba-ssm-cache-dtype: float32
+        use-replayssm: true
+        additional-config: '{"decode_backend":"latency_specialized"}'
+        enable-prefix-caching: true
+        enable-auto-tool-choice: true
+        tool-call-parser: kimi_k3
+        reasoning-parser: kimi_k3
+        speculative-config: *spec
+
+  sbatch_directives:
+    mem: "0"
+    cpus-per-task: "144"
+
+  srun_options:
+    mem: "0"
+    container-remap-root: ""
+
+  telemetry:
+    collector_join_timeout_seconds: 12
+
+  benchmark:
+    placement:
+      node: head
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
+      AIPERF_HTTP_TCP_USER_TIMEOUT: "900000"
+
+override_1p1d_tp16_dcp16_c32:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 32
+        max-cudagraph-capture-size: 160
+    decode:
+      args:
+        max-num-seqs: 64
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320]}'
+
+override_1p1d_tp16_dcp16_c64:
+  roles:
+    prefill:
+      args:
+        max-num-seqs: 64
+        max-cudagraph-capture-size: 320
+    decode:
+      args:
+        max-num-seqs: 128
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320,325,330,335,340,345,350,355,360,365,370,375,380,385,390,395,400,405,410,415,420,425,430,435,440,445,450,455,460,465,470,475,480,485,490,495,500,505,510,515,520,525,530,535,540,545,550,555,560,565,570,575,580,585,590,595,600,605,610,615,620,625,630,635,640]}'
