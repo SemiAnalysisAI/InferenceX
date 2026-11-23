@@ -13308,4 +13308,4 @@
     - "Drop --max-total-tokens 1048576 so the GPU KV pool fills the 0.85 static fraction, and lower --chunked-prefill-size from 131072 to 16384 for HBM headroom: with the uncapped pool a 450k-token prefill peaks at 97% of HBM with 131072-token chunks and at 92% with 16384."
     - "GPU-resident KV at TP8 concurrency 1, 2 and 3; SGLang HiCache at TP8 concurrency 4, 5, 6 and 8 (host-memory fraction 0.80, direct I/O, page_first_direct layout)."
     - "Image, TP8/EP1, concurrencies, mem-fraction-static, admission limits, EAGLE 3/1/4, BF16 KV cache, parsers and 1M context are unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5190
