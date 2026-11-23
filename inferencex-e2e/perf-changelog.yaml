@@ -13306,5 +13306,5 @@
     - "Add DeepSeek-V4.1-Flash FP4 AgentX on MI355X at DEP8 (TP1 x DP8 with expert parallelism over the 8 ranks) behind a consistent-hash vLLM router at concurrency 256, 512 and 1024; concurrency below 256 keeps the TP2/TP4 entries. Image reference is TBD (vLLM ROCm nightly with the amd_kernels bridge and the prefill schedulers)."
     - "Experts run on AITER MegaMoE over MoRI (--moe-backend aiter_mega_moe, --all2all-backend mori) with the per-tensor-scale FP8 KV cache (--kv-cache-dtype fp8_e4m3), engram tables in HBM sharded across the DP ranks, max-num-seqs 128 (160 at concurrency 1024)."
     - "Prefill uses the cross-DP delayer (--prefill-schedule-policy delayer, --prefill-max-wait-ms 5000, prefill-schedule-interval 96). All amd_kernels routes are enabled (--kernel-config) with the static 49-slot-per-rank expert placement expert_plan_S49.npz."
-    - "At concurrency 1024 the router runs with a LD_PRELOAD shim that raises its listen() backlog from 128 to 4096, which otherwise resets connections in the warm-up burst."
+    - "The router runs with a LD_PRELOAD shim that raises its listen() backlog from 128 to 4096 at every concurrency: vllm-router 0.1.14 hard-codes 128, which resets connections in the AgentX warm-up burst (reproducible at concurrency 1024, intermittent at 512)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5185

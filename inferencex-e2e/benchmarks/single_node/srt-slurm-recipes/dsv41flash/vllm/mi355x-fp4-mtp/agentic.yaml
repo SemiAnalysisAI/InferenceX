@@ -390,6 +390,10 @@ override_dep8_c256:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
+    env:
+      # vllm-router 0.1.14 listens with a backlog of 128, which resets connections in the AgentX warm-up burst.
+      LD_PRELOAD: /opt/dsv41f/lib/listen_backlog_shim.so
+      LISTEN_BACKLOG_MIN: '4096'
   setup_script: vllm-router.sh
   roles:
     agg:
@@ -431,6 +435,10 @@ override_dep8_c512:
       prometheus-port: 18000
       request-timeout-secs: 14400
       disable-retries: true
+    env:
+      # vllm-router 0.1.14 listens with a backlog of 128, which resets connections in the AgentX warm-up burst.
+      LD_PRELOAD: /opt/dsv41f/lib/listen_backlog_shim.so
+      LISTEN_BACKLOG_MIN: '4096'
   setup_script: vllm-router.sh
   roles:
     agg:
@@ -473,7 +481,7 @@ override_dep8_c1024:
       request-timeout-secs: 14400
       disable-retries: true
     env:
-      # vllm-router 0.1.14 listens with a backlog of 128, which resets connections in the c1024 warm-up burst.
+      # vllm-router 0.1.14 listens with a backlog of 128, which resets connections in the AgentX warm-up burst.
       LD_PRELOAD: /opt/dsv41f/lib/listen_backlog_shim.so
       LISTEN_BACKLOG_MIN: '4096'
   setup_script: vllm-router.sh
