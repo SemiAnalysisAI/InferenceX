@@ -13283,3 +13283,18 @@
   description:
     - "Add SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB200, aggregated and disaggregated, with DSpark block 7 and the minimax-msa kernels."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4695
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:kimi-k31-5c14fe8 (sha256:a61996b4) to vllm/vllm-openai-rocm:kimi-k31-712d9eb (sha256:7c167350), vLLM 712d9eb37 (the head of vllm-project/vllm k31-amd-tracking), which is 5c14fe8de plus seungrokj/mum#30, seungrokj/mum#33, seungrokj/mum#35, seungrokj/mum#36 and seungrokj/mum#38."
+    - "Points are unchanged: TP8 at concurrency 1 (DCP1) and 4 (DCP8) with the KV cache on the GPUs, and TP8 DCP8 at concurrency 16, 24, 32 and 48 with vllm-simple DRAM KV offload."
+    - "Switch the draft from Inferact/Kimi-K3.1-Pro-DSpark-preview (unpinned) to the released Inferact/Kimi-K3.1-Pro-DSpark at revision e4e6e626, the revision its golden acceptance curve was measured with. The released draft uses GQA sliding-window (2048-token) attention instead of MLA, which ROCM_AITER_MLA rejects, so concurrency 16-48 move the draft attention backend from ROCM_AITER_MLA to TRITON_ATTN and keep the fp8 draft KV cache."
+    - "Concurrency 1 and 4 (latency_specialized) drop the draft attention_backend and kv_cache_dtype, so vLLM selects KIMI_K3_FLYDSL_SWA_GQA with a model-dtype (BF16) draft KV cache, which also enables VLLM_K31_BEAT_CTXKV (one-launch draft context K/V store; it requires a non-fp8 draft cache)."
+    - "prefix-match-unit 64 -> 1152 (1280 at concurrency 1), the KV block span under DCP8 (1152 tokens) and DCP1 (1280), which the unit must divide. On kimi-k31-5c14fe8, the draft's sliding-window KV group only matched whole blocks, so a 64-token unit disabled fine-grained prefix-cache hits for the whole model and rounded every hit down to the scheduler block."
+    - "Concurrency 32 and 48: num_speculative_tokens 3 -> 4, with the capture sizes regenerated as multiples of 5. No other server argument or environment variable changes."
+    - "Framework changes that matter here: mum#38 serves the released GQA sliding-window draft under latency_specialized (FlyDSL sliding-window GQA draft attention, TP-split draft fc and Markov head, AITER logits gather, one-launch draft context K/V store); mum#35 adds fine-grained prefix-cache lookups for sliding-window groups (VLLM_SWA_FINE_GRAINED_PREFIX_HITS, default on) and stores the sliding-window prompt-tail block in the vllm-simple CPU offload; mum#36 stops KV-connector chunks at scheduler-block boundaries under DCP; mum#33 adds FlyDSL sparse MLA for the 96 gathered heads of the DCP branch; mum#30 speeds up the K3 mono decode kernels, extends SP prefill token sharding to DCP1 (concurrency 1 inherits VLLM_K3_SP_PREFILL=1) and fuses the indexer prefill query quantization (bitwise identical)."
+    - "Draft data types: unchanged. Both drafts ship all-BF16 with no quantization_config, and the draft runs with BF16 weights and activations at every point, sharing the target's BF16 embedding and lm_head. The draft KV cache stays fp8, the same as the target's, at concurrency 16-48, and moves from fp8 to the image's BF16 default at concurrency 1 and 4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
