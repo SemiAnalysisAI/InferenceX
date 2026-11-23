@@ -13305,6 +13305,6 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Set SGLANG_AITER_GFX942_BLOCKSCALE_USE_CK=1 (sglang#41071), so the dense block-FP8 linears run on aiter's CK blockscale GEMM instead of its Triton one. In the image's aiter (e7d2453f2), four of GLM-5.3-Flash's six linear shapes have no gfx942 Triton config and run the 128x128 default tile."
+    - "Set SGLANG_AITER_GFX942_BLOCKSCALE_USE_CK=1 (sglang#41071), so the dense block-FP8 linears run on aiter's CK blockscale GEMM instead of its Triton one. In the image's aiter (285579b62), four of GLM-5.3-Flash's six linear shapes have no gfx942 Triton config and run the 128x128 default tile."
     - "Image, search space and every other flag are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5150
