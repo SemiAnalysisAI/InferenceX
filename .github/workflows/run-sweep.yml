@@ -39,6 +39,7 @@ jobs:
         runs-on: ubuntu-latest
         permissions:
             contents: read
+            pull-requests: read # Read a stacked parent PR's head.
         if: >-
             github.event.pull_request.head.repo.full_name == github.repository &&
             (
@@ -52,6 +53,8 @@ jobs:
             )
         outputs:
             skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
+            plan-base-ref: ${{ steps.stack_base.outputs.base-ref }}
+            stack-parent-pr: ${{ steps.stack_base.outputs.parent-pr }}
         steps:
             - name: Reject conflicting sweep labels
               env:
@@ -93,8 +96,25 @@ jobs:
             - name: Set up uv
               uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
+            - name: Resolve stacked append-only base
+              id: stack_base
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+              run: |
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
+                  uv run --no-project --exclude-newer PT12H --python 3.12 \
+                    --with "pydantic>=2" --with pyyaml python -m infx.workflows.stack_base \
+                    --repo "${GITHUB_REPOSITORY}" \
+                    --pr-number "${PR_NUMBER}" \
+                    --base-ref "origin/${GITHUB_BASE_REF}" \
+                    --head-ref "${PR_HEAD_SHA}" \
+                    --changelog-file perf-changelog.yaml
+
             - name: Validate perf-changelog matrix
               env:
+                  PLAN_BASE_REF: ${{ steps.stack_base.outputs.base-ref }}
                   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
@@ -104,7 +124,7 @@ jobs:
                       uv run --no-project --exclude-newer PT12H --python 3.12
                       --with "pydantic>=2" --with pyyaml python -m infx.workflows.validate_perf_changelog
                       --changelog-file perf-changelog.yaml
-                      --base-ref "origin/${GITHUB_BASE_REF}"
+                      --base-ref "${PLAN_BASE_REF}"
                       --head-ref "${PR_HEAD_SHA}"
                   )
                   if [ "$ALL_EVALS" = "true" ]; then
@@ -232,9 +252,19 @@ jobs:
                   anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
                   github-token: ${{ github.token }}
 
+            - name: Fetch stacked parent head
+              if: needs.check-changelog.outputs.stack-parent-pr != ''
+              env:
+                  PARENT_PR: ${{ needs.check-changelog.outputs.stack-parent-pr }}
+                  PLAN_BASE_REF: ${{ needs.check-changelog.outputs.plan-base-ref }}
+              run: |
+                  git cat-file -e "${PLAN_BASE_REF}^{commit}" 2>/dev/null ||
+                    git fetch --no-tags origin "+refs/pull/${PARENT_PR}/head"
+
             - id: setup
               env:
                   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PLAN_BASE_REF: ${{ needs.check-changelog.outputs.plan-base-ref || format('origin/{0}', github.base_ref) }}
                   PRIORITY_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
@@ -245,7 +275,7 @@ jobs:
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                       python -m infx.matrix.plan
                       --changelog-file "${GITHUB_WORKSPACE}/inferencex-e2e/perf-changelog.yaml"
-                      --base-ref "origin/${GITHUB_BASE_REF}"
+                      --base-ref "${PLAN_BASE_REF}"
                       --head-ref "${PR_HEAD_SHA}"
                   )
                   if [ "$ALL_EVALS" = "true" ]; then
@@ -259,14 +289,24 @@ jobs:
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                     python -m infx.workflows.benchmark_schema --plan)
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-                    python -m infx.workflows.ci_priority \
+                    python -m infx.workflows.scheduler_facts \
                     --event-name "${GITHUB_EVENT_NAME}" \
                     --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
-                    --criteria-json "$PRIORITY_CRITERIA")
+                    --criteria-json "$PRIORITY_CRITERIA" \
+                    --facts-file "${RUNNER_TEMP}/scheduling-facts.json")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
                   has_benchmark_results=$(jq '[.single_node | to_entries[] | select(.key != "video") | .value[]] + [.multi_node | .[][]] | length > 0' <<<"$CONFIG_JSON")
                   echo "has-benchmark-results=$has_benchmark_results" >> "$GITHUB_OUTPUT"
+
+            - name: Upload scheduling facts
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  path: ${{ runner.temp }}/scheduling-facts.json
+                  archive: false
+                  overwrite: true
+                  if-no-files-found: error
 
     canary-select:
         name: canary-select
@@ -341,7 +381,6 @@ jobs:
             pr-number: &pr-number ${{ github.event.pull_request.number }}
             klaud-run: &klaud-run ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
@@ -367,7 +406,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
@@ -420,7 +458,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             conc-list: ${{ toJson(matrix.config.conc) }}
@@ -470,7 +507,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: ${{ matrix.config.run-eval }}
@@ -520,7 +556,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
@@ -553,7 +588,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
@@ -584,7 +618,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
@@ -635,7 +668,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
@@ -668,7 +700,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
@@ -703,7 +734,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
@@ -738,7 +768,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             conc: ${{ matrix.config['eval-conc'] }}
@@ -1014,16 +1043,21 @@ jobs:
         steps:
             - name: Update unofficial run visualizer links on PR
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  # Video results live on the VideoGenX page, not the inference charts.
+                  HAS_VIDEO: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
               with:
                   github-token: ${{ github.token }}
                   script: |
                       const marker = '<!-- inferencex-unofficial-run-visualizer -->';
                       const inferenceUrl = `https://inferencex.semianalysis.com/inference?unofficialRun=${context.runId}`;
                       const evaluationUrl = `https://inferencex.semianalysis.com/evaluation?unofficialRun=${context.runId}`;
+                      const videoUrl = `https://inferencex.semianalysis.com/vgx?unofficialRun=${context.runId}`;
                       const body = [
                           marker,
                           `View unofficial run (performance): ${inferenceUrl}`,
                           `View unofficial run (accuracy): ${evaluationUrl}`,
+                          ...(process.env.HAS_VIDEO === 'true' ? [`View unofficial run (video): ${videoUrl}`] : []),
                       ].join('\n\n');
                       const comments = await github.paginate(github.rest.issues.listComments, {
                           ...context.repo,
