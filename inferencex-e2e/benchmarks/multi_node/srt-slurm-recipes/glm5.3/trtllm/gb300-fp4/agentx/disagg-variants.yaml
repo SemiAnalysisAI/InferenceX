@@ -1,0 +1,506 @@
+schema: 2
+
+base:
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261030
+    request_plane: tcp
+    sidecar: true
+    sidecar_args:
+      - --grpc-connections
+      # One request holds a prefill and a decode leg.
+      - "8"
+      - --grpc-startup-deadline-secs
+      - "3600"
+  health_check:
+    max_attempts: 270
+    interval_seconds: 10
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  engine:
+    type: trtllm
+    publish_metrics: true
+    # The sidecar registers the name the engine reports; name it so a checkpoint staged at /model
+    # does not register as "/model".
+    served_model_name: GLM-5.3-NVFP4
+    # Pin each worker to its GPU's NUMA node.
+    numa_cpu_bind: true
+  roles:
+    prefill:
+      gpus: 4
+      env:
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        TQDM_DISABLE: '1'
+        HF_HUB_DISABLE_PROGRESS_BARS: '1'
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_PURGE_DELAY: '0'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        TRTLLM_FUSED_DSA_METADATA: '1'
+        TRTLLM_DSA_INDEXER_BF16: '1'
+        TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
+        TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
+        TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: '600'
+        # KV moves over MNNVL (cuda_ipc); tcp carries the active-message lane.
+        UCX_TLS: cuda_ipc,cuda_copy,sm,self,tcp
+        UCX_CUDA_IPC_ENABLE_MNNVL: y
+        UCX_RNDV_SCHEME: put_zcopy
+        TRTLLM_KVCACHE_SEND_BUFFER_COUNT: '1'
+        TRTLLM_KVCACHE_RECV_BUFFER_COUNT: '1'
+        DYN_TRTLLM_ENABLE_ATTENTION_DP: '1'
+        DYN_ENGINE_CONV_AFFINITY: '1'
+        DYN_TOKENIZER: fastokens
+        DYN_PUBLISH_KV_EVENTS: '0'
+      args:
+        attention_dp_config:
+          enable_kv_cache_aware_routing: false
+          kv_cache_routing_conversation_affinity: true
+          kv_cache_routing_max_sessions: 65536
+        cache_transceiver_config:
+          backend: NIXL
+          transceiver_runtime: PYTHON
+          # C++ transfer-agent bounce: every prefill->decode copy is staged in fixed pieces instead of
+          # first-touch writes into the remote pool.
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+          max_tokens_in_buffer: 1048576
+          kv_transfer_timeout_ms: 600000
+        cuda_graph_config: null
+        enable_attention_dp: true
+        enable_chunked_prefill: true
+        trust_remote_code: true
+        kv_cache_config:
+          enable_block_reuse: true
+          event_buffer_max_size: 0
+          iteration_stats_interval: 20
+          # Sized for c66's live context per DEP4 rank.
+          free_gpu_memory_fraction: 0.85
+          tokens_per_block: 64
+        max_batch_size: 256
+        max_num_tokens: 8192
+        max_seq_len: 1048576
+        moe_config:
+          backend: CUTEDSL
+        moe_expert_parallel_size: 4
+        num_postprocess_workers: 8
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        # trtllm-serve serves its OpenEngine Prometheus endpoint (the trtllm_* gauges AIPerf scrapes)
+        # only while it collects request perf metrics.
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        sparse_attention_config:
+          algorithm: dsa
+          enable_heuristic_topk: true
+        speculative_config:
+          decoding_type: MTP
+          max_draft_len: 5
+        stream_interval: 20
+        tensor_parallel_size: 4
+    decode:
+      env:
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        TQDM_DISABLE: '1'
+        HF_HUB_DISABLE_PROGRESS_BARS: '1'
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_PURGE_DELAY: '0'
+        PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+        TRTLLM_FUSED_DSA_METADATA: '1'
+        TRTLLM_DSA_INDEXER_BF16: '1'
+        TRTLLM_SERVE_ENABLE_MSGSPEC: '1'
+        TLLM_ADP_ROUTER_MATCH_RATE_THRESHOLD: '0.10'
+        TRTLLM_KV_CACHE_TRANSFER_TIMEOUT_SEC: '600'
+        # KV moves over MNNVL (cuda_ipc); tcp carries the active-message lane.
+        UCX_TLS: cuda_ipc,cuda_copy,sm,self,tcp
+        UCX_CUDA_IPC_ENABLE_MNNVL: y
+        UCX_RNDV_SCHEME: put_zcopy
+        TRTLLM_KVCACHE_SEND_BUFFER_COUNT: '1'
+        TRTLLM_KVCACHE_RECV_BUFFER_COUNT: '1'
+        DYN_TRTLLM_ENABLE_ATTENTION_DP: '1'
+        DYN_TOKENIZER: fastokens
+        DYN_PUBLISH_KV_EVENTS: '0'
+      args:
+        cache_transceiver_config:
+          backend: NIXL
+          transceiver_runtime: PYTHON
+          # C++ transfer-agent bounce: every prefill->decode copy is staged in fixed pieces instead of
+          # first-touch writes into the remote pool.
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+          max_tokens_in_buffer: 1048576
+          kv_transfer_timeout_ms: 600000
+        cuda_graph_config:
+          enable_padding: true
+        trust_remote_code: true
+        kv_cache_config:
+          enable_block_reuse: false
+          event_buffer_max_size: 0
+          iteration_stats_interval: 20
+          # Not a cache here (block reuse is off) but the spill tier of the KV cache manager v2
+          # scheduler. c1, c30 and c66 never fill their pools, so 0 avoids pinning the default
+          # per-rank tier; c520 and c624 set 160 GiB.
+          host_cache_size: 0
+          tokens_per_block: 64
+        max_num_tokens: 128
+        max_seq_len: 1048576
+        moe_config:
+          use_low_precision_moe_combine: true
+        num_postprocess_workers: 4
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        # trtllm-serve serves its OpenEngine Prometheus endpoint (the trtllm_* gauges AIPerf scrapes)
+        # only while it collects request perf metrics.
+        return_perf_metrics: true
+        sparse_attention_config:
+          algorithm: dsa
+          enable_heuristic_topk: true
+          use_cute_dsl_paged_mqa_logits: true
+          use_cute_dsl_topk: true
+        speculative_config:
+          decoding_type: MTP
+          max_draft_len: 5
+        stream_interval: 20
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    env:
+      ETCD_LEASE_TTL: '120'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_TEMPERATURE: '0'
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+      DYN_TOKENIZER: fastokens
+      DYN_TCP_REQUEST_TIMEOUT: '30'
+      DYN_LOG: warn
+      # Decode slots are bound by max_batch_size: balance decode workers by active requests, not
+      # resident KV blocks.
+      DYN_ROUTER_DECODE_ACTIVE_REQUEST_WEIGHT: '100000'
+    args:
+      router-mode: kv
+      no-kv-events: true
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+    placement:
+      node: head
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
+      SERVED_MODEL_NAME: GLM-5.3-NVFP4
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    placement:
+      node: dedicated
+
+override_1p1d_tp8_c1_b1_mtp5:
+  name: dynamo-disagg-gb300-1p1d-tp8-c1-b1-mtp5
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        disable_overlap_scheduler: true
+        kv_cache_config:
+          dtype: fp8
+          host_cache_size: 137438953472
+        scheduler_config:
+          context_chunking_policy: EQUAL_PROGRESS
+    decode:
+      nodes: 2
+      workers: 1
+      gpus: 8
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+        enable_attention_dp: false
+        kv_cache_config:
+          dtype: fp8
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 1
+        # auto, not require: the container's FlashInfer is outside the sm103 TP8 target's verified
+        # set for its drafter norm, which falls back to the built-in path; require would refuse to start.
+        modeling_v2: auto
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 1
+        tensor_parallel_size: 8
+
+override_1p4d_tep4_c30_b2_mtp5:
+  name: dynamo-disagg-gb300-1p4d-tep4-c30-b2-mtp5
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        disable_overlap_scheduler: false
+        kv_cache_config:
+          dtype: fp8
+          host_cache_size: 137438953472
+    decode:
+      nodes: 4
+      workers: 4
+      gpus: 4
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+        enable_attention_dp: false
+        kv_cache_config:
+          dtype: fp8
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 2
+        # Built-in model: the sm103 TEP4 modeling_v2 target claims GLM-5.3 by shape but cannot load
+        # its FP8 dense MLPs (layers 0-2).
+        modeling_v2: 'off'
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 4
+        tensor_parallel_size: 4
+
+override_1p7d_tp4_c66_b4_mtp5:
+  name: dynamo-disagg-gb300-1p7d-tp4-c66-b4-mtp5
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      args:
+        cache_transceiver_config:
+          # Arena and pieces sized for this point's 700k-token contexts.
+          kv_cache_bounce_size_mb: 4096
+          agent_bounce_params:
+            max_chunk_size: 128MB
+            max_inflight_chunks_per_request: '32'
+        disable_overlap_scheduler: true
+        kv_cache_config:
+          dtype: fp8
+          host_cache_size: 206158430208
+        scheduler_config:
+          context_chunking_policy: EQUAL_PROGRESS
+    decode:
+      nodes: 7
+      workers: 7
+      gpus: 4
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 4096
+          agent_bounce_params:
+            max_chunk_size: 128MB
+            max_inflight_chunks_per_request: '32'
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+        enable_attention_dp: false
+        kv_cache_config:
+          dtype: fp8
+          free_gpu_memory_fraction: 0.8
+        max_batch_size: 4
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 1
+        tensor_parallel_size: 4
+
+override_5p1d_dep16_c520_b16_mtp5:
+  name: dynamo-disagg-gb300-5p1d-dep16-c520-b16-mtp5
+  frontend:
+    env:
+      # Session affinity for 4 h in soft mode: it keeps the prefill hop on the worker and rank that
+      # hold the conversation's prefix, while the decode policy below picks by load.
+      DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
+      DYN_ROUTER_SESSION_AFFINITY_MODE: soft
+    # Decode hop only: block reuse is off on decode and attention DP pads every rank's step to the
+    # fullest rank's batch, so place each turn on the rank with the fewest active requests.
+    worker_selection:
+      decode: decode-least-loaded
+      instances:
+        - name: decode-least-loaded
+          type: dynamo-two-tier-cost-fn
+          parameters:
+            # Balance whenever the fullest rank is more than one request above the emptiest.
+            balance_abs_threshold: 1
+            balance_rel_threshold: 1.1
+  roles:
+    prefill:
+      nodes: 5
+      workers: 5
+      env:
+        TRTLLM_GVR_SELF_SAMPLING: '1'
+        # NVFP4 KV cache in the fp8rope layout (E2M1 NoPE with inline E4M3 block scales, E4M3 RoPE);
+        # prefill and decode must store the same layout, which needs KV cache manager V2.
+        TRTLLM_NVFP4_MLA_KV_CACHE_LAYOUT: fp8rope
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        disable_overlap_scheduler: true
+        kv_cache_config:
+          dtype: nvfp4
+          use_kv_cache_manager_v2: true
+          free_gpu_memory_fraction: 0.75
+          host_cache_size: 206158430208
+        scheduler_config:
+          context_chunking_policy: EQUAL_PROGRESS
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        TRTLLM_GVR_SELF_SAMPLING: '1'
+        TRTLLM_NVFP4_MLA_KV_CACHE_LAYOUT: fp8rope
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: true
+        kv_cache_config:
+          dtype: nvfp4
+          use_kv_cache_manager_v2: true
+          free_gpu_memory_fraction: 0.9
+          # Spill tier of the KV cache manager v2 scheduler (block reuse is off here); a full
+          # 16-slot decode without it can declare a scheduler deadlock.
+          host_cache_size: 171798691840
+        max_batch_size: 16
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 16
+        tensor_parallel_size: 16
+
+override_6p1d_dep16_c624_b24_mtp5:
+  name: dynamo-disagg-gb300-6p1d-dep16-c624-b24-mtp5
+  frontend:
+    env:
+      # Session affinity for 4 h in soft mode: it keeps the prefill hop on the worker and rank that
+      # hold the conversation's prefix, while the decode policy below picks by load.
+      DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
+      DYN_ROUTER_SESSION_AFFINITY_MODE: soft
+    # Decode hop only: block reuse is off on decode and attention DP pads every rank's step to the
+    # fullest rank's batch, so place each turn on the rank with the fewest active requests.
+    worker_selection:
+      decode: decode-least-loaded
+      instances:
+        - name: decode-least-loaded
+          type: dynamo-two-tier-cost-fn
+          parameters:
+            # Balance whenever the fullest rank is more than one request above the emptiest.
+            balance_abs_threshold: 1
+            balance_rel_threshold: 1.1
+  roles:
+    prefill:
+      nodes: 6
+      workers: 6
+      env:
+        TRTLLM_GVR_SELF_SAMPLING: '1'
+        # NVFP4 KV cache in the fp8rope layout (E2M1 NoPE with inline E4M3 block scales, E4M3 RoPE);
+        # prefill and decode must store the same layout, which needs KV cache manager V2.
+        TRTLLM_NVFP4_MLA_KV_CACHE_LAYOUT: fp8rope
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        disable_overlap_scheduler: true
+        kv_cache_config:
+          dtype: nvfp4
+          use_kv_cache_manager_v2: true
+          free_gpu_memory_fraction: 0.75
+          host_cache_size: 206158430208
+        scheduler_config:
+          context_chunking_policy: EQUAL_PROGRESS
+    decode:
+      nodes: 4
+      workers: 1
+      gpus: 16
+      env:
+        TRTLLM_GVR_SELF_SAMPLING: '1'
+        TRTLLM_NVFP4_MLA_KV_CACHE_LAYOUT: fp8rope
+      args:
+        cache_transceiver_config:
+          kv_cache_bounce_size_mb: 1024
+        cuda_graph_config:
+          batch_sizes:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
+          - 21
+          - 22
+          - 23
+          - 24
+        enable_attention_dp: true
+        enable_lm_head_tp_in_adp: true
+        kv_cache_config:
+          dtype: nvfp4
+          use_kv_cache_manager_v2: true
+          free_gpu_memory_fraction: 0.9
+          # Spill tier of the KV cache manager v2 scheduler (block reuse is off here); a full
+          # 16-slot decode without it can declare a scheduler deadlock.
+          host_cache_size: 171798691840
+        max_batch_size: 24
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 16
+        tensor_parallel_size: 16
