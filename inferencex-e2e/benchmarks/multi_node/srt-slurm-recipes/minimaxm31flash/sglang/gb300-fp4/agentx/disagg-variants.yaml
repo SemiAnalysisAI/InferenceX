@@ -90,9 +90,9 @@ base:
         reasoning-parser: minimax-m3
         tool-call-parser: minimax-m3
         tensor-parallel-size: 2
-        data-parallel-size: 2
+        # SGLang 1.0 sets attention DP with attn-dp-size; dp-size now counts replicas.
+        attn-dp-size: 2
         expert-parallel-size: 2
-        enable-dp-attention: true
         enable-dp-lm-head: true
         # flashinfer_trtllm_routed needs attention TP to match EP, which attention DP breaks.
         moe-a2a-backend: megamoe
@@ -150,9 +150,8 @@ base:
         reasoning-parser: minimax-m3
         tool-call-parser: minimax-m3
         tensor-parallel-size: 8
-        data-parallel-size: 8
+        attn-dp-size: 8
         expert-parallel-size: 8
-        enable-dp-attention: true
         enable-dp-lm-head: true
         moe-a2a-backend: megamoe
         disaggregation-transfer-backend: mooncake
@@ -305,7 +304,7 @@ override_4p_dep4_dep16_si20_linker:
         MOONCAKE_STANDALONE_STORAGE: "0"
       args: &gb300-dep4-linker-prefill-args
         tensor-parallel-size: 4
-        data-parallel-size: 4
+        attn-dp-size: 4
         expert-parallel-size: 4
         # Divided by the DP size: 8192 per rank.
         chunked-prefill-size: 32768
@@ -323,7 +322,7 @@ override_4p_dep4_dep16_si20_linker:
       gpus: 16
       args:
         tensor-parallel-size: 16
-        data-parallel-size: 16
+        attn-dp-size: 16
         expert-parallel-size: 16
         max-running-requests: 768
         stream-interval: 20
