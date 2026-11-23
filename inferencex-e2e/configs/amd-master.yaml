@@ -1106,10 +1106,10 @@ glm5.3-fp8-mi355x-sglang-agentic-mtp:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c1 }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [2], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c2 }
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [4], spec-decoding: mtp, srt-recipe: agentic.yaml:override_tp8_c4 }
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [10], spec-decoding: mtp, srt-recipe: agentic-throughput.yaml:override_tp8_c10 }
     - dram-utilization: 0.8
       search-space:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8], spec-decoding: mtp, srt-recipe: agentic-throughput.yaml:override_tp8_c8_hicache }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [10], spec-decoding: mtp, srt-recipe: agentic-throughput.yaml:override_tp8_c10_hicache }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16], spec-decoding: mtp, srt-recipe: agentic-throughput.yaml:override_tp8_c16_hicache }
 glm5.3-fp8-mi355x-tilert-agentic:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
