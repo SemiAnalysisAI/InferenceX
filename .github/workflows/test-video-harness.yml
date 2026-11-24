@@ -4,6 +4,7 @@ on:
   pull_request:
     paths: &video-harness-paths
       - 'video-generation/**'
+      - 'inferencex-e2e/infx/bench/env.py'
       - 'inferencex-e2e/infx/bench/video.py'
       - 'inferencex-e2e/infx/results/power/**'
       - 'inferencex-e2e/infx/results/video_artifacts.py'
