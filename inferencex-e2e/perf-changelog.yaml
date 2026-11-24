@@ -13333,3 +13333,13 @@
     - "Bump utils/srt-slurm from 2d9079c to cc9db05 (21 commits), which adds NVIDIA/srt-slurm#669: one bootstrap port per prefill engine and Router start after every worker's health check. The shared vllm-router.sh setup script now raises the worker parent shell's soft RLIMIT_MEMLOCK to its hard limit."
     - "Draft data type unchanged: the DSpark draft from the checkpoint's dspark/ subfolder runs as shipped, with MXFP8 attention and MLP projections, BF16 fc, norms and the shared target embedding and LM head, and an FP8 E4M3 draft KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
+
+- config-keys:
+    - glm5.2-fp4-h100-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add GLM-5.2 single-node 8k1k on H100 with vLLM (vllm/vllm-openai:v0.33.0). The 756 GB FP8 checkpoint does not fit 8x80 GB, so it serves nvidia/GLM-5.2-NVFP4 with Marlin MoE on Hopper; SGLang's modelopt_fp4 path OOMed creating the expert weights."
+    - "Flags follow recipes.vllm.ai's GLM-5.2 NVFP4 command without MTP: TP8 with expert parallel, FP8 KV, max-model-len 9472, gpu-memory-utilization 0.88 and 8192 batched tokens (0.95 with 16384 OOMed in FlashInfer warmup), prefix caching off; concurrency 4, 8 and 16 (the ~9 GiB KV pool holds ~19 requests) with max-num-seqs matched to concurrency."
+    - "Adds a TP8 arm without expert parallel (experts TP-sharded on Marlin) at concurrency 4, 8 and 16 beside the expert-parallel arm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5079
