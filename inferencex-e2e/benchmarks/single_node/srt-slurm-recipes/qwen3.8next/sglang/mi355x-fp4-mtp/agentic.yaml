@@ -16,11 +16,9 @@ base:
       enabled: false
   engine: sglang
   # The image (lmsysorg/sglang-rocm 20261124: SGLang 88dc7501f5, AITER 581579ab 0.1.29.dev156,
-  # FlyDSL 0.4.2) already has the AITER FlyDSL kernels this recipe uses (ROCm/aiter#5992, #5993,
-  # #6496, #6670), so AITER is not touched. The setup script patches SGLang with open upstream
-  # PRs (sgl-project/sglang #48648, #45529, #41879, #44103, #48090); the patch files are in
-  # patches/ next to this recipe. sglang #45196 and #48649 are merged and in the image.
-  setup_script: qwen3.8next-rocm10-patches.sh
+  # FlyDSL 0.4.2) is used as shipped: no setup script, no SGLang or AITER patches. It already has
+  # the AITER FlyDSL kernels this recipe uses (ROCm/aiter#5992, #5993, #6496, #6670) and the
+  # merged sglang#45196 (FlyDSL QSA sparse decode) and #48649.
   roles:
     agg:
       nodes: 1
@@ -69,13 +67,8 @@ base:
         SGLANG_ENABLE_SPEC_V2: '1'
         AITER_GDR_FLYDSL: '1'
         # The FlyDSL QSA sparse decode (sglang#45196, in the image) is on whenever SGLANG_USE_AITER
-        # is set on gfx950. The GDN prefill (sglang#41879, #44103) runs AITER's
-        # FlyDSL causal conv1d and the single fused chunked-prefill kernel
-        # (ROCm/aiter#6496), which needs the bf16 SSM state set above.
+        # is set on gfx950.
         SGLANG_USE_AITER: '1'
-        SGLANG_AITER_GDN_CONV: '1'
-        SGLANG_AITER_GDN_PREFILL: '1'
-        SGLANG_AITER_GDN_PREFILL_H: fused
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
@@ -128,11 +121,10 @@ override_c2:
 # is 0.88, used as given. c12 and c24 admit 2x CONC and serve from GPU KV; c48 and c80
 # add HiCache host-DRAM offload and admit 128 requests. HiCache takes the point's 299 GB
 # DRAM share from the matrix generator (hicache-size 298); TOTAL_CPU_DRAM_GB records it.
-# SGLANG_OPT_QWEN4_FUSED_HC (sglang#48648) fuses the decode-sized hyper-connection
-# norm and inject into the mix. The prefill CUDA graph backend is breakable (the AMD
+# The prefill CUDA graph backend is breakable (the AMD
 # reference recipes get it from an SGLang default change that this image lacks), which
 # captures the GDN prefill on static per-bucket tables; a batch outside the captured
-# buckets runs eagerly through the AITER fused prefill. c80 caches only the prompt on
+# buckets runs eagerly. c80 caches only the prompt on
 # finish and keeps at most two Mamba states per path.
 override_c12:
   roles:
@@ -151,7 +143,6 @@ override_c12:
         SGLANG_USE_AITER: '1'
         SGLANG_USE_AITER_UNIFIED_ATTN: '1'
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-        SGLANG_OPT_QWEN4_FUSED_HC: '1'
   benchmark:
     env:
       KV_OFFLOADING: none
