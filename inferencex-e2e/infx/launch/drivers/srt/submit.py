@@ -111,7 +111,7 @@ def bind_point(
     """
     prepare = [
         str(checkout.venv / "bin/python"), "-m", "infx.srt_slurm.single_node", "prepare",
-        f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run),
+        f"{run.workspace}/{run.request.srt_recipe}", str(arguments), *_fabric(run), *_memory(run),
     ]  # fmt: skip
     if cpu_power_source is not None:
         prepare += ["--cpu-power-source", cpu_power_source]
@@ -154,7 +154,7 @@ def bind_recipe(
         bind += ["--cpu-power-source", cpu_power_source]
     for name, value in client_env.items():
         bind += ["--client-env", f"{name}={value}"]
-    bind += _fabric(run)
+    bind += [*_fabric(run), *_memory(run)]
     return _bind(run, bind, checkout.root)
 
 
@@ -186,6 +186,19 @@ def _bind(run: SrtRun, argv: list[str], cwd: Path) -> int:
 def _fabric(run: SrtRun) -> list[str]:
     """The binder argument that resolves recipe ``'@fabric.<name>'`` values on this cluster."""
     return ["--fabric", json.dumps(run.srt.fabric.rendered())]
+
+
+def _memory(run: SrtRun) -> list[str]:
+    """Pass measured node capacity to the binder that resolves worker placement."""
+    available = run.cluster.available_cpu_dram_mib
+    if available is None:
+        raise LaunchError(f"cluster {run.cluster.id!r} must declare available-cpu-dram-mib")
+    return [
+        "--available-memory-mib",
+        str(available),
+        "--gpus-per-node",
+        str(run.cluster.gpus_per_node),
+    ]
 
 
 def apply(

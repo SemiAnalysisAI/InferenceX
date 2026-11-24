@@ -53,7 +53,6 @@ base:
     connector: null
   roles:
     agg:
-      workers: 1
       kv_events: true
       env:
         HF_HOME: /hf_hub_cache
@@ -107,7 +106,6 @@ override_tp8_c4:
   roles:
     agg:
       nodes: 2
-      gpus: 8
       env:
         VLLM_MINIMAX_M3_MSA_PREFILL_PAD_HEADS: '1'
         VLLM_MINIMAX_M3_LOW_BATCH_FFN_TP8: '1'
@@ -122,7 +120,6 @@ override_tp4_c18:
   roles:
     agg:
       nodes: 1
-      gpus: 4
       env:
         VLLM_MINIMAX_M3_DSPARK_SHARDED_CONTEXT_FC: '1'
         VLLM_MINIMAX_M3_DSPARK_NORM_MXFP8: '1'

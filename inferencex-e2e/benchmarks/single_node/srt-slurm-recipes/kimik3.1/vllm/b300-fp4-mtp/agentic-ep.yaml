@@ -22,8 +22,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         tensor-parallel-size: 8
@@ -50,7 +48,7 @@ base:
         gpu-memory-utilization: 0.98
         stream-interval: 10
         disable-uvicorn-access-log: true
-        # TOTAL_CPU_DRAM_GB (dram-utilization 1.0) split across the 8 TP ranks.
+        # 2999 GB split across the 8 TP ranks.
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":374875000000,"lazy_offload":false}}'
         # Hybrid decode: TP8 x DCP8 attention, routed experts EP8 on MegaMoE.
         # Routed experts EP8 on MegaMoE (see the note below the base).
@@ -77,7 +75,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2999'
 
 # Hybrid decode: TP8 x DCP8 attention with routed experts EP8 on MegaMoE and the fused Kimi-K3 decode at every batch
 # size. Sequence-parallel MoE replicates the shared expert on each rank (about 20 GiB more weights per GPU).
