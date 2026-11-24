@@ -2,7 +2,7 @@
 
 Follow these steps to add or change a VideoGenX deployment, from choosing a
 config to a published result. Every deployment must meet
-[VideoGenX Standard v0.1](README.md#videogenx-standard-v01); this guide covers the
+[VideoGenX Standard v0.1](STANDARD.md); this guide covers the
 mechanics. Each step links the section that holds its detail.
 [Native video delivery](../inferencex-e2e/docs/video-generation.md) explains how the
 sweep runs, what a result bundle contains, and how reuse is validated.
@@ -28,7 +28,7 @@ recipe directory under
 [`srt-slurm-recipes/`](../inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/).
 
 Start from an existing combination. Keep everything the
-[standard](README.md#videogenx-standard-v01) fixes: workload, model revision,
+[standard](STANDARD.md) fixes: workload, model revision,
 concurrency and measurement boundary. To change a deployment, edit its row. To add
 a deployment that must stay separately selectable, copy the row under a distinct
 key with its own recipe. A new model, engine API, topology, or model-view
@@ -115,12 +115,14 @@ every label and modifier.
 
 ## 6. Confirm the run qualifies
 
-The qualifying run is a full sweep of the final changelog matrix on a commit in the
-PR. Its `validate-video-results` job must pass. That job checks the
+The qualifying run is a full regular sweep whose video rows carry the same recipe
+fingerprints as the merged commit's video rows. It may come from any PR, as rule 13 of
+the [standard](STANDARD.md#rules-for-a-result) states. Its `validate-video-results`
+job must pass. That job checks the
 [reuse conditions](../inferencex-e2e/docs/video-generation.md) against the retained
-evidence of every selected deployment. A deployment qualifies as rule 12 of the
-[standard](README.md#videogenx-standard-v01) defines. Keep failed attempts. An ad hoc
-diagnostic run cannot replace the qualifying sweep.
+evidence of every selected deployment. A deployment qualifies as rule 11 of the
+standard defines. Keep failed attempts. An ad hoc diagnostic run cannot replace the
+qualifying sweep.
 
 Inspect the run's artifacts:
 
@@ -128,10 +130,11 @@ Inspect the run's artifacts:
 - Each `h3-results-*` bundle holds `manifest.json`, `ci.json`, `SHA256SUMS`, and the
   request, media, and power evidence under `gpu/c*/`.
 - For SGLang, each cell's `gpu/c*/attestation.json` checks, from the engine's own
-  startup arguments and log, that every request ran the declared shape, seed, and
-  denoising steps within the lossless tier (rule 7 of the
-  [standard](README.md#videogenx-standard-v01)). A failed attestation leaves the
-  cell unverified.
+  startup arguments and log, that no cache-dit config, quantization or LoRA is set,
+  that the conditioning cache is off, and that every request ran the declared shape,
+  seed and denoising steps. It does not prove the whole lossless tier;
+  [Enforcement on main](STANDARD.md#enforcement-on-main) lists what it misses. A
+  failed attestation leaves the cell unverified.
 
 Never hand-edit a bundle to make its result eligible. If a deployment fails, see
 [Troubleshoot a run](#troubleshoot-a-run).
@@ -141,8 +144,7 @@ Never hand-edit a bundle to make its result eligible. If a deployment fails, see
 The master configs and the recipes have vendor owners in
 [CODEOWNERS](../.github/CODEOWNERS). One eligible CODEOWNER posts the
 [PR Review Checklist](../CONTRIBUTING.md#the-pr-review-checklist-codeowner-sign-off).
-A core maintainer gives final approval, as rule 15 of the
-[standard](README.md#videogenx-standard-v01) requires.
+A core maintainer gives final approval.
 
 ## 8. Reuse and merge
 
@@ -173,7 +175,7 @@ clip against the public Diffusers reference videos. It uploads the scores as the
 automatically. A maintainer dispatches it with that run's `run_id` and
 `run_attempt`.
 
-The score is advisory, as rule 16 of the [standard](README.md#videogenx-standard-v01) states.
+The score is advisory: the [standard](STANDARD.md#recorded-not-gating) records it and never gates on it.
 [Reference PSNR](README.md#reference-psnr) describes the method and the reasons a
 clip stays unscored.
 

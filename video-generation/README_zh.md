@@ -2,130 +2,26 @@
 
 [English](README.md) | **中文**
 
-本目录是 `video-generation` 基准场景的客户端与服务端：MiniMax-H3 由一个
-diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载按每个配置的并发度发送，每段生成的视频都会被解码并校验，每个单元的
+本目录是 `video-generation` 基准场景的客户端与服务端：MiniMax-H3 或 Wan2.2-T2V-A14B
+由一个 diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载每次只发送一个请求，每段生成的视频都会被解码并校验，每个单元的
 测量窗口会发布给 srt-slurm 的原生 GPU 功耗遥测。
 
 调度与结果由 InferenceX 负责。`inferencex-e2e/configs/nvidia-master.yaml`
 与 `amd-master.yaml` 声明部署（`h3-bf16-<sku>-<engine>-video`），`infx.matrix` 根据
 `perf-changelog.yaml` 生成计划，`run-sweep.yml` 通过 `benchmark-tmpl.yml`
 运行 `video` 桶，`python -m infx.launch run` 走 `srt-video` 路径：
-`benchmarks/single_node/srt-slurm-recipes/h3/` 下的 SKU 配方通过
+`benchmarks/single_node/srt-slurm-recipes/<model>/` 下的 SKU 配方通过
 `python3 -m infx.bench video serve` 把引擎作为 generic service 启动，
 并以 `benchmark.type: custom` 运行 `python3 -m infx.bench video client`。
 本目录以 `/video-package` 挂载进任务。master 配置中的每个 `*-video` 条目都写明
 所用的 spec 与集合。产物身份、复用校验与合并后发布见
 [原生视频交付](../inferencex-e2e/docs/video-generation.md)。
 
-## VideoGenX 标准 v0.1
+## VideoGenX 标准
 
-草案。范围：MiniMax-H3（[`specs/h3-v2.yaml`](specs/h3-v2.yaml) 的 `release-v1` 集合）
-与 Wan2.2-T2V-A14B（[`specs/wan22.yaml`](specs/wan22.yaml) 的 `release-v1` 集合），
-只含无损档，单节点 1、2、4 或 8 卡，并发 1，引擎为 SGLang 与 vLLM-Omni。SGLang 的结果由
-引擎日志 attestation 证明；vLLM-Omni 的结果只在配方层面检查（规则 7，G2）。Sol-Engine
-在范围内但尚未支持（G8）。并非每个部署都跑全部四种卡数（见[部署列表][gpu-counts]）。
-范围负责人：`@edwingao28`。
-
-结果须满足下表每一条规则，才计入 VideoGenX v0.1。唯一的豁免：Wan2.2 在 v0.2 迁到 spec
-schema 2 之前不受规则 5 约束。修改规则要写进本表并升级版本号；在规则不变的前提下新增模型
-不升级版本号，只需新增 spec 及其已发布的计划哈希，并经 CODEOWNER 审查。
-“执行位置”链接到提交 `8dd3577` 中阻断或计算该规则的代码；“缺口”表示目前没有代码检查，
-标为“待合并”的分支或 PR 尚未合并。“状态”为 `已执行`、`部分执行`（代码只检查了规则的一部分）、
-`缺口（G#）`（编号见[待补缺口](#待补缺口)）或 `参考`（该规则从不卡结果）。
-
-| # | 规则 | 原因 | 执行位置 | 效力 | 负责人 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | 每个测量部署按其模型的 spec 与集合原样运行。H3：20 个 prompt，各用一个固定 seed，49 次去噪更新，124 帧、24 fps、1344×768，另有一个独立的 warmup prompt。Wan2.2：4 个 prompt × 5 个 seed，40 步，81 帧、16 fps、832×480，一次 warmup。 | 计划哈希相同的部署跑的是同一份工作。 | [`srt_selected.py:190`][plan-bind] 绑定计划哈希；[`video_artifacts.py:163`][plan-pub] 在发布前复核。尚未检查：已发布的计划哈希保持不变（待合并：`fix/vgx-release-plan-pins`） | 阻断 | `@functionstackx` | 部分执行 |
-| 2 | 镜像按 SHA256 digest 固定，引擎按 40 位 commit（`VIDEO_RUNTIME_REVISION`）固定，模型按 revision 固定。引擎 commit 由配方声明，没有代码核对它与镜像是否一致。 | 任何人都能精确复跑同一个点。 | [`srt_selected.py:266`][image]、[`srt_slurm/video.py:336`][engine]、[`srt_slurm/video.py:149`][model]。[`runner.py:797`][engine-declared] 接受任意 40 位 commit，视为操作者声明 | 阻断 | `@edwingao28` | 部分执行 |
-| 3 | 每个部署只用一个节点。每种 GPU 数量是独立部署，并指定一个 `video/agg-<layout>.yaml` 配方，`<layout>` 写明 GPU 的划分方式。 | 每种并行布局各自通过 sweep 认证。 | [`validation.py:918`][single-node]（视频只有单节点场景）；[`validation.py:453`][naming] | 阻断 | `@edwingao28` | 已执行 |
-| 4 | 并发 1。 | 规则 12 的失败容忍度与样本总数都以一次一个请求为前提。 | 缺口：[`validation.py:488`][conc] 接受任意不重复的正并发；目前每一行都是 `[1]` | 阻断 | `@edwingao28` | 缺口（G1） |
-| 5 | 所有引擎都用 libx264 `ultrafast`、CRF 18、yuv420p 编码；H3 另有 32 kHz 立体声 AAC 音频。 | 编码时间计入测量延迟。 | H3：[`h3-v2.yaml:157`][encoding] 把编码参数计入计划哈希，[`media.py:581`][sei] 从 x264 SEI 头读取 CRF 与 preset。Wan2.2 有缺口：`wan22.yaml` 是 schema 1，[`runner.py:183`][encoding-v2] 既不下发也不检查编码参数；Wan2.2 在 v0.2 迁到 schema 2，计划哈希会变，需要重新 sweep | 阻断 | `@functionstackx` | 已执行；Wan2.2 在 v0.2 前豁免 |
-| 6 | 请求之间不复用工作：prompt embedding（conditioning）缓存关闭。 | 每个请求都完成全部计算。 | H3：[`srt_slurm/video.py:329`][cache] 要求各引擎的关闭开关。SGLang 上的 Wan2.2：attestation 要求 `disable_conditioning_cache`（[`attestation.py:45`][sglang-no-reuse]）。尚未检查：vLLM-Omni 上的 Wan2.2（待合并：`fix/vgx-wan22-no-reuse`） | 阻断 | `@functionstackx` | 部分执行 |
-| 7 | 只允许无损档，见[下方列表](#无损档)。v0.1 不发布任何有损结果。 | 有损加速会改变输出，需要配对质量分，而 v0.1 还没有。 | SGLang：引擎日志 attestation [`attestation.py:36`][policy]，由 [`srt_bundle.py:378`][attest-gate] 把关。还有三处未补上：[`video_artifacts.py:146`][attest-presence] 会放行没有 attestation 的 bundle（G3）；attestation 还不会对它能检测到的每一种优化都判失败（G4）；在 [#5181](https://github.com/SemiAnalysisAI/InferenceX/pull/5181) 合并之前，没有代码检查配方是否写明 `--performance-mode`，attestation 也只记录该模式，不记录它最终决定的 offload 设置。vLLM-Omni：只在配方层面检查，不由日志证明。[`attestation.py:66`][policies] 只有 SGLang 的策略（G2）；在绑定阶段拒绝有损开关的检查待合并（`feat/vgx-vllm-omni-flag-check`）。该检查还会拒绝让默认开启的缓存保持默认值的配方，例如 H3 的 AdaLN 缓存。TF32 与降低精度的设置在 v0.1 中只记录，不卡结果 | 阻断 | `@functionstackx` | 缺口（G2、G3、G4；#5181） |
-| 8 | 未登记在 registry 中的优化一律按有损处理；由 registry 而不是提交者判定。 | 新技术未经审查不能进入无损排名。 | App [`optimizations.ts:26`][registry]。缺口：InferenceX 没有代码记录一次运行用了哪些优化，因此所有已发布运行都显示为无损 | 阻断 | `@SemiAnalysisAI/core` | 缺口（G4） |
-| 9 | 所有配置都写在配方和 master 配置行里：不改 launcher 或客户端，不修补缓存，不在配方之外加启动参数，设置中不放密钥。 | 配方 fingerprint 能完整描述部署。 | [`srt_slurm/video.py:102`][env] 拒绝 launcher 专用和疑似凭据的环境变量名。缺口（G5）：没有代码检查镜像由谁发布。G5 检查的是镜像仓库的来源，不是补丁检测。仅靠审查：Python 路径上的代码（共享配置块在 [`video.yaml:8`][python-path] 把仓库 checkout 放进客户端的路径，各配方对服务端也是如此）以及 service 的 `preamble` | 阻断 | `@edwingao28` | 缺口（G5） |
-| 10 | 每段视频都通过技术检查：完整解码；视频为 H.264 yuv420p 且分辨率稳定；帧数一致，fps 误差在 0.1% 以内且帧间隔均匀；时长误差在一帧以内；画面不是全黑或全白；需要动作的 prompt 相邻帧有变化。H3 音频为 32 kHz 立体声 AAC，时间戳连续，需要声音的 prompt 电平高于 −80 dBFS。 | 不合格的视频不能计入速度。 | [`runner.py:946`][expected] 从计划生成检查项；[`media.py:806`][clip-valid] 只有全部检查通过才判为有效 | 阻断 | `@functionstackx` | 已执行 |
-| 11 | 冻结帧比例只记录，不检查。 | 还没有校准过的阈值。 | [`media.py:753`][frozen] 只在计划设置了 `max_frozen_fraction` 时检查；两个 spec 都没有设置 | 参考 | `@functionstackx` | 参考 |
-| 12 | 部署须 warmup 视频有效、20 段测量视频全部有效（不容忍失败）、原生功耗有效，才算合格。 | 中位数基于完整的样本总体。 | [`runner.py:1124`][warmup] 在 warmup 失败后不进入测量；[`bench/video.py:28`][complete]；发布时由 [`video_artifacts.py:140`][power] 与 [`video_artifacts.py:183`][population] 检查 | 阻断 | `@functionstackx` | 已执行 |
-| 13 | 单段延迟即 `submit_to_media_seconds`：从提交请求开始，到下载完生成的 MP4 为止，包含编码和轮询。图表使用有效测量视频的中位数，不计 warmup。 | 所有引擎用同一个定义。 | 写入位置为 [`runner.py:1073`][latency]；中位数在 [`serving.py:105`][median] 计算；App 在 [`tradeoff.ts:93`][app-latency] 逐段读取。`summary.latency_median_seconds`（[`runner.py:750`][latency-summary]）是另一个字段 `latency_seconds` 的中位数，只有当一次运行没有逐段数值时 App 才使用它（[`tradeoff.ts:120`][app-fallback]） | 定义 | `@functionstackx` | 已执行 |
-| 14 | 认证运行是一次完整的常规 sweep，其视频行的配方 fingerprint 与合并后提交的视频行一致，且其 `validate-video-results` 任务通过。维护者用 `/use <run_id>` 选定它，该运行可以来自任意 PR。合并后发布的就是这次运行，`main` 上不重跑。 | 发布的数字就是审过的数字。 | [`plan.py:178`][append-only] 拒绝 append-only；[`video_artifacts.py:76`][full-sweep] 要求完整视频 sweep；[`reuse.py:234`][reuse-pinned] 按 `/use` 指定的运行 ID 取运行，不要求它属于被合并的 PR。配方检查只做一次：合并之后，在 Merge Ingest 中（[`merge-ingest.yml:131`][merge-gate]）。目前这一步只对照被复用运行自己的 sweep manifest 校验它的 bundle，不对照合并后的提交。待合并（`fix/vgx-merge-matrix-check`）：合并后提交的视频行，其配方 fingerprint 必须与被复用运行的 sweep manifest 一致。改动过的配方如果没通过这项检查，它已经在 `main` 上，但不会发布任何结果。发布环节待合并（InferenceX 的 `fix/video-publication-selection` 与 InferenceX-app 的 `fix/video-publication-selected-only`）：App 只批准 Merge Ingest 选定的 artifact，一条记录必须带有写明 merge run 的回执才算数。另外，`validate-video-results`（[`run-sweep.yml:910`][validate-job]）还不是 `main` 的必过检查 | 阻断 | `@SemiAnalysisAI/core` | 部分执行 |
-| 15 | 一位合格的 CODEOWNER 提交 PR Review Checklist，再由一位 core 维护者 approve。 | 每次规则改动和结果都有第二个人审。 | `main` 的 ruleset 要求 `@SemiAnalysisAI/core` 的一次 approve。缺口：不要求 code-owner review，admin 合并可以绕过 ruleset。G6 在 CODEOWNERS 中写明视频负责人；补上这个缺口还需要管理员修改 ruleset | 阻断 | `@SemiAnalysisAI/core` | 缺口（G6） |
-| 16 | 参考 PSNR 只报告，从不卡复用或合并；`quality_status` 保持 `unjudged`。Wan2.2 没有参考视频，其视频保持未评分。 | 无损引擎和并行布局相对同一参考的 PSNR 本来就差异很大。 | [`quality.py:192`][unjudged]；没有 workflow 把该分数当作门槛 | 参考 | `@functionstackx` | 参考 |
-| 17 | VLM judge 先用人工评分的视频做离线校准；v0.1 只要求这份校准报告。judge 从不阻止发布，v0.1 中 dashboard 不作改动。 | 技术检查判断不了视频是否符合 prompt。 | 缺口：本仓库还没有 judge，也没有校准报告 | 参考 | `@edwingao28` | 缺口（G7） |
-| 18 | 所有引擎遵守同一套规则。v0.1 中的差别在于规则 7 背后的证据：SGLang 由引擎日志 attestation 证明，vLLM-Omni 只在配方层面检查，Sol-Engine 尚未支持。 | 读者能看出每个引擎的无损结论有多少证据支撑。 | SGLang：[`attestation.py:66`][policies]。vLLM-Omni：缺口（G2）。Sol-Engine：缺口，[`srt_slurm/video.py:253`][runtime] 只接受 `sglang` 与 `vllm-omni` | 阻断 | `@edwingao28` | 缺口（G8） |
-| 19 | 每个 workload 写明每条视频的规模：latent token 数、DiT 前向次数（去噪步数 × guidance 分支数），以及估算的 DiT 计算量。推导方法和各 workload 的数值见 [`specs/README.md`](specs/README.md#workload-size)。它们只描述 workload，不参与排名；不同 workload 的结果不合并成一条曲线。 | 视频秒数不代表工作量：H3（5.17 s）和 Wan2.2（5.06 s）时长几乎相同，但 H3 每条视频的 DiT 计算量约为 Wan2.2 的 1.29 倍。 | 缺口：spec 与 artifact 都还没有记录这三项，dashboard 也不显示 | 定义 | `@edwingao28` | 缺口（G9） |
-
-### 无损档
-
-- 允许以下改动，因为它们只改变工作的调度方式，不改变计算内容：tensor、Ulysses、
-  ring 与 CFG 并行；text encoder 的 tensor 并行；VAE tiling 与 patch 并行；
-  attention 后端与 kernel 选择。
-- 同样允许改变权重的存放位置。CPU offload、layerwise offload 与 FSDP 分片只移动
-  权重，不改变结果，搬运耗时和其他工作一样计入延迟。SGLang 的 `--performance-mode`
-  取 `auto`（默认值）或 `memory` 时，会按 GPU 空闲显存自动决定这些设置；取 `speed`
-  时，2 张及以上 GPU 也可能开启 FSDP。因此配方须显式写明该模式（由什么检查见规则 7）。
-- 不允许：改动任何工作负载或编码参数；BF16 以外的任何精度，包括 FP8、FP4
-  及其他量化；跨请求复用工作；TeaCache、FirstBlockCache 等步间缓存；稀疏
-  attention；LoRA；配方之外的启动参数或补丁。
-
-### 待补缺口
-
-- G1（规则 4）：1 以外的并发也会被接受。
-- G2（规则 7、18）：vLLM-Omni 没有日志 attestation；其绑定阶段的开关检查待合并（`feat/vgx-vllm-omni-flag-check`）。
-- G3（规则 7）：没有 attestation 的 bundle 也能通过发布检查。
-- G4（规则 7、8）：运行不记录自己用了哪些优化，attestation 也不会对它能检测到的每一种优化都判失败。
-- G5（规则 9）：没有代码检查镜像由谁发布。
-- G6（规则 15）：不要求 code-owner review，admin 合并可以绕过 ruleset。
-- G7（规则 17）：还没有 VLM judge，也没有校准报告。
-- G8（规则 18）：Sol-Engine 尚未支持：没有 binder 支持，也没有 attestation 策略。
-- G9（规则 19）：spec 与 artifact 都没有字段记录 workload 规模，dashboard 也不显示。
-
-未编号的待合并项：`fix/vgx-release-plan-pins`（规则 1）、`fix/vgx-wan22-no-reuse`（规则 6）、
-[#5181](https://github.com/SemiAnalysisAI/InferenceX/pull/5181)（规则 7），以及规则 14 的
-`fix/vgx-merge-matrix-check`、`fix/video-publication-selection` 和 InferenceX-app 的 `fix/video-publication-selected-only`。
-Wan2.2 对规则 5 的豁免，到 v0.2 迁到 schema 2 时结束。
-
-[plan-bind]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/srt_selected.py#L190-L191
-[plan-pub]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/results/video_artifacts.py#L163-L168
-[image]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/srt_selected.py#L266-L268
-[engine]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/srt_slurm/video.py#L336-L338
-[model]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/srt_slurm/video.py#L149-L150
-[engine-declared]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/runner.py#L797-L799
-[single-node]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/matrix/validation.py#L918-L920
-[naming]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/matrix/validation.py#L453-L467
-[conc]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/matrix/validation.py#L488
-[encoding]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/specs/h3-v2.yaml#L157-L164
-[sei]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/media.py#L581-L595
-[encoding-v2]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/runner.py#L182-L183
-[cache]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/srt_slurm/video.py#L329-L335
-[sglang-no-reuse]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/attestation.py#L45
-[policy]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/attestation.py#L36-L65
-[attest-gate]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/srt_bundle.py#L378-L389
-[policies]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/attestation.py#L66
-[attest-presence]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/results/video_artifacts.py#L146-L150
-[registry]: https://github.com/SemiAnalysisAI/InferenceX-app/blob/dbcd81e6dae24c83eb045db6a8e45a91ea428dc4/packages/app/src/components/video-benchmark/optimizations.ts#L26-L27
-[env]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/srt_slurm/video.py#L102-L108
-[python-path]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/configs/srt-recipes/video.yaml#L8
-[expected]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/runner.py#L946-L955
-[clip-valid]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/media.py#L806
-[frozen]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/media.py#L753-L763
-[warmup]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/runner.py#L1124-L1128
-[complete]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/bench/video.py#L28-L34
-[power]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/results/video_artifacts.py#L140-L145
-[population]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/results/video_artifacts.py#L183-L191
-[latency]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/runner.py#L1073
-[median]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/serving.py#L105-L107
-[append-only]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/matrix/plan.py#L178
-[full-sweep]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/results/video_artifacts.py#L75-L76
-[reuse-pinned]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/workflows/reuse.py#L234-L235
-[merge-gate]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/.github/workflows/merge-ingest.yml#L131-L160
-[validate-job]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/.github/workflows/run-sweep.yml#L910
-[unjudged]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/quality.py#L192-L193
-[runtime]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/srt_slurm/video.py#L246-L253
-[gpu-counts]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/docs/video-generation.md?plain=1#L3-L15
-[app-latency]: https://github.com/SemiAnalysisAI/InferenceX-app/blob/dbcd81e6dae24c83eb045db6a8e45a91ea428dc4/packages/app/src/components/video-benchmark/tradeoff.ts#L93
-[latency-summary]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/runner.py#L723-L750
-[app-fallback]: https://github.com/SemiAnalysisAI/InferenceX-app/blob/dbcd81e6dae24c83eb045db6a8e45a91ea428dc4/packages/app/src/components/video-benchmark/tradeoff.ts#L120-L133
+[`STANDARD.md`](STANDARD.md)（英文）写明结果计入 VideoGenX v0.1 须满足的规则、
+无损档的范围，以及 `main` 上的代码目前检查到哪一步。新增或修改部署的步骤见
+[`SUBMITTING.md`](SUBMITTING.md)（英文）。
 
 ## 入口
 
