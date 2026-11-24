@@ -413,8 +413,31 @@ profile 与 `2.0ghz_tpb_1.2ghz_soc` 并排，二者都以 2.4 GHz 峰值为基�
 86.1%，MXFP8 为 68.6%。2.0 GHz 下 bf16、fp8 double_row 和 MXFP4 为该峰值的 81.4% 到 81.5%（即
 2.0 GHz 峰值的 97.7%），MXFP8 为 70.5%，因此按同一基准比较，2.0 GHz profile 只对 MXFP8 更快。
 
+`results/trn3n_48xlarge_rev2_2026-11-24_full_chip_n4096_*` 在同一颗芯片上以 N = 4096 重跑全部四个
+kernel。这是 NeuronCore-v4 在 fp32 目标下接受的最宽 moving tile（一次矩阵乘法占满全部八个 PSUM
+bank，因此每次矩阵乘法都覆盖同一个 tile），并取 `NUM_MM=1024`，使每次循环迭代的流式时间仍为
+1.75 ms。`_n4096_mfu.png` 是 `plot_mfu.py` 画的图。
+
+| profile | 模式（kernel） | solo TFLOP/s（利用率） | 整芯片 TFLOP/s（利用率） | 整芯片 / (8 x solo) | 八核时 sysfs 限速均值 | profiler 给出的来源与水平 |
+|---|---|---|---|---|---|---|
+| 原状，2.4 GHz | bf16（`mm_bf16`） | 77.44（98.5%） | 619.4（98.4%） | 1.000 | 99.2% | 无 |
+| 原状，2.4 GHz | fp8 double_row（`mm_fp8dr`） | 154.38（98.2%） | 1,145.4（91.0%） | 0.927 | 91.7% | `power_3`，92.1% |
+| 原状，2.4 GHz | MXFP8（`mm_mx`） | 290.31（92.3%） | 1,744.5（69.3%） | 0.751 | 74.3% | `power_3`，74.5% |
+| 原状，2.4 GHz | MXFP4（`mm_mxfp4`） | 309.94（98.5%） | 2,187.7（86.9%） | 0.882 | 87.4% | `power_3` 和 `temp_0`，87.8% |
+| `2.0ghz_tpb_1.2ghz_soc` | bf16（`mm_bf16`） | 64.51（98.4%） | 516.1（98.4%） | 1.000 | 99.2% | 无 |
+| `2.0ghz_tpb_1.2ghz_soc` | fp8 double_row（`mm_fp8dr`） | 128.66（98.2%） | 1,029.2（98.2%） | 1.000 | 98.8% | 无 |
+| `2.0ghz_tpb_1.2ghz_soc` | MXFP8（`mm_mx`） | 241.63（92.2%） | 1,790.9（85.4%） | 0.927 | 91.0% | `power_3`，91.4% |
+| `2.0ghz_tpb_1.2ghz_soc` | MXFP4（`mm_mxfp4`） | 258.21（98.5%） | 2,065.6（98.5%） | 1.000 | 99.2% | 无 |
+
+整芯片 TFLOP/s 比 N = 512 时高 0.4% 到 1.6%，限速基本相同：每个 kernel 和 profile 的 sysfs 限速均值
+与 N = 512 的运行相差都在一个百分点以内。不受限速的矩阵乘法每 4,102 个周期（N + 6）发射一条，突发
+内达到 TensorE 峰值的 99.9%；整个运行的利用率为 98.5%，因为每次迭代的操作数加载和 PSUM 排空占
+1.4%。单个 MXFP8 核比 N = 512 时慢（290.3 对 297.1 TFLOP/s）：它的矩阵乘法每 4,243 个周期发射一条，
+与 N = 512 时一样比其他 kernel 多 3.4%，其余来自每次迭代在 VectorE 上量化更宽的操作数，使整个运行
+只有突发速率的 94.9%。
+
 芯片 0 上运行时的 LNC=1 核 0 到 7 对应 sysfs 的 `neuron_core` 4、5、6、7、2、3、0、1（逐核单独
 运行，根据其 `pe_cntrs` 判断）。sysfs 记录在每次采样中都打印 `Source attribution unavailable`，
-因此限速来源只来自 profiler。profile 对比只在一个节点的一颗芯片上进行，N = 512，stationary tile
+因此限速来源只来自 profiler。profile 对比只在一个节点的一颗芯片上进行，N = 512 和 N = 4096，stationary tile
 固定；没有读取功耗和温度（`stats/hardware/temperature` 返回 `Operation not supported`）。结果未与
 参考值比对。

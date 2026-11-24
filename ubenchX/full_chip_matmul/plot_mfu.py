@@ -12,7 +12,8 @@ the sysfs ham_throttle mean, averaged over the same cores and scaled by the same
 allows. Each band is labelled at its upper right with the means from 90 s on, the MFU and the throttle mean as
 "allowed"; for a run at another clock the label gives both against that clock's own rate, then the MFU against
 the reference clock. Labels that would overlap are stacked upward. The x axis stops where the first core pauses
-for its probe.
+for its probe. The legend gives each kernel's K; M and N are in the figure title, or in the panel titles when
+the panels differ.
 """
 
 import argparse
@@ -48,7 +49,7 @@ def chip_series(prefix, profile, ref_clock_ghz):
         clock = g.te_clock_ghz.mean()
         scale = 100 * clock / ref_clock_ghz
         out[kernel] = (s.index.to_numpy()[keep], scale * s.mfu.to_numpy()[keep], scale * s.level.to_numpy()[keep] / 255,
-                       int(c.core.nunique()), clock)
+                       int(c.core.nunique()), clock, tuple(int(c[d].iloc[0]) for d in "KMN"))
     return out
 
 
@@ -67,6 +68,10 @@ def main():
                 series.setdefault(kernel, s)
         panels.append((title, {k: series[k] for k in LABEL if k in series}))
     ncores = next(iter(panels[0][1].values()))[3]
+    # M and N go in the figure title when every panel shares them, otherwise in each panel's title
+    shapes = [sorted({s[5][1:] for s in series.values()}) for _, series in panels]
+    shape_text = [", ".join(f"M = {m}, N = {n}" for m, n in sh) for sh in shapes]
+    shared = len(set(shape_text)) == 1
     window = min(s[0].max() for _, series in panels for s in series.values())
     lo = min(s[1][s[0] >= 2].min() for _, series in panels for s in series.values())
     bottom = 10 * (lo // 10) - 5
@@ -76,14 +81,14 @@ def main():
                              facecolor=SURFACE)
     axes = axes[0]
     top = 102.5
-    for ax, (title, series) in zip(axes, panels):
+    for ax, (title, series), shape in zip(axes, panels, shape_text):
         ax.set_facecolor(SURFACE)
         labels = []
-        for kernel, (t, mfu, level, _, clock) in series.items():
+        for kernel, (t, mfu, level, _, clock, (k, _, _)) in series.items():
             color = SERIES[kernel]
             ax.fill_between(t, mfu, level, color=color, alpha=0.28, lw=0, zorder=2)
             ax.plot(t, level, color=color, lw=0.9, alpha=0.75, zorder=3)
-            ax.plot(t, mfu, color=color, lw=2.2, zorder=4, label=LABEL[kernel].split(" nc_")[0])
+            ax.plot(t, mfu, color=color, lw=2.2, zorder=4, label=f"{LABEL[kernel].split(' nc_')[0]}, K = {k}")
             steady = t >= STEADY_FROM_S
             own = a.ref_clock_ghz / clock
             m, lv = mfu[steady].mean(), own * level[steady].mean()
@@ -102,7 +107,7 @@ def main():
                         ha="right", va="bottom", color=SERIES[kernel], fontsize=LABEL_PT, fontweight="bold", zorder=6)
             y_prev = y
         top = max(top, y_prev + 1.6 * line)
-        ax.set_title(title, loc="left", color=INK, fontsize=11.5)
+        ax.set_title(title if shared else f"{title}, {shape}", loc="left", color=INK, fontsize=11.5)
         ax.set_xlabel(f"Seconds since all {ncores} cores started", color=INK2)
         ax.grid(axis="y", color=GRID, lw=0.8)
         ax.set_axisbelow(True)
@@ -115,7 +120,8 @@ def main():
     axes[0].set_ylim(bottom, top)
     axes[0].set_yticks([y for y in range(int(bottom) + 5, 101, 10)])
     axes[0].legend(loc="lower left", ncol=4, frameon=False, labelcolor=INK)
-    fig.suptitle(f"Trainium3 full-chip matmul utilization over time, {ncores} NeuronCores at LNC=1",
+    fig.suptitle(f"Trainium3 full-chip matmul utilization over time, {ncores} NeuronCores at LNC=1"
+                 + (f", {shape_text[0]} per matmul" if shared else ""),
                  x=0.012, y=0.988, ha="left", color=INK, fontsize=13)
     fig.text(0.012, 0.935, f"Thick line: MFU, the chip's TFLOP/s over its peak at {a.ref_clock_ghz:g} GHz in every panel. "
              f"Shaded band above it: up to the rate the chip allows, on the same scale.\nLabels are means from "

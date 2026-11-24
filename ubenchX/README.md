@@ -454,9 +454,33 @@ at 86.1% and MXFP8 at 68.6%. At 2.0 GHz bf16, fp8 double_row and MXFP4 run at 81
 (97.7% of the 2.0 GHz peak) and MXFP8 at 70.5%, so against one reference the 2.0 GHz profile is
 faster only for MXFP8.
 
+`results/trn3n_48xlarge_rev2_2026-11-24_full_chip_n4096_*` repeat all four kernels on the same chip
+with N = 4096, the widest moving tile NeuronCore-v4 takes with an fp32 destination (one matmul then
+fills all eight PSUM banks, so every matmul overwrites the same tile), and `NUM_MM=1024` so that one
+loop iteration streams for the same 1.75 ms. `_n4096_mfu.png` is the `plot_mfu.py` chart.
+
+| profile | mode (kernel) | solo TFLOP/s (utilization) | chip TFLOP/s (utilization) | chip / (8 x solo) | sysfs throttle mean, chip | profiler source and level |
+|---|---|---|---|---|---|---|
+| as found, 2.4 GHz | bf16 (`mm_bf16`) | 77.44 (98.5%) | 619.4 (98.4%) | 1.000 | 99.2% | none |
+| as found, 2.4 GHz | fp8 double_row (`mm_fp8dr`) | 154.38 (98.2%) | 1,145.4 (91.0%) | 0.927 | 91.7% | `power_3`, 92.1% |
+| as found, 2.4 GHz | MXFP8 (`mm_mx`) | 290.31 (92.3%) | 1,744.5 (69.3%) | 0.751 | 74.3% | `power_3`, 74.5% |
+| as found, 2.4 GHz | MXFP4 (`mm_mxfp4`) | 309.94 (98.5%) | 2,187.7 (86.9%) | 0.882 | 87.4% | `power_3` and `temp_0`, 87.8% |
+| `2.0ghz_tpb_1.2ghz_soc` | bf16 (`mm_bf16`) | 64.51 (98.4%) | 516.1 (98.4%) | 1.000 | 99.2% | none |
+| `2.0ghz_tpb_1.2ghz_soc` | fp8 double_row (`mm_fp8dr`) | 128.66 (98.2%) | 1,029.2 (98.2%) | 1.000 | 98.8% | none |
+| `2.0ghz_tpb_1.2ghz_soc` | MXFP8 (`mm_mx`) | 241.63 (92.2%) | 1,790.9 (85.4%) | 0.927 | 91.0% | `power_3`, 91.4% |
+| `2.0ghz_tpb_1.2ghz_soc` | MXFP4 (`mm_mxfp4`) | 258.21 (98.5%) | 2,065.6 (98.5%) | 1.000 | 99.2% | none |
+
+Chip TFLOP/s is 0.4% to 1.6% higher than at N = 512 and throttling is about the same: the sysfs
+throttle mean is within one point of the N = 512 runs for every kernel and profile. An unthrottled
+matmul starts every 4,102 cycles (N + 6), 99.9% of the TensorE peak within a burst; utilization
+over the run is 98.5% because the operand load and PSUM drain of each iteration take 1.4% of it.
+One MXFP8 core is slower than at N = 512 (290.3 against 297.1 TFLOP/s). Its matmuls start every
+4,243 cycles, 3.4% more than the other kernels as at N = 512, and the rest is the VectorE quantize
+of the wider operand in each iteration, which leaves the run at 94.9% of the burst rate.
+
 The runtime's LNC=1 cores 0 to 7 of chip 0 are sysfs `neuron_core` 4, 5, 6, 7, 2, 3, 0, 1 (one core
 at a time, by its `pe_cntrs`). The sysfs record printed `Source attribution unavailable` in every
 sample, so sources come only from the profiler. Profiles were compared on one chip of one node, with
-N = 512 and a fixed stationary tile; power and temperature were not read
+N = 512 and N = 4096 and a fixed stationary tile; power and temperature were not read
 (`stats/hardware/temperature` returns `Operation not supported`). Results are not checked against a
 reference.
