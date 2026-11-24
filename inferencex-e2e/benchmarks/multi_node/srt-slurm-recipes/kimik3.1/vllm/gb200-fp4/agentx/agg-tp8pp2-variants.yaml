@@ -31,8 +31,6 @@ base:
   roles:
     agg:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_RPC_TIMEOUT: "600000"

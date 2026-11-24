@@ -21,7 +21,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -53,7 +52,6 @@ base:
 zip_override_tp4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: [2, 8, 16, 32, 48]
@@ -67,12 +65,11 @@ zip_override_tp4:
 override_tp4_c32_dram:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: 64
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASH_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1073000000000,"lazy_offload":true}}'
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":966000000000,"lazy_offload":true}}'
       env:
         VLLM_USE_SIMPLE_KV_OFFLOAD: '1'
   benchmark:
@@ -92,7 +89,6 @@ zip_override_dep8:
   setup_script: vllm-router.sh
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 1
         data-parallel-size: 8
