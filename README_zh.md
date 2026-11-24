@@ -105,6 +105,9 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 [独立运行 AgentX-Harness](inferencex-e2e/docs/agentx-standalone.md)，
 其中包含客户端安装步骤和直接执行的 `agentx profile` 命令。
 
+若要在具备 Docker 的主机上针对已有端点运行 DeepSWE 编码智能体基准测试，请参阅
+[独立运行 DeepSWE](inferencex-e2e/docs/deepswe-standalone.md)，其中给出了固定的运行配置。
+
 ## 致谢与支持者
 感谢 Lisa Su 与 Anush Elangovan 为这一免费开源项目提供 MI355X 与 CDNA3 GPU。我们也要感谢众多 AMD 贡献者的积极响应，以及他们在各类 AMD GPU 上进行调试、优化与性能验证所付出的努力。
 我们同样感谢 Jensen Huang 与 Ian Buck 通过提供 GB200 NVL72 机架（经由 OCI）与 B200 GPU 来支持本开源项目。感谢来自 NVIDIA 推理团队与 NVIDIA Dynamo 团队的众多 NVIDIA 贡献者。

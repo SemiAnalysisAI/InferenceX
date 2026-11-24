@@ -105,6 +105,9 @@ To benchmark an existing server without CI or Slurm, see
 [Run AgentX-Harness Standalone](inferencex-e2e/docs/agentx-standalone.md)
 for client installation and a direct `agentx profile` command.
 
+To run the DeepSWE coding-agent benchmark against an existing endpoint from a host with Docker, see
+[Run DeepSWE Standalone](inferencex-e2e/docs/deepswe-standalone.md) for the pinned configuration.
+
 ## Acknowledgements & Supporters
 Thank you to Lisa Su and Anush Elangovan for providing the MI355X and CDNA3 GPUs for this free and open-source project. We want to recognize the many AMD contributors for their responsiveness and for debugging, optimizing, and validating performance across AMD GPUs. 
 We’re also grateful to Jensen Huang and Ian Buck for supporting this open source with access to a GB200 NVL72 rack (through OCI) and B200 GPUs. Thank you to the many NVIDIA contributors from the NVIDIA inference team, NVIDIA Dynamo team.
