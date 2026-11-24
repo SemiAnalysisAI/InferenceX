@@ -126,13 +126,16 @@ def lane_env(harness, cluster_id: str, recipe: str = LANE_FRAGMENT, **overrides:
     mirror = harness.workspace / "benchmarks/multi_node/srt-slurm-recipes/test/lane.yaml"
     mirror.parent.mkdir(parents=True, exist_ok=True)
     mirror.write_text(recipe)
+    # One worker per node, whatever the cluster's node size.
+    clusters = yaml.safe_load(harness.config.read_text())["clusters"]
+    gpus = str(clusters.get(cluster_id, {}).get("gpus-per-node", 8))
     env = {
         **harness.env, "RUNNER_NAME": overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id),
         "IS_MULTINODE": "true", "SRT_RECIPE": f"{MIRROR}/test/lane.yaml", "IMAGE": "test:tag",
         "CONC_LIST": "4", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "1024", "OSL": "1024",
         "FAKE_RESULTS": "fixed", "DISAGG": "true",
         "PREFILL_NUM_WORKERS": "1", "DECODE_NUM_WORKERS": "1",
-        "PREFILL_GPUS_PER_WORKER": "8", "DECODE_GPUS_PER_WORKER": "8",
+        "PREFILL_GPUS_PER_WORKER": gpus, "DECODE_GPUS_PER_WORKER": gpus,
     }  # fmt: skip
     return {**env, **overrides}
 
@@ -669,7 +672,8 @@ def test_nvl72_agentx_point_measures_gpu_and_cpu_power_by_default(harness, point
 
 def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
     dedicated = "services:\n" + "".join(
-        f"  - type: {kind}\n    placement:\n      node: dedicated\n" for kind in ("etcd", "nats")
+        f"  - name: {kind}\n    type: {kind}\n    placement:\n      node: dedicated\n"
+        for kind in ("etcd", "nats")
     )
     env = lane_env(
         harness, "gb300-nv", LANE_FRAGMENT + dedicated, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
@@ -789,7 +793,9 @@ def batch_env(harness, **overrides: str) -> dict[str, str]:
 def test_single_node_agentx_shares_the_clusters_dataset_cache(
     harness, cluster_id, agentic, mounted, handed, opened
 ):
-    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": POINT_RECIPE}))
+    # The node size comes from the cluster, so the TP4 point fits a 4-GPU node too.
+    recipe = {key: value for key, value in POINT_RECIPE.items() if key != "resources"}
+    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": recipe}))
     env = {
         **harness.env, **POINT_ENV, "RUNNER_NAME": runner_for(cluster_id), "PRECISION": "fp8",
         "MODEL_PREFIX": "dsv41flash", "IS_AGENTIC": agentic, "DURATION": "600",
