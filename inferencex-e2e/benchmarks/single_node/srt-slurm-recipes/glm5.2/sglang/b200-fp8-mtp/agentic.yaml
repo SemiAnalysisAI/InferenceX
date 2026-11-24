@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: zai-org/GLM-5.2-FP8
         trust-remote-code: true
@@ -71,7 +69,6 @@ override_c1:
     env:
       CONC: '1'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c4:
   roles:
@@ -84,7 +81,7 @@ override_c4:
         cuda-graph-max-bs-decode: 8
         enable-hierarchical-cache: true
         # MLA ranks hold full per-token KV: 169 GB x 8 plus the DSA indexer pool
-        # (~1,662 GB) fits the 1,717 GB budget.
+        # is ~1,662 GB.
         hicache-size: 169
         hicache-write-policy: write_through
         hicache-io-backend: direct
@@ -93,7 +90,6 @@ override_c4:
     env:
       CONC: '4'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c8:
   roles:
@@ -113,7 +109,6 @@ override_c8:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c12:
   roles:
@@ -133,7 +128,6 @@ override_c12:
     env:
       CONC: '12'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1717'
 
 override_c16:
   roles:
