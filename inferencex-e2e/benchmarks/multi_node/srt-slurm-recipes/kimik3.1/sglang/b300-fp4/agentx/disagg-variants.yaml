@@ -46,8 +46,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 8
       env:
         PYTHONUNBUFFERED: '1'
         PYTHONNOUSERSITE: '1'
@@ -121,8 +119,6 @@ base:
         enable-cache-report: true
     decode:
       nodes: 1
-      workers: 1
-      gpus: 8
       env:
         PYTHONUNBUFFERED: '1'
         PYTHONNOUSERSITE: '1'
@@ -200,11 +196,9 @@ override_1p2d_tp8_c24:
   roles:
     decode:
       nodes: 2
-      workers: 2
 
 override_1p2d_tp8_c56:
   name: kimik3.1-fp4-b300-dynamo-sglang-agentx-disagg-1p2d-tp8-c56
   roles:
     decode:
       nodes: 2
-      workers: 2

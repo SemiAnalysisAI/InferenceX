@@ -21,7 +21,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         language-model-only: true
@@ -79,7 +78,6 @@ base:
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
@@ -93,7 +91,6 @@ override_tp4_c1:
 override_tp4_c2:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
@@ -107,7 +104,6 @@ override_tp4_c2:
 override_tp4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
@@ -121,7 +117,6 @@ override_tp4_c4:
 override_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
@@ -134,7 +129,6 @@ override_tp4_c8:
 override_tp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
@@ -148,7 +142,6 @@ override_tp4_c16:
 override_tp4_c24:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
@@ -162,7 +155,6 @@ override_tp4_c24:
 override_tp4_c32:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
@@ -176,7 +168,6 @@ override_tp4_c32:
 override_tp4_c48:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
@@ -190,7 +181,6 @@ override_tp4_c48:
 override_tp4_c64:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         engram-config: '{"cpu_offload":false}'
@@ -204,7 +194,6 @@ override_tp4_c64:
 override_tp8_c1:
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 8
         engram-config: '{"cpu_offload":false}'
@@ -218,7 +207,6 @@ override_tp8_c1:
 override_tp2_c1:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -232,7 +220,6 @@ override_tp2_c1:
 override_tp2_c2:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -246,7 +233,6 @@ override_tp2_c2:
 override_tp2_c4:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -260,7 +246,6 @@ override_tp2_c4:
 override_tp2_c8:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -274,7 +259,6 @@ override_tp2_c8:
 override_tp2_c16:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -288,7 +272,6 @@ override_tp2_c16:
 override_tp2_c32:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -302,7 +285,6 @@ override_tp2_c32:
 override_tp2_c64:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
@@ -339,7 +321,7 @@ override_dp2_umbp_c256:
     - P=$(python3 -c 'import mori, os; print(os.path.dirname(mori.__file__))') && LD_LIBRARY_PATH=$P:$LD_LIBRARY_PATH exec $P/umbp_standalone_server unix:///umbp-host/umbp/standalone.grpc.sock
     env:
       UMBP_STANDALONE_ADDRESS: unix:///umbp-host/umbp/standalone.grpc.sock
-      # TOTAL_CPU_DRAM_GB in bytes.
+      # 449 GB in bytes.
       UMBP_DRAM_CAPACITY: '449000000000'
       # The mi355x-amds host setup releases hugepages, so the pool uses 4 KiB pages.
       UMBP_DRAM_USE_HUGEPAGES: '0'
@@ -353,7 +335,6 @@ override_dp2_umbp_c256:
       timeout_seconds: 1800
   roles:
     agg: &dp2_umbp_agg
-      gpus: 2
       args:
         tensor-parallel-size: 1
         data-parallel-size: 2
@@ -371,7 +352,6 @@ override_dp2_umbp_c256:
     env:
       CONC: '256'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '449'
 
 override_dp2_umbp_c384:
   container_mounts: *umbp_host_dir
@@ -384,14 +364,12 @@ override_dp2_umbp_c384:
     env:
       CONC: '384'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '449'
 
 override_dp2_c128:
   frontend: *dp2_router
   setup_script: vllm-router.sh
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 1
         data-parallel-size: 2
