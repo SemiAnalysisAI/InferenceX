@@ -61,8 +61,6 @@ base:
   roles:
     prefill:
       nodes: 3
-      workers: 6
-      gpus: 2
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"
@@ -123,8 +121,6 @@ base:
       kv_events: true
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"
@@ -294,8 +290,6 @@ override_4p_dep4_dep16_si20_linker:
   roles:
     prefill:
       nodes: 4
-      workers: 4
-      gpus: 4
       env: &gb300-linker-prefill-env
         MOONCAKE_PROTOCOL: rdma
         MOONCAKE_DEVICE: "@fabric.rdma-devices"
@@ -319,7 +313,6 @@ override_4p_dep4_dep16_si20_linker:
         unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
     decode: &gb300-dep16-decode
       nodes: 4
-      gpus: 16
       args:
         tensor-parallel-size: 16
         attn-dp-size: 16
@@ -333,8 +326,6 @@ override_3p_dep4_dep16_si20_linker:
   roles:
     prefill:
       nodes: 3
-      workers: 3
-      gpus: 4
       env: *gb300-linker-prefill-env
       args: *gb300-dep4-linker-prefill-args
     decode: *gb300-dep16-decode
@@ -345,8 +336,6 @@ override_6p_dep4_dep16_si20_linker:
   roles:
     prefill:
       nodes: 6
-      workers: 6
-      gpus: 4
       env: *gb300-linker-prefill-env
       args: *gb300-dep4-linker-prefill-args
     decode: *gb300-dep16-decode
