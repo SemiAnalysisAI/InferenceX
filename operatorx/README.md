@@ -9,7 +9,7 @@ Inference operator benchmarks: times one op at a time on NVIDIA and AMD through 
 | `mla`, `mla_dsa`, `dsv4_attn`, `gqa`, `qsa`, `gdn`, `kda` | `ops/attention.py` | whole attention modules, one op type each |
 
 - Split over devices: each case's `parallel` arg (`{"tp", "dp", "ep", "dcp"}`), defined in `core/parallel.py`.
-- Testlists: `testlists/*.json`; every entry lists its `sources` (`<org>/<model>/<role>`). Dispatch `attn_*` testlists apart from gemm / moe ones (each builds its own vLLM engine).
+- Testlists: `testlists/official/<op>_<model>.json` (ingested), `testlists/dev/` (harness checks) and `testlists/deprecated/` (models that get no new data); only runs of `official/` lists are ingested, and names are unique across all three. Every entry lists its `sources` (`<org>/<model>/<role>`); a shape from no model uses `operatorx/Synthetic-Shapes/m<M>_n<N>_k<K>` and lives in `gemm_synthetic` (except the `gemm_perf` squares). Dispatch `attn_*` testlists apart from gemm / moe ones (each builds its own vLLM engine).
 
 ## Running
 
@@ -17,7 +17,7 @@ Dispatch the **OperatorX Sweep** workflow ([CI.md](CI.md)). The same planner run
 
 ```bash
 PYTHONPATH=.:inferencex-e2e python3 -m operatorx.ci plan --platform-config operatorx/platforms.json \
-  --runner cluster:h200-dgxc --backends vllm --testlists gemm_parallel --world-sizes 1,2,4,8 \
+  --runner cluster:h200-dgxc --backends vllm --testlists gemm_kimi_k3 --world-sizes 1,2,4,8 \
   --chunk-size 500 --mode timing --run-id local --attempt 1 --source-sha "$(git rev-parse HEAD)" \
   --out manifest.json
 ```
@@ -28,7 +28,7 @@ Results: one JSON per run under `results/<platform>/<cluster>/`; in CI, the `ope
 
 - Backend: `runners/<platform>/backends/<name>.py` exporting `IMPLS = [BackendImpl(...)]`; its image in `containers.toml`.
 - Op: `ops/<name>.py` calling `register(OpSpec(type=..., arg_schema=..., parallel_axes=...))`.
-- Shapes: `testlists/<name>.json`.
+- Shapes: `testlists/{official,dev,deprecated}/<name>.json`.
 
 ## Ascend reproduction harness
 

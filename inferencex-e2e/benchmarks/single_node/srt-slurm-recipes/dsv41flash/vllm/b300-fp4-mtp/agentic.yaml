@@ -21,7 +21,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         language-model-only: true
@@ -50,7 +49,6 @@ base:
 zip_override_tp4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
@@ -87,7 +85,6 @@ zip_override_dep8:
   setup_script: vllm-router.sh
   roles:
     agg:
-      gpus: 8
       args:
         tensor-parallel-size: 1
         data-parallel-size: 8

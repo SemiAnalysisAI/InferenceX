@@ -20,8 +20,6 @@ roles:
     # provider lacks kernel ABI 4; this image carries a multi-protocol build and a newer provider.
     container: ghcr.io/tile-ai/tilert-rocm-prefill:0.1.7@sha256:8a88e2aa51105facd103217b0dc353258f3fc9368318c3bb62f0400bb8dd1ed5
     nodes: 1
-    workers: 1
-    gpus: 4
     env:
       TILERT_ROLE: prefill
       VLLM_ROCM_USE_AITER: "1"
@@ -67,8 +65,6 @@ roles:
     engine: tilert
     container: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6@sha256:48c30d7636a561b4edf781ac3c7712e09fa9a0b2f1292863b72c2d8e4bcb492a
     nodes: 1
-    workers: 1
-    gpus: 8
     env:
       TILERT_ROLE: decode
       # The dsv41 profile lands the whole prompt KV in one receive buffer.

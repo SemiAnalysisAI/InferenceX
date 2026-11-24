@@ -62,7 +62,7 @@ class SrtJob:
     mounts: Sequence[tuple[str, str]] = ()
     single_node: bool = False
     account: str | None = None
-    mem_mib: int | None = None
+    mem_mib: int | None = 0
     cpu_power_source: CpuPowerSource | None = None
 
 
@@ -196,21 +196,14 @@ def stage_gpu_exporter(run: SrtRun, *, single_node: bool = False) -> tuple[str, 
     return image, staged.reference
 
 
-def gpu_share_mib(cluster: Cluster, gpus: int) -> int | None:
-    """``gpus``' share of the node's ``available-cpu-dram-mib``; None where unmeasured."""
-    if cluster.available_cpu_dram_mib is None:
-        return None
-    return cluster.available_cpu_dram_mib * gpus // cluster.gpus_per_node
-
-
-def srun_options(settings: SlurmSettings, mem_mib: int | None) -> str | None:
-    """SRT_SRUN_OPTIONS for the single-node binder: ``slurm.srun-args`` and the step mem cap."""
+def srun_options(settings: SlurmSettings) -> str | None:
+    """Forward non-memory Slurm step settings to the single-node binder."""
     options = {}
     for arg in settings.srun_args:
         name, _, value = arg.removeprefix("--").partition("=")
+        if name in {"mem", "mem-per-cpu", "mem-per-gpu"}:
+            raise LaunchError("worker memory is derived from the cluster's available DRAM")
         options[name] = value
-    if mem_mib is not None:
-        options["mem"] = f"{mem_mib}M"
     return json.dumps(options) if options else None
 
 

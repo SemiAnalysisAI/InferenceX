@@ -166,8 +166,6 @@ base:
   roles:
     prefill:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         <<: &kimi_env
           PYTHONHASHSEED: "42"
@@ -241,8 +239,6 @@ base:
         speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         <<: *kimi_env
         VLLM_ENABLE_GEMM_RS: "0"
@@ -308,8 +304,6 @@ override_1p1d_dep32:
     prefill:
       # One DEP32 prefill engine (28 experts per rank) gives each rank room for an 80 GiB KV cache.
       nodes: 8
-      workers: 1
-      gpus: 32
       env:
         VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
         VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
@@ -332,8 +326,6 @@ override_1p1d_dep32:
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"lookup_prefetch_limit":16,"lookup_prefetch_ttl_s":30,"enable_cross_layers_blocks":false,"enable_offload":false,"store_tp_size":1,"store_chunk_size":4096}}]}}'
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       env:
         VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
         VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
@@ -358,8 +350,6 @@ override_1p1d_dep32_eval:
     prefill:
       # One DEP32 prefill engine (28 experts per rank) gives each rank room for an 80 GiB KV cache.
       nodes: 8
-      workers: 1
-      gpus: 32
       env:
         VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
         VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
@@ -385,8 +375,6 @@ override_1p1d_dep32_eval:
         enable-auto-tool-choice: true
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       env:
         VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
         VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"

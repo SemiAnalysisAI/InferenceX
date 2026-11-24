@@ -123,8 +123,6 @@ base:
   roles:
     agg:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         PYTHONHASHSEED: "42"
         VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
@@ -212,7 +210,6 @@ override_agg16_c1:
   roles:
     agg:
       nodes: 4
-      gpus: 16
       # Opt-in c=1 decode paths of this image (default off): published-mailbox MoE tail (PUB8),
       # one-pass decode prep (NP1), fused drafter layers (DRF/S31), KDA/attention kernels for 8 rows.
       env: &override_agg16_c1_env
@@ -246,7 +243,6 @@ override_agg16_c1_eval:
   roles:
     agg:
       nodes: 4
-      gpus: 16
       env: *override_agg16_c1_env
       args:
         <<: *override_agg16_c1_args
