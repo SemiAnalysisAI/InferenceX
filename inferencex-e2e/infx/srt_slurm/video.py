@@ -114,8 +114,27 @@ def video_package(root: Path) -> Path:
     return root.parent / VIDEO_PACKAGE
 
 
-def check_video_fragment(raw: Mapping[str, Any], source: Path) -> None:
-    """Reject a fragment that sets a launcher-owned key or carries engine roles."""
+def _restated(shared: Mapping[str, Any], service: Mapping[str, Any]) -> list[str]:
+    """The keys of ``service``, one mapping deep, that the shared service of its name sets."""
+    found = []
+    for key, value in service.items():
+        if key == "name" or key not in shared:
+            continue
+        if isinstance(shared[key], Mapping) and isinstance(value, Mapping):
+            found.extend(f"{key}.{inner}" for inner in value if inner in shared[key])
+        else:
+            found.append(key)
+    return found
+
+
+def check_video_fragment(
+    raw: Mapping[str, Any], source: Path, shared: Mapping[str, Mapping[str, Any]]
+) -> None:
+    """Reject a fragment that sets a launcher-owned or shared key, or carries engine roles.
+
+    ``shared`` maps the shared block's services by name. A fragment service may add to the
+    one of its name but not set a key it already sets.
+    """
     found = [
         f"{'.'.join(key)} (= {value!r})"
         for key in _BOUND_KEYS
@@ -130,24 +149,33 @@ def check_video_fragment(raw: Mapping[str, Any], source: Path) -> None:
         raise ValueError(
             f"{source}: remove {', '.join(found)} from the fragment; the launcher sets them"
         )
+    if isinstance(raw.get("services"), list):
+        for service in raw["services"]:
+            restated = _restated(shared.get(service["name"], {}), service)
+            if restated:
+                raise ValueError(
+                    f"{source}: remove {', '.join(restated)} from service {service['name']!r}; "
+                    f"{VIDEO_BLOCK} sets them for every recipe"
+                )
 
 
 def compose_video_recipe(path: Path, *, root: Path) -> dict[str, Any]:
     """The fragment at ``path`` over the shared video and native telemetry blocks.
 
-    Each fragment service also merges over the shared service of the same name.
+    Each fragment service also merges over the shared service of the same name, whose keys
+    it may extend but not restate.
     """
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
-    check_video_fragment(raw, path)
     shared = merge_blocks(_block(root / VIDEO_BLOCK), _block(root / NATIVE_TELEMETRY_BLOCK))
+    # infx.matrix.changed binds a base revision's recipes with this code; its block may hold none.
+    by_name = {service["name"]: service for service in shared.get("services", [])}
+    check_video_fragment(raw, path, by_name)
     recipe = merge_blocks(shared, raw)
     if isinstance(raw.get("services"), list):
-        by_name = {service["name"]: service for service in shared.get("services", [])}
         recipe["services"] = [
-            merge_blocks(by_name.get(service.get("name"), {}), service)
-            for service in raw["services"]
+            merge_blocks(by_name.get(service["name"], {}), service) for service in raw["services"]
         ]
     return recipe
 

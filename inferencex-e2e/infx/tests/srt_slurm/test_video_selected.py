@@ -55,14 +55,15 @@ def test_fairness_requires_disabled_cross_request_caches(native_fragment):
 
 
 def test_server_port_must_be_a_tcp_port_before_submission(native_fragment):
-    raw, write = native_fragment
+    _, write = native_fragment
+    recipe = video.compose_video_recipe(write(), root=ROOT)
     port = 65536
-    [server] = raw["services"]
+    [server] = recipe["services"]
     server["args"][server["args"].index("--port") + 1] = str(port)
-    server["env"]["VIDEO_SERVER_PORT"] = raw["benchmark"]["env"]["VIDEO_SERVER_PORT"] = str(port)
+    server["env"]["VIDEO_SERVER_PORT"] = recipe["benchmark"]["env"]["VIDEO_SERVER_PORT"] = str(port)
     server["readiness"]["http"]["port"] = port
     with pytest.raises(ValueError, match="TCP port"):
-        video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
+        video.bind_video(recipe, {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
 
 
 @pytest.fixture
@@ -74,8 +75,7 @@ def native_fragment(tmp_path):
         "resources": {"gpu_type": "test-gpu"},
         "frontend": {"type": "none"},
         "services": [{
-            "name": "video-server", "type": "generic", "nodes": 1, "critical": True,
-            "command": ["/usr/bin/python3", "-m", "infx.bench", "video", "serve"],
+            "name": "video-server",
             "args": [
                 "--model-view", "snapshot", "--", "/usr/bin/python3", "-m",
                 "evaluator.srt_selected", "serve", "--model-type", "diffusion",
@@ -86,10 +86,9 @@ def native_fragment(tmp_path):
                 "--attention-backend", "fixture-backend",
             ],
             "env": {
-                "VIDEO_SERVER_PORT": "30283", "VIDEO_RUNTIME_REVISION": "b" * 40,
+                "VIDEO_RUNTIME_REVISION": "b" * 40,
                 "MODEL_REVISION_IN_ENV": "{model_revision}", "TUNABLE_ENV": "keep-this-value",
             },
-            "readiness": {"http": {"port": 30283, "path": "/health"}},
         }],
         "benchmark": {
             "type": "custom",
@@ -138,9 +137,6 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     )
     args = raw["services"][0]["args"]
     args[3:7] = [sys.executable, str(engine)]
-    raw["services"][0]["env"]["PYTHONPATH"] = os.pathsep.join(
-        (str(video.video_package(ROOT)), str(ROOT))
-    )
     raw["services"][0]["env"]["CHILD_RECEIPT"] = str(tmp_path / "child.json")
     environment = {**ENV, "FRAMEWORK": "sglang", "HF_HUB_CACHE": str(tmp_path / "cache")}
     bound = video.prepare(write(raw), environment, root=ROOT)
@@ -155,6 +151,7 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
         **os.environ,
         **bound.get("environment", {}),
         **server["env"],
+        "PYTHONPATH": os.pathsep.join((str(video.video_package(ROOT)), str(ROOT))),
         "VIDEO_SPEC_PATH": str(video.video_package(ROOT) / "specs/h3.yaml"),
         "VIDEO_RESULT_DIR": str(output),
     }
@@ -189,7 +186,7 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     assert launch["model_revision"] == spec["baseline"]["model_revision"]
 
 
-def test_fragment_service_merges_over_the_shared_service_of_its_name(tmp_path):
+def test_fragment_service_extends_the_shared_service_and_may_not_restate_its_keys(tmp_path):
     shared = {
         "name": "video-server", "type": "generic", "nodes": 1,
         "env": {"VIDEO_SERVER_PORT": "30283", "HF_HUB_OFFLINE": "1"},
@@ -220,14 +217,15 @@ def test_fragment_service_merges_over_the_shared_service_of_its_name(tmp_path):
             "timeout_seconds": 60,
         },
     }
-    assert services(lean) == services(complete) == [complete]
-
     sidecar = {"name": "sidecar", "command": ["true"]}
-    online = {**lean, "nodes": 2, "env": {"HF_HUB_OFFLINE": "0"}}
-    assert services(online, sidecar) == [
-        {
-            **complete, "nodes": 2,
-            "env": {"VIDEO_SERVER_PORT": "30283", "HF_HUB_OFFLINE": "0"},
-        },
-        sidecar,
-    ]
+    assert services(lean, sidecar) == [complete, sidecar]
+
+    for restated, keys in (
+        ({**lean, "nodes": 2, "env": {"HF_HUB_OFFLINE": "0"}}, "env.HF_HUB_OFFLINE, nodes"),
+        (complete, "env.HF_HUB_OFFLINE, env.VIDEO_SERVER_PORT, nodes, readiness.http, "
+                   "readiness.interval_seconds, type"),
+    ):
+        with pytest.raises(
+            ValueError, match=f"agg-tp1.yaml: remove {keys} from service 'video-server'"
+        ):
+            services(restated)

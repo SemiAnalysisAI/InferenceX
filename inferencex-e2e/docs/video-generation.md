@@ -71,8 +71,9 @@ runtime, preserving per-concurrency outputs and native power windows. Its reques
 timeout and environment are supplied by that block. The block also holds the
 `video-server` service every recipe starts: its command, node pool, readiness probe,
 port, and offline-mode environment. A recipe's `video-server` entry merges over it,
-so a recipe lists only its `args`, its own `env`, and `readiness.timeout_seconds`; a key
-it repeats wins.
+so a recipe lists only its `args`, its own `env`, and `readiness.timeout_seconds`. It may
+not restate a key the block sets, even with the same value: the binder refuses the recipe
+and names the key.
 
 `perf-changelog.yaml` → `infx.matrix.plan` → `run-sweep.yml` →
 `benchmark-tmpl.yml` → `infx.launch` → native srt-slurm service/client → result bundle.
