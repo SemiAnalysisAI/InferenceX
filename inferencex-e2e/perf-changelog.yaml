@@ -13312,6 +13312,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5094
 
 - config-keys:
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
+  description:
+    - "Add MiniMax-M3.1-Flash B300 Dynamo + vLLM AgentX recipes with minimax-m31-flash-arm64-cu135-f7d7346, including TP8 c1/c4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4826
+  scenario-type: [agentic-coding]
+
     - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
