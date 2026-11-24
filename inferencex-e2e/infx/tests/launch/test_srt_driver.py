@@ -688,7 +688,12 @@ def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
 
 
 def test_a_frontend_image_of_its_own_is_staged_like_the_main_image(harness):
-    frontend = 'frontend:\n  type: llm-d\n  container_image: "registry.example/router:1"\n'
+    frontend = (
+        "frontend:\n"
+        "  type: llm-d\n"
+        "  enable_multiple_frontends: false\n"
+        '  container_image: "registry.example/router:1"\n'
+    )
     env = lane_env(
         harness, "gb300-nv", LANE_FRAGMENT + frontend, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
         FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
