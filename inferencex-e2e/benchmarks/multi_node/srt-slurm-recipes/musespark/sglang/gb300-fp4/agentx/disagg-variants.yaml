@@ -181,14 +181,10 @@ override_3p4d_tp8_tp8_c672:
   roles:
     prefill:
       nodes: 6
-      workers: 3
-      gpus: 8
       args:
         hicache-size: 175
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 56
         max-running-requests: 56
@@ -204,14 +200,10 @@ override_1p2d_tp8_tp8_c176:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
       args:
         hicache-size: 180
     decode:
       nodes: 4
-      workers: 2
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 24
         max-running-requests: 24
@@ -222,14 +214,10 @@ override_1p3d_tp8_tp8_c192:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
       args:
         hicache-size: 180
     decode:
       nodes: 6
-      workers: 3
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 20
         max-running-requests: 20
