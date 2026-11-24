@@ -25,7 +25,6 @@ base:
     numa_cpu_bind: true
   roles:
     prefill:
-      gpus: 4
       env:
         HF_HUB_OFFLINE: '1'
         TRANSFORMERS_OFFLINE: '1'
@@ -196,7 +195,6 @@ override_1p1d_tp8_c1_b1_mtp5:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           kv_cache_bounce_size_mb: 1024
@@ -208,8 +206,6 @@ override_1p1d_tp8_c1_b1_mtp5:
           context_chunking_policy: EQUAL_PROGRESS
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       args:
         cache_transceiver_config:
           kv_cache_bounce_size_mb: 1024
@@ -231,7 +227,6 @@ override_1p4d_tep4_c30_b2_mtp5:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           kv_cache_bounce_size_mb: 1024
@@ -241,8 +236,6 @@ override_1p4d_tep4_c30_b2_mtp5:
           host_cache_size: 137438953472
     decode:
       nodes: 4
-      workers: 4
-      gpus: 4
       args:
         cache_transceiver_config:
           kv_cache_bounce_size_mb: 1024
@@ -265,7 +258,6 @@ override_1p7d_tp4_c66_b4_mtp5:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           kv_cache_bounce_size_mb: 4096
@@ -280,8 +272,6 @@ override_1p7d_tp4_c66_b4_mtp5:
           context_chunking_policy: EQUAL_PROGRESS
     decode:
       nodes: 7
-      workers: 7
-      gpus: 4
       args:
         cache_transceiver_config:
           kv_cache_bounce_size_mb: 4096
@@ -312,8 +302,6 @@ override_2p1d_dep8_c256_b16_mtp5:
   roles:
     prefill:
       nodes: 4
-      workers: 2
-      gpus: 8
       args:
         cache_transceiver_config:
           kv_cache_bounce_size_mb: 1024
@@ -325,8 +313,6 @@ override_2p1d_dep8_c256_b16_mtp5:
         tensor_parallel_size: 8
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       args:
         cache_transceiver_config:
           kv_cache_bounce_size_mb: 1024
@@ -368,7 +354,6 @@ override_5p1d_dep16_c260_b16_mtp3:
   roles:
     prefill:
       nodes: 5
-      workers: 5
       args:
         cache_transceiver_config:
           kv_cache_bounce_size_mb: 1024
@@ -382,8 +367,6 @@ override_5p1d_dep16_c260_b16_mtp3:
           max_draft_len: 3
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cache_transceiver_config:
           kv_cache_bounce_size_mb: 1024
