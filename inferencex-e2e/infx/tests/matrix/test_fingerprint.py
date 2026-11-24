@@ -14,7 +14,7 @@ from infx.tests.srt_recipes import single_node_fragment, write_shared_blocks
 
 SINGLE = "benchmarks/single_node/srt-slurm-recipes/fixture"
 MULTI = "benchmarks/multi_node/srt-slurm-recipes/fixture"
-ROLES = {role: {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False} for role in ("prefill", "decode")}
+ROLES = {role: {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False} for role in ("prefill", "decode")}
 
 
 def config(multinode: bool, scenarios: dict) -> dict:
@@ -31,8 +31,8 @@ def fixed(*spaces: dict) -> dict:
 
 
 MASTER = {
-    "single": config(False, fixed({"tp": 4, "conc-list": [2, 4], "srt-recipe": "bundle.yaml"})),
-    "other": config(False, fixed({"tp": 4, "conc-list": [2, 4], "srt-recipe": "plain.yaml"})),
+    "single": config(False, fixed({"gpus-per-worker": 4, "tp": 4, "conc-list": [2, 4], "srt-recipe": "bundle.yaml"})),
+    "other": config(False, fixed({"gpus-per-worker": 4, "tp": 4, "conc-list": [2, 4], "srt-recipe": "plain.yaml"})),
     "multi": config(True, fixed(
         {**ROLES, "conc-list": [2, 4], "srt-recipe": "disagg.yaml:override_a", "power": True},
         {**ROLES, "conc-list": [8], "srt-recipe": "disagg.yaml:override_b"},
@@ -207,12 +207,12 @@ def test_concurrency_lists_leave_the_remaining_points_alone(project):
 
 
 def test_a_point_no_variant_serves_cannot_be_fingerprinted(project):
-    edit(project, f"{SINGLE}/bundle.yaml", lambda recipe: recipe["base"]["roles"]["agg"].update(gpus=8))
+    edit(project, f"{SINGLE}/bundle.yaml", lambda recipe: recipe["base"]["roles"]["agg"]["args"].update({"tensor-parallel-size": 8}))
     master = load_config_files([str(project / "configs/master.yaml")])
     runners = load_runner_file(str(project / "configs/runners.yaml"))
     [row, _] = generate_config_matrix(["single"], master, runners, eval_mode="none", root=project)
 
-    with pytest.raises(ValueError, match=r"fixture/bundle\.yaml .*Single-node SRT gpus"):
+    with pytest.raises(ValueError, match=r"fixture/bundle\.yaml .*Single-node SRT tensor-parallel-size"):
         recipe_fingerprint(row, project)
 
 

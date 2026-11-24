@@ -18,8 +18,6 @@ engine: sglang
 roles:
   prefill:
     nodes: 1
-    workers: 1
-    gpus: 4
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
       PYTHONUNBUFFERED: '1'
@@ -65,7 +63,6 @@ roles:
       fp4-gemm-backend: flashinfer_trtllm
   decode:
     nodes: 5
-    workers: 5
     env:
       TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
       PYTHONUNBUFFERED: '1'
