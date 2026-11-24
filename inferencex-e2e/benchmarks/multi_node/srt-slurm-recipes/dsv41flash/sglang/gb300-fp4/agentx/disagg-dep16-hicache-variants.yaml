@@ -70,7 +70,6 @@ base:
   roles:
     prefill:
       nodes: 5
-      gpus: 2
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_DSV4_KV_LAYOUT: v41_new
@@ -134,8 +133,6 @@ base:
       kv_events: true
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_DSV4_KV_LAYOUT: v41_new
@@ -218,14 +215,12 @@ override_5p1d_dep2_dep32_b18_c4000:
   roles:
     prefill:
       nodes: 3
-      workers: 5
       args:
         hicache-ratio: 2.7
         mem-fraction-static: 0.85
         engram-config: '{"placement":"cpu","replication":"group_shards","group_size":10,"group_store":"/logs/engram-group-store"}'
     decode:
       nodes: 8
-      gpus: 32
       env:
         SGLANG_OPT_DSV41_BLOCKWISE_REJECTION: "1"
       args:
@@ -243,14 +238,12 @@ override_12p1d_dep2_dep32_b72_c10288:
   roles:
     prefill:
       nodes: 6
-      workers: 12
       args:
         hicache-ratio: 3.0
         mem-fraction-static: 0.89
         engram-config: '{"placement":"gpu","replication":"group_shards","group_size":24,"group_store":"/logs/engram-group-store"}'
     decode:
       nodes: 8
-      gpus: 32
       env:
         SGLANG_OPT_DSV41_BLOCKWISE_REJECTION: "1"
       args:
@@ -267,7 +260,6 @@ override_7p1d_dep2_dep16_b128_c6600:
   roles:
     prefill:
       nodes: 4
-      workers: 7
       args:
         stream-interval: 32
         hicache-ratio: 2.9
@@ -283,7 +275,6 @@ override_8p1d_dep2_dep16_b160_c7600:
   roles:
     prefill:
       nodes: 4
-      workers: 8
       args:
         stream-interval: 32
         hicache-ratio: 2.9
