@@ -13380,3 +13380,11 @@
     - "TP8/DCP8 1P5D: concurrency 44 with 5 draft tokens (was 4), and concurrency 104 with 4 draft tokens and an adaptive 4096-token long-prefill threshold on the prefill engine; both decode engines turn on the image's opt-in TP8 x DCP8 decode paths (K31_* env). They replace 1P5D at 44 and 56 and 1P3D at 56."
     - "Aggregated TP16/DCP16 at concurrency 1: 7 draft tokens with the image's opt-in c=1 decode paths (K31_* env) and prefix-match-unit 768."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5109
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp2-mooncake
+  scenario-type: [agentic-coding]
+  description:
+    - "Add ten GB300 Qwen3.5-397B-A17B NVFP4 Dynamo-SGLang AgentX configurations with TP1/PP2 prefill and TP8, TP8/EP4, or DEP4 decode."
+    - "Use native MTP and configure prefill HiCache and Mooncake DRAM storage for disaggregated serving."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
