@@ -15,7 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
@@ -51,7 +50,6 @@ base:
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 1
@@ -76,7 +74,6 @@ override_tp4_c1:
 override_tp4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -100,7 +97,6 @@ override_tp4_c4:
 override_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -124,7 +120,6 @@ override_tp4_c8:
 override_tp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -143,7 +138,6 @@ override_tp4_c16:
 override_tp4_c24:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -172,7 +166,6 @@ override_dep4_c48:
       request-timeout-secs: 14400
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4
@@ -222,7 +215,6 @@ override_dep4_c64:
       request-timeout-secs: 14400
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4
@@ -272,7 +264,6 @@ override_dep4_c96:
       request-timeout-secs: 14400
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4
@@ -322,7 +313,6 @@ override_dep4_c128:
       request-timeout-secs: 14400
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4
@@ -372,7 +362,6 @@ override_dep4_c192:
       request-timeout-secs: 14400
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4
@@ -422,7 +411,6 @@ override_dep4_c256:
       request-timeout-secs: 14400
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         data-parallel-size: 4

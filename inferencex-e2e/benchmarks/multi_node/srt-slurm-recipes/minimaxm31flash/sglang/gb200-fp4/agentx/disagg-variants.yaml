@@ -61,8 +61,6 @@ base:
   roles:
     prefill:
       nodes: 2
-      workers: 2
-      gpus: 4
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"
@@ -105,7 +103,7 @@ base:
         max-running-requests: 256
         mem-fraction-static: 0.88
         enable-hierarchical-cache: true
-        # 200 GB per rank: 800 GB per node, inside the matrix's 0.89 DRAM share.
+        # 200 GB per rank: 800 GB per node.
         hicache-size: 200
         hicache-write-policy: write_back
         speculative-algorithm: DSPARK
@@ -121,8 +119,6 @@ base:
       kv_events: true
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"
@@ -314,8 +310,6 @@ override_1p_dep8_dep16_linker_d1115:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
       env: &linker-env-d1115
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "16384"
         MOONCAKE_PROTOCOL: rdma
@@ -337,7 +331,6 @@ override_1p_dep8_dep16_linker_d1115:
         unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
     decode: &linker-dep16-decode-d1115
       nodes: 4
-      gpus: 16
       args:
         tensor-parallel-size: 16
         data-parallel-size: 16
@@ -359,8 +352,6 @@ override_2p_dep8_dep16_linker_d1115:
   roles:
     prefill:
       nodes: 4
-      workers: 2
-      gpus: 8
       env: *linker-env-d1115
       args: *linker-prefill-args
     decode: *linker-dep16-decode-d1115
