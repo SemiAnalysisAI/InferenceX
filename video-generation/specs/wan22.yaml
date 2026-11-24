@@ -105,6 +105,8 @@ workload_size:
   # Classifier-free guidance runs a conditional and an unconditional pass per step.
   guidance_branches: 2
   # model.id at model.revision: transformer/config.json; transformer_2 has the same values.
+  # Wan2.2 is a two-expert MoE: each denoising step runs one expert (transformer at high
+  # noise, transformer_2 at low noise), so one expert's weights count per pass.
   model:
     # VAE spatial stride 8 x patch size 2.
     latent_patch_pixels: 16
