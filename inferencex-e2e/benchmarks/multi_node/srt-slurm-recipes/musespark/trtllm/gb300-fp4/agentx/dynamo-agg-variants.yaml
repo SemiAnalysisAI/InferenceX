@@ -187,8 +187,6 @@ override_tep4_b24_c48:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         TRTLLM_SCHED_PREFILL_DECODE_INTERVAL: '64'
         TRTLLM_SCHED_SPF_FIRST_CHUNK_MAX_WAIT_PASSES: '64'
@@ -206,8 +204,6 @@ override_tep4_b80_c80:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         TRTLLM_SCHED_PREFILL_DECODE_INTERVAL: '12'
         TRTLLM_SCHED_SPF_FIRST_CHUNK_MAX_WAIT_PASSES: '12'

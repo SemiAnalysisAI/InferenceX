@@ -8,6 +8,11 @@ sends each token to the ranks owning its top-k experts, and **combine** brings t
 back. No expert compute runs, so it measures neither overlap nor serving throughput, and it does not
 rank or recommend.
 
+**Intent: benchmark what production does.** Each library runs the configuration a serving engine
+selects for it. Configurations no engine can select today (UCCL-EP, NCCL EP `normal` mode and NCCL
+EP FP8) still run, as library rows labelled `candidate`. The intent covers configuration only: the
+workload is synthetic.
+
 - **Shape** `deepseek-v4-pro`: hidden 7168, top-k 6, 384 experts, packed placement, uniform
   deterministic routing, proven identical on every rank.
 - **`T` is tokens per rank**: decode 1-512, prefill 1024-8192, powers of two.

@@ -257,8 +257,6 @@ override_1p4d_tep4_tep8b1_c52:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         MUSESPARK_OPEN_PREFILL_SEQUENCE_PARALLEL: '1'
         MUSESPARK_OPEN_PREFILL_SP_MIN_TOKENS: '1024'
@@ -273,8 +271,6 @@ override_1p4d_tep4_tep8b1_c52:
           2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192]
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         cuda_graph_config:
           batch_sizes: [1]
@@ -286,8 +282,6 @@ override_1p2d_tep4_tep8b3_c52:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         MUSESPARK_OPEN_PREFILL_SEQUENCE_PARALLEL: '1'
         MUSESPARK_OPEN_PREFILL_SP_MIN_TOKENS: '1024'
@@ -303,8 +297,6 @@ override_1p2d_tep4_tep8b3_c52:
           2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192]
     decode:
       nodes: 4
-      workers: 2
-      gpus: 8
       env:
         MUSESPARK_OPEN_FULL_ROUTING_ALL_BATCHES: '1'
         MUSESPARK_OPEN_FULL_ROUTING_TORCH_ORDER: '1'
@@ -323,8 +315,6 @@ override_1p2d_tep4_tep8b4_c60:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         TRTLLM_SCHED_SPF_MAX_AGE_PASSES: '600'
         TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
@@ -342,8 +332,6 @@ override_1p2d_tep4_tep8b4_c60:
           2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192]
     decode:
       nodes: 4
-      workers: 2
-      gpus: 8
       env:
         MUSESPARK_OPEN_FULL_ROUTING_ALL_BATCHES: '1'
         MUSESPARK_OPEN_FULL_ROUTING_TORCH_ORDER: '1'
@@ -365,8 +353,6 @@ override_1p1d_tep4_tep8b24_c88:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         TRTLLM_KV_SWA_ENDPOINT_RETIRE: '1'
         TRTLLM_SCHED_SPF_MAX_AGE_PASSES: '200'
@@ -387,8 +373,6 @@ override_1p1d_tep4_tep8b24_c88:
           12288, 12800, 13312, 13824, 14336, 14848, 15360, 15872, 16384]
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         MUSESPARK_OPEN_FULL_ROUTING_ALL_BATCHES: '1'
         MUSESPARK_OPEN_FULL_ROUTING_TORCH_ORDER: '1'
@@ -408,8 +392,6 @@ override_3p2d_tep4_tep8b31_c240:
   roles:
     prefill:
       nodes: 3
-      workers: 3
-      gpus: 4
       env:
         TRTLLM_SCHED_SPF_MAX_AGE_PASSES: '600'
         MUSESPARK_OPEN_LEVER__ROLE: ctx
@@ -427,8 +409,6 @@ override_3p2d_tep4_tep8b31_c240:
           2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192]
     decode:
       nodes: 4
-      workers: 2
-      gpus: 8
       env:
         MUSESPARK_OPEN_FULL_ROUTING_ALL_BATCHES: '1'
         MUSESPARK_OPEN_FULL_ROUTING_TORCH_ORDER: '1'
