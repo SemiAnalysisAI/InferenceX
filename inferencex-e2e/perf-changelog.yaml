@@ -13333,3 +13333,13 @@
     - "Bump utils/srt-slurm from 2d9079c to cc9db05 (21 commits), which adds NVIDIA/srt-slurm#669: one bootstrap port per prefill engine and Router start after every worker's health check. The shared vllm-router.sh setup script now raises the worker parent shell's soft RLIMIT_MEMLOCK to its hard limit."
     - "Draft data type unchanged: the DSpark draft from the checkpoint's dspark/ subfolder runs as shipped, with MXFP8 attention and MLP projections, BF16 fc, norms and the shared target embedding and LM head, and an FP8 E4M3 draft KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the vLLM ROCm image from nightly-4fab5a07 to nightly-rocm100-8ca766326652caf4b8e50d1b9118d8a22f6adc73 (2026-11-17), pinned by digest."
+    - "Extend TP4 from concurrency 1-2 to 1, 2, 4, 8, 16, 24, 32 and 48. TP4 caps the running requests at 1, 2, 2, 4, 6 and 8 for concurrency 4, 8, 16, 24, 32 and 48 (32768-token prefill chunks at 4, 8192 elsewhere), so every decode step fits the 48-row mono decode launch; sessions past the cap queue."
+    - "TP2 concurrency 16: cap the running requests at 2 instead of 4. Every other TP2 point and flag is unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5125
