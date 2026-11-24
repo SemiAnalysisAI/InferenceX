@@ -139,7 +139,7 @@ jobs:
                   selection="$RUNNER_TEMP/video-publication-selection.json"
                   python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
                     --run-id "$SOURCE_RUN_ID" --run-attempt "$SOURCE_RUN_ATTEMPT" --head-sha "$SOURCE_HEAD_SHA" \
-                    --selection-output "$selection"
+                    --merged-plan "$RUNNER_TEMP/plan.json" --selection-output "$selection"
                   checksum=$(sha256sum "$selection")
                   echo "sha256=${checksum%% *}" >> "$GITHUB_OUTPUT"
 

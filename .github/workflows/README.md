@@ -354,7 +354,9 @@ The app downloads source artifacts, keeps the newest upload for each exact
 artifact name, and ingests them with changelog metadata from the merge run. The
 normal ingestion code skips failed benchmark rows. Benchmark rows and public
 links retain source-run provenance. Source coverage is authoritative, so later
-matrix/eval policy changes do not invalidate reuse.
+matrix/eval policy changes do not invalidate reuse. Video is the exception: Merge
+Ingest publishes only when the merge commit's video rows have the recipe
+fingerprints of the reused run's `video-sweep-manifest`.
 
 When the app's ingest finishes, on success or failure, it sends
 `ingest-results-completed` back with per-run counts (benchmark, eval, trace and
