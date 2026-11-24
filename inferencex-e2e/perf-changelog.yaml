@@ -13387,4 +13387,4 @@
   description:
     - "Remove the four Mooncake stores on the infra node, which runs no inference workers, so KV offload DRAM sits only on prefill and decode nodes in proportion to their GPUs."
     - "L3 is now every prefill rank's 190 GB segment plus 4 x 190 GB of stores on each of the 4 decode nodes. Everything else is unchanged."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5227
