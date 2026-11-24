@@ -13335,6 +13335,37 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
 
 - config-keys:
+    - minimaxm31flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "New MiniMax-M3.1-Flash AgentX config on MI355X with ATOM: rocm/atom-dev:nightly_202611200431 (ATOM 0.1.11.dev71+g17edc6157 and AITER a485545d3, built from ROCm/ATOM main; the atomesh frontend container_image pins its digest sha256:57c08153e332315b85c00bb3bb6c1dd71504950f7989be83915be456cfb6749f), serving amd/MiniMax-M3.1-Flash-Quark-MXFP4 as shipped: MXFP4 routed experts; MXFP8 attention, dense MLP and shared expert, the shared expert kept as its own MLP."
+    - "Points: TP4 at concurrency 1, 2, 4, 8, 16 and 32 on the GPU prefix cache, and at 48 with the LMCache 0.5.6.dev139+gf22dec28 CPU tier (200 GiB per rank, dram-utilization 0.58)."
+    - "Every point runs the NVFP4 KV and index caches (the checkpoint is QAT-trained for an NVFP4 KV cache), 128-token blocks, prefix caching, gpu-memory-utilization 0.85, max-num-batched-tokens 32768 (16384 at concurrency 32), max-num-seqs at twice the concurrency, and decode graphs at every batch size up to 8, then in steps of 2, 4, 8 and 16 up to max-num-seqs."
+    - "Concurrency 1 to 8 run ATOM's mono decode (on by default) for decode steps of up to 16 rows. From 16, decode indexer scoring splits across the TP ranks by context (ATOM_M3_INDEXER_CP=1), which mono decode does not run with. Concurrency 32 adds the prefill delayer (interval 8, target fill 0.05, stall 2 ticks). The LMCache point uses 256-token chunks."
+    - "All-reduce is not quantized: AITER_QUICK_REDUCE_QUANTIZATION is left unset, so tensor-parallel all-reduce runs in BF16. No online quantization and no shared-expert fusion. Throughput runs use the minimax-m3.1-flash__dspark__native__probabilistic-block golden AL (4.04 at seven draft tokens)."
+    - "Relevant ATOM changes in the image: ROCm/ATOM#3310 (NVFP4 KV and index caches), #3308 (mono decode with the MXFP8 shared expert), #3576 with ROCm/aiter#8285 (indexer CP over the NVFP4 caches) and #3591 (LMCache offload with an NVFP4 KV and a DSpark draft of its own dtype)."
+    - "Draft data types: the DSpark draft weights run as shipped, MXFP8 (1x32 UE8M0 scales) attention and MLP linears with BF16 fc, Markov and confidence heads, sharing the target's embedding and LM head; the draft path is the MiniMaxAI snapshot whose dspark/ files are byte-identical to the served checkpoint's. Its KV cache, in a pool of its own, is ATOM's default beside an NVFP4 target (BF16) up to concurrency 32; at 48, --spec-decode-kv-cache-dtype fp8 lowers it to FP8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5157
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update both entries from rocm/atom-dev:nightly_202611110332 (ATOM 920a200a3) to rocm/atom-dev:nightly_202611171508 (ATOM 5f3ae2b5b, Mooncake 206d634), pinned by digest, and move the AToMesh router from 920a200a3 to the same ATOM commit."
+    - "Add single-node TP8 points at concurrency 1 and 2 (new key glm5.2-fp4-mi355x-atom-disagg-agentic-mtp-agg). Both entries now use framework atom instead of atom-disagg, so the single-node and disaggregated ATOM points form one curve."
+    - "Drop 1P1D concurrency 128 and 1P3D concurrency 12 and 16. 1P1D 56, 72, 96 and 112, 1P2D 56 and 1P3D 24 remain."
+    - "The TP8 server runs ATOM's GLM-5.2 mono decode (ATOM_MONO_ENABLE=1) and the DSA indexer mono decode on FP8 KV and index caches, with MTP at three draft tokens and the golden acceptance 2.99. It admits 2 requests, captures graphs at 1 and 2, and uses max-num-batched-tokens 16384 and gpu-memory-utilization 0.95."
+    - "The disaggregated points keep their recipes and set ATOM_MONO_ENABLE=0 on prefill and decode, so their decode stays on the path the previous image ran."
+    - "The disaggregated workers raise RLIMIT_MEMLOCK's soft limit to the hard limit before they start (setup script raise-memlock-soft-limit.sh). Slurm sets the soft limit to 8 MiB, and the ionic driver charges every GPU KV registration against it before falling back to peer memory, so without the raise each Mooncake KV registration fails with ENOMEM."
+    - "Weights run as shipped in amd/GLM-5.2-MXFP4 with no online quantization, AITER quick reduce is unset, and the mono decode's all-reduce sums BF16 partials in FP32."
+    - "Relevant ATOM changes in the image: ROCm/ATOM#3266 (GLM-5.2 mono decode on the checkpoint's BF16 attention), #3350 (mono mailbox polling stalls during concurrent transfers), #3043 (FP8 indexer prefill logits and key gathers in bounded passes), #3097 and #3324 (shared Mooncake Store loads and restores) and #3147 (P/D decode admission bounded by pending receive KV bytes)."
+    - "Draft data types: no change. The MTP draft (model.layers.78) ships in BF16 and is excluded from the checkpoint's MXFP4 quantization, so ATOM loads it in BF16 at both the old and new commit; it shares the target's FP8 KV cache, as before."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5120
+
+- config-keys:
     - glm5.3-fp4-gb300-dynamo-sglang-agentic-agg
     - glm5.3-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
