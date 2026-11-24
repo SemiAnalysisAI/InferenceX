@@ -306,7 +306,7 @@ def test_a_bases_points_are_reused_only_when_git_vouches_for_every_other_input(
 def test_rows_without_fingerprints_are_compared_individually(tmp_path):
     def matrix(*tps: int) -> changed.Matrix:
         rows = [
-            {"exp-name": f"key_tp{tp}", "tp": tp, "ep": 1, "conc": [4], "srt-recipe": "gone.yaml"}
+            {"exp-name": f"key_tp{tp}", "gpus-per-worker": (tp), "tp": tp, "ep": 1, "conc": [4], "srt-recipe": "gone.yaml"}
             for tp in tps
         ]
         return {"key": changed._points(rows, tmp_path)}
@@ -324,7 +324,7 @@ def test_rows_without_fingerprints_are_compared_individually(tmp_path):
 
 def test_points_sharing_a_name_and_concurrency_keep_generation_order(tmp_path):
     tps = [8, 4, 2, 1, 16, 32, 64, 128]
-    rows = [{"exp-name": "dsr1_8k1k", "tp": tp, "ep": 1, "conc": [32]} for tp in tps]
+    rows = [{"exp-name": "dsr1_8k1k", "gpus-per-worker": (tp), "tp": tp, "ep": 1, "conc": [32]} for tp in tps]
     head = {"key": changed._points(rows, tmp_path)}
 
     [change] = changed.compare({}, head)
