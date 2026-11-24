@@ -70,7 +70,6 @@ base:
     publish_metrics: true
   roles:
     prefill:
-      gpus: 2
       # Each DEP2 worker spans both NUMA nodes, so each rank's host KV tier and Engram table
       # stay on its own GPU's node.
       gpu_indices: [[0, 2], [1, 3]]
@@ -220,7 +219,6 @@ override_5p1d_dep2_dep8_c7000:
   roles:
     prefill:
       nodes: 3
-      workers: 5
       env:
         # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
         DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
@@ -235,8 +233,6 @@ override_5p1d_dep2_dep8_c7000:
           host_cache_size: 134217728000
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       args:
         cuda_graph_config:
           batch_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76,
@@ -292,7 +288,6 @@ override_7p1d_dep2_dep32_c7600:
   roles:
     prefill:
       nodes: 4
-      workers: 7
       env:
         # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
         DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
@@ -306,8 +301,6 @@ override_7p1d_dep2_dep32_c7600:
           host_cache_size: 119185342464
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       env:
         TRTLLM_V41_ENCODER_REPLAY: "0"
       args:
@@ -363,15 +356,12 @@ override_1p4d_dep2_tep8_c84:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       gpu_indices: [0, 2]
       args:
         kv_cache_config:
           host_cache_size: 85899345920
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         cuda_graph_config:
           batch_sizes: [1, 2, 4]
@@ -400,7 +390,6 @@ override_7p1d_dep2_dep16_c7900:
   roles:
     prefill:
       nodes: 4
-      workers: 7
       env:
         # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
         DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
@@ -414,8 +403,6 @@ override_7p1d_dep2_dep16_c7900:
           host_cache_size: 134217728000
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cuda_graph_config:
           batch_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72,
@@ -468,7 +455,6 @@ override_5p1d_dep2_dep16_c5100:
   roles:
     prefill:
       nodes: 3
-      workers: 5
       env:
         # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
         DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
@@ -482,8 +468,6 @@ override_5p1d_dep2_dep16_c5100:
           host_cache_size: 134217728000
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cuda_graph_config:
           batch_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64]
@@ -537,15 +521,12 @@ override_1p4d_dep2_tep8_c240:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       gpu_indices: [0, 2]
       args:
         kv_cache_config:
           host_cache_size: 85899345920
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         cuda_graph_config:
           batch_sizes: [1, 2, 4]
@@ -576,15 +557,12 @@ override_1p4d_dep2_tep8_c140:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       gpu_indices: [0, 2]
       args:
         kv_cache_config:
           host_cache_size: 85899345920
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         cuda_graph_config:
           batch_sizes: [1, 2]
@@ -613,7 +591,6 @@ override_10p1d_dep2_dep16_c11718:
   roles:
     prefill:
       nodes: 5
-      workers: 10
       env:
         # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
         DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
@@ -627,8 +604,6 @@ override_10p1d_dep2_dep16_c11718:
           host_cache_size: 134217728000
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cuda_graph_config:
           batch_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72,
@@ -683,7 +658,6 @@ override_3p1d_dep2_dep32_c2286:
   roles:
     prefill:
       nodes: 2
-      workers: 3
       env:
         # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
         DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
@@ -697,8 +671,6 @@ override_3p1d_dep2_dep32_c2286:
           host_cache_size: 119185342464
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       env:
         TRTLLM_V41_ENCODER_REPLAY: "0"
       args:
@@ -752,7 +724,6 @@ override_2p1d_dep2_dep32_c1283:
   roles:
     prefill:
       nodes: 1
-      workers: 2
       env:
         # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
         DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
@@ -766,8 +737,6 @@ override_2p1d_dep2_dep32_c1283:
           host_cache_size: 119185342464
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       env:
         TRTLLM_V41_ENCODER_REPLAY: "0"
       args:
@@ -823,15 +792,12 @@ override_1p6d_dep2_tp4_c180:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       gpu_indices: [0, 2]
       args:
         kv_cache_config:
           host_cache_size: 85899345920
     decode:
       nodes: 6
-      workers: 6
-      gpus: 4
       args:
         cuda_graph_config:
           batch_sizes: [1, 2]
@@ -862,15 +828,12 @@ override_1p6d_dep2_tp4_c114:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       gpu_indices: [0, 2]
       args:
         kv_cache_config:
           host_cache_size: 85899345920
     decode:
       nodes: 6
-      workers: 6
-      gpus: 4
       args:
         cuda_graph_config:
           batch_sizes: [1, 2, 4]
