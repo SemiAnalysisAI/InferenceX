@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
         trust-remote-code: true
@@ -155,7 +153,6 @@ override_tp8_c64:
 override_tp4_c7:
   roles:
     agg:
-      gpus: 4
       args:
         chunked-prefill-size: 8192
         cuda-graph-max-bs-decode: 2
@@ -186,7 +183,6 @@ override_tp4_c7:
 override_tp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         chunked-prefill-size: 8192
         cuda-graph-max-bs-decode: 6
@@ -218,7 +214,6 @@ override_tp4_c16:
 override_tp4_c24:
   roles:
     agg:
-      gpus: 4
       args:
         chunked-prefill-size: 8192
         cuda-graph-max-bs-decode: 48
@@ -250,7 +245,6 @@ override_tp4_c24:
 override_tp4_c40:
   roles:
     agg:
-      gpus: 4
       args:
         chunked-prefill-size: 16384
         cuda-graph-max-bs-decode: 48

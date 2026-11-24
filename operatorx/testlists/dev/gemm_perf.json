@@ -147,7 +147,9 @@
       },
       "out": "bf16"
     },
-    "sources": []
+    "sources": [
+      "operatorx/Synthetic-Shapes/m8192_n8192_k8192"
+    ]
   },
   {
     "type": "gemm",
@@ -163,7 +165,9 @@
       },
       "out": "bf16"
     },
-    "sources": []
+    "sources": [
+      "operatorx/Synthetic-Shapes/m16384_n8192_k8192"
+    ]
   },
   {
     "type": "gemm",

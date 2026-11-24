@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: zai-org/GLM-5.2-FP8
         trust-remote-code: true
@@ -57,7 +55,6 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2399'
 
 # Tune admission and MTP depth per point; graph maxima follow admission.
 override_c1:
