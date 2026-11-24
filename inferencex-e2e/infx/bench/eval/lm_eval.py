@@ -139,7 +139,7 @@ def run(ctx: EvalContext) -> EvalOutcome:
         "--apply_chat_template", "--tasks", tasks(ctx.env),
         "--output_path", str(ctx.results_dir), "--log_samples",
         "--model_args", ",".join(model_args),
-        "--gen_kwargs", f"max_tokens={max_tokens},temperature=0,top_p=1",
+        "--gen_kwargs", f"max_tokens={max_tokens},temperature=0",
     ]  # fmt: skip
     if limit := env.optional("EVAL_LIMIT", env=ctx.env):
         argv += ["--limit", limit]
