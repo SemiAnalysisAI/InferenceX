@@ -878,7 +878,7 @@ glm5.2-fp4-mi355x-atom-disagg-agentic-mtp:
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
   precision: fp4
-  framework: atom-disagg
+  framework: atom
   router: { name: atomesh, version: "5f3ae2b5be695df4cf6cf53a16b226b6f8e73301" }
   kv-p2p-transfer: mooncake
   multinode: true
@@ -911,16 +911,13 @@ glm5.2-fp4-mi355x-atom-disagg-agentic-mtp:
         prefill: { num-worker: 1, tp: 1, pp: 4, ep: 1, dp-attn: false }
         decode: { num-worker: 3, tp: 4, ep: 1, dp-attn: false }
 
-# Single-node TP8 points on the same AToMesh + ATOM curve as the disaggregated
-# points above (atom-disagg maps to the mooncake-atom series): at concurrency 1
-# and 2 one node decodes faster than any prefill/decode split.
 glm5.2-fp4-mi355x-atom-disagg-agentic-mtp-agg:
   image: rocm/atom-dev:nightly_202611171508@sha256:ea74fa0b05d8c7a062ae235b901cb2b1bc0c169b0a5edd7ca07bfa3b967ca462
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
   precision: fp4
-  framework: atom-disagg
+  framework: atom
   multinode: true
   disagg: false
   srt-recipe-dir: glm5.2/atom/mi355x-fp4/agentx
