@@ -19,8 +19,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       args:
         served-model-name: zai-org/GLM-5.3-Flash
         tensor-parallel-size: 4

@@ -13335,6 +13335,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
 
 - config-keys:
+    - minimaxm31flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "New MiniMax-M3.1-Flash AgentX config on MI355X with ATOM: rocm/atom-dev:nightly_202611200431 (ATOM 0.1.11.dev71+g17edc6157 and AITER a485545d3, built from ROCm/ATOM main; the atomesh frontend container_image pins its digest sha256:57c08153e332315b85c00bb3bb6c1dd71504950f7989be83915be456cfb6749f), serving amd/MiniMax-M3.1-Flash-Quark-MXFP4 as shipped: MXFP4 routed experts; MXFP8 attention, dense MLP and shared expert, the shared expert kept as its own MLP."
+    - "Points: TP4 at concurrency 1, 2, 4, 8, 16 and 32 on the GPU prefix cache, and at 48 with the LMCache 0.5.6.dev139+gf22dec28 CPU tier (200 GiB per rank, dram-utilization 0.58)."
+    - "Every point runs the NVFP4 KV and index caches (the checkpoint is QAT-trained for an NVFP4 KV cache), 128-token blocks, prefix caching, gpu-memory-utilization 0.85, max-num-batched-tokens 32768 (16384 at concurrency 32), max-num-seqs at twice the concurrency, and decode graphs at every batch size up to 8, then in steps of 2, 4, 8 and 16 up to max-num-seqs."
+    - "Concurrency 1 to 8 run ATOM's mono decode (on by default) for decode steps of up to 16 rows. From 16, decode indexer scoring splits across the TP ranks by context (ATOM_M3_INDEXER_CP=1), which mono decode does not run with. Concurrency 32 adds the prefill delayer (interval 8, target fill 0.05, stall 2 ticks). The LMCache point uses 256-token chunks."
+    - "All-reduce is not quantized: AITER_QUICK_REDUCE_QUANTIZATION is left unset, so tensor-parallel all-reduce runs in BF16. No online quantization and no shared-expert fusion. Throughput runs use the minimax-m3.1-flash__dspark__native__probabilistic-block golden AL (4.04 at seven draft tokens)."
+    - "Relevant ATOM changes in the image: ROCm/ATOM#3310 (NVFP4 KV and index caches), #3308 (mono decode with the MXFP8 shared expert), #3576 with ROCm/aiter#8285 (indexer CP over the NVFP4 caches) and #3591 (LMCache offload with an NVFP4 KV and a DSpark draft of its own dtype)."
+    - "Draft data types: the DSpark draft weights run as shipped, MXFP8 (1x32 UE8M0 scales) attention and MLP linears with BF16 fc, Markov and confidence heads, sharing the target's embedding and LM head; the draft path is the MiniMaxAI snapshot whose dspark/ files are byte-identical to the served checkpoint's. Its KV cache, in a pool of its own, is ATOM's default beside an NVFP4 target (BF16) up to concurrency 32; at 48, --spec-decode-kv-cache-dtype fp8 lowers it to FP8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5157
+
+- config-keys:
     - qwen3.5-fp8-h100-sglang-agentic
     - qwen3.5-fp8-h100-sglang-agentic-mtp
   description:
