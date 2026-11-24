@@ -312,7 +312,7 @@ override_tp4_c36:
         # QKV projection as an FP8 GEMM in decode at 33-128 rows.
         dense-fp8-small-m: qkv
         # Host KV store, in GB per GPU.
-        kvstore-size: 310
+        kvstore-size: 360
         stream-interval: 20
   benchmark:
     env:
