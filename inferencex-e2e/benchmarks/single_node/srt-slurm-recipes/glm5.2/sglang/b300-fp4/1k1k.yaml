@@ -1,0 +1,67 @@
+# GLM-5.2 NVFP4 on B300, 1k1k, SGLang. Same flags as the B200 8k1k recipe
+# (glm5.2/sglang/b200-fp4), which is the cookbook "balanced" NVFP4 cell
+# (docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2) with its EAGLE flags
+# removed: TP8 with 8-way DP attention, chunked prefill 32768, 256 running
+# requests (mem-fraction lowered, see below).
+base:
+  schema: 2
+  name: glm5.2-fp4-b300-sglang-1k1k
+  resources:
+    gpu_type: b300
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      args:
+        served-model-name: nvidia/GLM-5.2-NVFP4
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        quantization: modelopt_fp4
+        kv-cache-dtype: fp8_e4m3
+        chunked-prefill-size: 32768
+        # Cookbook 0.92 OOMs at CUDA-graph capture on this nightly; leave room
+        # for graph capture and DSA indexer temporaries like the AgentX sibling.
+        mem-fraction-static: 0.85
+        max-running-requests: 256
+        watchdog-timeout: 1800
+        enable-metrics: false
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_RADIX_FORCE_MISS: '1'
+        # Keep FlashInfer/Triton/JIT caches off the shared home.
+        SGLANG_CACHE_DIR: /tmp/sglang-cache
+        # As in glm5.2-fp4-b300-sglang-agentic-mtp.
+        TORCH_CUDA_ARCH_LIST: '10.0'
+
+# Decode graphs sized to the request concurrency (no larger than the 256 cap).
+zip_override_dep8:
+  roles:
+    agg:
+      args:
+        # Cookbook --attn-dp-size 8; spelled the pre-#41818 way so the
+        # matrix's DP_ATTENTION check reads it.
+        data-parallel-size: 8
+        enable-dp-attention: true
+        cuda-graph-max-bs-decode: [8, 16, 32, 64, 128, 256]
+  benchmark:
+    env:
+      CONC: ['8', '16', '32', '64', '128', '256']
+
+# Attention sharded TP8 with no per-GPU attention replicas.
+zip_override_tp8:
+  roles:
+    agg:
+      args:
+        cuda-graph-max-bs-decode: [4, 8, 16, 32, 64, 128, 256]
+  benchmark:
+    env:
+      CONC: ['4', '8', '16', '32', '64', '128', '256']
