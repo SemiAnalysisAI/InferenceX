@@ -1306,7 +1306,7 @@ dsr1-fp8-h200-sglang:
       search-space:
       - gpus-per-worker: 8
         tp: 8
-        conc-start: 4
+        conc-start: 64
         conc-end: 64
         srt-recipe: 8k1k.yaml
 
