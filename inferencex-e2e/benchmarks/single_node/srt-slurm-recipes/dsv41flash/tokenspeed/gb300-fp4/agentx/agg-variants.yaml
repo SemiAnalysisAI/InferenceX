@@ -40,8 +40,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         PYTORCH_CUDA_ALLOC_CONF: per_process_memory_fraction:0.95
         TOKENSPEED_PREFILL_INDEX_LOGITS_MB: '2048'

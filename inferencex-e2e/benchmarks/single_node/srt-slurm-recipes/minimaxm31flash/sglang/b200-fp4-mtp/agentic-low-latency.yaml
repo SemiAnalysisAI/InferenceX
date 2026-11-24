@@ -19,8 +19,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       # The MSA-V1 MonoKernel serves batch-size-1 DSpark steps; larger batches take
       # the standard path.
       args:

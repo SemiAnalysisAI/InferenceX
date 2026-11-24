@@ -77,7 +77,6 @@ base:
     dp_launch_mode: per_node
   roles:
     prefill:
-      gpus: 2
       kv_events: true
       env:
         HF_HUB_CACHE: "/hf_hub_cache"
@@ -129,8 +128,6 @@ base:
         safetensors-load-strategy: prefetch
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         HF_HUB_CACHE: "/hf_hub_cache"
         HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
@@ -197,13 +194,11 @@ override_5p1d_dep2_dep32_c3200:
   roles:
     prefill:
       nodes: 3
-      workers: 5
       args:
         # The peer group spans every prefill GPU; the store must be per job.
         engram-config: '{"cpu_offload":false,"embedding_across_dp":true,"use_thp":false,"peer_group_size":10,"peer_group_store":"/logs/engram-peers/store"}'
     decode:
       nodes: 8
-      gpus: 32
       args:
         data-parallel-size: 32
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":32,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":false,"log_balancedness_interval":3000}'
@@ -218,12 +213,10 @@ override_12p1d_dep2_dep32_c10288:
   roles:
     prefill:
       nodes: 6
-      workers: 12
       args:
         engram-config: '{"cpu_offload":false,"embedding_across_dp":true,"use_thp":false,"peer_group_size":24,"peer_group_store":"/logs/engram-peers/store"}'
     decode:
       nodes: 8
-      gpus: 32
       args:
         data-parallel-size: 32
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":32,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":false,"log_balancedness_interval":3000}'
@@ -238,7 +231,6 @@ override_7p1d_dep2_dep16_c6600:
   roles:
     prefill:
       nodes: 4
-      workers: 7
       args:
         engram-config: '{"cpu_offload":false,"embedding_across_dp":true,"use_thp":false,"peer_group_size":14,"peer_group_store":"/logs/engram-peers/store"}'
     decode:
