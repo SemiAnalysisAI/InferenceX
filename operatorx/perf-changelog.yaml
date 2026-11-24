@@ -42,7 +42,7 @@
     - "Kimi-K3 attention: decode context parallelism applies to the MLA layer only; the KDA layer's dcp cases are dropped."
     - "Recovery: after a case that raised an error, or that failed with nothing cached while the process still holds device memory (a failed vLLM startup is never freed), the process restarts and runs that case once more in a fresh process; a layer that fails again there has the rest of its cases recorded with that result. A single-device process that dies mid-case resumes after it (the case is an error). Previously every case after a failed attention engine startup was recorded unsupported."
 - date: 2026-11-24
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5231
   operators: [gemm, moe, attention]
   pools: [h100-dgxc, h200-dgxc, b200-nscale, b300, gb200, gb300, mi300x, mi325x, mi355x]
   description:
