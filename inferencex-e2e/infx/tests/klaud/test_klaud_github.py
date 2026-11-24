@@ -4136,7 +4136,7 @@ def test_a_fixed_sequence_result_reads_the_dashboards_median_axes():
     env = {
         "RUNNER_TYPE": "h100", "FRAMEWORK": "sglang", "PRECISION": "fp8", "SPEC_DECODING": "none",
         "ISL": "1024", "OSL": "1024", "DISAGG": "false", "MODEL_PREFIX": "dsr1", "IMAGE": "i:1",
-        "TP": "8", "EP_SIZE": "1", "DP_ATTENTION": "false",
+        "TP": "8", "GPU_COUNT": "8", "EP_SIZE": "1", "DP_ATTENTION": "false",
     }  # fmt: skip
 
     axes = reporting.values(build_result(raw, env)).dashboard

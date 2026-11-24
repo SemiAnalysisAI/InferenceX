@@ -363,8 +363,8 @@ class TestAgenticMatrixEntries:
 
     def test_only_the_kebab_case_key_sets_spec_decoding(self):
         entry = {
-            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
-            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "prefill": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
             "conc-list": [1],
         }
         assert MultiNodeSearchSpaceEntry(**entry, **{"spec-decoding": "mtp"}).spec_decoding == "mtp"
@@ -664,7 +664,7 @@ class TestMultiNodeSearchSpaceEntry:
         assert entry.decode is None
 
     def test_cpu_power_rides_on_power(self):
-        row = {"worker": {"tp": 8, "ep": 1, "dp-attn": False}, "num-nodes": 2,
+        row = {"worker": {"gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False},
                "conc-list": [1], "cpu-power": True}  # fmt: skip
         with pytest.raises(ValidationError, match="cpu-power requires power"):
             MultiNodeSearchSpaceEntry(**row)

@@ -336,7 +336,9 @@ def test_a_multinode_spec_label_must_match_the_decode_worker(project, label, dec
         "prefill": {"args": {}}, "decode": {"args": decode_args},
     }})  # fmt: skip
     env = {**MULTI_ENV, "IS_AGENTIC": "1", "FRAMEWORK": "dynamo-sglang", "MODEL_PREFIX": "glm5.2",
-           "SPEC_DECODING": label}  # fmt: skip
+           "SPEC_DECODING": label, "IS_MULTINODE": "true", "DISAGG": "true",
+           "PREFILL_NUM_WORKERS": "1", "PREFILL_GPUS_PER_WORKER": "8",
+           "DECODE_NUM_WORKERS": "1", "DECODE_GPUS_PER_WORKER": "8"}  # fmt: skip
     if isinstance(expected, str):
         with pytest.raises(ValueError, match=re.escape(expected)):
             bind_multinode(str(path), env, root=project)

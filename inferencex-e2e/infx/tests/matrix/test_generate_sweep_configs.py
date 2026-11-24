@@ -3231,18 +3231,18 @@ def test_require_power_is_scoped_to_one_multinode_fixed_sequence(
 
 
 def test_cpu_power_reaches_the_planner_row_beside_power(
-    sample_multinode_config, sample_runner_config
+    sample_multinode_config, sample_runner_config, tmp_path
 ):
     from infx.matrix.generate import expand_full_sweep
 
-    config = sample_multinode_config
+    config = fixture_recipes(sample_multinode_config, tmp_path)
     point = next(iter(config.values()))["scenarios"]["fixed-seq-len"][0]["search-space"][0]
     point["power"] = True
-    rows = expand_full_sweep(config, sample_runner_config)
+    rows = expand_full_sweep(config, sample_runner_config, root=tmp_path)
     assert rows
     assert all(row["power"] is True and "cpu-power" not in row for row in rows)
     point["cpu-power"] = True
-    rows = expand_full_sweep(config, sample_runner_config)
+    rows = expand_full_sweep(config, sample_runner_config, root=tmp_path)
     assert all(row["cpu-power"] is True for row in rows)
 
 
