@@ -694,8 +694,14 @@ def test_a_frontend_image_of_its_own_is_staged_like_the_main_image(harness):
         "  enable_multiple_frontends: false\n"
         '  container_image: "registry.example/router:1"\n'
     )
+    # The llm-d sidecar needs the decode worker's KV transfer backend.
+    lane = LANE_FRAGMENT.replace(
+        "  decode:\n    nodes: 1\n    workers: 1\n    gpus: 8\n    args:\n",
+        "  decode:\n    nodes: 1\n    workers: 1\n    gpus: 8\n    args:\n"
+        "      disaggregation-transfer-backend: nixl\n",
+    )
     env = lane_env(
-        harness, "gb300-nv", LANE_FRAGMENT + frontend, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
+        harness, "gb300-nv", lane + frontend, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
         FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
