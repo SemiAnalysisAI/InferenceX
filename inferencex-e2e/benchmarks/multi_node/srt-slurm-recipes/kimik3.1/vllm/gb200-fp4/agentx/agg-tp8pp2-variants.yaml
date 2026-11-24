@@ -31,8 +31,6 @@ base:
   roles:
     agg:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_RPC_TIMEOUT: "600000"
@@ -63,7 +61,7 @@ base:
         enable-auto-tool-choice: true
         tool-call-parser: kimi_k3
         reasoning-parser: kimi_k3
-        # 112742379520 bytes per rank is the dram-utilization 0.5 share of a 4-GPU tray.
+        # 112742379520 bytes per rank is half of each GPU's share of a 4-GPU tray.
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112742379520,"lazy_offload":false}}'
 
   srun_options:

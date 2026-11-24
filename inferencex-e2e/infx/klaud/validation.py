@@ -248,6 +248,7 @@ def check_matrix(matrix: dict, canonical: dict, head: str, family: str) -> None:
         for point in benchmark_points([entry])
     }
     for entry in benchmark_entries(matrix):
+        # Sweeps set up before scores left the workflows still carry "priority".
         measured = {
             key: value for key, value in entry.items() if key not in ("priority", "queue-token")
         }

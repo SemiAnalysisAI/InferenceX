@@ -43,6 +43,7 @@ from srtctl.core.schema import ClusterConfig  # noqa: E402
 
 POINT_RECIPE = {
     "schema": 2,
+    "name": "fixture",
     "engine": "sglang",
     "resources": {"gpus_per_node": 8},
     "roles": {"agg": {
@@ -59,13 +60,23 @@ POINT_ENV = {
     "IS_MULTINODE": "false", "SRT_RECIPE": "recipe.yaml", "FAKE_RESULTS": "single",
 }  # fmt: skip
 
-LANE_FRAGMENT = """name: "fixture"
+LANE_FRAGMENT = """schema: 2
+name: "fixture"
+engine: sglang
+frontend:
+  type: sglang-router
 roles:
   prefill:
+    nodes: 1
+    workers: 1
+    gpus: 8
     args:
       tensor-parallel-size: 8
       watchdog-timeout: 600
   decode:
+    nodes: 1
+    workers: 1
+    gpus: 8
     args:
       tensor-parallel-size: 8
       watchdog-timeout: 600
@@ -115,11 +126,16 @@ def lane_env(harness, cluster_id: str, recipe: str = LANE_FRAGMENT, **overrides:
     mirror = harness.workspace / "benchmarks/multi_node/srt-slurm-recipes/test/lane.yaml"
     mirror.parent.mkdir(parents=True, exist_ok=True)
     mirror.write_text(recipe)
+    # One worker per node, whatever the cluster's node size.
+    clusters = yaml.safe_load(harness.config.read_text())["clusters"]
+    gpus = str(clusters.get(cluster_id, {}).get("gpus-per-node", 8))
     env = {
         **harness.env, "RUNNER_NAME": overrides.pop("RUNNER_NAME", None) or runner_for(cluster_id),
         "IS_MULTINODE": "true", "SRT_RECIPE": f"{MIRROR}/test/lane.yaml", "IMAGE": "test:tag",
         "CONC_LIST": "4", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "1024", "OSL": "1024",
-        "FAKE_RESULTS": "fixed",
+        "FAKE_RESULTS": "fixed", "DISAGG": "true",
+        "PREFILL_NUM_WORKERS": "1", "DECODE_NUM_WORKERS": "1",
+        "PREFILL_GPUS_PER_WORKER": gpus, "DECODE_GPUS_PER_WORKER": gpus,
     }  # fmt: skip
     return {**env, **overrides}
 
@@ -216,7 +232,7 @@ VIDEO_ENV = {
     "MODEL_PREFIX": "h3", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "0", "OSL": "0",
     "SCENARIO_TYPE": "video-generation", "IS_MULTINODE": "false", "GPU_COUNT": "2",
     "CONC_LIST": "1 2", "VIDEO_SPEC": "h3.yaml", "VIDEO_SET": "release-v1", "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
-    "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/b200-bf16/serving-client.yaml",
+    "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/b200-bf16/video/agg-ulysses.yaml",
     "FAKE_RESULTS": "video",
 }  # fmt: skip
 
@@ -414,11 +430,11 @@ def test_a_recipe_the_binder_rejects_fails_the_point_with_the_binders_error(harn
 
 
 @pytest.mark.parametrize(("dram", "exclusive", "step", "job"), [
-    (8000, True, {}, {"mem": "0"}),
+    (8000, True, {"mem": "4000M"}, {"mem": "0"}),
     (8000, False, {"mem": "4000M"}, {"mem": "4000M"}),
     (None, True, {}, {}),
 ])  # fmt: skip
-def test_single_node_jobs_cap_dram_only_on_shared_nodes(harness, dram, exclusive, step, job):
+def test_single_node_jobs_cap_worker_dram_including_exclusive_nodes(harness, dram, exclusive, step, job):
     slurm = {
         "partition": "p", "exclusive": True, "srun-args": ["--container-remap-root"],
         "volumes": {"hf-hub-cache": {"path": str(harness.tmp / "hf")}},
@@ -433,11 +449,22 @@ def test_single_node_jobs_cap_dram_only_on_shared_nodes(harness, dram, exclusive
     config = harness.tmp / "dram-runners.yaml"
     config.write_text(yaml.safe_dump({"labels": {"cluster:lab": ["lab_00"]}, "clusters": {"lab": cluster}}))
     env = single_node_env(harness, "lab", RUNNER_NAME="lab_00", GPU_COUNT="4")
-    assert_ok(launch(env, config, harness.workspace))
-
+    result = launch(env, config, harness.workspace)
+    if dram is None:
+        assert result.returncode != 0
+        assert "must declare available-cpu-dram-mib" in result.stderr
+        assert srtctl_calls(harness.logs) == []
+        return
+    assert_ok(result)
     [call] = srtctl_calls(harness.logs)
-    assert json.loads(call["env"]["SRT_SRUN_OPTIONS"]) == {"container-remap-root": "", **step}
+    assert json.loads(call["env"]["SRT_SRUN_OPTIONS"]) == {"container-remap-root": ""}
+    bound = Path(call["argv"][call["argv"].index("--file") + 1])
+    recipe = yaml.safe_load(bound.read_text())
+    assert recipe["roles"]["agg"]["srun_options"] == step
+    assert "sbatch_directives" not in recipe
     assert srtslurm(harness.workspace).get("default_sbatch_directives", {}) == job
+    assert recipe["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "4000"
+    assert "mem" not in recipe.get("srun_options", {})
 
 
 LABS = {
@@ -461,7 +488,7 @@ LABS = {
 
 def lab_config(tmp: Path) -> Path:
     """runners.yaml of the synthetic clusters, their storage under ``tmp``."""
-    common = {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm"}
+    common = {"gpus-per-node": 8, "available-cpu-dram-mib": 8000, "arch": "x86_64", "scheduler": "slurm"}
     clusters = {
         "lab-a": {**common, "models": {"entries": {"Model": {"root": "nvme", "dir": "model"}}}, "slurm": {
             "partition": "p", "exclusive": True,
@@ -546,6 +573,9 @@ def test_multinode_lane_stages_workflow_artifacts(harness, monkeypatch, cluster_
             "RESULT_DIR": "/logs/agentic", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf_mmap_cache",
             "HF_HUB_CACHE": "/hf_hub_cache", "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "0",
             "REQUIRE_POWER": "0",
+            "INFERENCEX_WORKER_MEMORY_MIB": "16000", "INFERENCEX_DECODE_MEMORY_MIB": "8000",
+            "PREFILL_NUM_WORKERS": "1", "DECODE_NUM_WORKERS": "1",
+            "PREFILL_GPUS_PER_WORKER": "8", "DECODE_GPUS_PER_WORKER": "8",
         }
 
     config = srtslurm(checkout)
@@ -642,7 +672,8 @@ def test_nvl72_agentx_point_measures_gpu_and_cpu_power_by_default(harness, point
 
 def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
     dedicated = "services:\n" + "".join(
-        f"  - type: {kind}\n    placement:\n      node: dedicated\n" for kind in ("etcd", "nats")
+        f"  - name: {kind}\n    type: {kind}\n    placement:\n      node: dedicated\n"
+        for kind in ("etcd", "nats")
     )
     env = lane_env(
         harness, "gb300-nv", LANE_FRAGMENT + dedicated, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
@@ -762,7 +793,9 @@ def batch_env(harness, **overrides: str) -> dict[str, str]:
 def test_single_node_agentx_shares_the_clusters_dataset_cache(
     harness, cluster_id, agentic, mounted, handed, opened
 ):
-    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": POINT_RECIPE}))
+    # The node size comes from the cluster, so the TP4 point fits a 4-GPU node too.
+    recipe = {key: value for key, value in POINT_RECIPE.items() if key != "resources"}
+    (harness.workspace / "recipe.yaml").write_text(yaml.safe_dump({"base": recipe}))
     env = {
         **harness.env, **POINT_ENV, "RUNNER_NAME": runner_for(cluster_id), "PRECISION": "fp8",
         "MODEL_PREFIX": "dsv41flash", "IS_AGENTIC": agentic, "DURATION": "600",
@@ -853,7 +886,7 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
     (mirror / "trtllm/forced.yaml").write_text(
         "roles:\n  decode:\n    env:\n      TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: 2\n      KEEP: 1\n"
     )
-    (mirror / "eval.yaml").write_text(LANE_FRAGMENT)
+    (mirror / "eval.yaml").write_text(LANE_FRAGMENT.replace("    nodes: 1\n", "    nodes: 2\n").replace("gpus: 8", "gpus: 4"))
     staged = {
         "eval_suite": "kimi_tool_call_schema", "recipe_fingerprint": "", "conc": 4,
         "eval_concs": [4, 8], "completed_eval_concs": [8], "failed_eval_concs": [4],
@@ -894,8 +927,9 @@ def test_eval_only_runs_the_eval_recipe_with_real_verification(harness):
 
 GATE_DATASET = "al_gate_dataset/speedbench_coding.jsonl"
 DRAFTING_LANE = LANE_FRAGMENT.replace(
-    "  decode:\n    args:\n",
-    "  decode:\n    args:\n      speculative-config: '{\"method\": \"mtp\", \"num_speculative_tokens\": 3}'\n",
+    "  decode:\n    nodes: 1\n    workers: 1\n    gpus: 8\n    args:\n",
+    "  decode:\n    nodes: 1\n    workers: 1\n    gpus: 8\n    args:\n"
+    "      speculative-config: '{\"method\": \"mtp\", \"num_speculative_tokens\": 3}'\n",
 )
 
 
@@ -946,7 +980,7 @@ def test_an_agentic_eval_without_staged_prompts_runs_alone_and_records_why(harne
     assert (skipped["status"], skipped["error"]) == ("skipped", "no SPEED-Bench prompts at ''")
 
 
-def test_bundle_variants_take_the_lane_job_edits(harness, monkeypatch):
+def test_bundle_variants_preserve_node_reservations_and_map_master_workers(harness, monkeypatch):
     monkeypatch.setitem(lanes.SRT_LANES, ("lab-a", LaunchPath.SRT_MULTI), LABS["lab-a"]["lane"])
     bundle = "base:\n" + "".join(f"  {line}\n" for line in LANE_FRAGMENT.splitlines())
     env = lane_env(
@@ -960,7 +994,11 @@ def test_bundle_variants_take_the_lane_job_edits(harness, monkeypatch):
     bound = yaml.safe_load((Path(call["cwd"]) / argv[argv.index("--file") + 1]).read_text())
     args = {"tensor-parallel-size": 8, "watchdog-timeout": 600, "dist-timeout": 1800}
     assert bound["name"] == call["env"]["RUNNER_NAME"] == "inferencex-lab-a_00"
-    assert bound["roles"] == {"prefill": {"args": args}, "decode": {"nodes": 3, "args": args}}
+    assert bound["roles"] == {
+        role: {"nodes": nodes, "workers": 1, "gpus": 8, "args": args,
+               "srun_options": {"mem": "8000M"}}
+        for role, nodes in (("prefill", 1), ("decode", 3))
+    }
 
 
 def test_srt_recipe_outside_the_recipe_mirror_fails_before_any_setup(harness):

@@ -22,8 +22,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       args:
         served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
         tensor-parallel-size: 4
@@ -104,7 +102,7 @@ zip_override_tp4_dspark7:
 
 # c32-c72: the working set outgrows the GPU KV cache, so
 # SimpleCPUOffloadConnector (eager) keeps about 24M tokens in 1349 GB of host
-# memory (dram-utilization 0.9 of the TP4 lane). LRU eviction drops the least
+# memory. LRU eviction drops the least
 # recently used prefixes from their tail, so a hot session's chain stays
 # whole. c32 runs DSpark 7 at 0.85 GPU memory utilization; c64, c68 and c72
 # run DSpark 3 at 0.90.
@@ -125,7 +123,6 @@ zip_override_tp4_offload:
     env:
       CONC: ['32', '64', '68', '72']
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1349'
 
 # c48 and c56 run on the same offload tier with both settings: DSpark 7 at 0.85
 # GPU memory utilization (as c32) and DSpark 3 at 0.90 (as c64). The two lanes
@@ -143,7 +140,6 @@ zip_override_tp4_offload_dspark7:
     env:
       CONC: ['48', '56']
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1349'
 
 zip_override_tp4_offload_dspark3:
   roles:
@@ -158,4 +154,3 @@ zip_override_tp4_offload_dspark3:
     env:
       CONC: ['48', '56']
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '1349'

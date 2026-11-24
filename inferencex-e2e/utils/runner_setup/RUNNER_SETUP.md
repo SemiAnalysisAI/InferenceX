@@ -205,24 +205,20 @@ must require its unique `ci-job-*` label; a workflow that targets only a generic
 hardware label bypasses admission accounting.
 
 If `PRIORITY_SCHEDULER_ENABLED` is disabled, workflows omit `nodes:N`, `ci-job-*`,
-and `ci-attempt-*` and target the plain runner label. The priority score also
-subtracts `0.001` per additional node so otherwise equal work prefers smaller
-allocations without overriding the existing business-priority signals.
+and `ci-attempt-*` and target the plain runner label. When it is enabled, each
+workflow's setup job uploads a `scheduling-facts.json` artifact keyed by the
+token in every `ci-job-<token>` label. The priority scheduler scores jobs from
+those facts, node count included, with weights kept outside this repository.
 
-Aggregated multi-node search-space entries must declare one aggregate `worker`
-role and `num-nodes`; that value becomes the generated `node-count` directly.
-The worker may set `num-worker` when the aggregate engine uses multiple process
-replicas, otherwise it defaults to one. The generator expands this role into
-the legacy internal prefill/decode matrix shape expected by the launcher.
+Aggregated multi-node search-space entries declare one aggregate `worker`
+role. The worker may set `num-worker` when the aggregate engine uses multiple
+process replicas, otherwise it defaults to one. The generator expands this role
+into the internal prefill/decode matrix shape expected by the launcher.
 Aggregate master entries cannot declare separate `prefill` or `decode` roles.
 
-Disaggregated entries must declare `prefill` and `decode`, and reject both
-`worker` and `num-nodes`. Their generated `node-count` is derived from, in
-precedence order:
-
-1. checked-in srt-slurm recipe `resources`;
-2. explicit `PREFILL_NODES` and `DECODE_NODES` settings; or
-3. worker GPU footprints divided by the relevant hardware's GPUs per node.
+Disaggregated entries declare `prefill` and `decode`, and reject `worker`.
+For both topologies, the generated `node-count` reads the SRT recipe’s declared worker
+node reservations, accounting for colocated roles and auxiliary nodes.
 
 Runner leases account for GitHub-managed work only. Slurm remains the final
 capacity authority for external users, reservations, offline compute nodes,
@@ -302,6 +298,33 @@ nodes and jobs; the MI300X collector must retain only `MI300X-UBUNTU`.
 `quanta-ccs-aus-k11-45` is included in the nine-node pool. The provider validated
 it for single-node use but had not yet qualified its multi-node fabric at
 handoff; GPU enumeration alone does not validate cross-node collectives.
+
+### CoreWeave A100 outside the priority controller
+
+`a100-cw` is a two-node CoreWeave SUNK cluster with eight A100 80 GB GPUs per node (Slurm
+partition `a100`, account `cw-sup`). Runners `a100-cw_00` and `a100-cw_01` run as `oren` on
+the login pod, under `/mnt/home/oren/gharunners/gharunnerNN/actions-runner`, in the default
+`github-actions` tmux session. Provision with `setup.sh` and tags
+`slurm,a100,a100-cw,cluster:a100-cw`. The login node is a Kubernetes pod without systemd, so
+start the listeners again after a pod restart:
+
+```sh
+bash ~/gharunners/start_runners.sh 0 1 ~/gharunners
+```
+
+Caches live on the shared `/mnt/data` volume: `hf-hub-cache`, `aiperf-cache` and `squash`.
+A video job downloads a missing model snapshot into `hf-hub-cache` from the login pod before it
+submits; H3 takes about 355 GB.
+Image imports run on a compute node; the login pod cannot write enroot's default paths.
+
+The cluster runs no Slurm collector, so the priority controller has no telemetry for it and
+fences both runners with `ci-slurm-unavailable`. Its benchmark jobs skip admission instead:
+`benchmark-tmpl.yml` requests the job's runner label alone (`a100`, `cluster:a100-cw` or a
+node name) and GitHub dispatches each job to an idle runner. Every single-node job takes a
+whole node, so two runners match the two nodes and Slurm queues anything beyond that. The
+other workflows (profiling, SpeedBench, multi-node) keep their admission labels and cannot
+run here. Deploy a collector and remove that exception before the cluster shares capacity
+with multi-node or externally submitted work.
 
 The login node (where the runners live) and the Slurm compute nodes (where benchmarks
 run) exchange everything through the filesystem, so every path the CI touches must be
