@@ -42,6 +42,9 @@ fairness plan, the binder also requires SGLang's `--disable-conditioning-cache`
 or vLLM-Omni's `OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0` in the selected recipe.
 It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.
+Every run records `configuration.optimizations` as `[]` in each cell's `run.json`.
+The SGLang work attestation fails when the engine log shows cache-dit or SubBlock
+sparse attention running.
 
 The launch receipt records recipe-wide `environment` and server `env` values
 after binding, with server values taking precedence. Use these fields only for
