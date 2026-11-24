@@ -1130,6 +1130,27 @@ minimaxm31flash-fp4-mi355x-sglang-agentic-dspark:
       # High-Throughput: TP4 + HiCache, 180 GB of host KV per rank (720 GB per server).
       - { gpus-per-worker: 4, tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48, 64], srt-recipe: agentic.yaml }
 
+# MiniMax-M3.1-Flash on ATOM, following the upstream TP4 + DSpark AgentX recipe
+# (ROCm/ATOM recipes/MiniMax-M3-Agentic-InferenceX.md). Seven-token DSpark uses
+# golden AL 4.04 for throughput and real acceptance for eval.
+minimaxm31flash-fp4-mi355x-atom-agentic-dspark:
+  image: rocm/atom-dev:nightly_202611200431
+  model: amd/MiniMax-M3.1-Flash-Quark-MXFP4
+  model-prefix: minimaxm31flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: atom
+  multinode: false
+  srt-recipe-dir: minimaxm31flash/atom/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    # dram-utilization 0.58 -> TOTAL_CPU_DRAM_GB=869 per TP4 server
+    # (2861022 MiB * 0.58 * 4/8); the recipe's LMCache tier is
+    # 200 GiB x 4 ranks = 858.99 GB.
+    - search-space:
+      - { gpus-per-worker: 4, tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32], srt-recipe: agentic.yaml }
+      - { gpus-per-worker: 4, tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, spec-decoding: mtp, conc-list: [48], srt-recipe: agentic.yaml }
+
 # Five-token DSpark uses golden AL 3.51 for throughput and real acceptance for eval.
 dsv41flash-fp4-mi355x-atom-agentic-dspark:
   image: rocm/atom-dev:nightly_202611101510
