@@ -547,10 +547,30 @@ def _reseal(bundle):
 def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout_identity(tmp_path):
     from infx.results.video_artifacts import validate_video_artifacts
 
-    artifacts = _sweep(tmp_path)
-    assert (
-        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
+    artifacts = _sweep(tmp_path, attempts=("1", "2"))
+    _bundle(tmp_path, artifacts, "2" * 64, "1")
+    selection = validate_video_artifacts(
+        artifacts, run_id="123", run_attempt="2", head_sha="c" * 40
     )
+    expected = ["h3-results-123-1-" + "1" * 64, "h3-results-123-2-" + "2" * 64]
+    assert selection == {
+        "version": 1,
+        "source_run_id": "123",
+        "source_run_attempt": "2",
+        "source_head_sha": "c" * 40,
+        "artifacts": [
+            {
+                "name": name,
+                "manifest_sha256": hashlib.sha256(
+                    (artifacts / name / "manifest.json").read_bytes()
+                ).hexdigest(),
+                "sha256sums_sha256": hashlib.sha256(
+                    (artifacts / name / "SHA256SUMS").read_bytes()
+                ).hexdigest(),
+            }
+            for name in expected
+        ],
+    }
     with pytest.raises(ValueError, match="trusted run/head"):
         validate_video_artifacts(artifacts, run_id="124", run_attempt="2", head_sha="c" * 40)
     with pytest.raises(ValueError, match="trusted run/head/attempt"):
@@ -646,9 +666,10 @@ def test_reuse_counts_only_the_newest_attempt_of_each_selected_deployment(tmp_pa
     # Deployment 1 ran only in attempt 1; deployment 2 ran in attempts 1 and 2.
     artifacts = _sweep(tmp_path, attempts=("1", "2"))
     _bundle(tmp_path, artifacts, "2" * 64, "1")
-    assert (
-        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
+    selection = validate_video_artifacts(
+        artifacts, run_id="123", run_attempt="2", head_sha="c" * 40
     )
+    assert len(selection["artifacts"]) == 2
     if fault == "newest_corrupted":
         newest = artifacts / ("h3-results-123-2-" + "2" * 64)
         next(newest.rglob("*.mp4")).write_bytes(b"corrupted")

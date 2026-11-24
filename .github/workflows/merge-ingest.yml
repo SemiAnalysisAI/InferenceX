@@ -135,8 +135,20 @@ jobs:
                   SOURCE_HEAD_SHA: ${{ steps.reuse.outputs.reuse-source-head-sha }}
                   SOURCE_RUN_ATTEMPT: ${{ steps.reuse.outputs.reuse-source-run-attempt }}
               run: |
+                  source "$GITHUB_WORKSPACE/inferencex-e2e/benchmarks/check_env.sh"
+                  check_env_vars GITHUB_WORKSPACE RUNNER_TEMP SOURCE_RUN_ID SOURCE_RUN_ATTEMPT SOURCE_HEAD_SHA
                   python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
-                    --run-id "$SOURCE_RUN_ID" --run-attempt "$SOURCE_RUN_ATTEMPT" --head-sha "$SOURCE_HEAD_SHA"
+                    --run-id "$SOURCE_RUN_ID" --run-attempt "$SOURCE_RUN_ATTEMPT" --head-sha "$SOURCE_HEAD_SHA" \
+                    --selection-output "$RUNNER_TEMP/video-publication-selection.json"
+
+            - name: Upload validated video publication selection
+              if: steps.plan.outputs.video == 'true'
+              id: video-selection
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: video-publication-selection
+                  path: ${{ runner.temp }}/video-publication-selection.json
+                  if-no-files-found: error
 
             - name: Publish reused videos
               if: steps.plan.outputs.video == 'true'
@@ -144,6 +156,7 @@ jobs:
               env:
                   SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
                   MERGE_RUN_ID: ${{ github.run_id }}
+                  SELECTION_ARTIFACT_ID: ${{ steps.video-selection.outputs.artifact-id }}
                   APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
               with:
                   github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
@@ -156,6 +169,7 @@ jobs:
                       client_payload: {
                         source_run_id: process.env.SOURCE_RUN_ID,
                         merge_run_id: process.env.MERGE_RUN_ID,
+                        selection_artifact_id: process.env.SELECTION_ARTIFACT_ID,
                       },
                     });
 
