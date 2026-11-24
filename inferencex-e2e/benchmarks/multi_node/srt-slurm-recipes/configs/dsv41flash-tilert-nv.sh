@@ -152,23 +152,18 @@ print(f"placed {src} at {dst}")
 PY
 fi
 
-# AUTOTUNE_CACHE_SEED=<directory under /configs>: the FlashInfer autotune results vLLM saved for this
-# exact prefill (same image, flags and GPU), in vLLM's own layout under its config hash. A cold start
-# then loads them instead of re-tuning, as a warm deployment does. vLLM reads them only under the
-# same config hash and FlashInfer only with the same library versions and GPU; otherwise the prefill
-# tunes as before. Copy them into the writable VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR, where vLLM saves
-# after a re-tune; write-then-rename, since the two prefill workers on a tray may copy at once.
 if [[ "$TILERT_ROLE" == prefill && -n "${AUTOTUNE_CACHE_SEED:-}" ]]; then
-    check_env_vars VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR
-    python3 - "$AUTOTUNE_CACHE_SEED" "$VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR" <<'PY'
+    check_env_vars VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR AUTOTUNE_CONFIG_HASH
+    python3 - "$AUTOTUNE_CACHE_SEED" "$VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR/$AUTOTUNE_CONFIG_HASH" <<'PY'
 import os, pathlib, shutil, sys
 src, dst = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
-files = sorted(p for p in src.rglob("*.json") if p.is_file())
+files = sorted(p for p in src.glob("*.json") if p.is_file())
 if not files:
     raise SystemExit(f"no autotune results under {src}")
+dst.mkdir(parents=True, exist_ok=True)
 for f in files:
-    out = dst / f.relative_to(src)
-    out.parent.mkdir(parents=True, exist_ok=True)
+    out = dst / f.name
+    # Workers sharing a tray can seed the same cache concurrently.
     tmp = out.with_name(f".{out.name}.{os.uname().nodename}.{os.getpid()}")
     shutil.copyfile(f, tmp)
     os.replace(tmp, out)

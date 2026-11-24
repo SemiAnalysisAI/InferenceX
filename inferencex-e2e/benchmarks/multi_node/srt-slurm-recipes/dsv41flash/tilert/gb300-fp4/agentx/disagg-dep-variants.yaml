@@ -50,7 +50,8 @@ base:
         # loads them instead of re-tuning. A cold tune's temporary buffers otherwise leave the
         # prefill a KV cache of about 60 GiB per GPU instead of about 88 GiB.
         VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR: /tmp/flashinfer-autotune
-        AUTOTUNE_CACHE_SEED: /configs/dsv41flash-tilert-gb300-flashinfer-autotune
+        AUTOTUNE_CACHE_SEED: /configs/gb300-tilert-autotune
+        AUTOTUNE_CONFIG_HASH: 28b1fd16afac8e8dad7324b8f20245a3e260e12607d390682f1f400b4bc8b973
       args:
         served-model-name: "deepseek-ai/DeepSeek-V4.1-Flash"
         tokenizer-mode: deepseek_v41
