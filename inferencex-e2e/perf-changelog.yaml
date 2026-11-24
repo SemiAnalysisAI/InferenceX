@@ -13300,6 +13300,26 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
 
 - config-keys:
+    - dsv41flash-fp4-gb300-tilert-agentic-dspark-dep
+    - dsv41flash-fp4-gb300-tilert-agentic-dspark-tp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add TileRT wide-EP decode on GB300 NVL72 for DeepSeek-V4.1-Flash FP4 AgentX: vLLM prefill workers (DP2 + expert parallel, two per tray; the official vllm/vllm-openai:cu134-nightly-a2bcb565 image by digest, unmodified) send the prompt KV over NVLink to one TileRT DEP32 decode (eight trays), at 4, 8 and 16 sequences per decode GPU (concurrency 1200, 2000 and 3200) with four, six and six prefill workers (40, 44 and 44 GPUs). Decode, prefill KV connector and router run tilert 0.2.1 from PyPI, sha256-checked; the decode is on the CUDA 13.2 runtime image by digest."
+    - "The prefill keeps a lazy CPU DRAM KV tier with vLLM's SimpleCPUOffloadConnector, 64 GiB per DP rank. The router has its own tray, tokenizes with the release's Rust port of vLLM's DeepSeek-V4.1 encoder, splits reasoning with vLLM's parser (no tool-call parsing), serves the client port with the release's Rust front, and sends each prefill straight to a worker and one of its DP ranks, keeping a conversation on one for its prefix cache."
+    - "DSpark with five drafts; acceptance is simulated at the golden AL 3.51 (TILERT_SIMULATE_ACC_LEN). 30-minute warm-up grace."
+    - "The prefill ships the FlashInfer autotune results vLLM itself saved for this exact prefill (configs/gb300-tilert-autotune/: a cold start of these prefill flags in the same image on GB300, files as written under vLLM's config hash); the setup script copies them into VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR, so each cold start loads them instead of re-tuning, as a warm deployment does. A cold tune's temporary buffers otherwise leave the prefill a KV cache of about 60 GiB per GPU instead of about 88 GiB. vLLM reads them only under the same config hash and FlashInfer only with the same library versions and GPU; anywhere else the prefill tunes as before."
+    - "Also rerun the existing concurrency-1 TP8 and TP24 points of dsv41flash-fp4-gb300-tilert-agentic-dspark-tp (tilert 0.1.8) with their recipes unchanged, so all five GB300 TileRT points publish together as one curve; an AgentX curve takes its points from a single run."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5094
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
+  description:
+    - "Add MiniMax-M3.1-Flash B300 Dynamo + vLLM AgentX recipes with minimax-m31-flash-arm64-cu135-f7d7346, including TP8 c1/c4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4826
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
     - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark-disagg
   scenario-type: [agentic-coding]
