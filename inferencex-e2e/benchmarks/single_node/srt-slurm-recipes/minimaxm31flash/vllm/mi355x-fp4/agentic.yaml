@@ -83,7 +83,10 @@ base:
 # upstream MI355X layout; admission is 2x CONC. Throughput runs replace block
 # rejection with the golden acceptance length.
 
-# c1-c16: DSpark 7 with the KV cache on the GPUs. Batch-sharded sampling
+# A zip variant's name carries its list index, so a new concurrency goes at the
+# end of each list.
+
+# c1-c24: DSpark 7 with the KV cache on the GPUs. Batch-sharded sampling
 # splits the sampler across the TP ranks; vLLM refuses it when max-num-seqs is
 # below the TP size, so c1 runs without it.
 zip_override_tp4_dspark7:
@@ -91,28 +94,63 @@ zip_override_tp4_dspark7:
     agg:
       args:
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        max-num-seqs: [2, 4, 8, 16, 32]
-        enable-batch-sharded-sampling: [null, true, true, true, true]
+        max-num-seqs: [2, 4, 8, 16, 32, 48]
+        enable-batch-sharded-sampling: [null, true, true, true, true, true]
   benchmark:
     env:
-      CONC: ['1', '2', '4', '8', '16']
+      CONC: ['1', '2', '4', '8', '16', '24']
 
-# c32-c64: the working set outgrows the GPU KV cache, so
+# c32-c72: the working set outgrows the GPU KV cache, so
 # SimpleCPUOffloadConnector (eager) keeps about 24M tokens in 1349 GB of host
-# memory. LRU eviction drops the least recently used prefixes from their tail,
-# so a hot session's chain stays whole. c64 runs DSpark 3 at 0.90 memory utilization.
+# memory. LRU eviction drops the least
+# recently used prefixes from their tail, so a hot session's chain stays
+# whole. c32 runs DSpark 7 at 0.85 GPU memory utilization; c64, c68 and c72
+# run DSpark 3 at 0.90.
 zip_override_tp4_offload:
   roles:
     agg:
       args:
-        gpu-memory-utilization: [0.85, 0.9]
+        gpu-memory-utilization: [0.85, 0.9, 0.9, 0.9]
         speculative-config:
           - '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
           - '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-        max-num-seqs: [64, 128]
+          - '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+          - '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: [64, 128, 136, 144]
         enable-batch-sharded-sampling: true
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false,"cpu_lru_eviction":true}}'
   benchmark:
     env:
-      CONC: ['32', '64']
+      CONC: ['32', '64', '68', '72']
+      KV_OFFLOADING: 'dram'
+
+# c48 and c56 run on the same offload tier with both settings: DSpark 7 at 0.85
+# GPU memory utilization (as c32) and DSpark 3 at 0.90 (as c64). The two lanes
+# share their concurrencies, so each matrix row selects its variant by index.
+zip_override_tp4_offload_dspark7:
+  roles:
+    agg:
+      args:
+        gpu-memory-utilization: 0.85
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: [96, 112]
+        enable-batch-sharded-sampling: true
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false,"cpu_lru_eviction":true}}'
+  benchmark:
+    env:
+      CONC: ['48', '56']
+      KV_OFFLOADING: 'dram'
+
+zip_override_tp4_offload_dspark3:
+  roles:
+    agg:
+      args:
+        gpu-memory-utilization: 0.9
+        speculative-config: '{"method":"dspark","num_speculative_tokens":3,"attention_backend":"TRITON_ATTN","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        max-num-seqs: [96, 112]
+        enable-batch-sharded-sampling: true
+        kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false,"cpu_lru_eviction":true}}'
+  benchmark:
+    env:
+      CONC: ['48', '56']
       KV_OFFLOADING: 'dram'
