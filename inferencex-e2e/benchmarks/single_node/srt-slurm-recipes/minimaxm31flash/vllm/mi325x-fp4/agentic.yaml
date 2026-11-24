@@ -22,8 +22,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       args:
         served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
         tensor-parallel-size: 4
@@ -107,4 +105,3 @@ zip_override_tp4_offload:
     env:
       CONC: ['32']
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '800'

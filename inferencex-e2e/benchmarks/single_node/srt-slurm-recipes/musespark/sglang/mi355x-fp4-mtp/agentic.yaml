@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 8
@@ -135,7 +133,6 @@ override_tp4_c28:
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
         SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: '1'
-      gpus: 4
   benchmark:
     env:
       CONC: '28'
@@ -166,7 +163,6 @@ override_tp4_c36:
         PYTORCH_HIP_ALLOC_CONF: expandable_segments:True
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-      gpus: 4
   benchmark:
     env:
       CONC: '36'
@@ -197,7 +193,6 @@ override_tp4_c40:
         PYTORCH_HIP_ALLOC_CONF: expandable_segments:True
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
         SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-      gpus: 4
   benchmark:
     env:
       CONC: '40'
