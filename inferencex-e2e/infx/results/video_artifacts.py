@@ -231,7 +231,10 @@ def validate_video_artifacts(
                 or len(matrix.get("gpu_uuids", [])) != row["gpus"]
             ):
                 raise ValueError(f"{name}: selected engine or GPU count mismatch")
-        selected.append({"name": name, "manifest_sha256": inventory["manifest.json"]})
+        sums = hashlib.sha256((bundle / "SHA256SUMS").read_bytes()).hexdigest()
+        selected.append(
+            {"name": name, "manifest_sha256": inventory["manifest.json"], "sha256sums_sha256": sums}
+        )
     if selection_output is not None:
         write_json(
             selection_output,

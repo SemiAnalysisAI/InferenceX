@@ -566,6 +566,9 @@ def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout
                 "manifest_sha256": hashlib.sha256(
                     (artifacts / name / "manifest.json").read_bytes()
                 ).hexdigest(),
+                "sha256sums_sha256": hashlib.sha256(
+                    (artifacts / name / "SHA256SUMS").read_bytes()
+                ).hexdigest(),
             }
             for name in expected
         ],

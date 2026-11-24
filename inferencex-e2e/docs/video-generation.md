@@ -102,8 +102,9 @@ use the regular sweep so one server's complete workload stays together.
 
 After authorized reuse and merge, Merge Ingest uploads `video-publication-selection.json`
 as the `video-publication-selection` artifact. Its version 1 payload records
-`source_run_id`, `source_run_attempt`, `source_head_sha`, and the selected artifact
-name and SHA-256 of its raw `manifest.json` for each deployment. Deployments
+`source_run_id`, `source_run_attempt`, `source_head_sha`, and for each deployment the
+selected artifact name and the SHA-256 of its raw `manifest.json` and of its `SHA256SUMS`,
+which lists every other file in the bundle. Deployments
 that succeeded in an earlier attempt keep that attempt's bundle unless superseded.
 The `publish-video-results` dispatch gives the App `source_run_id`, `merge_run_id`,
 `selection_artifact_id`, and `selection_sha256` (the digest of the JSON file).
