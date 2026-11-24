@@ -13304,7 +13304,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "TP2 concurrency 1-32: raise --max-num-batched-tokens from 8192 to 32768 (the 32 GiB fp8 indexer logits buffer still fits beside the ~145 GiB of resident weights per rank), add --monokernel (the mono decode layers stay off at TP2, but the gfx942 indexer top-k, decode metadata and DSpark sampling helpers run) and set VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 for the TP2 all-reduce."
-    - "Measured on vllm/vllm-openai-rocm:nightly-rocm100-f5d93296 with the main launch for each point, one hour of AgentX per arm: total throughput +3.9% (c1), +3.9% (c2), +4.2% (c4), +3.8% (c8), +5.1% (c16), +8.9% (c32), with better P90 interactivity, TTFT and TPOT at every point; GSM8K 96.44% against 96.82% for the baseline."
-    - "TP8 and TP4 points, the image and the speculative decoding config are unchanged."
+    - "TP2 concurrency 1-32: raise --max-num-batched-tokens from 8192 to 32768 (the 32 GiB fp8 indexer logits buffer still fits beside the ~145 GiB of resident weights per rank) and add --monokernel (the mono decode layers stay off at TP2, but the gfx942 indexer top-k, decode metadata and DSpark sampling helpers run)."
+    - "Measured on vllm/vllm-openai-rocm:nightly-rocm100-f5d93296 with the main launch for each point, one hour of AgentX per arm: total throughput +3.8% (c1), +5.2% (c2), +3.2% (c4), +2.2% (c8), +4.1% (c16), +6.6% (c32), with lower P90 TTFT at every point."
+    - "TP8 and TP4 points, the image, the all-reduce and the speculative decoding config are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5203
