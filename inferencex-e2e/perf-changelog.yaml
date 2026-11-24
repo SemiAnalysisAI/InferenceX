@@ -13333,3 +13333,13 @@
     - "Bump utils/srt-slurm from 2d9079c to cc9db05 (21 commits), which adds NVIDIA/srt-slurm#669: one bootstrap port per prefill engine and Router start after every worker's health check. The shared vllm-router.sh setup script now raises the worker parent shell's soft RLIMIT_MEMLOCK to its hard limit."
     - "Draft data type unchanged: the DSpark draft from the checkpoint's dspark/ subfolder runs as shipped, with MXFP8 attention and MLP projections, BF16 fc, norms and the shared target embedding and LM head, and an FP8 E4M3 draft KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
+
+- config-keys:
+    - glm5.2-fp4-b200-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add GLM-5.2 NVFP4 B200 single-node 8k1k on SGLang (lmsysorg/sglang:nightly-dev-cu13-20261027-5884e4fe, the image the B200 NVFP4 AgentX recipe uses)."
+    - "Recipe is the SGLang cookbook's verified B200 NVFP4 balanced cell without MTP: TP8 with 8-way DP attention, modelopt_fp4, chunked prefill 32768, max 256 running requests, FP8 KV, mem-fraction 0.85 (the cookbook 0.92 OOMs at CUDA-graph capture); concurrency 8 to 256 with decode CUDA graphs sized to concurrency."
+    - "Adds a plain TP8 arm (no DP attention, EP1) at concurrency 4 to 256 beside the DP-attention arm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5077
