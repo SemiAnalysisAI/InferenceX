@@ -48,8 +48,6 @@ base:
   roles:
     prefill:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'
@@ -107,8 +105,6 @@ base:
       kv_events: true
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'
@@ -241,7 +237,6 @@ override_1p2d_tp16_c32:
         speculative-num-draft-tokens: 8
     decode:
       nodes: 8
-      workers: 2
       args:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
@@ -325,7 +320,6 @@ override_1p2d_pp2_c76:
         speculative-num-draft-tokens: 8
     decode:
       nodes: 8
-      workers: 2
       kv_events: null
       env: *pp2_decode_env
       args:
@@ -352,7 +346,6 @@ override_1p2d_pp2_c150:
         max-prefill-tokens: 32768
     decode:
       nodes: 8
-      workers: 2
       kv_events: null
       env: *pp2_decode_env
       args: *pp2_decode_args

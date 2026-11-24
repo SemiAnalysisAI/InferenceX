@@ -49,8 +49,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       args:
         <<: &common_args
           served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
@@ -114,8 +112,6 @@ base:
         MC_MAX_MR_SIZE: '1073741824'
     decode:
       nodes: 1
-      workers: 2
-      gpus: 4
       args:
         <<: *common_args
         # Below both DBO thresholds, so decode runs without DBO.

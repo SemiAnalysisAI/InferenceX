@@ -21,7 +21,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
         language-model-only: true
@@ -54,7 +53,6 @@ base:
 zip_override_tp4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: [2, 8, 64]
@@ -68,7 +66,6 @@ zip_override_tp4:
 override_tp4_c8_cudagraph:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: 16
@@ -81,7 +78,6 @@ override_tp4_c8_cudagraph:
 override_tp4_c16_cudagraph:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: 64
@@ -94,7 +90,6 @@ override_tp4_c16_cudagraph:
 override_tp4_c24_batched32k:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: 64
@@ -112,7 +107,6 @@ override_tp4_c24_batched32k:
 override_tp4_c40_batched8k:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         max-num-seqs: 64
@@ -131,7 +125,6 @@ override_tp4_c40_batched8k:
 override_tp2_c28_cpu_offload:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         max-num-seqs: 42
@@ -150,7 +143,6 @@ override_tp2_c28_cpu_offload:
 override_tp2_c32_cpu_offload:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         max-num-seqs: 48
@@ -169,7 +161,6 @@ override_tp2_c32_cpu_offload:
 override_tp2_c36_cpu_offload:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         max-num-seqs: 54
@@ -197,7 +188,6 @@ zip_override_dep4:
   setup_script: vllm-router.sh
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 1
         data-parallel-size: 4

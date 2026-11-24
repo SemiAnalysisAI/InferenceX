@@ -47,8 +47,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       env:
         GPU_MAX_HW_QUEUES: '2'
         PYTHONNOUSERSITE: '1'

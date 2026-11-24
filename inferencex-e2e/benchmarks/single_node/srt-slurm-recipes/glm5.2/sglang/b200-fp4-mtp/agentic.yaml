@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: nvidia/GLM-5.2-NVFP4
         trust-remote-code: true

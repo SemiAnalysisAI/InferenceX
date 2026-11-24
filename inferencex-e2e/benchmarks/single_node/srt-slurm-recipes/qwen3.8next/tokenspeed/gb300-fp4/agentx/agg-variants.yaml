@@ -51,8 +51,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 1
       env:
         TOKENSPEED_JIT_COMPILE_CHECK: error
         TOKENSPEED_HEALTH_CHECK_TIMEOUT: '600'

@@ -20,8 +20,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 1
       env:
         PYTHONNOUSERSITE: '1'
         PYTHONUNBUFFERED: '1'
@@ -106,7 +104,6 @@ base:
 override_tp4_c3:
   roles:
     agg:
-      gpus: 4
       env:
         # Captures the decode step's host-side metadata preparation in the decode CUDA graph.
         SGLANG_ENABLE_METADATA_GLUE_GRAPH: '1'

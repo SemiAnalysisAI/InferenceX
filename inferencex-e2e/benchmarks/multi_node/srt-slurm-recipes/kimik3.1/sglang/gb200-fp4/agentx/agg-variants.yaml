@@ -49,8 +49,6 @@ base:
     # A single worker leaves the KV router nothing to choose, so it publishes no KV events.
     agg:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'

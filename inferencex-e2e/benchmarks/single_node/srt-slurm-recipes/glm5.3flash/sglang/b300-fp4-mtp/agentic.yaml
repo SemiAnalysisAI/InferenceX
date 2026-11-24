@@ -18,8 +18,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       # Serve flags follow the cookbook's B300 Low Latency cell at
       # https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.3-Flash.
       args:
