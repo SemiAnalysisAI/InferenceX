@@ -140,11 +140,11 @@ def test_settings_read_the_optional_inputs_and_default_the_rest() -> None:
         "thinking_json": kbe.DEFAULT_THINKING_JSON,
     }
     assert kbe.settings(
-        {"BEAM_API_KEY": "k", "BEAM_LIMIT": "3", "BEAM_CONCURRENCY": "2", "BEAM_THINKING_JSON": ""}
+        {"BEAM_API_KEY": "k", "EVAL_LIMIT": "3", "BEAM_CONCURRENCY": "2", "BEAM_THINKING_JSON": ""}
     ) == {"api_key": "k", "judge_api_key": "k", "limit": 3, "concurrency": 2, "thinking_json": ""}
     assert kbe.settings({"BEAM_API_KEY": "k", "JUDGE_API_KEY": "j"})["judge_api_key"] == "j"
-    with pytest.raises(ValueError, match="BEAM_LIMIT must be a positive integer, got '0'"):
-        kbe.settings({"BEAM_LIMIT": "0"})
+    with pytest.raises(ValueError, match="EVAL_LIMIT must be a positive integer, got '0'"):
+        kbe.settings({"EVAL_LIMIT": "0"})
 
 
 def test_project_reduces_a_complete_run() -> None:
@@ -185,7 +185,7 @@ def test_project_turns_an_incomplete_run_into_a_zero_score_integration_error(
 
 def test_run_evaluation_drives_both_scripts_with_keys_in_the_environment(tmp_path: Path) -> None:
     completed, calls, output = _run(
-        tmp_path, {"answers": ANSWERS, "scores": SCORES}, BEAM_LIMIT="2", JUDGE_API_KEY="sk-judge"
+        tmp_path, {"answers": ANSWERS, "scores": SCORES}, EVAL_LIMIT="2", JUDGE_API_KEY="sk-judge"
     )
 
     assert completed
@@ -225,7 +225,7 @@ def test_run_evaluation_refuses_unresolved_lfs_pointers_before_any_request(tmp_p
 def test_run_evaluation_records_a_failed_script_as_an_integration_error(
     tmp_path: Path, plan: dict[str, Any], message: str
 ) -> None:
-    completed, _, output = _run(tmp_path, plan, BEAM_LIMIT="2")
+    completed, _, output = _run(tmp_path, plan, EVAL_LIMIT="2")
 
     assert not completed
     assert _result(output)["integration_error"]["message"] == message

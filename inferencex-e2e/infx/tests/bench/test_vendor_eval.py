@@ -199,7 +199,7 @@ def test_kimi_runs_the_verified_checkout_with_an_isolated_runtime(stub: Stub) ->
 
 
 def test_kimi_beam_suite_adds_the_tokenizer_runtime_and_runs_its_own_adapter(stub: Stub) -> None:
-    ctx = stub.context("kimi_beam_1m", BEAM_API_KEY="sk-beam-key-4711", BEAM_LIMIT="2")
+    ctx = stub.context("kimi_beam_1m", BEAM_API_KEY="sk-beam-key-4711", EVAL_LIMIT="2")
 
     assert FRAMEWORKS["kimi-vendor"](ctx) == EvalOutcome(0, "kimi_beam_1m")
 

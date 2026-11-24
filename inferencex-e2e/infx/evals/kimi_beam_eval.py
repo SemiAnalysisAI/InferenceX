@@ -61,11 +61,11 @@ def settings(environ: Mapping[str, str]) -> dict[str, Any]:
     The sampling, context budget and judge settings are fixed by this adapter.
     """
     api_key = environ.get("BEAM_API_KEY") or "EMPTY"
-    limit = environ.get("BEAM_LIMIT", "")
+    limit = environ.get("EVAL_LIMIT", "")
     return {
         "api_key": api_key,
         "judge_api_key": environ.get("JUDGE_API_KEY") or api_key,
-        "limit": _positive_int("BEAM_LIMIT", limit) if limit else None,
+        "limit": _positive_int("EVAL_LIMIT", limit) if limit else None,
         "concurrency": _positive_int(
             "BEAM_CONCURRENCY", environ.get("BEAM_CONCURRENCY") or DEFAULT_CONCURRENCY
         ),

@@ -193,7 +193,7 @@ results.
 | --- | --- | ---: | ---: |
 | `kimi_tool_call_schema` | Explicit smoke | 1 | 2 |
 | `kimi_tool_call_schema_full` | Automatic AgentX evaluation | 204 | 408 |
-| `kimi_beam_1m` | Explicit long-context diagnostic | 700 questions | 700 (or `BEAM_LIMIT`) |
+| `kimi_beam_1m` | Explicit long-context diagnostic | 700 questions | 700 (or `EVAL_LIMIT`) |
 
 Each schema case runs once in streaming and once in non-streaming mode. A
 smoke score of `1.0` therefore means 2/2 checks passed on one schema case.
@@ -312,7 +312,7 @@ environment:
 |----------|---------|-------------|
 | `BEAM_API_KEY` | `EMPTY` | Bearer token for the endpoint under test; never placed on the command line |
 | `JUDGE_API_KEY` | `BEAM_API_KEY` | Bearer token for the judge endpoint (the same endpoint) |
-| `BEAM_LIMIT` | unset | Answer and judge only the first N questions; a smoke of the plumbing, never a full-suite result |
+| `EVAL_LIMIT` | unset | Answer and judge only the first N questions (the workflow's `eval-limit` input); a smoke of the plumbing, never a full-suite result |
 | `BEAM_CONCURRENCY` | `16` | Concurrent generation requests |
 | `BEAM_THINKING_JSON` | `{"thinking":{"type":"enabled","keep":"all","effort":"max"}}` | Extra request-body JSON; set to the engine's `chat_template_kwargs` form for self-hosted SGLang or vLLM, or empty for none |
 
@@ -748,7 +748,7 @@ attempt cannot replace a newer failed retry.
 | `EVAL_MAX_MODEL_LEN` | unset | Explicit lm-eval request budget. Unset means `MAX_MODEL_LEN` capped at the model's native maximum, or 16384 when neither is known |
 | `EVAL_CONC` | Workflow-selected; srt-slurm falls back to the highest benchmark concurrency | Multi-node eval concurrency, passed as `--concurrency`. A space-separated list enables sequential batched evals against one live engine |
 | `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests). Empty means the full set |
-| `BEAM_API_KEY`, `JUDGE_API_KEY`, `BEAM_LIMIT`, `BEAM_CONCURRENCY`, `BEAM_THINKING_JSON` | see [Kimi BEAM (1M)](#kimi-beam-1m-long-context-diagnostic) | Inputs of the `kimi_beam_1m` suite only |
+| `BEAM_API_KEY`, `JUDGE_API_KEY`, `BEAM_CONCURRENCY`, `BEAM_THINKING_JSON` | see [Kimi BEAM (1M)](#kimi-beam-1m-long-context-diagnostic) | Inputs of the `kimi_beam_1m` suite only |
 
 ### Score validation
 `infx/evals/validate_scores.py` checks eval results against thresholds in `infx/evals/thresholds.yaml`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
