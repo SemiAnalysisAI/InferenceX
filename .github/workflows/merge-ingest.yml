@@ -130,18 +130,16 @@ jobs:
 
             - name: Validate reused video coverage
               if: steps.plan.outputs.video == 'true'
-              id: video-validation
               env:
                   SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
                   SOURCE_HEAD_SHA: ${{ steps.reuse.outputs.reuse-source-head-sha }}
                   SOURCE_RUN_ATTEMPT: ${{ steps.reuse.outputs.reuse-source-run-attempt }}
               run: |
-                  selection="$RUNNER_TEMP/video-publication-selection.json"
+                  source "$GITHUB_WORKSPACE/inferencex-e2e/benchmarks/check_env.sh"
+                  check_env_vars GITHUB_WORKSPACE RUNNER_TEMP SOURCE_RUN_ID SOURCE_RUN_ATTEMPT SOURCE_HEAD_SHA
                   python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
                     --run-id "$SOURCE_RUN_ID" --run-attempt "$SOURCE_RUN_ATTEMPT" --head-sha "$SOURCE_HEAD_SHA" \
-                    --selection-output "$selection"
-                  checksum=$(sha256sum "$selection")
-                  echo "sha256=${checksum%% *}" >> "$GITHUB_OUTPUT"
+                    --selection-output "$RUNNER_TEMP/video-publication-selection.json"
 
             - name: Upload validated video publication selection
               if: steps.plan.outputs.video == 'true'
@@ -159,7 +157,6 @@ jobs:
                   SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
                   MERGE_RUN_ID: ${{ github.run_id }}
                   SELECTION_ARTIFACT_ID: ${{ steps.video-selection.outputs.artifact-id }}
-                  SELECTION_SHA256: ${{ steps.video-validation.outputs.sha256 }}
                   APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
               with:
                   github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
@@ -173,7 +170,6 @@ jobs:
                         source_run_id: process.env.SOURCE_RUN_ID,
                         merge_run_id: process.env.MERGE_RUN_ID,
                         selection_artifact_id: process.env.SELECTION_ARTIFACT_ID,
-                        selection_sha256: process.env.SELECTION_SHA256,
                       },
                     });
 
