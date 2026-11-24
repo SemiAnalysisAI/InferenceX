@@ -42,7 +42,7 @@ def test_result_builder_uses_explicit_readonly_inputs(single_node_env_vars, monk
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TP", "invalid ambient value")
-    env = {**single_node_env_vars, "TP": "2"}
+    env = {**single_node_env_vars, "TP": "2", "GPU_COUNT": "2"}
     del env["RESULT_FILENAME"]
     benchmark = {
         "model_id": "fixture", "max_concurrency": 3,
@@ -56,7 +56,7 @@ def test_result_builder_uses_explicit_readonly_inputs(single_node_env_vars, monk
     assert result["ttft_p50"] == 0.25
     assert result["intvty_p50"] == 50
 
-    second = build_result(benchmark, {**env, "TP": "4"})
+    second = build_result(benchmark, {**env, "TP": "4", "GPU_COUNT": "4"})
     assert second["tput_per_gpu"] == 3
     assert result["tput_per_gpu"] == 6
     assert env["TP"] == "2"
@@ -177,6 +177,7 @@ def single_node_env_vars(base_env_vars):
     return {
         **base_env_vars,
         "TP": "8",
+        "GPU_COUNT": "8",
         "EP_SIZE": "1",
         "DP_ATTENTION": "false",
     }
@@ -522,7 +523,7 @@ class TestCalculations:
         assert output_data["custom_metric"] == pytest.approx(0.5)
 
     def test_throughput_per_gpu_single_node(self, tmp_path, single_node_env_vars):
-        """PP and PCP expand the GPU denominator while DCP remains metadata."""
+        """Explicit GPU allocation controls throughput while parallelism remains metadata."""
         benchmark_result = {
             "model_id": "test-model",
             "max_concurrency": 8,
@@ -531,7 +532,7 @@ class TestCalculations:
         }
 
         env = single_node_env_vars.copy()
-        env.update({"TP": "4", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "2"})
+        env.update({"TP": "4", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "2", "GPU_COUNT": "32"})
 
         result = run_script(tmp_path, env, benchmark_result)
         assert result.returncode == 0, f"Script failed: {result.stderr}"
@@ -540,9 +541,9 @@ class TestCalculations:
         assert output_data["pp"] == 2
         assert output_data["dcp_size"] == 2
         assert output_data["pcp_size"] == 2
-        assert output_data["tput_per_gpu"] == pytest.approx(500.0)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(375.0)
-        assert output_data["input_tput_per_gpu"] == pytest.approx(125.0)
+        assert output_data["tput_per_gpu"] == pytest.approx(250.0)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(187.5)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(62.5)
 
     def test_throughput_per_gpu_multinode(self, tmp_path, multinode_env_vars):
         """Test throughput per GPU calculation for multinode."""

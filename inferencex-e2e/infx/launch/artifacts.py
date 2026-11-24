@@ -275,11 +275,13 @@ def build_video_bundle(
     output: Path,
     result_filename: str,
     concurrencies: Sequence[int],
+    precision: str,
 ) -> int:
     """Assemble the app-facing video bundle from the job's results and validation sidecars."""
     argv = [
         results_python, "-P", "-m", "evaluator.cli", "srt-finalize",
         "--video-dir", str(logs_dir / "video"), "--power-dir", str(logs_dir / "power"),
+        "--server-log", str(logs_dir / "service_video-server.out"), "--precision", precision,
         "--workspace", str(workspace), "--result-filename", result_filename,
         "--output", str(output), "--concurrencies", *map(str, concurrencies),
     ]  # fmt: skip

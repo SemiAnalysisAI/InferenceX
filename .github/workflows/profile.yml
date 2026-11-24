@@ -115,8 +115,7 @@ jobs:
             python -P "${GENERATOR[@]}" \
             test-config --config-files "$INPUTS_CONFIG_FILE" --config-keys "$INPUTS_CONFIG_KEY" --conc "$INPUTS_CONC")
           CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | env PYTHONPATH="$PRIORITY_ROOT" uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-            python -P -m infx.workflows.ci_priority \
-            --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
+            python -P -m infx.workflows.scheduler_facts \
             --event-name "${GITHUB_EVENT_NAME}" \
             --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
             --criteria-json "${PRIORITY_CRITERIA}" \
@@ -197,7 +196,7 @@ jobs:
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
     name: >-
-      p${{ matrix.config.priority }} | ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
+      ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
       TP${{ matrix.config.tp }}${{ matrix.config.pp != '' && matrix.config.pp != '1' && format('/PP{0}', matrix.config.pp) || '' }}${{ matrix.config.dcp-size != '' && matrix.config.dcp-size != '1' && format('/DCP{0}', matrix.config.dcp-size) || '' }}${{ matrix.config.pcp-size != '' && matrix.config.pcp-size != '1' && format('/PCP{0}', matrix.config.pcp-size) || '' }} c${{ matrix.config.conc }}
     runs-on: >- # zizmor: ignore[self-hosted-runner] GPU Slurm runners by design; workflow_dispatch only
       ${{ fromJSON(
@@ -206,11 +205,7 @@ jobs:
           '["self-hosted",{0},{1},{2},{3}]',
           toJSON(matrix.config.runner),
           toJSON(format('nodes:{0}', matrix.config['node-count'])),
-          toJSON(format(
-            'ci-job-{0}-{1}',
-            matrix.config.priority,
-            matrix.config['queue-token']
-          )),
+          toJSON(format('ci-job-{0}', matrix.config['queue-token'])),
           toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
         format('[{0}]', toJSON(matrix.config.runner))
@@ -225,6 +220,7 @@ jobs:
       IMAGE: ${{ matrix.config.image }}
       FRAMEWORK: ${{ matrix.config.framework }}
       PRECISION: ${{ matrix.config.precision }}
+      GPU_COUNT: ${{ matrix.config['gpus-per-worker'] }}
       TP: ${{ matrix.config.tp }}
       PP_SIZE: ${{ matrix.config.pp }}
       DCP_SIZE: ${{ matrix.config.dcp-size }}
@@ -334,8 +330,6 @@ jobs:
           export GITHUB_WORKSPACE="$PWD"
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -eo pipefail
-          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
-          echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
           ep_val="${EP_SIZE:-1}"
           res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}-pp${PP_SIZE}-dcp${DCP_SIZE}-pcp${PCP_SIZE}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
           export RESULT_FILENAME="${res_name}"

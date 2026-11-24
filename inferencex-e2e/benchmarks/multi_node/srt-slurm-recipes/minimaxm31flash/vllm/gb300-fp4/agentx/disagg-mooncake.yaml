@@ -103,8 +103,6 @@ base:
     prefill:
       kv_events: false
       nodes: 3
-      workers: 3
-      gpus: 4
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache
@@ -162,8 +160,6 @@ base:
         data-parallel-size: 4
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache
@@ -251,10 +247,8 @@ override_1p1d_dep16_c200:
   roles:
     prefill:
       nodes: 1
-      workers: 1
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
@@ -265,7 +259,6 @@ override_3p1d_dep16_c500:
   roles:
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
@@ -276,10 +269,8 @@ override_5p1d_dep16_c800:
   roles:
     prefill:
       nodes: 5
-      workers: 5
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
@@ -290,10 +281,8 @@ override_6p1d_dep16_c900:
   roles:
     prefill:
       nodes: 6
-      workers: 6
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
@@ -304,10 +293,8 @@ override_6p1d_dep16_c950:
   roles:
     prefill:
       nodes: 6
-      workers: 6
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
@@ -318,10 +305,8 @@ override_6p1d_dep16_c1000:
   roles:
     prefill:
       nodes: 6
-      workers: 6
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
@@ -332,10 +317,8 @@ override_4p1d_dep16_c640:
   roles:
     prefill:
       nodes: 4
-      workers: 4
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
@@ -346,10 +329,8 @@ override_4p1d_dep16_c680:
   roles:
     prefill:
       nodes: 4
-      workers: 4
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
@@ -360,10 +341,8 @@ override_4p1d_dep16_c700:
   roles:
     prefill:
       nodes: 4
-      workers: 4
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
@@ -374,10 +353,8 @@ override_5p1d_dep16_c850:
   roles:
     prefill:
       nodes: 5
-      workers: 5
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'

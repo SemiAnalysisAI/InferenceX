@@ -15,16 +15,16 @@ on:
           - cluster:gb200-nv
           - cluster:gb300-nv
           - cluster:mi300x-amd
-          - cluster:mi325x-amds
+          - cluster:mi325x-amd
           - cluster:mi355x-amds
       backends:
         description: Comma-separated backends (vllm GEMM; AMD also torch GEMM)
         type: string
         default: vllm
       testlists:
-        description: Comma-separated testlist stems
+        description: Comma-separated testlist stems (a run is ingested only if every list is in testlists/official/)
         type: string
-        default: gemm
+        default: gemm_perf
       mode:
         description: timing (latency, telemetry, profiler replay) or counters (per-kernel ncu / rocprofv3 counters; latencies perturbed)
         type: choice
@@ -35,9 +35,9 @@ on:
         type: string
         default: '1'
       chunk_size:
-        description: Maximum shapes per shard (1-500)
+        description: Maximum shapes per shard (1-4000; shards also stop at about 30 min of estimated work)
         type: number
-        default: 500
+        default: 4000
       recovery_run_id:
         description: Optional recent OperatorX run on this runner whose failed cleanup should be retried
         type: string
@@ -69,6 +69,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      ingestable: ${{ steps.plan.outputs.ingestable }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -79,11 +80,11 @@ jobs:
         env:
           OPERATORX_RUNNER: ${{ inputs.runner || 'cluster:h100-dsxe' }}
           OPERATORX_BACKENDS: ${{ inputs.backends || 'vllm' }}
-          OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm' }}
+          OPERATORX_TESTLISTS: ${{ inputs.testlists || 'gemm_perf' }}
           OPERATORX_WORLD_SIZES: ${{ inputs.world_sizes || '1' }}
           OPERATORX_MODE: ${{ inputs.mode || 'timing' }}
           OPERATORX_RECOVERY_RUN: ${{ inputs.recovery_run_id }}
-          OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '500' }}
+          OPERATORX_CHUNK_SIZE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.chunk_size) || '4000' }}
           PYTHONPATH: .:inferencex-e2e
         run: |
           set -eo pipefail
@@ -103,12 +104,22 @@ jobs:
             [[ "$OPERATORX_RECOVERY_RUN" =~ ^[1-9][0-9]*$ ]] && [ "$(jq '.include | length' operatorx-matrix.json)" = 1 ] \
               || { echo 'Recovery requires a numeric run ID and a single-shard selection' >&2; exit 1; }
           fi
-          jq '[.include[] | . + {framework: "operatorx"}]' operatorx-matrix.json |
+          jq '[.include[] | . + {framework: "operatorx", "node-count": 1}]' operatorx-matrix.json |
             uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-              python -m infx.workflows.ci_priority \
+              python -m infx.workflows.scheduler_facts \
               --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
-              --facts-file "${RUNNER_TEMP}/scheduling-facts.json" > scored.json
-          echo "matrix=$(jq -c '{include: .}' scored.json)" >> "$GITHUB_OUTPUT"
+              --facts-file "${RUNNER_TEMP}/scheduling-facts.json" > annotated.json
+          echo "matrix=$(jq -c '{include: .}' annotated.json)" >> "$GITHUB_OUTPUT"
+          # only runs whose every testlist is in testlists/official/ are ingested
+          ingestable=true
+          IFS=, read -ra lists <<<"$OPERATORX_TESTLISTS"
+          for t in "${lists[@]}"; do
+            if [ ! -f "operatorx/testlists/official/$t.json" ]; then
+              ingestable=false
+              echo "::notice::$t is not an official testlist; this run's results will not be ingested"
+            fi
+          done
+          echo "ingestable=$ingestable" >> "$GITHUB_OUTPUT"
       - name: Upload scheduling facts
         if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -136,10 +147,10 @@ jobs:
       ${{ fromJSON(vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format('["self-hosted",{0},"nodes:1",{1},{2}]',
           toJSON(matrix.runner),
-          toJSON(format('ci-job-{0}-{1}', matrix.priority, matrix.queue-token)),
+          toJSON(format('ci-job-{0}', matrix.queue-token)),
           toJSON(format('ci-attempt-{0}', github.run_attempt))) ||
         format('["self-hosted",{0}]', toJSON(matrix.runner))) }}
-    name: p${{ matrix.priority }} | OperatorX ${{ matrix.id }}
+    name: OperatorX ${{ matrix.id }}
     env:
       OPERATORX_SHARD: ${{ matrix.id }}
       OPERATORX_OUTPUT: ${{ github.workspace }}/operatorx-output-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
@@ -264,9 +275,10 @@ jobs:
   trigger-ingest:
     name: Trigger OperatorX database ingest
     if: >-
-      always() && github.event_name == 'workflow_dispatch' && inputs.ingest &&
+      !cancelled() && github.event_name == 'workflow_dispatch' && inputs.ingest &&
+      needs.setup.outputs.ingestable == 'true' &&
       (needs.summarize.result == 'success' || needs.summarize.result == 'failure')
-    needs: [summarize]
+    needs: [setup, summarize]
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch ingest to the app repository
