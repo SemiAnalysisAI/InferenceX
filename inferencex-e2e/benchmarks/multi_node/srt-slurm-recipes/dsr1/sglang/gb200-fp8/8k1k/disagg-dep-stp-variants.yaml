@@ -69,7 +69,6 @@ base:
         disaggregation-bootstrap-port: 30001
         disaggregation-transfer-backend: nixl
     decode:
-      workers: 1
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
         SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
@@ -119,7 +118,6 @@ override_5p1d_p_tp8_ep8_dp8_d_tp32_ep32_dp32_c512x1024x2048x6144:
   roles:
     prefill:
       nodes: 10
-      workers: 5
     decode:
       nodes: 8
       env:
@@ -134,7 +132,6 @@ override_6p1d_p_tp8_ep8_dp8_d_tp24_ep24_dp24_c2048x4096x6144:
   roles:
     prefill:
       nodes: 12
-      workers: 6
     decode:
       nodes: 6
       env:

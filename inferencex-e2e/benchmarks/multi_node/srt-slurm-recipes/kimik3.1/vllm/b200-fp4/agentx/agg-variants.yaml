@@ -30,8 +30,6 @@ base:
   roles:
     agg:
       nodes: 2
-      workers: 1
-      gpus: 16
       env:
         # Loading ~1.56 TB of MXFP4 shards can take over 20 minutes.
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"

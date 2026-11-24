@@ -12,7 +12,6 @@ base:
 
   roles:
     prefill:
-      gpus: 2
       env:
         NCCL_GRAPH_MIXING_SUPPORT: "0"
         OMPI_MCA_coll_ucc_enable: "0"
@@ -94,14 +93,12 @@ override_10p1d_dep8_b256_mtp1:
   roles:
     prefill:
       nodes: 3
-      workers: 10
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 1
     decode:
       nodes: 1
-      workers: 1
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -132,14 +129,12 @@ override_1p4d_tep4_b8_mtp3:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 2
-      workers: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -169,14 +164,12 @@ override_1p4d_tep8_b1_mtp3:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 4
-      workers: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -202,14 +195,12 @@ override_1p4d_tep8_b4_mtp3:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 4
-      workers: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -238,14 +229,12 @@ override_3p1d_dep8_b16_mtp3:
   roles:
     prefill:
       nodes: 1
-      workers: 3
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 3
     decode:
       nodes: 1
-      workers: 1
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -272,14 +261,12 @@ override_9p1d_dep8_b128_mtp1:
   roles:
     prefill:
       nodes: 3
-      workers: 9
       args:
         speculative_config:
           decoding_type: MTP
           num_nextn_predict_layers: 1
     decode:
       nodes: 1
-      workers: 1
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -309,11 +296,8 @@ override_1p3d_tep4_b32_mtp0:
   roles:
     prefill:
       nodes: 1
-      workers: 1
     decode:
       nodes: 2
-      workers: 3
-      gpus: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -341,10 +325,8 @@ override_1p3d_tep8_b16_mtp0:
   roles:
     prefill:
       nodes: 1
-      workers: 1
     decode:
       nodes: 3
-      workers: 3
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -371,10 +353,8 @@ override_1p3d_tep8_b1_mtp0:
   roles:
     prefill:
       nodes: 1
-      workers: 1
     decode:
       nodes: 3
-      workers: 3
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -410,10 +390,8 @@ override_1p4d_tep4_b2_mtp0:
   roles:
     prefill:
       nodes: 1
-      workers: 1
     decode:
       nodes: 2
-      workers: 4
       env:
         TRTLLM_ENABLE_PDL: "1"
       args:
@@ -437,10 +415,8 @@ override_5p2d_dep8_b32_mtp0:
   roles:
     prefill:
       nodes: 2
-      workers: 5
     decode:
       nodes: 2
-      workers: 2
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -465,10 +441,8 @@ override_6p1d_dep8_b128_mtp0:
   roles:
     prefill:
       nodes: 2
-      workers: 6
     decode:
       nodes: 1
-      workers: 1
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
@@ -501,10 +475,8 @@ override_8p1d_dep8_b256_mtp0:
   roles:
     prefill:
       nodes: 2
-      workers: 8
     decode:
       nodes: 1
-      workers: 1
       args:
         tensor_parallel_size: 8
         moe_expert_parallel_size: 8
