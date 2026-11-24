@@ -19,8 +19,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         trust-remote-code: true

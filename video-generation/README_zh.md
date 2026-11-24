@@ -26,8 +26,8 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 
 - `serve` 记录封存的服务端 spec 与启动信息，然后在任务的 GPU 上 exec
   引擎（`sglang` 或 `vllm-omni`）。
-- `client` 对服务端点按 `CONC_LIST` 的每个并发度运行同一计划，每个并发度一个
-  `gpu/c<N>/` 单元，并发布各单元的测量窗口。
+- `client` 对服务端点以并发度 1 运行同一计划（校验后的行只携带这一个
+  `CONC_LIST`），写入 `gpu/c1/` 单元并发布其测量窗口。
 
 任务结束后，launcher 运行 `python -m evaluator.cli srt-finalize`，把各单元、
 其功耗校验边车与服务端记录合并为仪表盘摄入的

@@ -177,7 +177,10 @@ All primary labels run the full selected concurrency matrix. Modifiers require
 a primary label: `all-evals` expands eligible evals while retaining throughput;
 `evals-only` suppresses throughput; `agentx-fast` uses one extra AgentX warmup
 request after mandatory primers and a 20-minute profile, leaving fixed-sequence
-and eval settings canonical. `all-evals`/`evals-only` reject changelog additions
+and eval settings canonical; `evals-last` holds the eval jobs until every
+throughput job has finished with any result, where by default they start
+alongside throughput. `evals-last` applies to same-repository sweeps only and
+its runs stay reusable. `all-evals`/`evals-only` reject changelog additions
 with `append-only: true` or `no-evals: true`. Do not reuse an `evals-only` or
 `agentx-fast` run. For lowest-concurrency smoke, dispatch `e2e-tests.yml` with
 `trim-conc: true`; no PR label trims concurrency.
