@@ -100,9 +100,15 @@ or production acceptance. Old unsuffixed bundles remain readable by the App but
 do not qualify this new native reuse path. Video append-only sweeps are unsupported;
 use the regular sweep so one server's complete workload stays together.
 
-After authorized reuse and merge, Merge Ingest validates source artifacts and
-sends `publish-video-results` with the original `source_run_id` to the App's media
-publisher. Mixed runs separately retain their existing LLM/AgentX ingest event.
+After authorized reuse and merge, Merge Ingest uploads `video-publication-selection.json`
+as the `video-publication-selection` artifact. Its version 1 payload records
+`source_run_id`, `source_run_attempt`, `source_head_sha`, and the selected artifact
+name and SHA-256 of its raw `manifest.json` for each deployment. Deployments
+that succeeded in an earlier attempt keep that attempt's bundle unless superseded.
+The `publish-video-results` dispatch gives the App `source_run_id`, `merge_run_id`,
+`selection_artifact_id`, and `selection_sha256` (the digest of the JSON file).
+The App can verify the selection and publish the bundles it names. Mixed runs
+separately retain their existing LLM/AgentX ingest event.
 Verify the downstream publication and playback before claiming delivery. The
 trusted main-branch `/use` handler must support video artifacts before accepting
 the first native video reuse request; a PR-local checker cannot bypass that gate.

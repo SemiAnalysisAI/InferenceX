@@ -130,13 +130,27 @@ jobs:
 
             - name: Validate reused video coverage
               if: steps.plan.outputs.video == 'true'
+              id: video-validation
               env:
                   SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
                   SOURCE_HEAD_SHA: ${{ steps.reuse.outputs.reuse-source-head-sha }}
                   SOURCE_RUN_ATTEMPT: ${{ steps.reuse.outputs.reuse-source-run-attempt }}
               run: |
+                  selection="$RUNNER_TEMP/video-publication-selection.json"
                   python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
-                    --run-id "$SOURCE_RUN_ID" --run-attempt "$SOURCE_RUN_ATTEMPT" --head-sha "$SOURCE_HEAD_SHA"
+                    --run-id "$SOURCE_RUN_ID" --run-attempt "$SOURCE_RUN_ATTEMPT" --head-sha "$SOURCE_HEAD_SHA" \
+                    --selection-output "$selection"
+                  checksum=$(sha256sum "$selection")
+                  echo "sha256=${checksum%% *}" >> "$GITHUB_OUTPUT"
+
+            - name: Upload validated video publication selection
+              if: steps.plan.outputs.video == 'true'
+              id: video-selection
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: video-publication-selection
+                  path: ${{ runner.temp }}/video-publication-selection.json
+                  if-no-files-found: error
 
             - name: Publish reused videos
               if: steps.plan.outputs.video == 'true'
@@ -144,11 +158,16 @@ jobs:
               env:
                   SOURCE_RUN_ID: ${{ steps.reuse.outputs.reuse-source-run-id }}
                   MERGE_RUN_ID: ${{ github.run_id }}
+                  SELECTION_ARTIFACT_ID: ${{ steps.video-selection.outputs.artifact-id }}
+                  SELECTION_SHA256: ${{ steps.video-validation.outputs.sha256 }}
                   APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
               with:
                   github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                   script: |
                     const [owner, repo] = process.env.APP_REPO.split("/");
+                    if (!/^[1-9]\d*$/.test(process.env.SELECTION_ARTIFACT_ID) || !/^[0-9a-f]{64}$/.test(process.env.SELECTION_SHA256)) {
+                      throw new Error("Missing validated video publication selection");
+                    }
                     await github.rest.repos.createDispatchEvent({
                       owner,
                       repo,
@@ -156,6 +175,8 @@ jobs:
                       client_payload: {
                         source_run_id: process.env.SOURCE_RUN_ID,
                         merge_run_id: process.env.MERGE_RUN_ID,
+                        selection_artifact_id: process.env.SELECTION_ARTIFACT_ID,
+                        selection_sha256: process.env.SELECTION_SHA256,
                       },
                     });
 
