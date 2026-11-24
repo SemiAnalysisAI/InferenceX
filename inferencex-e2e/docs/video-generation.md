@@ -2,11 +2,17 @@
 
 The `video-generation` scenario schedules one server job per deployment. SGLang
 selects C1 deployments on 1, 2, 4 and 8 B200, H200 or MI355X GPUs (Ulysses
-across all GPUs) and on 2, 4 and 8 H100 GPUs (TP2, since the model does not fit
-one 80 GB GPU), and vLLM-Omni the same four B200 deployments, all using
+across all GPUs) and on 2, 4 and 8 H100 or A100 GPUs (TP2, since the model does
+not fit one 80 GB GPU), and vLLM-Omni the same B200, H200, H100, A100 and MI355X deployments, all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
-124/24 seconds of video. Config presence is not GPU or quality qualification.
+124/24 seconds of video. Wan2.2-T2V-A14B runs vLLM-Omni on 1, 2, 4 and 8
+H100, H200, B200 or B300 GPUs and SGLang on 1, 2, 4 and 8 H200 GPUs and 4 and
+8 H100 GPUs (CFG parallel 1 x Ulysses 1 on one GPU, then CFG parallel 2 x
+Ulysses 1, 2 and 4 on 2, 4 and 8 GPUs) using `wan22.yaml` `release-v1`: four
+prompts by five seeds, one warmup, 40 UniPC steps, and 81 silent frames at 16 fps
+and 832×480; its `smoke` set sends the same request controls for one case.
+Config presence is not GPU or quality qualification.
 Each deployment's image pin is its `*-video` entry in
 [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml) or
 [`configs/amd-master.yaml`](../configs/amd-master.yaml).
@@ -18,7 +24,9 @@ Native power is accepted only when its sampled GPU UUIDs match the server's
 `spec.json` and `launch.json` assignment. On ROCm the server names each GPU by
 its board serial, which is how the AMD power exporter identifies it.
 The H100 runner provides an HF hub cache mount, but the pinned H3 snapshot must
-be verified there before execution. Historical artifacts remain evidence of their
+be verified there before execution. On the clusters in `HUB_DOWNLOAD_CLUSTERS`
+([`models.py`](../infx/launch/drivers/srt/models.py)) the launcher downloads the
+snapshot, without the Ref2VA weights, into that cache before it submits. Historical artifacts remain evidence of their
 original workloads.
 
 Each video service uses `command: [python3, -m, infx.bench, video, serve]`.
@@ -44,7 +52,11 @@ includes the declared settings.
 
 The Python entrypoint validates the workload and GPU identity, prepares an
 explicitly selected model view, records the final command, then starts it.
-It adds no engine flags or performance environment defaults. The SGLang child
+It adds no engine flags or performance environment defaults. For Wan2.2 on
+SGLang it also requires `--flow-shift` and the checkpoint's `boundary_ratio` to
+equal the plan, because SGLang reads neither from a request. SGLang's Wan2.2
+requests set `x264_preset: ultrafast` and `output_compression: 63` (CRF 18),
+the libx264 encoding vLLM-Omni v0.32.0 delivers by default. The SGLang child
 checks the assigned UUID order before importing its engine. The previous B200
 `frozen-c124` four-clip JSON and YAML artifacts remain readable as historical evidence.
 The App shows their four-sample cells in History, below its ten-valid-sample chart

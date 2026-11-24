@@ -228,8 +228,6 @@ override_disagg_1p3d_tp4_tp4_mtp7_c36:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       args:
         modeling_v2: require
         tensor_parallel_size: 4
@@ -243,8 +241,6 @@ override_disagg_1p3d_tp4_tp4_mtp7_c36:
           host_cache_size: 170000000000
     decode:
       nodes: 3
-      workers: 3
-      gpus: 4
       args:
         modeling_v2: require
         tensor_parallel_size: 4
@@ -268,8 +264,6 @@ override_disagg_1p3d_tp4_tp4_mtp7_c56:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
         TRTLLM_M31_V2_NVFP4_IDXK: '1'
@@ -287,8 +281,6 @@ override_disagg_1p3d_tp4_tp4_mtp7_c56:
           host_cache_size: 170000000000
     decode:
       nodes: 3
-      workers: 3
-      gpus: 4
       env:
         TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
         TORCH_EXTENSIONS_DIR: /tmp/torch_ext-decode
@@ -335,8 +327,6 @@ override_disagg_1p3d_tp4_tp4_mtp7_c76:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
         TRTLLM_M31_V2_NVFP4_IDXK: '1'
@@ -354,8 +344,6 @@ override_disagg_1p3d_tp4_tp4_mtp7_c76:
           host_cache_size: 170000000000
     decode:
       nodes: 3
-      workers: 3
-      gpus: 4
       env:
         TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
         TORCH_EXTENSIONS_DIR: /tmp/torch_ext-decode
@@ -404,8 +392,6 @@ override_disagg_1p4d_tp4_tp8_mtp7_c60:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         TRTLLM_ITER_STATS_GPU_MEM_ASYNC_MS: '1000'
         TRTLLM_M31_V2_NVFP4_IDXK: '1'
@@ -423,8 +409,6 @@ override_disagg_1p4d_tp4_tp8_mtp7_c60:
           host_cache_size: 170000000000
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       env:
         TRTLLM_M31_V2_NVFP4_IDXK: '1'
         TRTLLM_M31_MSA_INDEXER_V2: '1'
@@ -491,8 +475,6 @@ override_disagg_4p1d_dp2_dp8_mtp7_c320:
   roles:
     prefill:
       nodes: 2
-      workers: 4
-      gpus: 2
       env:
         TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
         TRTLLM_M31_ADP_RESIZE_GUARD: '1'
@@ -559,8 +541,6 @@ override_disagg_4p1d_dp2_dp8_mtp7_c320:
         - 3072
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
         TRTLLM_M31_ADP_RESIZE_GUARD: '1'
@@ -628,8 +608,6 @@ override_disagg_5p1d_dp2_dp16_mtp7_c300:
   roles:
     prefill:
       nodes: 3
-      workers: 5
-      gpus: 2
       env:
         TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
         TRTLLM_M31_ADP_RESIZE_GUARD: '1'
@@ -694,8 +672,6 @@ override_disagg_5p1d_dp2_dp16_mtp7_c300:
         - 3072
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
         TRTLLM_M31_ADP_RESIZE_GUARD: '1'
@@ -763,8 +739,6 @@ override_disagg_7p1d_dp2_dp8_mtp7_c480:
   roles:
     prefill:
       nodes: 4
-      workers: 7
-      gpus: 2
       env:
         TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
         TRTLLM_M31_ADP_RESIZE_GUARD: '1'
@@ -831,8 +805,6 @@ override_disagg_7p1d_dp2_dp8_mtp7_c480:
         - 3072
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         TRTLLM_DISAGG_SHARED_DRAFT_KV: '0'
         TRTLLM_M31_ADP_RESIZE_GUARD: '1'
