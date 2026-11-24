@@ -53,8 +53,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"
@@ -171,7 +169,6 @@ override_tp2_hicache_spf_c40:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp2-hicache-spf-c40
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         chunked-prefill-size: 8192
@@ -189,7 +186,6 @@ override_tp2_hicache_c40:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp2-hicache-c40
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         chunked-prefill-size: 32768
@@ -204,7 +200,6 @@ override_tp2_hicache_c44:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-agg-tp2-hicache-c44
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         chunked-prefill-size: 32768

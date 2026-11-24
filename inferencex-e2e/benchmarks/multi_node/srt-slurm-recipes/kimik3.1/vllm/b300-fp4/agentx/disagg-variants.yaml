@@ -80,8 +80,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 8
       env:
         <<: &kimi_env
           DYN_TCP_REQUEST_TIMEOUT: "120"
@@ -161,8 +159,6 @@ base:
         speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 1
-      workers: 1
-      gpus: 8
       env:
         <<: *kimi_env
         VLLM_ENABLE_GEMM_RS: "0"
@@ -217,13 +213,11 @@ override_1p1d:
   roles:
     prefill: &override_1p1d_prefill
       nodes: 1
-      workers: 1
       args: &override_1p1d_prefill_args
         prefix-match-unit: 1536
         speculative-config: &spec_k7 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode: &override_1p1d_decode
       nodes: 1
-      workers: 1
       args: &override_1p1d_decode_args
         prefix-match-unit: 1536
         max-cudagraph-capture-size: 64
@@ -253,11 +247,9 @@ override_1p2d:
   roles:
     prefill: &override_1p2d_prefill
       nodes: 1
-      workers: 1
       args: &override_1p2d_prefill_args {}
     decode: &override_1p2d_decode
       nodes: 2
-      workers: 2
       args: &override_1p2d_decode_args {}
 
 override_1p2d_eval:
@@ -283,11 +275,9 @@ override_1p3d:
   roles:
     prefill: &override_1p3d_prefill
       nodes: 1
-      workers: 1
       args: &override_1p3d_prefill_args {}
     decode: &override_1p3d_decode
       nodes: 3
-      workers: 3
       args: &override_1p3d_decode_args {}
 
 override_1p3d_eval:
@@ -317,7 +307,6 @@ override_2p3d_kv98:
   roles:
     prefill: &override_2p3d_kv98_prefill
       nodes: 2
-      workers: 2
       env: &store_tail_cleanup
         VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
         VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
@@ -325,7 +314,6 @@ override_2p3d_kv98:
         kv-transfer-config: &kv_transfer_prefetch '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false,"lookup_timeout_s":60,"store_tp_size":1,"store_chunk_size":4096,"lookup_prefetch_limit":16,"lookup_prefetch_ttl_s":30}}]}}'
     decode: &override_2p3d_kv98_decode
       nodes: 3
-      workers: 3
       env: *store_tail_cleanup
       args: &override_2p3d_kv98_decode_args
         kv-transfer-config: *kv_transfer_prefetch
@@ -361,7 +349,6 @@ override_4p5d_kv98:
   roles:
     prefill: &override_4p5d_kv98_prefill
       nodes: 4
-      workers: 4
       env: *store_tail_cleanup
       args: &override_4p5d_kv98_prefill_args
         attention-config: &indexer_logits_bf16 '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
@@ -369,7 +356,6 @@ override_4p5d_kv98:
         kv-transfer-config: *kv_transfer_prefetch
     decode: &override_4p5d_kv98_decode
       nodes: 5
-      workers: 5
       env: *store_tail_cleanup
       args: &override_4p5d_kv98_decode_args
         <<: *override_2p3d_kv98_decode_args

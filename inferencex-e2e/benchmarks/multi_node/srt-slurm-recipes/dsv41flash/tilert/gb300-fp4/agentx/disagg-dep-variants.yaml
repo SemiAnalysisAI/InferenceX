@@ -26,8 +26,6 @@ base:
       # Six DEP2 workers (DP2 + expert parallel), two per tray; the point at 4 sequences per
       # decode GPU takes four (two trays) below.
       nodes: 3
-      workers: 6
-      gpus: 2
       env:
         TILERT_ROLE: prefill
         HF_HUB_CACHE: "/hf_hub_cache"
@@ -89,8 +87,6 @@ base:
         multi_node_launch: node-env
       container: nvidia/cuda:13.2.0-runtime-ubuntu24.04@sha256:5f070a8f89e13ce9247188d7ed71a77119ed44e8be360e53c9ae1719e3089ea0
       nodes: 8
-      workers: 1
-      gpus: 32
       env:
         TILERT_ROLE: decode
         # The CUDA runtime image (arm64) carries no Python stack: the setup script installs the
@@ -182,7 +178,6 @@ override_4p1d_dep2_dep32_eb4_c1200:
   roles:
     prefill:
       nodes: 2
-      workers: 4
     decode:
       env:
         TILERT_EP_BATCH: "4"
