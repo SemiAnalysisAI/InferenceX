@@ -16,10 +16,9 @@ base:
       enabled: false
   engine: sglang
   # The image (lmsysorg/sglang-rocm 20261124: SGLang 88dc7501f5, AITER 581579ab 0.1.29.dev156,
-  # FlyDSL 0.4.2) is used as shipped except for one SGLang patch (patches/ next to this recipe,
-  # applied by the setup script): the monokernel's capture check must skip the draft's CUDA graph
-  # captures, which sglang#46210 started to run it on, or c1/c2 (--enable-amd-monokernel) fail at
-  # startup. AITER is not touched: the image has the FlyDSL kernels this recipe uses
+  # FlyDSL 0.4.2, sgl-amd-mono 32a12203) is used as shipped except for one patch to its sgl-amd-mono
+  # checkout (patches/ next to this recipe, applied by the setup script): sgl-project/sgl-amd-mono#184.
+  # AITER and SGLang are not touched: the image has the FlyDSL kernels this recipe uses
   # (ROCm/aiter#5992, #5993, #6496, #6670) and the merged sglang#45196 and #48649.
   setup_script: qwen3.8next-rocm10-patches.sh
   roles:
