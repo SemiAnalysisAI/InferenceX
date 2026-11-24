@@ -139,7 +139,7 @@ def main():
     k = cores.iloc[0]
     print(f"M = {k.M}, N = {k.N}, {k.num_mm} matmuls per loop iteration, {k.reps} iterations per execution.\n")
     print("### TFLOP/s, utilization and scaling\n\nUtilization is TFLOP/s over the TensorE peak at the profile's clock: "
-          "2 K M FLOPs per clock cycle per core, with K = 128 for bf16, 256 for fp8 double_row and 512 for MXFP8, "
+          "2 K M FLOPs per clock cycle per core, with K = 128 for bf16, 256 for fp8 double_row and 512 for MXFP8 and MXFP4, "
           "times the number of cores. The clock is the one the TensorE counters show in the solo run.\n\n"
           + summary(cores, sysfs, probes))
     print("\n### Per-core TFLOP/s with all cores running\n\n" + per_core(cores))

@@ -16,7 +16,7 @@ repository root in an environment with the required device libraries.
 | [trn3_exp_bw](trn3_exp_bw/) | Trainium3 exp and activation-function throughput on VectorE and ScalarE | Trainium3 instance with the Neuron driver and Docker |
 | [trn3_matmul](trn3_matmul/) | Trainium3 TensorE bf16 matmul initiation interval and latency across N and M, with a fixed or a new stationary per matmul | Trainium3 instance with the Neuron driver and Docker |
 | [trn3_core_membw](trn3_core_membw/) | Trainium3 per-core memory bandwidth, core-to-core and chip-to-chip collectives across a node and the two racks, and a core-map shim for cross-SEngine runs | Trainium3 UltraServer with the Neuron driver and Docker |
-| [full_chip_matmul](full_chip_matmul/) | Trainium3 whole-chip TensorE matmul TFLOP/s (bf16, fp8 double_row, MXFP8) with all eight NeuronCores running at once against one core alone, and throttle readings under device performance profiles | Trainium3 instance with the Neuron driver, Docker, and AWS's `performance_profile_tool` with `sudo` |
+| [full_chip_matmul](full_chip_matmul/) | Trainium3 whole-chip TensorE matmul TFLOP/s (bf16, fp8 double_row, MXFP8, MXFP4) with all eight NeuronCores running at once against one core alone, and throttle readings under device performance profiles | Trainium3 instance with the Neuron driver, Docker, and AWS's `performance_profile_tool` with `sudo` |
 
 ## GEMM
 
@@ -287,12 +287,16 @@ full latency each time. Results are not checked against a reference.
 `full_chip_matmul` runs TensorE matmuls on all eight NeuronCores of one Trainium3 chip at LNC=1 at
 the same time, compares the chip's TFLOP/s with eight times one core running alone, and records
 throttling while it runs. It repeats this under each device performance profile set with AWS's
-`performance_profile_tool` (a binary AWS provides; it is not in this repository). Three kernels use
-the fixed-stationary tiles of the single-core benchmarks, with M = 128 and N = 512:
+`performance_profile_tool` (a binary AWS provides; it is not in this repository). Four kernels use
+fixed-stationary tiles, the first three those of the single-core benchmarks, with M = 128 and
+N = 512:
 
 - `mm_bf16`: `nisa.nc_matmul`, bf16, K = 128 (`trn3_matmul`'s `mm_bf16_fixed`).
 - `mm_fp8dr`: `nisa.nc_matmul` with `perf_mode=double_row`, float8_e4m3, K = 256.
 - `mm_mx`: MXFP8, `nisa.nc_matmul_mx`, float8_e4m3fn_x4 with e8m0 scales, K = 512.
+- `mm_mxfp4`: MXFP4, `nisa.nc_matmul_mx`, float4_e2m1fn_x4 (four 4-bit values in 16 bits) with e8m0
+  scales, K = 512. `nisa.quantize_mx` has no fp4 output, so the operands are quantized on the host
+  and each iteration loads their data and scale tiles from HBM.
 
 Each kernel is an on-device loop (`nl.dynamic_range`) of `REPS` iterations, each `NUM_MM` matmuls
 into PSUM tile i % 8, so one execution streams matmuls for about 0.25 s without returning to the
@@ -311,6 +315,8 @@ ubenchX/trn3_dma_bw/run.sh python ubenchX/full_chip_matmul/parse.py ubenchX/full
 ubenchX/trn3_dma_bw/run.sh python ubenchX/full_chip_matmul/report.py --prefix chip --bin-s 15 > chip_report.md
 python ubenchX/full_chip_matmul/plot.py --prefix chip --out chip_timeline.png \
   --profiles as_found 2.0ghz_tpb_1.2ghz_soc
+python ubenchX/full_chip_matmul/plot_mfu.py --out chip_mfu.png --ref-clock-ghz 2.4 \
+  --panel "2.4 GHz TensorE" chip:as_found --panel "2.0 GHz TensorE" chip:2.0ghz_tpb_1.2ghz_soc
 ```
 
 `sweep.sh` runs on the host and needs passwordless `sudo` for the profile tool. For each name in
@@ -335,7 +341,7 @@ so it includes each iteration's operand load and PSUM drain. Chip TFLOP/s is the
 cores, and scaling is chip TFLOP/s over `NCORES` times the solo TFLOP/s. Utilization is TFLOP/s
 over the TensorE peak at the profile's clock: 2 K M FLOPs per clock cycle per core, which at
 2.4 GHz is 78.6 TFLOP/s for bf16 (the peak `trn3_matmul` uses), 157.3 for fp8 double_row and 314.6
-for MXFP8, and eight times that for the chip. `report.py` takes the clock from the TensorE counters.
+for MXFP8 and MXFP4, and eight times that for the chip. `report.py` takes the clock from the TensorE counters.
 
 Throttling is recorded three ways:
 
@@ -414,6 +420,39 @@ throttled there: it starts at 297 TFLOP/s, is at 270 after 1.5 s and at 265 afte
 profiler names `temp_0`. The two nodes were measured at different times and with different run lengths, so this
 shows that throttling differs between chips or nodes, not why; the profile comparison above is all
 on one chip.
+
+`results/trn3n_48xlarge_rev2_2026-11-24_full_chip_mxfp4_*` add MXFP4 on the first node's chip 0,
+with the node set to `2.4ghz_tpb_1.2ghz_soc` and then `2.0ghz_tpb_1.2ghz_soc`, and a 30 s and 72 s
+MXFP8 run in the same session, which is within 0.1% of the MXFP8 rows above over the same time. The
+NKI documentation gives 512 as the largest contraction of one MX matmul for MXFP4 as for MXFP8 (128
+partitions times the four values of each x4 element), so the peak is the same 314.6 TFLOP/s per
+core at 2.4 GHz. The profiler shows MATMUL_MX with source dtype `mxfp4` and 67,108,864 FLOPs per
+instruction, which is 2 K M N with K = 512.
+
+| profile | mode (kernel) | solo TFLOP/s (utilization) | chip TFLOP/s (utilization) | chip / (8 x solo) | sysfs throttle mean, chip | profiler source and level |
+|---|---|---|---|---|---|---|
+| `2.4ghz_tpb_1.2ghz_soc` | MXFP4 (`mm_mxfp4`) | 307.29 (97.7%) | 2,159.1 (85.8%) | 0.878 | 87.0% | `power_3`, 87.6% |
+| `2.0ghz_tpb_1.2ghz_soc` | MXFP4 (`mm_mxfp4`) | 256.08 (97.7%) | 2,048.6 (97.7%) | 1.000 | 99.2% | none |
+
+At 2.4 GHz MXFP4 is power-throttled less than MXFP8, to 87.8% of eight times the solo rate against
+72.7%, and its chip total is 25% higher (2,159 against 1,728 TFLOP/s). At 2.0 GHz it is not
+throttled, where MXFP8 still is, and gives 2,049 against 1,767 TFLOP/s. The throttle follows the
+same course as for MXFP8: 2,177 TFLOP/s in the first 15 s, 2,116 in the next and 2,164 to 2,170 from
+75 s, with `temp_0` for 2.8% of the probe beside `power_3`. One MXFP4 core is also 3.4% faster than
+one MXFP8 core, because its MATMUL_MX instructions start every 518 cycles on average (215.9 ns)
+against 534 (222.7 ns) for MXFP8; `_probes.csv` holds the medians, 216 and 221 ns. The time between
+bursts in a loop iteration is about the same, 19.9 us against 22.0 us, although MXFP4 loads its
+operands with four DMAs where MXFP8 quantizes them on VectorE.
+
+`plot_mfu.py` draws the eight-core runs as utilization over time, one line per kernel, with a band
+above each line up to the throttle level (the sysfs mean over the chip's cores). Every panel is
+scaled to the TensorE peak at `--ref-clock-ghz`, so profiles with different clocks share one axis.
+`results/trn3n_48xlarge_rev2_2026-11-24_full_chip_mfu.png` has the default profile beside
+`2.0ghz_tpb_1.2ghz_soc`, both against the 2.4 GHz peak, from the runs above and the MXFP4 runs.
+From 90 s on, at 2.4 GHz the chip runs bf16 at 97.7% of that peak, fp8 double_row at 90.0%, MXFP4
+at 86.1% and MXFP8 at 68.6%. At 2.0 GHz bf16, fp8 double_row and MXFP4 run at 81.4% to 81.5% of it
+(97.7% of the 2.0 GHz peak) and MXFP8 at 70.5%, so against one reference the 2.0 GHz profile is
+faster only for MXFP8.
 
 The runtime's LNC=1 cores 0 to 7 of chip 0 are sysfs `neuron_core` 4, 5, 6, 7, 2, 3, 0, 1 (one core
 at a time, by its `pe_cntrs`). The sysfs record printed `Source attribution unavailable` in every

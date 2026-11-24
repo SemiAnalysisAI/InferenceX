@@ -93,11 +93,11 @@ class Model:
 
 def do_compile(a, out):
     sys.path.insert(0, HERE)
-    from kernels import K_PER_PARTITION, get_kernel, input_shape
+    from kernels import K_PER_PARTITION, get_kernel, make_input
 
     K = 128 * K_PER_PARTITION[a.kernel]
     inp = os.path.join(out, "input.npy")
-    np.save(inp, np.random.default_rng(0).standard_normal(input_shape(a.kernel, a.m, a.n)).astype(np.float32))
+    np.save(inp, make_input(a.kernel, a.m, a.n))
     t0 = time.time()
     compile_neff(get_kernel(a.kernel, a.mm, a.reps, a.m), np.load(inp), out, a.target)
     meta = {"kernel": a.kernel, "K": K, "M": a.m, "N": a.n, "num_mm": a.mm, "reps": a.reps,
@@ -163,7 +163,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True)
     ap.add_argument("--compile-only", action="store_true", help="build the NEFF and stop")
-    ap.add_argument("--kernel", choices=["mm_bf16", "mm_fp8dr", "mm_mx"])
+    ap.add_argument("--kernel", choices=["mm_bf16", "mm_fp8dr", "mm_mx", "mm_mxfp4"])
     # trn3 is Trainium3 silicon revision v2 and trn3pre is revision v1.
     ap.add_argument("--target", choices=["trn3", "trn3pre"])
     ap.add_argument("--n", type=int, help="moving free size N (columns streamed per matmul)")

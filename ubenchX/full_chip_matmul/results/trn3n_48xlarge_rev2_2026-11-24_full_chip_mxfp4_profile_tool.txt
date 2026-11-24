@@ -1,0 +1,152 @@
+== MXFP8 reference: no set (node at 2.4ghz_tpb_1.2ghz_soc from the earlier restore); te_clock.py --seconds 2
+neuron0: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron1: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron2: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron3: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron4: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron5: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron6: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron7: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron8: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron9: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron10: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron11: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron12: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron13: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron14: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron15: 2.400 GHz (cores 8, min 2.400, max 2.400)
+
+== sudo ./performance_profile_tool --profile 2.4ghz_tpb_1.2ghz_soc
+Found 16 Neuron device(s)
+Detected Trainium3 platform
+Checking if 128 cores are available
+All cores available, proceeding with profile change
+Opening Neuron device 0
+Opening Neuron device 1
+Opening Neuron device 2
+Opening Neuron device 3
+Opening Neuron device 4
+Opening Neuron device 5
+Opening Neuron device 6
+Opening Neuron device 7
+Opening Neuron device 8
+Opening Neuron device 9
+Opening Neuron device 10
+Opening Neuron device 11
+Opening Neuron device 12
+Opening Neuron device 13
+Opening Neuron device 14
+Opening Neuron device 15
+Setting performance profile to 2.4ghz_tpb_1.2ghz_soc on all devices
+Performance profile set successfully on all devices
+Note: --get-profile is not yet supported by Trainium3 firmware, so the profile
+cannot be verified with this tool.
+
+== after that set: te_clock.py --seconds 2
+neuron0: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron1: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron2: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron3: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron4: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron5: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron6: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron7: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron8: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron9: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron10: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron11: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron12: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron13: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron14: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron15: 2.400 GHz (cores 8, min 2.400, max 2.400)
+
+== sudo ./performance_profile_tool --profile 2.0ghz_tpb_1.2ghz_soc
+Found 16 Neuron device(s)
+Detected Trainium3 platform
+Checking if 128 cores are available
+All cores available, proceeding with profile change
+Opening Neuron device 0
+Opening Neuron device 1
+Opening Neuron device 2
+Opening Neuron device 3
+Opening Neuron device 4
+Opening Neuron device 5
+Opening Neuron device 6
+Opening Neuron device 7
+Opening Neuron device 8
+Opening Neuron device 9
+Opening Neuron device 10
+Opening Neuron device 11
+Opening Neuron device 12
+Opening Neuron device 13
+Opening Neuron device 14
+Opening Neuron device 15
+Setting performance profile to 2.0ghz_tpb_1.2ghz_soc on all devices
+Performance profile set successfully on all devices
+Note: --get-profile is not yet supported by Trainium3 firmware, so the profile
+cannot be verified with this tool.
+
+== after that set: te_clock.py --seconds 2
+neuron0: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron1: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron2: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron3: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron4: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron5: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron6: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron7: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron8: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron9: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron10: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron11: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron12: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron13: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron14: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron15: 2.000 GHz (cores 8, min 2.000, max 2.000)
+
+== restore: sudo ./performance_profile_tool --profile 2.4ghz_tpb_1.2ghz_soc
+Found 16 Neuron device(s)
+Detected Trainium3 platform
+Checking if 128 cores are available
+All cores available, proceeding with profile change
+Opening Neuron device 0
+Opening Neuron device 1
+Opening Neuron device 2
+Opening Neuron device 3
+Opening Neuron device 4
+Opening Neuron device 5
+Opening Neuron device 6
+Opening Neuron device 7
+Opening Neuron device 8
+Opening Neuron device 9
+Opening Neuron device 10
+Opening Neuron device 11
+Opening Neuron device 12
+Opening Neuron device 13
+Opening Neuron device 14
+Opening Neuron device 15
+Setting performance profile to 2.4ghz_tpb_1.2ghz_soc on all devices
+Performance profile set successfully on all devices
+Note: --get-profile is not yet supported by Trainium3 firmware, so the profile
+cannot be verified with this tool.
+
+== after the restore: te_clock.py --seconds 2
+neuron0: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron1: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron2: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron3: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron4: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron5: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron6: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron7: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron8: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron9: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron10: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron11: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron12: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron13: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron14: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron15: 2.400 GHz (cores 8, min 2.400, max 2.400)
+
+== after the restore: cat /sys/class/neuron_device/current_perf_profile
+6

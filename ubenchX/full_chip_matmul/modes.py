@@ -1,6 +1,7 @@
-"""Names of the three kernels for tables and plots, and the TensorE peak they are compared with."""
+"""Names of the kernels for tables and plots, and the TensorE peak they are compared with."""
 
-LABEL = {"mm_bf16": "bf16 nc_matmul", "mm_fp8dr": "fp8 double_row nc_matmul", "mm_mx": "MXFP8 nc_matmul_mx"}
+LABEL = {"mm_bf16": "bf16 nc_matmul", "mm_fp8dr": "fp8 double_row nc_matmul", "mm_mx": "MXFP8 nc_matmul_mx",
+         "mm_mxfp4": "MXFP4 nc_matmul_mx"}
 
 
 def label(kernel):

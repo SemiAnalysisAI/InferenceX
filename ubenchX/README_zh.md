@@ -15,7 +15,7 @@
 | [trn3_psum_bw](trn3_psum_bw/) | Trainium3 上 VectorE 与 ScalarE 的 PSUM 到 SBUF `tensor_copy` 带宽，含单引擎与双引擎并发 | 安装 Neuron 驱动和 Docker 的 Trainium3 实例 |
 | [trn3_exp_bw](trn3_exp_bw/) | Trainium3 上 VectorE 与 ScalarE 的 exp 及激活函数吞吐量 | 安装 Neuron 驱动和 Docker 的 Trainium3 实例 |
 | [trn3_matmul](trn3_matmul/) | Trainium3 TensorE bf16 矩阵乘法在不同 N 和 M 下的发射间隔与延迟，含固定或每次新加载的 stationary | 安装 Neuron 驱动和 Docker 的 Trainium3 实例 |
-| [full_chip_matmul](full_chip_matmul/) | Trainium3 整芯片 TensorE 矩阵乘法 TFLOP/s（bf16、fp8 double_row、MXFP8）：八个 NeuronCore 同时运行与单核单独运行的对比，以及各设备性能 profile 下的限速读数 | 安装 Neuron 驱动和 Docker 的 Trainium3 实例，以及 AWS 的 `performance_profile_tool`（需 `sudo`） |
+| [full_chip_matmul](full_chip_matmul/) | Trainium3 整芯片 TensorE 矩阵乘法 TFLOP/s（bf16、fp8 double_row、MXFP8、MXFP4）：八个 NeuronCore 同时运行与单核单独运行的对比，以及各设备性能 profile 下的限速读数 | 安装 Neuron 驱动和 Docker 的 Trainium3 实例，以及 AWS 的 `performance_profile_tool`（需 `sudo`） |
 
 ## GEMM
 
@@ -267,11 +267,14 @@ Throttle 表记录其恢复全速的时刻。对恢复之后开始的 MATMUL，I
 `full_chip_matmul` 在 LNC=1 下让一颗 Trainium3 芯片的全部八个 NeuronCore 同时运行 TensorE 矩阵
 乘法，把整芯片的 TFLOP/s 与单核单独运行时的八倍相比较，并在运行期间记录限速情况。它在用 AWS 的
 `performance_profile_tool`（AWS 提供的二进制，不在本仓库中）设置的每个设备性能 profile 下各测
-一遍。三个 kernel 沿用单核基准测试中固定 stationary 的 tile，M = 128，N = 512：
+一遍。四个 kernel 都使用固定 stationary 的 tile，前三个沿用单核基准测试中的 tile，M = 128，N = 512：
 
 - `mm_bf16`：`nisa.nc_matmul`，bf16，K = 128（即 `trn3_matmul` 的 `mm_bf16_fixed`）。
 - `mm_fp8dr`：`nisa.nc_matmul` 加 `perf_mode=double_row`，float8_e4m3，K = 256。
 - `mm_mx`：MXFP8，`nisa.nc_matmul_mx`，float8_e4m3fn_x4 加 e8m0 scale，K = 512。
+- `mm_mxfp4`：MXFP4，`nisa.nc_matmul_mx`，float4_e2m1fn_x4（16 位中打包四个 4 位值）加 e8m0 scale，
+  K = 512。`nisa.quantize_mx` 不能输出 fp4，因此操作数在主机上量化，每次迭代从 HBM 加载其数据和
+  scale tile。
 
 每个 kernel 是一个在设备上执行的循环（`nl.dynamic_range`），共 `REPS` 次迭代，每次迭代有 `NUM_MM`
 条矩阵乘法，写入 PSUM tile i % 8，因此一次执行可以连续发射约 0.25 s 的矩阵乘法而不返回主机。
@@ -290,6 +293,8 @@ ubenchX/trn3_dma_bw/run.sh python ubenchX/full_chip_matmul/parse.py ubenchX/full
 ubenchX/trn3_dma_bw/run.sh python ubenchX/full_chip_matmul/report.py --prefix chip --bin-s 15 > chip_report.md
 python ubenchX/full_chip_matmul/plot.py --prefix chip --out chip_timeline.png \
   --profiles as_found 2.0ghz_tpb_1.2ghz_soc
+python ubenchX/full_chip_matmul/plot_mfu.py --out chip_mfu.png --ref-clock-ghz 2.4 \
+  --panel "2.4 GHz TensorE" chip:as_found --panel "2.0 GHz TensorE" chip:2.0ghz_tpb_1.2ghz_soc
 ```
 
 `sweep.sh` 在主机上运行，需要能免密 `sudo` 执行 profile 工具。对 `PROFILES` 中的每个名字，它先设置
@@ -309,8 +314,8 @@ TFLOP/s 按每条矩阵乘法指令 2 K M N 个 FLOP 计算，与单核基准测
 `REPS` x `NUM_MM` x 2 K M N x 执行次数除以在 `nrt_execute` 内花费的时间，因此包含每次迭代的操作数
 加载和 PSUM 排空。整芯片 TFLOP/s 是各核之和，scaling 为整芯片 TFLOP/s 除以 `NCORES` 乘以 solo
 TFLOP/s。利用率为 TFLOP/s 除以该 profile 时钟下的 TensorE 峰值：每个核每个时钟周期 2 K M 个 FLOP，
-2.4 GHz 下 bf16 为 78.6 TFLOP/s（即 `trn3_matmul` 使用的峰值），fp8 double_row 为 157.3，MXFP8 为
-314.6，整芯片为其八倍。`report.py` 的时钟取自 TensorE 计数器。
+2.4 GHz 下 bf16 为 78.6 TFLOP/s（即 `trn3_matmul` 使用的峰值），fp8 double_row 为 157.3，MXFP8 和
+MXFP4 为 314.6，整芯片为其八倍。`report.py` 的时钟取自 TensorE 计数器。
 
 限速通过三种方式记录：
 
@@ -379,6 +384,34 @@ TFLOP/s。利用率为 TFLOP/s 除以该 profile 时钟下的 TensorE 峰值：�
 探测的 8% 到 18%。在这颗芯片上，单个 MXFP8 核本身就会被限速：起始为 297 TFLOP/s，1.5 s 后为 270，
 15 s 后为 265，profiler 标出的来源是 `temp_0`。两个节点的测量时间和运行时长都不同，因此这只说明限速在不同
 芯片或节点之间存在差异，并不能说明原因；上面的 profile 对比全部在同一颗芯片上完成。
+
+`results/trn3n_48xlarge_rev2_2026-11-24_full_chip_mxfp4_*` 在第一个节点的芯片 0 上增加了 MXFP4
+的测量，节点先设为 `2.4ghz_tpb_1.2ghz_soc`，再设为 `2.0ghz_tpb_1.2ghz_soc`，并在同一次会话中跑了
+一次 30 s 和 72 s 的 MXFP8，其结果与上面 MXFP8 各行在相同时间内相差不超过 0.1%。NKI 文档给出的
+单条 MX 矩阵乘法的最大收缩维度对 MXFP4 和 MXFP8 都是 512（128 个 partition 乘以每个 x4 元素的四个
+值），因此峰值同为 2.4 GHz 下每核 314.6 TFLOP/s。profiler 显示 MATMUL_MX、源 dtype 为 `mxfp4`、每条
+指令 67,108,864 个 FLOP，即 K = 512 时的 2 K M N。
+
+| profile | 模式（kernel） | solo TFLOP/s（利用率） | 整芯片 TFLOP/s（利用率） | 整芯片 / (8 x solo) | 八核时 sysfs 限速均值 | profiler 给出的来源与水平 |
+|---|---|---|---|---|---|---|
+| `2.4ghz_tpb_1.2ghz_soc` | MXFP4（`mm_mxfp4`） | 307.29（97.7%） | 2,159.1（85.8%） | 0.878 | 87.0% | `power_3`，87.6% |
+| `2.0ghz_tpb_1.2ghz_soc` | MXFP4（`mm_mxfp4`） | 256.08（97.7%） | 2,048.6（97.7%） | 1.000 | 99.2% | 无 |
+
+2.4 GHz 下 MXFP4 受到的功耗限速比 MXFP8 轻，为单核速率八倍的 87.8%，而 MXFP8 为 72.7%，整芯片总量
+高 25%（2,159 对 1,728 TFLOP/s）。2.0 GHz 下它不被限速，而 MXFP8 仍被限速，总量为 2,049 对 1,767
+TFLOP/s。限速的变化过程与 MXFP8 相同：前 15 s 为 2,177 TFLOP/s，随后 15 s 为 2,116，75 s 之后为
+2,164 到 2,170，探测中除 `power_3` 外还有 2.8% 的时间来源为 `temp_0`。单个 MXFP4 核也比单个 MXFP8
+核快 3.4%，因为它的 MATMUL_MX 指令平均每 518 个周期（215.9 ns）发射一条，而 MXFP8 为 534 个周期
+（222.7 ns）；`_probes.csv` 中是中位数，分别为 216 和 221 ns。每次循环迭代中两段突发之间的时间大致
+相同，为 19.9 us 对 22.0 us，尽管 MXFP4 用四次 DMA 加载操作数，而 MXFP8 在 VectorE 上量化。
+
+`plot_mfu.py` 把八核运行画成利用率随时间的变化，每个 kernel 一条线，线上方的色带延伸到限速水平
+（芯片各核 sysfs 均值的平均）。每个子图都按 `--ref-clock-ghz` 时钟下的 TensorE 峰值归一，因此不同
+时钟的 profile 共用一个坐标轴。`results/trn3n_48xlarge_rev2_2026-11-24_full_chip_mfu.png` 把默认
+profile 与 `2.0ghz_tpb_1.2ghz_soc` 并排，二者都以 2.4 GHz 峰值为基准，数据来自上面的运行和 MXFP4
+的运行。90 s 之后，2.4 GHz 下整芯片 bf16 为该峰值的 97.7%，fp8 double_row 为 90.0%，MXFP4 为
+86.1%，MXFP8 为 68.6%。2.0 GHz 下 bf16、fp8 double_row 和 MXFP4 为该峰值的 81.4% 到 81.5%（即
+2.0 GHz 峰值的 97.7%），MXFP8 为 70.5%，因此按同一基准比较，2.0 GHz profile 只对 MXFP8 更快。
 
 芯片 0 上运行时的 LNC=1 核 0 到 7 对应 sysfs 的 `neuron_core` 4、5、6、7、2、3、0、1（逐核单独
 运行，根据其 `pe_cntrs` 判断）。sysfs 记录在每次采样中都打印 `Source attribution unavailable`，
