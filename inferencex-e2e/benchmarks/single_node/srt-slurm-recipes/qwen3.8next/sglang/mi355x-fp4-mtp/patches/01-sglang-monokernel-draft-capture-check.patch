@@ -1,0 +1,27 @@
+# [Fix] [AMD] monokernels: do not run the target's capture check on the draft's CUDA graph captures
+# No upstream PR yet. Needed since sglang#46210 (merged 2026-11-20), which makes the draft decode and draft
+# extend CUDA graph runners call the draft model runner's capture tail hooks; the monokernel's check
+# (_CaptureCheck) then compares the draft's decode step (1 token a request) with the target_verify keys it
+# serves and raises "--enable-amd-monokernel: none of the 1 captured decode graphs ... runs
+# qwen38_flash_next_mtp_draft_hip's monokernels" at c1/c2. sgl-amd-mono's draft.py assumes "SGLang's capture
+# check never sees a draft step" and routes and logs the draft's steps itself.
+# Generated against the SGLang checkout of the image (88dc7501f5, 2026-11-24).
+
+diff --git a/python/sglang/srt/kernel_plugins/amd/binding.py b/python/sglang/srt/kernel_plugins/amd/binding.py
+index 7a4960f9c2..755fa0eb93 100644
+--- a/python/sglang/srt/kernel_plugins/amd/binding.py
++++ b/python/sglang/srt/kernel_plugins/amd/binding.py
+@@ -516,6 +516,13 @@ class _CaptureCheck:
+     ) -> None:
+         if self.is_done or not torch.cuda.is_current_stream_capturing():
+             return  # the runner's warmup runs, and any recapture
++        if getattr(runner.model_runner, "is_draft_worker", False):
++            # The draft runners (decode and extend) call the capture tail hooks too, but
++            # this check keys on the served graphs of the monokernel's own model, which
++            # is not what a draft step is: a draft decode is 1 token a request and a
++            # draft extend is not a decode or verify step. The draft spec routes and
++            # logs its own steps (sgl_amd_mono qwen38_flash_next/draft.py).
++            return
+         self.captured[int(forward_batch.batch_size)] = shape_key(forward_batch)
+         if not set(runner.capture_bs) <= set(self.captured):
+             return
