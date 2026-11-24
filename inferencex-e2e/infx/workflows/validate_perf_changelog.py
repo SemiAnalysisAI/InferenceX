@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -120,8 +121,13 @@ def compare_entries(
     base_entries: list[dict[str, Any]],
     head_entries: list[dict[str, Any]],
     pr_number: int | None,
+    already_merged: Sequence[dict[str, Any]] = (),
 ) -> tuple[list[dict[str, Any]], int]:
-    """Validate append-only ordering and canonical pr-link-only corrections."""
+    """Validate append-only ordering and canonical pr-link-only corrections.
+
+    Additions matching an ``already_merged`` entry apart from its pr-link (a stacked
+    parent PR's entry that main now carries) skip the pr-link check.
+    """
     if len(head_entries) < len(base_entries):
         raise ChangelogValidationError("perf-changelog.yaml entries were deleted")
 
@@ -155,7 +161,10 @@ def compare_entries(
             "do not mix historical pr-link corrections with new changelog entries"
         )
 
+    merged = [without_pr_link(entry) for entry in already_merged]
     for entry in additions:
+        if without_pr_link(entry) in merged:
+            continue
         validate_added_pr_link(str(entry.get("pr-link") or ""), pr_number)
 
     return additions, corrections

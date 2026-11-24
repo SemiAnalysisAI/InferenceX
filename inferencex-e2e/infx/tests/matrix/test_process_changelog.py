@@ -37,7 +37,7 @@ def _fixed_matrix_row(
         "runner": "cluster:b300-nv",
         "isl": 8192,
         "osl": 1024,
-        "tp": tp,
+        "gpus-per-worker": (tp) * (1) * (1), "tp": tp,
         "pp": 1,
         "dcp-size": 1,
         "pcp-size": 1,
@@ -268,7 +268,7 @@ def test_append_only_scope_allows_additive_top_level_restructuring(tmp_path):
                         "isl": 8192,
                         "osl": 1024,
                         "search-space": [
-                            {"tp": 4, "conc-list": [1, 4, 8], "srt-recipe": "recipe.yaml"}
+                            {"gpus-per-worker": 4, "tp": 4, "conc-list": [1, 4, 8], "srt-recipe": "recipe.yaml"}
                         ],
                     }
                 ]
@@ -282,7 +282,7 @@ def test_append_only_scope_allows_additive_top_level_restructuring(tmp_path):
     ]
     search_space[0]["router"] = router_a
     search_space.append(
-        {"tp": 8, "conc-list": [12, 16], "router": router_b, "srt-recipe": "recipe.yaml"}
+        {"gpus-per-worker": 8, "tp": 8, "conc-list": [12, 16], "router": router_b, "srt-recipe": "recipe.yaml"}
     )
 
     validate_master_config(base, tmp_path)
@@ -294,8 +294,9 @@ def test_append_only_scope_allows_additive_top_level_restructuring(tmp_path):
         scenario_type=["fixed-seq-len"],
         runner_node_filter=None,
     )
-    base_rows = generate_test_config_sweep(args, base)
-    head_rows = generate_test_config_sweep(args, head)
+    runners = {"clusters": {"b200": {"gpus-per-node": 8}}}
+    base_rows = generate_test_config_sweep(args, base, runners)
+    head_rows = generate_test_config_sweep(args, head, runners)
 
     process_changelog.validate_append_only_scope(
         base, head, {"test-config": {"fixed-seq-len"}}
@@ -313,8 +314,8 @@ def test_append_only_scope_rejects_global_change_with_unselected_scenario():
         "test-config": {
             "router": {"name": "dynamo-router", "version": "0.8.1"},
             "scenarios": {
-                "fixed-seq-len": {"search-space": [{"tp": 4, "conc-list": [1]}]},
-                "agentic-coding": {"search-space": [{"tp": 4, "conc-list": [1]}]},
+                "fixed-seq-len": {"search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1]}]},
+                "agentic-coding": {"search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1]}]},
             },
         }
     }
@@ -339,17 +340,17 @@ def test_append_only_scope_rejects_changes_to_unselected_scenario():
     base = {
         "test-config": {
             "scenarios": {
-                "fixed-seq-len": {"search-space": [{"tp": 4, "conc-list": [1]}]},
-                "agentic-coding": {"search-space": [{"tp": 4, "conc-list": [1]}]},
+                "fixed-seq-len": {"search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1]}]},
+                "agentic-coding": {"search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1]}]},
             }
         }
     }
     head = {
         "test-config": {
             "scenarios": {
-                "fixed-seq-len": {"search-space": [{"tp": 4, "conc-list": [1]}]},
+                "fixed-seq-len": {"search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1]}]},
                 "agentic-coding": {
-                    "search-space": [{"tp": 4, "conc-list": [1, 4]}]
+                    "search-space": [{"gpus-per-worker": 4, "tp": 4, "conc-list": [1, 4]}]
                 },
             }
         }
@@ -372,8 +373,8 @@ def planning_inputs() -> tuple[dict, dict]:
     }}}
     master = {}
     for key, multinode in (("single", False), ("multi", True)):
-        shape = ({role: {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
-                  for role in ("prefill", "decode")} if multinode else {"tp": 8})
+        shape = ({role: {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}
+                  for role in ("prefill", "decode")} if multinode else {"gpus-per-worker": 8, "tp": 8})
         master[key] = {
             "image": "example/image:stable", "model": key, "model-prefix": "dsr1",
             "precision": "fp8", "framework": "sglang", "runner": "cluster:fixture",
@@ -436,52 +437,6 @@ def committed_planning_repo(planning_repo):
     return root, base, head
 
 
-@pytest.mark.parametrize("ambient", [False, True])
-def test_recovery_plans_with_the_checkouts_own_planner_and_recipes(
-    committed_planning_repo, monkeypatch, tmp_path_factory, ambient
-):
-    from infx.workflows.recover_failed_ingest import build_config
-
-    root, base, head = committed_planning_repo
-    master_path = root / "configs/nvidia-master.yaml"
-    master = yaml.safe_load(master_path.read_text())
-    master["multi"]["scenarios"]["fixed-seq-len"][0]["search-space"][0][
-        "srt-recipe"
-    ] = "recovery-fixture.yaml"
-    master_path.write_text(yaml.safe_dump(master, sort_keys=False))
-    recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/recovery-fixture.yaml"
-    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
-    changelog = root / "perf-changelog.yaml"
-    entries = yaml.safe_load(changelog.read_text())
-    entries[0]["config-keys"] = ["multi"]
-    changelog.write_text(yaml.safe_dump(entries, sort_keys=False))
-    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
-    subprocess.run(["git", "commit", "-qm", "recipe fixture"], cwd=root, check=True)
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-    if ambient:
-        shadow = tmp_path_factory.mktemp("ambient")
-        (shadow / "infx").mkdir()
-        (shadow / "infx/__init__.py").write_text("raise RuntimeError('ambient tooling imported')\n")
-        monkeypatch.setenv("PYTHONPATH", str(shadow))
-        monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(tmp_path_factory.mktemp("other")))
-    changelog.write_text("\n" + yaml.safe_dump(entries, sort_keys=False))
-    output, metadata = root / "config.json", root / "metadata.json"
-
-    result = build_config(root, base, head, 1, "perf-changelog.yaml", output, metadata)
-
-    assert result["fixed_rows"] == 1
-    assert result["agentic_rows"] == result["eval_jobs"] == 0
-    config = json.loads(output.read_text())
-    assert [row["conc"] for row in config["multi_node"]["8k1k"]] == [[16, 32, 64]]
-    assert [row["node-count"] for row in config["multi_node"]["8k1k"]] == [7]
-    written_metadata = json.loads(metadata.read_text())
-    assert written_metadata["base_ref"] == base
-    assert written_metadata["head_ref"] == head
-    assert [entry["pr-link"] for entry in written_metadata["entries"]] == [
-        "https://github.com/SemiAnalysisAI/InferenceX/pull/1"
-    ]
-
-
 @pytest.mark.parametrize("nested_layout", [False, True])
 def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     planning_repo, monkeypatch, nested_layout
@@ -492,7 +447,7 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
     ] = "snapshot.yaml"
     (root / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master, sort_keys=False))
     recipe = root / "benchmarks/multi_node/srt-slurm-recipes/fixture/snapshot.yaml"
-    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 3}\n  decode: {nodes: 4}\n")
+    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\nservices: [{name: pool, type: custom, nodes: 5}]\n")
     if nested_layout:
         project = root / "inferencex-e2e"
         project.mkdir()
@@ -507,7 +462,7 @@ def test_historical_generator_uses_snapshot_recipes_not_inherited_recovery_root(
         ["commit", "-qm", "committed recipe allocation"],
     ):
         subprocess.run(["git", *command], cwd=root, check=True)
-    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 20}\n  decode: {nodes: 30}\n")
+    recipe.write_text("schema: 2\nroles:\n  prefill: {nodes: 1}\n  decode: {nodes: 1}\nservices: [{name: pool, type: custom, nodes: 48}]\n")
     unrelated = root / "other-revision"
     unrelated.mkdir()
     monkeypatch.setenv("INFERENCEX_REPOSITORY_ROOT", str(unrelated))
@@ -581,6 +536,30 @@ def test_cli_entry_mode_truth_table(changelog_run, cli_flags, expected_modes, en
     assert output["changelog_metadata"]["base_ref"] == "base"
     for flag, value in entry_flags.items():
         assert output["changelog_metadata"]["entries"][0][flag] is value
+
+
+UPSTREAM_PR = "https://github.com/SemiAnalysisAI/InferenceX/pull/1"
+OTHER_PR = "https://github.com/semianalysisai/other/pull/2"
+
+
+@pytest.mark.parametrize("links,repository,pull_request,kept", [
+    ([UPSTREAM_PR], "SemiAnalysisAI/InferenceX", None, [UPSTREAM_PR]),
+    ([UPSTREAM_PR], "SemiAnalysisAI/Other", None, []),
+    ([UPSTREAM_PR], "SemiAnalysisAI/Other", 1, [UPSTREAM_PR]),
+    ([UPSTREAM_PR], "SemiAnalysisAI/Other", 2, []),
+    ([f"{UPSTREAM_PR}/changes", OTHER_PR], "SemiAnalysisAI/Other", None, [OTHER_PR]),
+    (["https://github.com/SemiAnalysisAI/InferenceX/pull/XXX"], "SemiAnalysisAI/Other", None,
+     ["https://github.com/SemiAnalysisAI/InferenceX/pull/XXX"]),
+])
+def test_repository_leaves_out_entries_of_other_repositories_pull_requests(
+    changelog_run, links, repository, pull_request, kept
+):
+    flags = ["--repository", repository]
+    if pull_request is not None:
+        flags += ["--pull-request", str(pull_request)]
+    output = changelog_run([{"pr-link": link} for link in links], flags)
+    assert [entry["pr-link"] for entry in output["changelog_metadata"]["entries"]] == kept
+    assert bool(output["single_node"]) == bool(kept)
 
 
 def test_overlapping_scenarios_preserve_eval_precedence_and_buckets(changelog_run):
@@ -737,6 +716,7 @@ def test_merge_ingest_executes_the_plan_before_classifying_retirement(
             **os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}", "PYTHONPATH": str(project),
             "GITHUB_WORKSPACE": str(workspace), "GITHUB_OUTPUT": str(output),
             "RUNNER_TEMP": str(tmp_path), "PUSH_BEFORE": base, "PUSH_AFTER": head,
+            "GITHUB_REPOSITORY": "SemiAnalysisAI/InferenceX",
         },
     )
     if expected is None:

@@ -70,12 +70,15 @@ def fixed_seq_entry(recipe: str, concurrencies: list[int]) -> dict:
         "precision": "fp8", "framework": "sglang", "runner": "cluster:fixture",
         "multinode": False, "srt-recipe-dir": "fixture",
         "scenarios": {"fixed-seq-len": [{"isl": 1024, "osl": 128, "search-space": [
-            {"tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
+            {"gpus-per-worker": 4, "tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
         ]}]},
     }  # fmt: skip
 
 
-def video_entry(recipe: str = "video.yaml") -> dict:
+VIDEO_RECIPE = "video/agg-tp2.yaml"
+
+
+def video_entry(recipe: str = VIDEO_RECIPE) -> dict:
     """A master entry with one 2-GPU video point of ``VIDEO_SPEC``'s set served by ``recipe``."""
     return {
         "image": "example/video:1", "model": VIDEO_MODEL, "model-prefix": "h3",

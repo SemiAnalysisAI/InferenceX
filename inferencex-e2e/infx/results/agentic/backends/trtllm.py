@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from infx.results.agentic.common import (
@@ -33,33 +33,30 @@ class TrtllmBackend(ServerMetricsBackend):
         nested: dict[str, Any],
     ) -> None:
         """Fill token totals, KV hit rate, usage and offload bytes and per-endpoint sources from ``metrics``."""
-        prompt_total = _first_counter_total(
-            metrics,
-            ["dynamo_frontend_input_sequence_tokens", "trtllm_prompt_tokens_total"],
-        )
+        roles = _endpoint_roles(metrics)
+        prefill_endpoints = {endpoint for endpoint, role in roles.items() if role == "prefill"}
+        scope = _endpoint_filter(prefill_endpoints) if prefill_endpoints else None
+        prompt_total = sum_stat(metrics, "dynamo_frontend_input_sequence_tokens")
+        if prompt_total is None:
+            prompt_total = _counter(metrics, "trtllm_prompt_tokens", scope)
         generation_total = _first_counter_total(
             metrics,
-            ["dynamo_frontend_output_tokens", "trtllm_generation_tokens_total"],
+            [
+                "dynamo_frontend_output_tokens",
+                "trtllm_generation_tokens_total",
+                "trtllm_generation_tokens",
+            ],
         )
-        cached_tokens = sum_stat(
-            metrics,
-            "trtllm_prompt_cached_tokens_total",
-            preferred_keys=("total", "sum", "max", "avg"),
+        # Prefix reuse saves compute only where prompts are prefilled; a disaggregated decode
+        # worker receives its KV by transfer, so its hits measure transfer savings instead.
+        hit_rate, cached_tokens, queried_tokens = _prefix_hit_rate(
+            metrics, scope, None if scope else prompt_total
         )
 
         flat["total_prompt_tokens"] = counter_int(prompt_total)
         flat["total_generation_tokens"] = counter_int(generation_total)
-        flat["server_gpu_cache_hit_rate"] = normalize_fraction(
-            gauge_stat(
-                metrics,
-                "trtllm_kv_cache_hit_rate",
-                preferred_keys=("avg", "max", "total"),
-                combine="avg",
-            )
-        )
-        if flat["server_gpu_cache_hit_rate"] is None:
-            flat["server_gpu_cache_hit_rate"] = rate(cached_tokens, prompt_total)
-        flat["server_overall_cache_hit_rate"] = flat["server_gpu_cache_hit_rate"]
+        flat["server_gpu_cache_hit_rate"] = hit_rate
+        flat["server_overall_cache_hit_rate"] = hit_rate
 
         flat["gpu_kv_cache_usage_pct"] = normalize_fraction(
             gauge_stat(
@@ -77,25 +74,19 @@ class TrtllmBackend(ServerMetricsBackend):
                 combine="max",
             )
         )
-        flat["kv_offload_bytes_gpu_to_cpu"] = sum_stat(
-            metrics,
-            "trtllm_kv_cache_offload_bytes_total",
-            preferred_keys=("total", "sum", "max", "avg"),
-        )
-        flat["kv_offload_bytes_cpu_to_gpu"] = sum_stat(
-            metrics,
-            "trtllm_kv_cache_onboard_bytes_total",
-            preferred_keys=("total", "sum", "max", "avg"),
-        )
+        flat["kv_offload_bytes_gpu_to_cpu"] = _counter(metrics, "trtllm_kv_cache_offload_bytes")
+        flat["kv_offload_bytes_cpu_to_gpu"] = _counter(metrics, "trtllm_kv_cache_onboard_bytes")
 
         computed_tokens = None
-        if prompt_total is not None and cached_tokens is not None:
-            computed_tokens = max(prompt_total - cached_tokens, 0.0)
+        if queried_tokens is not None and cached_tokens is not None:
+            computed_tokens = max(queried_tokens - cached_tokens, 0.0)
 
         nested["cache"].update(
             {
                 "gpu_cache_hit_rate": flat["server_gpu_cache_hit_rate"],
                 "overall_cache_hit_rate": flat["server_overall_cache_hit_rate"],
+                "prefix_cache_hits": cached_tokens,
+                "prefix_cache_queries": queried_tokens,
                 "cached_tokens_by_source": {"device": cached_tokens}
                 if cached_tokens is not None
                 else {},
@@ -150,6 +141,22 @@ class TrtllmBackend(ServerMetricsBackend):
         return counter_int(max_blocks * tokens_per_block)
 
 
+def _counter(
+    metrics: dict[str, dict[str, Any]],
+    base_name: str,
+    series_filter: Callable[[dict[str, Any]], bool] | None = None,
+) -> float | None:
+    """Return counter ``base_name``'s window total over ``series_filter``.
+
+    aiperf exports a counter under its ``_total`` name or, as aiperf 1.0.12 does, its base name.
+    """
+    for metric_name in (f"{base_name}_total", base_name):
+        value = sum_stat(metrics, metric_name, series_filter=series_filter)
+        if value is not None:
+            return value
+    return None
+
+
 def _first_counter_total(
     metrics: dict[str, dict[str, Any]],
     metric_names: list[str],
@@ -166,9 +173,8 @@ def _first_counter_total(
     return None
 
 
-def _trtllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return per-endpoint token, hit rate and KV usage rows from TRT-LLM ``metrics``, sorted by endpoint."""
-    endpoints: set[str] = set()
+def _endpoint_roles(metrics: dict[str, dict[str, Any]]) -> dict[str, str]:
+    """Map every scraped endpoint URL in ``metrics`` to its role, ``worker`` when no series names one."""
     roles: dict[str, str] = {}
     for entry in metrics.values():
         if not isinstance(entry, dict):
@@ -180,49 +186,77 @@ def _trtllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
             if not isinstance(series, dict) or not series.get("endpoint_url"):
                 continue
             endpoint = str(series["endpoint_url"])
-            endpoints.add(endpoint)
+            roles.setdefault(endpoint, "worker")
+            # Core trtllm_ series carry no role label; Dynamo's own series on the same endpoint do.
             mode = label_value(series, "disaggregation_mode") or label_value(
                 series, "dynamo_component"
             )
             if mode:
-                roles[endpoint] = _normalize_role(mode)
+                role = _normalize_role(mode)
+                if role in {"prefill", "decode", "combined"} or roles[endpoint] == "worker":
+                    roles[endpoint] = role
+    return roles
+
+
+def _endpoint_filter(endpoints: set[str]) -> Callable[[dict[str, Any]], bool]:
+    """Return a series filter that keeps series scraped from one of ``endpoints``."""
+    return lambda series: str(series.get("endpoint_url", "")) in endpoints
+
+
+def _prefix_hit_rate(
+    metrics: dict[str, dict[str, Any]],
+    series_filter: Callable[[dict[str, Any]], bool] | None,
+    fallback_queried: float | None,
+) -> tuple[float | None, float | None, float | None]:
+    """Return the prefix hit rate with its cached and queried token counts over ``series_filter``.
+
+    Prefers window token counters, then window block counters, then the hit-rate gauge;
+    ``fallback_queried`` stands in for a missing prompt-token counter. Counts are None unless
+    the rate came from token counters.
+    """
+    cached = _counter(metrics, "trtllm_prompt_cached_tokens", series_filter)
+    queried = _counter(metrics, "trtllm_prompt_tokens", series_filter)
+    if queried is None:
+        queried = fallback_queried
+    token_rate = rate(cached, queried)
+    if token_rate is not None:
+        return token_rate, cached, queried
+
+    reused = _counter(metrics, "trtllm_kv_cache_reused_blocks", series_filter)
+    missed = _counter(metrics, "trtllm_kv_cache_missed_blocks", series_filter)
+    if reused is not None and missed is not None:
+        block_rate = rate(reused, reused + missed)
+        if block_rate is not None:
+            return block_rate, None, None
+
+    # The gauge is TRT-LLM's process-lifetime ratio, so it includes warmup traffic.
+    gauge_rate = normalize_fraction(
+        gauge_stat(
+            metrics,
+            "trtllm_kv_cache_hit_rate",
+            preferred_keys=("avg", "max", "total"),
+            combine="avg",
+            series_filter=series_filter,
+        )
+    )
+    return gauge_rate, None, None
+
+
+def _trtllm_sources(metrics: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return per-endpoint token, hit rate and KV usage rows from TRT-LLM ``metrics``, sorted by endpoint."""
+    roles = _endpoint_roles(metrics)
 
     sources: list[dict[str, Any]] = []
-    for endpoint in sorted(endpoints):
+    for endpoint in sorted(roles):
+        series_filter = _endpoint_filter({endpoint})
 
-        def series_filter(series: dict, endpoint: str = endpoint) -> bool:
-            """Return whether ``series`` was scraped from ``endpoint``."""
-            return str(series.get("endpoint_url", "")) == endpoint
-
-        prompt_tokens = sum_stat(
-            metrics,
-            "trtllm_prompt_tokens_total",
-            series_filter=series_filter,
-        )
-        generation_tokens = sum_stat(
-            metrics,
-            "trtllm_generation_tokens_total",
-            series_filter=series_filter,
-        )
-        cached_tokens = sum_stat(
-            metrics,
-            "trtllm_prompt_cached_tokens_total",
-            series_filter=series_filter,
-        )
-        hit_rate = normalize_fraction(
-            gauge_stat(
-                metrics,
-                "trtllm_kv_cache_hit_rate",
-                combine="avg",
-                series_filter=series_filter,
-            )
-        )
-        if hit_rate is None:
-            hit_rate = rate(cached_tokens, prompt_tokens)
+        prompt_tokens = _counter(metrics, "trtllm_prompt_tokens", series_filter)
+        generation_tokens = _counter(metrics, "trtllm_generation_tokens", series_filter)
+        hit_rate, _, _ = _prefix_hit_rate(metrics, series_filter, None)
         sources.append(
             {
-                "id": f"{roles.get(endpoint, 'worker')}|{endpoint}",
-                "role": roles.get(endpoint, "worker"),
+                "id": f"{roles[endpoint]}|{endpoint}",
+                "role": roles[endpoint],
                 "prompt_tokens": prompt_tokens,
                 "generation_tokens": generation_tokens,
                 "prefix_cache_hit_rate": hit_rate,

@@ -24,20 +24,21 @@ entry-name:
     - isl: int
       osl: int
       search-space:
-      - { tp: int, conc-start: int, conc-end: int, srt-recipe: string }
+      - { gpus-per-worker: int, tp: int, conc-start: int, conc-end: int, srt-recipe: string }
       # Optionally, specify pipeline/expert/data-attention/context parallelism.
-      - { tp: int, pp: int, ep: int, dp-attn: bool, dcp-size: int, pcp-size: int, conc-start: int, conc-end: int }
+      - { gpus-per-worker: int, tp: int, pp: int, ep: int, dp-attn: bool, dcp-size: int, pcp-size: int, conc-start: int, conc-end: int }
       # Optionally, declare router metadata.
-      - tp: int
+      - gpus-per-worker: int
+        tp: int
         router: { name: string, version: string }
         conc-start: int
         conc-end: int
       - ...
     - ...
     agentic-coding:  # optional
-    - dram-utilization: float  # required by kv-offloading: dram
-      search-space:
-      - tp: int
+    - search-space:
+      - gpus-per-worker: int
+        tp: int
         kv-offloading: dram
         kv-offload-backend: { name: string, version: string } # version optional
         conc-start: int
@@ -60,6 +61,7 @@ scenarios:
       prefill:
         hardware: b200
         num-worker: 1
+        gpus-per-worker: 16
         tp: 8
         pp: 1
         dcp-size: 1
@@ -69,6 +71,7 @@ scenarios:
       decode:
         hardware: h100
         num-worker: 2
+        gpus-per-worker: 8
         tp: 8
         pp: 1
         dcp-size: 2
@@ -90,6 +93,13 @@ The below list describes what each field is:
   fleet.
 - `precision`: The precision to run the benchmark. Launcher workload policy rows may also match on it.
 - `framework`: The framework (serving runtime) to serve the benchmark, e.g., `vllm`, `sglang`, `trt`.
+- `gpus-per-worker`: Required positive integer on each single-node search-space entry or each
+  `worker`, `prefill`, and `decode` block. It is the total GPU allocation of one logical
+  inference worker, including any data parallel ranks. Worker counts and GPU allocations
+  are copied from the master config into SRT `workers` and `gpus`. Recipe roles retain
+  their node counts and engine settings. For example, DEP16 on HGX8 uses a recipe with
+  two nodes and a master request for 16 GPUs per worker. Memory limits use the GPUs
+  assigned to each worker step; all steps of a role must have the same limit.
 - `multinode`: Required. `true` selects the multinode schema with `prefill`/`decode` or `worker` blocks, and `false` the single-node schema with `tp` entries.
 - `disagg`: Enables disaggregated serving and may only be `true` when
   `multinode` is also `true`.
@@ -114,11 +124,10 @@ The below list describes what each field is:
       - (Optional) `kv-p2p-transfer`: Non-empty name of the engine used to move KV state between workers. It is valid only for `multinode: true` configs and does not carry version metadata.
       - (Optional) `pp`: Pipeline parallelism level. Default is 1. It must be a positive integer.
       - (Optional) `dcp-size`: Decode context-parallel size. Default is 1. It must be a positive divisor of `tp`. DCP reuses the TP GPUs.
-      - (Optional) `pcp-size`: Prefill context-parallel size. Default is 1. A topology consumes `tp * pp * pcp-size` GPUs per worker. DCP does not add GPUs.
+      - (Optional) `pcp-size`: Prefill context-parallel size. Default is 1. These are engine parallelism settings; resource allocation comes from `gpus-per-worker`. DCP does not add GPUs.
       - For single-node entries, set `pp`, `dcp-size`, and `pcp-size` directly in the search-space entry.
-      - For multinode entries, set them independently inside each `prefill` and `decode` worker block. A worker pool allocates `num-worker * tp * pp * pcp-size` GPUs.
+      - For multinode entries, set them independently inside each `prefill` and `decode` worker block. A worker pool allocates `num-worker * gpus-per-worker` GPUs.
   - `agentic-coding`: Agentic trace replay benchmarks using real conversation traces. Each entry has:
-    - (Optional) `dram-utilization`: The fraction of each node's available CPU DRAM that DRAM KV offloading may use, greater than 0 and at most 1. It is required when any search-space entry sets `kv-offloading: dram`.
     - `search-space`: Same structure as `fixed-seq-len` search-space entries, plus `kv-offloading` (`none` or `dram`, required for single-node entries) and the optional `kv-offload-backend`.
 
 `router` and `kv-p2p-transfer` may be omitted independently. Router metadata
@@ -152,7 +161,7 @@ jobs to 3600 seconds. Reusable workflow callers may override the `duration`
 input.
 
 Notes:
-- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `num-nodes`, `require-power` and `power`, and they reject any field they do not define, which fails matrix generation.
+- The fields above are the common ones, not the full schema. The Pydantic models in [`infx/matrix/validation.py`](../infx/matrix/validation.py) are the authoritative contract; they also accept fields such as `spec-decoding`, `require-power` and `power`, and they reject any field they do not define, which fails matrix generation.
 - Every multinode benchmark point on a cluster with a GPU exporter measures GPU power (DCGM where the cluster sets `srt-slurm.power-exporter-port`, its `default_gpu_exporter` elsewhere), and CPU power where the cluster declares a `cpu-power-exporter`, unless its recipe runs etcd and NATS on a dedicated node; it keeps its result when telemetry fails. A search-space entry with `power: true` makes failed telemetry or invalid AgentX power fail the point, and is rejected on a cluster without a GPU exporter.
 - A multinode entry with `cpu-power: true` beside `power: true` also measures CPU power: its rows carry `cpu-power: true` and the launcher binds the cluster's `cpu-power-exporter` record beside the GPU telemetry block. Native single-node points measure CPU power by default on a cluster that declares a `cpu-power-exporter`; a single-node fixed-sequence entry sets `cpu-power: true` alone to count a missing CPU leg as invalid.
 - srt-slurm entries require `srt-recipe-dir`. Every row requires `srt-recipe: <file>[:<selector>]` under it (selector: `base`, `override_<name>` or `zip_override_<name>[<i>]`). Multinode rows may add `eval-srt-recipe`. Validation rejects missing files or variants, and `CONFIG_FILE`/`EVAL_CONFIG_FILE` settings. Only `llmd-vllm` keeps `CONFIG_FILE`. Generated rows carry the path from `inferencex-e2e/`.
@@ -164,7 +173,7 @@ Multi-node prefill workers may set `dwdp-size` to the number of ranks in a
 distributed weight-data parallel group. It defaults to 1 (disabled). For DWDP,
 `tp`, `ep`, `pp`, `dcp-size`, and `pcp-size` must all be 1 and `dp-attn` must be
 false. `num-worker` counts groups, not ranks: two workers with `dwdp-size: 8`
-allocate 16 prefill GPUs. Decode workers cannot enable DWDP.
+must also declare `gpus-per-worker: 8`, allocating 16 prefill GPUs. Decode workers cannot enable DWDP.
 
 The native TensorRT-LLM recipe must enable the corresponding DWDP mode and match
 the declared group layout. This field records topology and sizes allocations;
@@ -209,22 +218,30 @@ schema; unknown keys fail.
 - `labels` maps each schedulable label to concrete runner names. Every runner is in
   exactly one `cluster:<id>` label, and every such label has a `clusters.<id>` record;
   `python -m infx.launch` resolves its cluster from `RUNNER_NAME` this way.
-- Matrix generation reads `gpus-per-node` and `available-cpu-dram-mib` from the cluster a
-  master config's `cluster:<id>` label names; broad SKU labels use the GPU family when its
-  clusters agree. Agentic master configs must use a `cluster:<id>` label; their DRAM
-  KV-offload matrices combine both fields with `dram-utilization` into per-node caps:
-  `total-cpu-dram-gb` for each node a single-node, aggregate, or prefill server occupies, and
-  `decode-cpu-dram-gb` (omitted when 0) for each node a decode server occupies. Each is the
-  node's share held by that server's GPUs on it; a server spanning nodes gets a full node's
-  share on each. Servers must tile their nodes, and per-worker `hardware` is not supported.
-  Results record them as `allocated_cpu_dram_gb` and `decode_allocated_cpu_dram_gb`.
+- Matrix generation reads `gpus-per-node` from the cluster a master config's
+  `cluster:<id>` label names; broad SKU labels use the GPU family when its clusters agree.
+  Agentic master configs must use a `cluster:<id>` label; per-worker `hardware` is not supported.
 - `available-cpu-dram-mib` is the host DRAM a benchmark job can use on a node: the lower of
   Slurm's `RealMemory - MemSpecLimit` and `MemTotal` less 16 GiB for the OS, over the
-  cluster's GPU nodes; omit it where unmeasured. With `slurm.srt-slurm.single-node-exclusive`
-  (the default), a single-node srt-slurm job requests `--mem=0`, all the memory Slurm has,
-  so its host KV pools must fit the node. Otherwise the job and its srun step get the serving
-  GPUs' share, `available-cpu-dram-mib / gpus-per-node * GPU_COUNT` MiB, which the pools and
-  server processes must fit; Slurm rejects a share above what it can allocate.
+  cluster's GPU nodes. Inference workers automatically receive
+  `available-cpu-dram-mib * worker GPUs on the node / gpus-per-node` MiB through
+  `roles.<role>.srun_options.mem`. Four GPUs on an eight-GPU node receive half the node's
+  available DRAM, including when the job has exclusive access. A worker spanning whole
+  nodes receives the full available amount on each node; colocated roles receive their
+  own shares. InferenceX calculates the budget from the master GPU request and cluster
+  capacity; the adapter maps it to the launcher's steps. Separate per-GPU processes split
+  the worker budget, while MPI ranks sharing a step share its node-local cap.
+  The proportional policy is scheduler independent; the Slurm adapter applies
+  it to inference-worker steps. Frontends, benchmark clients, telemetry, and services retain
+  their existing step memory settings. Native multi-node jobs and exclusive single-node jobs
+  request all node memory with `--mem=0` so scheduler defaults cannot undercut worker ceilings;
+  shared single-node jobs request their GPUs' proportional share. These are worker ceilings,
+  not dedicated reservations: workers and helpers still share the enclosing job's memory budget.
+  Slurm must be configured to enforce job-step memory limits.
+  Native engine cache sizes remain recipe settings: the offload pool and all other server
+  allocations must fit within the worker's limit. The memory allocation does not reserve
+  the entire amount for KV cache. Results record the total assigned worker capacity in
+  `allocated_cpu_dram_gb`.
 - `env` is the workload environment of every launch on the cluster. Like
   `slurm.srt-slurm.env`, it overrides the runner's own environment but never a name the
   point's additional-settings set. Values cannot contain commas: Slurm hands them to jobs
@@ -295,7 +312,7 @@ schema; unknown keys fail.
   measurement fails the job under `REQUIRE_POWER=1` and otherwise records an invalid
   verdict without energy metrics. NVIDIA clusters run `dcgm-exporter`; AMD clusters use
   srt-slurm's
-  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/acfb4dcc3bd48fd6a1e7b615e849e7954c0c3852/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
+  [`kind: custom` schema](https://github.com/NVIDIA/srt-slurm/blob/2d9079c678e059c41d9186bbb7b14a16c414b8bc/docs/power-telemetry.md#gpu-exporter-labels-and-metrics),
   which requires `gpu_labels` and `gpu_metrics` and rejects unknown keys such as the
   former `power_profile`. The AMD exporter reads
   [`runners/srt-slurm/exporters/amd-power.json`](../runners/srt-slurm/exporters/amd-power.json);

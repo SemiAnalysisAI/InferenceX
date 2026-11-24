@@ -1,0 +1,231 @@
+base:
+  schema: 2
+  name: kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark
+  identity:
+    model:
+      revision: d9e99b0792a5e93b78ea9bea62a68167e36ddd9e
+    container: {}
+    frameworks:
+      tokenspeed: 0.1.1.post20261119
+      tokenspeed-kernel: 0.1.5.post20261119
+      tokenspeed-kernel-amd: 0.1.4.post20261119
+      tokenspeed-scheduler: 0.1.58
+      tokenspeed-engine: 0.1.1.post20261119
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  # Up to two hours to load the 1.56 TB checkpoint, capture graphs and compile the first kernels.
+  health_check:
+    max_attempts: 720
+    interval_seconds: 10
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+    # srtctl runs SMG directly: these are the gateway settings `ts serve` applies.
+    args:
+      reasoning-parser: passthrough
+      tool-call-parser: passthrough
+      policy: round_robin
+      disable-circuit-breaker: true
+      disable-retries: true
+      disable-load-monitoring: true
+      tokenizer-cache-enable-l0: true
+      tokenizer-cache-enable-l1: true
+      log-level: warn
+  engine: tokenspeed
+  setup_script: tokenspeed-nightly-rocm.sh
+  environment:
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261119/tokenspeed-0.1.1.post20261119-py3-none-any.whl#sha256=a50cc6aca1e6dec22c14a914d9e593b5f6490b44ee26062f75718b6591dc69c4
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261119-rocm72/tokenspeed_kernel-0.1.5.post20261119-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=0d045c1bfeafa1e1118606a511cd7fb2195dbc693d335d93a0273678f5d36523
+    TOKENSPEED_KERNEL_AMD_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-amd-nightly-v0.1.4.post20261119/tokenspeed_kernel_amd-0.1.4.post20261119-py3-none-any.whl#sha256=cfb38b114f4a1ccb75e36f2dc0ae407c7be25844d21b4bd66754cb87eea83334
+    TOKENSPEED_SCHEDULER_VERSION: 0.1.58
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.1.post20261119/tokenspeed_engine-0.1.1.post20261119-cp312-abi3-manylinux_2_28_x86_64.whl#sha256=2034d53a09fd05667d297cf0f960c94383954087da9b2dd3976b2ae2c0d7e401
+  roles:
+    agg:
+      nodes: 1
+      env:
+        GPU_MAX_HW_QUEUES: '2'
+        PYTHONNOUSERSITE: '1'
+        # Pinned Host L2 comes from hipHostMalloc's GTT pool; registering pageable memory
+        # pins it page by page and can outlast the distributed startup timeout.
+        HSA_USERPTR_FOR_PAGED_MEM: '0'
+      args:
+        served-model-name: moonshotai/Kimi-K3.1-Pro
+        revision: d9e99b0792a5e93b78ea9bea62a68167e36ddd9e
+        trust-remote-code: true
+        # Attention and MoE TP8; EP1 keeps every expert on every GPU.
+        attn-tp-size: 8
+        data-parallel-size: 1
+        ep-size: 1
+        pipeline-parallel-size: 1
+        moe-backend: auto
+        kv-cache-dtype: fp8
+        # The K3.1 precision policy's FP4 DSA indexer key cache.
+        dsa-index-k-format: mxfp4
+        language-model-only: true
+        max-model-len: 1048560
+        chunked-prefill-size: 8192
+        max-prefill-tokens: 8192
+        gpu-memory-utilization: 0.95
+        enable-prefix-caching: true
+        # Host L2 per GPU; the eight GPUs' Host L2 must fit the node's GTT pool.
+        kvstore-size: 128
+        reasoning-parser: passthrough
+        drafter-attention-backend: mha
+        speculative-algorithm: DSPARK
+        speculative-draft-model-path: Inferact/Kimi-K3.1-Pro-DSpark
+        speculative-draft-model-revision: e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f
+        # Drafts per step (overrides change it); the verify window adds the current token.
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
+        speculative-eagle-topk: 1
+        # Real verification. The connector selects greedy sampling and the golden acceptance
+        # length for synthetic throughput.
+        sampling-backend: triton
+        enable-speculative-sampling: true
+        speculative-rejection-sample-method: block
+        enable-metrics: true
+        metrics-host: 0.0.0.0
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'tokenspeed:'
+
+override_tp8_c1:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 1
+        max-cudagraph-capture-size: 1
+        cudagraph-capture-sizes: [1]
+        disable-prefill-graph: true
+        speculative-num-steps: 7
+        speculative-num-draft-tokens: 8
+        # No Host L2: the GPU KV pool already holds the sessions' prefixes.
+        disable-kvstore: true
+        kvstore-size: null
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: none
+
+override_tp8_c4:
+  roles:
+    agg:
+      args:
+        # Running cap below concurrency: the other sessions wait for their first token.
+        max-num-seqs: 2
+        max-cudagraph-capture-size: 2
+        cudagraph-capture-sizes: [1, 2]
+        disable-prefill-graph: true
+        speculative-num-steps: 7
+        speculative-num-draft-tokens: 8
+        disable-kvstore: true
+        kvstore-size: null
+  benchmark:
+    env:
+      CONC: '4'
+      KV_OFFLOADING: none
+
+override_tp8_dcp8_c8:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 8
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8]
+        # Each GPU stores one eighth of every request's KV pages and decode attends its own shard.
+        kv-parallel-size: 8
+        decode-context-parallel-size: 8
+        prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
+        prefill-graph-max-tokens: 3072
+        # Up to 64 decode rounds run after each prefill chunk before the next prefill round.
+        prefill-decode-interval: 64
+        speculative-num-steps: 7
+        speculative-num-draft-tokens: 8
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c16:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 8
+        max-cudagraph-capture-size: 8
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8]
+        kv-parallel-size: 8
+        decode-context-parallel-size: 8
+        prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
+        prefill-graph-max-tokens: 3072
+        prefill-decode-interval: 80
+        # At least 8 decode rounds after every prefill chunk, also once a prompt waited the full interval.
+        prefill-decode-min-interval: 8
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c24:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 12
+        max-cudagraph-capture-size: 12
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        kv-parallel-size: 8
+        decode-context-parallel-size: 8
+        prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
+        prefill-graph-max-tokens: 3072
+        prefill-decode-interval: 64
+        prefill-decode-min-interval: 24
+        enable-short-prefill-first: true
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c32:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 16
+        max-cudagraph-capture-size: 16
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        kv-parallel-size: 8
+        decode-context-parallel-size: 8
+        prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
+        prefill-graph-max-tokens: 3072
+        prefill-decode-interval: 64
+        prefill-decode-min-interval: 24
+        enable-short-prefill-first: true
+        enable-mixed-batch: true
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c48:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 48
+        max-cudagraph-capture-size: 48
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48]
+        kv-parallel-size: 8
+        decode-context-parallel-size: 8
+        prefill-graph-capture-sizes: [256, 512, 1024, 1536, 2048, 3072]
+        prefill-graph-max-tokens: 3072
+        prefill-decode-interval: 80
+        prefill-decode-min-interval: 4
+        enable-mixed-batch: true
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram

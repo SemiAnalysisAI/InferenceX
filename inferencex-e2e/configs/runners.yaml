@@ -1,4 +1,7 @@
 labels:
+  a100:
+    - a100-cw_00
+    - a100-cw_01
   h100:
     - h100-cw_00
     - h100-cw_01
@@ -152,6 +155,9 @@ labels:
     - gb300-nv_15
     - gb300-nv_16
     - gb300-nv_17
+  cluster:a100-cw:
+    - a100-cw_00
+    - a100-cw_01
   cluster:h100-cw:
     - h100-cw_00
     - h100-cw_01
@@ -329,6 +335,37 @@ labels:
     - mi355x-amds_08
     - mi355x-amds_09
 clusters:
+  a100-cw:
+    gpus-per-node: 8
+    available-cpu-dram-mib: 2_027_520
+    arch: x86_64
+    scheduler: slurm
+    slurm:
+      partition: a100
+      account: cw-sup
+      exclusive: true
+      gres: "gpu:a100:{gpus}"
+      cpus-per-gpu: 16
+      volumes:
+        hf-hub-cache: {path: /mnt/data/hf-hub-cache}
+        aiperf-cache: {path: /mnt/data/aiperf-cache}
+      squash:
+        dir: /mnt/data/squash
+        visibility: shared
+        import: compute
+        lock-timeout-s: 1800
+        import-step-args: [--exclusive, --mem=0]
+        single-node-import: true
+      srt-slurm:
+        extra:
+          default_gpu_exporter:
+            container_image: nvcr.io#nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless
+            port: 9401
+            command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
+        network-interface: ""
+        gpus-per-node-directive: false
+        agentic-volume-mounts:
+          aiperf-cache: /aiperf_mmap_cache
   h100-cw:
     gpus-per-node: 8
     available-cpu-dram-mib: 1_998_848
@@ -557,6 +594,7 @@ clusters:
         visibility: shared
         import: compute
         lock-timeout-s: 3600
+        single-node-import: true
       srt-slurm:
         extra:
           default_gpu_exporter:
@@ -565,6 +603,9 @@ clusters:
             command: "dcgm-exporter --collect-interval=1000 --address :{port} -f /configs/dcgm-counters-noprof.csv"
         network-interface: ""
         fabric:
+          rdma-devices: [rdmap86s0, rdmap87s0, rdmap101s0, rdmap102s0, rdmap116s0, rdmap117s0,
+                         rdmap131s0, rdmap132s0, rdmap146s0, rdmap147s0, rdmap161s0, rdmap162s0,
+                         rdmap176s0, rdmap177s0, rdmap191s0, rdmap192s0]
           rdma-device-ports: [mlx5_0:1, mlx5_1:1, mlx5_10:1, mlx5_11:1, mlx5_16:1, mlx5_17:1,
                               mlx5_20:1, mlx5_21:1, mlx5_22:1, mlx5_23:1, mlx5_4:1, mlx5_5:1,
                               mlx5_8:1, mlx5_9:1, mlx5_2:1, mlx5_3:1]
@@ -789,6 +830,7 @@ clusters:
       MORI_RDMA_TC: '@fabric.rdma-tc'
     models:
       entries:
+        Kimi-K3.1-Pro: {root: hf-hub-cache, dir: models--moonshotai--Kimi-K3.1-Pro/snapshots/d9e99b0792a5e93b78ea9bea62a68167e36ddd9e}
         DeepSeek-R1-0528-MXFP4-v2: {root: it-share-data, dir: DeepSeek-R1-0528-MXFP4-v2}
         GLM-5.3: {root: it-share-data, dir: GLM-5.3}
         Qwen3.5-397B-A17B-FP8: {root: it-share-data, dir: Qwen3.5-397B-A17B-FP8}
@@ -796,6 +838,8 @@ clusters:
     slurm:
       partition: compute
       exclusive: true
+      # Known bad nodes.
+      exclude: [mia1-p01-g09, mia1-p01-g11]
       gres: "gpu:{gpus}"
       cpus-per-task: 128
       srun-args: [--container-remap-root, --container-writable]

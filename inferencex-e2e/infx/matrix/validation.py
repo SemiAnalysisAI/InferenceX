@@ -1,3 +1,4 @@
+import fnmatch
 import pprint
 import re
 from enum import Enum
@@ -21,7 +22,9 @@ from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
 MULTI_NODE_RECIPES = "benchmarks/multi_node/srt-slurm-recipes"
-RECIPE_SELECTOR = re.compile(r"base|override_[\w-]+|zip_override_[\w-]+\[\d+\]")
+RECIPE_SELECTOR = re.compile(
+    r"base|override_[\w*?-]+|zip_override_[\w-]+\[\d+\]|zip_override_[\w-]*[*?][\w*?-]*"
+)
 
 
 class Fields(Enum):
@@ -72,12 +75,9 @@ class Fields(Enum):
     KV_OFFLOAD_BACKEND = "kv-offload-backend"
     ROUTER = "router"
     KV_P2P_TRANSFER = "kv-p2p-transfer"
-    TOTAL_CPU_DRAM_GB = "total-cpu-dram-gb"
-    DECODE_CPU_DRAM_GB = "decode-cpu-dram-gb"
     AVAILABLE_CPU_DRAM_MIB = "available-cpu-dram-mib"
-    DRAM_UTILIZATION = "dram-utilization"
     GPUS_PER_NODE = "gpus-per-node"
-    NUM_NODES = "num-nodes"
+    GPUS_PER_WORKER = "gpus-per-worker"
     NODE_COUNT = "node-count"
     DURATION = "duration"
     REQUIRE_POWER = "require-power"
@@ -146,7 +146,9 @@ def _validate_tp_context_topology(self: Any) -> Any:
 
 
 class SingleNodeMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     image: str
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
@@ -187,9 +189,11 @@ class SingleNodeMatrixEntry(BaseModel):
 
 
 class WorkerConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
-    num_worker: int = Field(alias=Fields.NUM_WORKER.value)
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
+
+    num_worker: int = Field(alias=Fields.NUM_WORKER.value, ge=0, strict=True)
     tp: int = Field(gt=0)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
@@ -217,7 +221,9 @@ class WorkerConfig(BaseModel):
 
 
 class AggregateWorkerConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     num_worker: int = Field(default=1, alias=Fields.NUM_WORKER.value, gt=0, strict=True)
     tp: int = Field(gt=0)
@@ -250,7 +256,7 @@ def _validate_worker_hardware_pair(self: Any) -> Any:
 
 
 class MultiNodeMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     model: str
@@ -305,7 +311,9 @@ class MultiNodeMatrixEntry(BaseModel):
 
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     image: str
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
@@ -330,7 +338,6 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
     router: ComponentMetadata | None = None
-    total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
@@ -356,7 +363,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
 
 
 class MultiNodeAgenticMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
@@ -384,8 +391,6 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
-    total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
-    decode_cpu_dram_gb: int = Field(default=0, alias=Fields.DECODE_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
@@ -448,11 +453,32 @@ def _video_spec_path(value: str) -> str:
 
 VideoSpec = Annotated[str, AfterValidator(_video_spec_path)]
 
+VIDEO_PARALLEL_DEGREES = ("tp", "pp", "ep", "dp", "pcp", "cfg", "ulysses", "ring")
+# A degree without a number takes the row's GPU count; a degree of 1 is left out.
+VIDEO_RECIPE = re.compile(
+    r"video/agg(?:-tp1|(?=-)"
+    + "".join(rf"(?:-{degree}(?:[2-9]|[1-9][0-9]+)?)?" for degree in VIDEO_PARALLEL_DEGREES)
+    + r")\.yaml"
+)
+
+
+def _video_recipe_reference(value: str) -> str:
+    """A video recipe reference named by its GPU split, such as video/agg-cfg2-ulysses4.yaml."""
+    if not VIDEO_RECIPE.fullmatch(value):
+        raise ValueError(
+            f"{value!r} must be video/agg-<layout>.yaml, where <layout> lists each parallel "
+            f"degree above 1 in the order {' '.join(VIDEO_PARALLEL_DEGREES)}, or is tp1"
+        )
+    return value
+
+
+VideoRecipeReference = Annotated[str, AfterValidator(_video_recipe_reference)]
+
 
 class VideoMatrixEntry(BaseModel):
     """One video-generation job: every concurrency of ``conc`` against one server."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     srt_recipe: str = Field(alias=Fields.SRT_RECIPE.value, min_length=1)
@@ -613,7 +639,7 @@ def _recipe_reference(value: str) -> str:
     _recipe_path(path)
     if separator and not RECIPE_SELECTOR.fullmatch(selector):
         raise ValueError(
-            f"{value!r} must select base, override_<name> or zip_override_<name>[<index>]"
+            f"{value!r} must select base, an override name/pattern or zip_override_<name>[<index>]"
         )
     return value
 
@@ -623,7 +649,9 @@ RecipeReference = Annotated[str, AfterValidator(_recipe_reference)]
 
 
 class SingleNodeSearchSpaceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     tp: int = Field(gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
@@ -661,7 +689,7 @@ def _cpu_power_rides_on_power(self: Any) -> Any:
 
 
 class MultiNodeSearchSpaceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value
@@ -675,7 +703,6 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     )
     power: bool = Field(default=False, strict=True)
     cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
-    num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: ComponentMetadata | None = None
     kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
@@ -712,7 +739,7 @@ class MultiNodeSearchSpaceEntry(BaseModel):
 
 
 class SingleNodeSeqLenConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     isl: int
     osl: int
@@ -720,7 +747,7 @@ class SingleNodeSeqLenConfig(BaseModel):
 
 
 class MultiNodeSeqLenConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     isl: int
     osl: int
@@ -729,10 +756,13 @@ class MultiNodeSeqLenConfig(BaseModel):
 
 
 class AgenticCodingSearchSpaceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int | None = Field(default=None, gt=0)
+    gpus_per_worker: int | None = Field(
+        default=None, alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True
+    )
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     eval_srt_recipe: RecipeReference | None = Field(
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
@@ -750,7 +780,6 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     worker: AggregateWorkerConfig | None = None
     prefill: WorkerConfig | None = None
     decode: WorkerConfig | None = None
-    num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     kv_offloading: Literal["none", "dram"] | None = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
@@ -795,6 +824,8 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 "worker, or both prefill and decode"
             )
         if has_single_node:
+            if self.gpus_per_worker is None:
+                raise ValueError("Single-node entries must specify gpus-per-worker")
             if self.kv_offloading is None:
                 raise ValueError(
                     f"Single-node agentic search-space entries must specify "
@@ -811,6 +842,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 "pp",
                 "dcp_size",
                 "pcp_size",
+                "gpus_per_worker",
             } & self.model_fields_set
             if explicitly_single_node_fields:
                 field_names = ", ".join(
@@ -820,6 +852,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                         Fields.DCP_SIZE.value,
                         Fields.PCP_SIZE.value,
                         Fields.DWDP_SIZE.value,
+                        Fields.GPUS_PER_WORKER.value,
                     )
                 )
                 raise ValueError(
@@ -831,24 +864,16 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
 
 class AgenticCodingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     search_space: list[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
-    dram_utilization: float | None = Field(
-        default=None, alias=Fields.DRAM_UTILIZATION.value, gt=0, le=1
-    )
 
     @model_validator(mode="after")
-    def validate_dram_offload_capacity(self) -> Self:
-        """Return the config, raising ValueError for DRAM offload it cannot size."""
+    def validate_dram_offload_hardware(self) -> Self:
+        """Return the config, raising ValueError for unsupported heterogeneous DRAM offload."""
         for entry in self.search_space:
             if entry.kv_offloading != "dram":
                 continue
-            if self.dram_utilization is None:
-                raise ValueError(
-                    f"{Fields.KV_OFFLOADING.value}='dram' requires "
-                    f"{Fields.DRAM_UTILIZATION.value} with runner hardware metadata"
-                )
             if entry.prefill is not None and entry.prefill.hardware is not None:
                 raise ValueError(
                     f"{Fields.KV_OFFLOADING.value}='dram' does not support per-worker "
@@ -860,10 +885,10 @@ class AgenticCodingConfig(BaseModel):
 class VideoGenerationSearchSpaceEntry(BaseModel):
     """One video serving job: a GPU count and the concurrencies one server serves in turn."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     gpus: int = Field(gt=0, strict=True)
-    srt_recipe: RecipeReference = Field(alias=Fields.SRT_RECIPE.value)
+    srt_recipe: VideoRecipeReference = Field(alias=Fields.SRT_RECIPE.value)
     conc_list: list[int] = Field(alias=Fields.CONC_LIST.value, min_length=1)
 
     @model_validator(mode="after")
@@ -878,7 +903,7 @@ class VideoGenerationSearchSpaceEntry(BaseModel):
 class VideoGenerationConfig(BaseModel):
     """One selected set of the video YAML workload and the deployments that serve it."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     spec: VideoSpec
     video_set: str = Field(alias="set", pattern=r"^[A-Za-z0-9_-]+$")
@@ -886,7 +911,7 @@ class VideoGenerationConfig(BaseModel):
 
 
 class SingleNodeScenarios(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     fixed_seq_len: list[SingleNodeSeqLenConfig] | None = Field(
         default=None, alias=Fields.FIXED_SEQ_LEN.value
@@ -907,7 +932,7 @@ class SingleNodeScenarios(BaseModel):
 
 
 class MultiNodeScenarios(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     fixed_seq_len: list[MultiNodeSeqLenConfig] | None = Field(
         default=None, alias=Fields.FIXED_SEQ_LEN.value
@@ -987,27 +1012,20 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
         worker = getattr(entry, "worker", None)
         prefill = getattr(entry, "prefill", None)
         decode = getattr(entry, "decode", None)
-        num_nodes = getattr(entry, "num_nodes", None)
 
         if not self.multinode:
-            if (
-                worker is not None
-                or prefill is not None
-                or decode is not None
-                or num_nodes is not None
-            ):
+            if worker is not None or prefill is not None or decode is not None:
                 raise ValueError(
                     "Single-node search-space entries must specify tp topology "
-                    "and cannot declare worker, prefill, decode, or num-nodes"
+                    "and cannot declare worker, prefill, or decode"
                 )
             continue
 
         if self.disagg:
-            if worker is not None or num_nodes is not None:
+            if worker is not None:
                 raise ValueError(
                     f"{Fields.DISAGG.value}=true requires prefill and decode "
-                    f"and rejects {Fields.WORKER.value} and "
-                    f"{Fields.NUM_NODES.value}"
+                    f"and rejects {Fields.WORKER.value}"
                 )
             if prefill is None or decode is None:
                 raise ValueError(f"{Fields.DISAGG.value}=true requires prefill and decode")
@@ -1017,11 +1035,6 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
             raise ValueError(
                 f"{Fields.DISAGG.value}=false requires one "
                 f"{Fields.WORKER.value} and rejects prefill and decode"
-            )
-        if num_nodes is None:
-            raise ValueError(
-                f"{Fields.DISAGG.value}=false requires "
-                f"{Fields.NUM_NODES.value} in every search-space entry"
             )
     return self
 
@@ -1051,7 +1064,7 @@ def _validate_srt_recipes(self: Any) -> Any:
 
 
 class SingleNodeMasterConfigEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     model: str
@@ -1088,7 +1101,7 @@ class SingleNodeMasterConfigEntry(BaseModel):
 
 
 class MultiNodeMasterConfigEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     image: str
     model: str
@@ -1151,7 +1164,7 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
         if not (root / path).is_file():
             raise ValueError(f"{reference} does not exist")
         try:
-            recipes[path] = yamlio.safe_load((root / path).read_text())
+            recipes[path] = yamlio.load((root / path).read_text(), yamlio.UniqueKeySafeLoader)
         except yaml.YAMLError as error:
             raise ValueError(f"{path} is not valid YAML") from error
     recipe = recipes[path]
@@ -1159,6 +1172,13 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
         return
     if not isinstance(recipe, dict) or "base" not in recipe:
         raise ValueError(f"{reference}: only an override bundle with a base takes a selector")
+    if any(char in selector for char in "*?"):
+        if not any(
+            key.startswith(("override_", "zip_override_")) and fnmatch.fnmatchcase(key, selector)
+            for key in recipe
+        ):
+            raise ValueError(f"{reference}: {path} has no variant {selector}")
+        return
     group, _, index = selector.removesuffix("]").partition("[")
     if group not in recipe or (index and int(index) >= _zip_length(recipe[group])):
         raise ValueError(f"{reference}: {path} has no variant {selector}")
@@ -1238,7 +1258,7 @@ def validate_runner_config(runner_configs: dict) -> dict:
 
 
 class ChangelogEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     config_keys: list[str] = Field(alias="config-keys", min_length=1)
     description: list[str] = Field(min_length=1)
@@ -1311,7 +1331,7 @@ class ChangelogMetadata(BaseModel):
 
 
 class ChangelogMatrixEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     single_node: dict[
         str, list[SingleNodeMatrixEntry | SingleNodeAgenticMatrixEntry | VideoMatrixEntry]
@@ -1372,7 +1392,7 @@ def load_runner_file(runner_file: str, validate: bool = True) -> dict:
     """
     try:
         with open(runner_file) as f:
-            runner_config = yamlio.safe_load(f)
+            runner_config = yamlio.load(f, yamlio.UniqueKeySafeLoader)
     except FileNotFoundError as e:
         raise ValueError(f"Runner config file '{runner_file}' does not exist.") from e
 
