@@ -15,11 +15,11 @@ base:
     tachometer:
       enabled: false
   engine: sglang
-  # The image (lmsysorg/sglang-rocm 20261117: SGLang c67db7c762, AITER 581579ab 0.1.29.dev156,
+  # The image (lmsysorg/sglang-rocm 20261124: SGLang 88dc7501f5, AITER 581579ab 0.1.29.dev156,
   # FlyDSL 0.4.2) already has the AITER FlyDSL kernels this recipe uses (ROCm/aiter#5992, #5993,
   # #6496, #6670), so AITER is not touched. The setup script patches SGLang with open upstream
-  # PRs (sgl-project/sglang #48648, #45196, #48649, #45529, #41879, #44103, #48090); the patch
-  # files are in patches/ next to this recipe.
+  # PRs (sgl-project/sglang #48648, #45529, #41879, #44103, #48090); the patch files are in
+  # patches/ next to this recipe. sglang #45196 and #48649 are merged and in the image.
   setup_script: qwen3.8next-rocm10-patches.sh
   roles:
     agg:
@@ -68,7 +68,7 @@ base:
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
         SGLANG_ENABLE_SPEC_V2: '1'
         AITER_GDR_FLYDSL: '1'
-        # The FlyDSL QSA sparse decode (sglang#45196) is on whenever SGLANG_USE_AITER
+        # The FlyDSL QSA sparse decode (sglang#45196, in the image) is on whenever SGLANG_USE_AITER
         # is set on gfx950. The GDN prefill (sglang#41879, #44103) runs AITER's
         # FlyDSL causal conv1d and the single fused chunked-prefill kernel
         # (ROCm/aiter#6496), which needs the bf16 SSM state set above.

@@ -29,4 +29,6 @@ jobs:
         working-directory: inferencex-e2e
         env:
           GH_TOKEN: ${{ github.token }}
+          APP_REPO: ${{ vars.APP_REPO || 'SemiAnalysisAI/InferenceX-app' }}
+          STAGING_APP_URL: ${{ vars.STAGING_APP_URL || 'https://inferencemax-app-git-staging-semianalysisai.vercel.app' }}
         run: python3 -m infx.workflows.stage_results_callback

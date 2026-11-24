@@ -1,6 +1,6 @@
 # [Perf] [AMD] Qwen4-Exp HC: fuse decode-sized hyper-connection norm and inject into FlyDSL mix
 # https://github.com/sgl-project/sglang/pull/48648  (PR head f6f9c1c41678ec6087a58cf51145b8041460364b)
-# Generated against the SGLang checkout of the image (c67db7c762, 2026-11-17); source files only (tests, benchmarks, AOT registry and docs dropped); rebased from the 1ced9a9eb0 version.
+# Generated against the SGLang checkout of the image (88dc7501f5, 2026-11-24); source files only (tests, benchmarks, AOT registry and docs dropped); rebased from the c67db7c762 version.
 
 diff --git a/python/sglang/kernels/ops/gemm/hc_fused_flydsl.py b/python/sglang/kernels/ops/gemm/hc_fused_flydsl.py
 new file mode 100644
@@ -558,10 +558,10 @@ index 0000000000..0d47a1d2b8
 +    )
 +    return out, ss
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index 7eba71d046..e5dfe15f8c 100644
+index 06524c2797..a04c37d21e 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -1089,6 +1089,9 @@ class Envs:
+@@ -1101,6 +1101,9 @@ class Envs:
      SGLANG_AITER_INTREE_GEMM_TUNE = EnvBool(True)
      # TODO(aiter#6030): remove once ROCm/aiter#6030 is in the aiter pin
      SGLANG_AITER_INTREE_MHC_TILE_M16 = EnvBool(True)
