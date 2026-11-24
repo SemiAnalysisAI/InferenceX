@@ -257,6 +257,80 @@ def _bind_command(
     _argument(command, "--host")
 
 
+_DENSE_ATTENTION = frozenset(
+    {
+        "FLASH_ATTN",
+        "TORCH_SDPA",
+        "CUDNN_ATTN",
+        "FLASHINFER_ATTN",
+        "FLASH_ATTN_HUB",
+        "FLASH_ATTN_3_HUB",
+        "TRTLLM_ATTN",
+    }
+)
+# vLLM-Omni flags and environment variables that change the generated result, with the only
+# values a row may give them; an empty set means unset. --cache-config is judged by its JSON.
+_VLLM_OMNI_LOSSLESS: dict[str, frozenset[str]] = {
+    "--cache-backend": frozenset({"none"}),
+    "--cache-config": frozenset(),
+    "DIFFUSION_CACHE_BACKEND": frozenset({"none"}),
+    "DIFFUSION_CACHE_ADAPTER": frozenset({"none"}),
+    "--quantization": frozenset(),
+    "-q": frozenset(),
+    "--diffusion-quantization-config": frozenset(),
+    "DIFFUSION_ATTENTION_QUANT": frozenset(),
+    "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION": frozenset({"NONE"}),
+    "--kv-cache-dtype": frozenset({"auto"}),
+    "--diffusion-kv-cache-dtype": frozenset(),
+    "--diffusion-attention-backend": _DENSE_ATTENTION,
+    "DIFFUSION_ATTENTION_BACKEND": _DENSE_ATTENTION,
+    "--diffusion-attention-config": frozenset(),
+    "-dac": frozenset(),
+    "--lora-path": frozenset(),
+}
+# --cache-config keys vLLM-Omni turns on by default for a model; its rows must pass each as false.
+_VLLM_OMNI_DEFAULT_ON: dict[str, tuple[str, ...]] = {
+    "MiniMaxAI/MiniMax-H3": ("minimax_h3_adaln_cache",),
+}
+
+
+def _lossless(name: str, value: str) -> bool:
+    if name != "--cache-config":
+        return value in _VLLM_OMNI_LOSSLESS[name]
+    try:
+        return all(enabled is False for enabled in json.loads(value).values())
+    except (ValueError, AttributeError):
+        return False
+
+
+def _refuse_lossy_vllm_omni(model: str, args: list[Any], env: Mapping[str, Any]) -> None:
+    """VideoGenX v0.1 is lossless only, and vLLM-Omni is checked here instead of from its logs."""
+    tokens = [str(arg) for arg in args]
+    settings = [(name, str(value)) for name, value in env.items() if name in _VLLM_OMNI_LOSSLESS]
+    for index, token in enumerate(tokens):
+        # vLLM takes --flag=value, an unambiguous prefix, underscores and dotted sub-keys.
+        flag, joined, value = token.partition("=")
+        flag = flag.replace("_", "-").split(".")[0]
+        if flag.startswith("-") and flag.strip("-"):
+            name = next((name for name in _VLLM_OMNI_LOSSLESS if name.startswith(flag)), None)
+            if name:
+                settings.append((name, value if joined else "".join(tokens[index + 1 : index + 2])))
+    for name, value in settings:
+        if not _lossless(name, value):
+            raise ValueError(
+                f"vLLM-Omni {name}={value!r} is not lossless: VideoGenX v0.1 refuses caches, "
+                "quantization, FP8 kv-cache, non-dense attention and LoRA"
+            )
+    if model in _VLLM_OMNI_DEFAULT_ON:
+        configs = [json.loads(value) for name, value in settings if name == "--cache-config"]
+        for key in _VLLM_OMNI_DEFAULT_ON[model]:
+            if not configs or any(key not in config for config in configs):
+                raise ValueError(
+                    f"vLLM-Omni turns {key} on by default for {model}: the recipe must pass "
+                    "it as false in --cache-config"
+                )
+
+
 def bind_video(
     recipe: Mapping[str, Any], environment: Mapping[str, str], *, root: Path
 ) -> dict[str, Any]:
@@ -336,6 +410,10 @@ def bind_video(
     revision = str((service.get("env") or {}).get("VIDEO_RUNTIME_REVISION", ""))
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("video service requires a pinned VIDEO_RUNTIME_REVISION")
+    if runtime == "vllm-omni":
+        _refuse_lossy_vllm_omni(
+            model, service["args"], {**(bound.get("environment") or {}), **service["env"]}
+        )
     values = {
         "MODEL": model,
         "CONC_LIST": " ".join(map(str, concurrencies)),

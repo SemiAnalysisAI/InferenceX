@@ -119,7 +119,41 @@ def _as_vllm(raw):
         "--served-model-name", "{model_id}", "--port", "30283",
         "--num-gpus", "{gpus_per_node}", "--host", "0.0.0.0",
         "--gpu-memory-utilization", "0.84",
+        "--cache-config", '{"minimax_h3_adaln_cache": false}',
     ]
+
+
+@pytest.mark.parametrize(("fault", "name"), [
+    ({"args": ["--cache-backend", "tea_cache"]}, "--cache-backend"),
+    ({"args": ["--cache-config", '{"minimax_h3_adaln_cache": true}']}, "--cache-config"),
+    ({"args": ["--quantization=fp8"]}, "--quantization"),
+    ({"args": ["--kv-cache-dtype", "fp8"]}, "--kv-cache-dtype"),
+    ({"args": ["--diffusion-attention-backend", "RAINFUSION_ATTN"]}, "--diffusion-attention-backend"),
+    ({"args": ["--diffusion_attention_back", "NEW_ATTN"]}, "--diffusion-attention-backend"),
+    ({"env": {"DIFFUSION_CACHE_BACKEND": "cache_dit"}}, "DIFFUSION_CACHE_BACKEND"),
+])  # fmt: skip
+def test_vllm_omni_recipe_binds_until_it_turns_on_a_lossy_switch(native_fragment, fault, name):
+    raw, write = native_fragment
+    _as_vllm(raw)
+    [server] = raw["services"]
+    server["args"] += ["--diffusion-attention-backend", "FLASH_ATTN"]
+    server["env"] |= {"OMNI_DIFFUSION_PROMPT_EMBED_CACHE": "0", "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION": "NONE"}
+    video.prepare(write(raw), ENV, root=ROOT)
+
+    server["args"] += fault.get("args", [])
+    server["env"] |= fault.get("env", {})
+    with pytest.raises(ValueError, match=f"vLLM-Omni {name}=.* is not lossless"):
+        video.prepare(write(raw), ENV, root=ROOT)
+
+
+def test_vllm_omni_recipe_must_turn_off_a_cache_its_engine_defaults_on(native_fragment):
+    raw, write = native_fragment
+    _as_vllm(raw)
+    [server] = raw["services"]
+    server["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] = "0"
+    server["args"] = server["args"][:-2]
+    with pytest.raises(ValueError, match="minimax_h3_adaln_cache on by default for MiniMaxAI/MiniMax-H3"):
+        video.prepare(write(raw), ENV, root=ROOT)
 
 
 def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(native_fragment, tmp_path):
