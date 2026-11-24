@@ -45,6 +45,9 @@ binding.
 - Set `services[].env.VIDEO_RUNTIME_REVISION` to the engine's 40-character commit.
   The binder rejects any other value, and the server records it as the engine
   revision.
+- Use an image whose repository is listed for the engine in `VIDEO_IMAGE_REPOSITORIES`
+  ([`validation.py`](../inferencex-e2e/infx/matrix/validation.py)); config validation rejects any other.
+  A video service may not set `container`, `source` or `build_command`; the binder rejects them.
 - Pin the image by SHA256 digest, and use its real interpreter and architecture.
   The A100, H100, H200, and B200 SGLang rows, the B200, H200, H100 and A100 vLLM-Omni H3 rows, and
   the H100, H200, B200 and B300 vLLM-Omni Wan2.2 rows use the public CUDA amd64 image. The MI355X SGLang

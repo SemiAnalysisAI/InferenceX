@@ -455,6 +455,10 @@ VIDEO_RECIPE = re.compile(
     + "".join(rf"(?:-{degree}(?:[2-9]|[1-9][0-9]+)?)?" for degree in VIDEO_PARALLEL_DEGREES)
     + r")\.yaml"
 )
+VIDEO_IMAGE_REPOSITORIES = {
+    "sglang": ("lmsysorg/sglang",),
+    "vllm-omni": ("vllm/vllm-omni", "vllm/vllm-omni-rocm"),
+}
 
 
 def _video_recipe_reference(value: str) -> str:
@@ -1090,6 +1094,20 @@ class SingleNodeMasterConfigEntry(BaseModel):
     def validate_agentic_runner(self) -> Self:
         """Return the config, raising ValueError if agentic scenarios use a non-cluster runner."""
         _validate_agentic_runner_is_cluster(self.runner, self.scenarios)
+        return self
+
+    @model_validator(mode="after")
+    def validate_video_image_repository(self) -> Self:
+        """Return the config, raising ValueError if a video image's repository is not listed."""
+        if self.scenarios.video_generation:
+            name = self.image.partition("@")[0]
+            repository = name[: name.rindex(":")] if ":" in name.rpartition("/")[2] else name
+            allowed = VIDEO_IMAGE_REPOSITORIES.get(self.framework, ())
+            if repository not in allowed:
+                raise ValueError(
+                    f"Video image repository {repository!r} is not listed for framework "
+                    f"{self.framework!r}; VIDEO_IMAGE_REPOSITORIES allows {list(allowed)}"
+                )
         return self
 
     @model_validator(mode="after")

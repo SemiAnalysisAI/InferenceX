@@ -184,6 +184,13 @@ def load_spec(name: str, *, root: Path, set_id: str) -> dict[str, Any]:
 
 def _pool_service(recipe: Mapping[str, Any]) -> dict[str, Any]:
     services = recipe.get("services")
+    for entry in services or []:
+        for key in ("container", "source", "build_command"):
+            if isinstance(entry, Mapping) and key in entry:
+                raise ValueError(
+                    f"services[{entry.get('name')}].{key} is not allowed: a video service "
+                    "runs in the config's image and builds nothing into it"
+                )
     owners = [s for s in services or [] if isinstance(s, Mapping) and s.get("nodes")]
     if len(owners) != 1:
         raise ValueError("video recipes declare exactly one service that owns nodes (the server)")

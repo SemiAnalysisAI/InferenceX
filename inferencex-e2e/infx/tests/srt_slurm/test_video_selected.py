@@ -113,6 +113,14 @@ def test_selected_engine_revision_must_match_bound_point(native_fragment):
         video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
 
 
+@pytest.mark.parametrize("key", ["container", "source", "build_command"])
+def test_service_may_not_replace_or_rebuild_the_bound_image(native_fragment, key):
+    raw, write = native_fragment
+    raw["services"][0][key] = "other/engine:1.0"
+    with pytest.raises(ValueError, match=rf"services\[video-server\]\.{key} is not allowed"):
+        video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
+
+
 def _as_vllm(raw):
     raw["services"][0]["args"] = [
         "--model-view", "h3-fl2va", "--", "vllm", "serve", "{model_path}",
