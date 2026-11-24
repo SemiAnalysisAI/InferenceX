@@ -25,7 +25,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      gpus: 4
       env:
         TLLM_LOG_LEVEL: INFO
         TRTLLM_SERVER_DISABLE_GC: '1'
@@ -145,8 +144,6 @@ base:
         trust_remote_code: true
     decode:
       nodes: 4
-      workers: 1
-      gpus: 8
       env:
         TLLM_LOG_LEVEL: INFO
         TRTLLM_SERVER_DISABLE_GC: '1'
@@ -249,10 +246,8 @@ base:
 override_1p1d_tep4_tep16_c16:
   name: disagg-gb300-1p1d-tep4-tep16-c16-b4-mnt28-mtp6-kvoffload
   roles:
-    prefill:
-      workers: 1
+    prefill: {}
     decode:
-      gpus: 16
       args:
         cuda_graph_config:
           batch_sizes:
@@ -268,10 +263,8 @@ override_1p1d_tep4_tep16_c16:
 override_1p1d_tep4_tep16_c8:
   name: disagg-gb300-1p1d-tep4-tep16-c8-b1-mnt7-mtp6-kvoffload
   roles:
-    prefill:
-      workers: 1
+    prefill: {}
     decode:
-      gpus: 16
       args:
         cuda_graph_config:
           batch_sizes:
@@ -284,8 +277,7 @@ override_1p1d_tep4_tep16_c8:
 override_1p1d_tep4_tep8_c28:
   name: disagg-gb300-1p1d-tep4-tep8-c28-b6-mnt42-mtp6-kvoffload
   roles:
-    prefill:
-      workers: 1
+    prefill: {}
     decode:
       nodes: 2
       args:
@@ -303,10 +295,8 @@ override_1p1d_tep4_tep8_c28:
 override_1p2d_tep4_tep8_c128:
   name: disagg-gb300-1p2d-tep4-tep8-c128-b16-mnt112-mtp6-kvoffload
   roles:
-    prefill:
-      workers: 1
+    prefill: {}
     decode:
-      workers: 2
       args:
         cuda_graph_config:
           batch_sizes:
@@ -333,8 +323,6 @@ override_2p1d_tep2_tep8_c224:
   name: disagg-gb300-2p1d-tep2-tep8-c224-b64-mnt448-mtp6-kvoffload
   roles:
     prefill:
-      workers: 2
-      gpus: 2
       args:
         moe_expert_parallel_size: 2
         tensor_parallel_size: 2
@@ -380,15 +368,12 @@ override_2p2d_tep2_tep8_c176:
   name: disagg-gb300-2p2d-tep2-tep8-c176-b32-mnt224-mtp6-kvoffload
   roles:
     prefill:
-      workers: 2
-      gpus: 2
       args:
         kv_cache_config:
           iteration_stats_interval:
         moe_expert_parallel_size: 2
         tensor_parallel_size: 2
     decode:
-      workers: 2
       args:
         cuda_graph_config:
           batch_sizes:
@@ -426,9 +411,7 @@ override_2p2d_tep4_tep8_c264:
   roles:
     prefill:
       nodes: 2
-      workers: 2
     decode:
-      workers: 2
       args:
         cuda_graph_config:
           batch_sizes:
@@ -464,8 +447,6 @@ override_3p1d_tep2_tep8_b128:
   roles:
     prefill:
       nodes: 2
-      workers: 3
-      gpus: 2
       args:
         moe_expert_parallel_size: 2
         tensor_parallel_size: 2
@@ -522,7 +503,6 @@ override_3p2d_dep4_dep4_c720:
   roles:
     prefill:
       nodes: 3
-      workers: 3
       args:
         enable_attention_dp: true
         kv_cache_config:
@@ -556,8 +536,6 @@ override_3p2d_dep4_dep4_c720:
         speculative_config:
     decode:
       nodes: 2
-      workers: 2
-      gpus: 4
       args:
         cache_transceiver_config:
           max_tokens_in_buffer:
