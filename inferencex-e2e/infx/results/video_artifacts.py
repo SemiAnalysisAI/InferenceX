@@ -11,6 +11,12 @@ from pathlib import Path, PurePosixPath
 from infx.bench.video import read_object
 
 VIDEO_ARTIFACT = re.compile(r"h3-results-([0-9]+)-([0-9]+)-([0-9a-f]{64})")
+# Released plan hash per (spec file, set). A result publishes only when it ran one of these
+# unchanged; an edited spec or a new model adds its hash here, under review.
+RELEASED_PLANS = {
+    ("h3-v2.yaml", "release-v1"): "a5c800f14c801c74ff6902bdefcfa008d95fbcf98abe3b4920c7e525a4dba457",
+    ("wan22.yaml", "release-v1"): "d1f6d1d429e123c0b717f347510d4b72bb00b2d8fc839104ad6bef5033a52016",
+}  # fmt: skip
 
 
 def _inventory(root: Path) -> dict[str, str]:
@@ -166,6 +172,12 @@ def validate_video_artifacts(
                 or plan.get("model_id") != row["model"]
             ):
                 raise ValueError(f"{name}: selected workload plan mismatch")
+            released = RELEASED_PLANS.get((row["spec"], row["set"]))
+            if plan_sha != released:
+                raise ValueError(
+                    f"{name}: plan {plan_sha} is not the released plan of spec {row['spec']} "
+                    f"set {row['set']} ({released})"
+                )
             repetitions, cases = plan.get("repetitions"), plan.get("cases")
             if (
                 not isinstance(repetitions, int)

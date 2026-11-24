@@ -505,6 +505,8 @@ def _sweep(tmp_path, attempts=("2", "2")):
                 "recipe-fingerprint": fingerprint,
                 "runner": runner,
                 "framework": "sglang",
+                "spec": "h3.yaml",
+                "set": "frozen-c124",
                 "gpus": 2,
                 "conc-list": [1, 2],
                 "model": PLAN["model_id"],
@@ -524,6 +526,23 @@ def _sweep(tmp_path, attempts=("2", "2")):
         )
     )
     return artifacts
+
+
+@pytest.fixture(autouse=True)
+def _released_fixture_plan(monkeypatch):
+    from infx.results import video_artifacts
+
+    monkeypatch.setitem(video_artifacts.RELEASED_PLANS, ("h3.yaml", "frozen-c124"), PLAN_SHA)
+
+
+def test_reuse_refuses_a_plan_that_is_not_the_released_one(tmp_path, monkeypatch):
+    from infx.results import video_artifacts
+
+    artifacts = _sweep(tmp_path)
+    for released in ("0" * 64, None):  # An edited spec; a set with no released plan.
+        monkeypatch.setitem(video_artifacts.RELEASED_PLANS, ("h3.yaml", "frozen-c124"), released)
+        with pytest.raises(ValueError, match="is not the released plan of spec h3.yaml"):
+            video_artifacts.validate_video_artifacts(artifacts)
 
 
 def _reseal(bundle):
