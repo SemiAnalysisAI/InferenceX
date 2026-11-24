@@ -45,8 +45,6 @@ base:
     agg:
       # One 8xB200 node cannot hold the ~1.56 TB MXFP4 checkpoint.
       nodes: 2
-      workers: 1
-      gpus: 16
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'

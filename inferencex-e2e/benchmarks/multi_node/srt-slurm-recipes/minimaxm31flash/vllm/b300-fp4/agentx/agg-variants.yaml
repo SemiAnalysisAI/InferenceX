@@ -54,8 +54,6 @@ base:
     agg:
       kv_events: true
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         VLLM_FLOAT32_MATMUL_PRECISION: high
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
@@ -126,7 +124,6 @@ override_tp8_c1:
   name: minimaxm31flash-b300-dynamo-agg-tp8-c1
   roles:
     agg:
-      gpus: 8
       env:
         VLLM_NVFP4_PER_TOKEN_QUANT_SKIP_ZERO_FILL: '1'
         VLLM_MINIMAX_M3_DSPARK_SHARDED_MARKOV: '1'
@@ -145,7 +142,6 @@ override_tp8_c4:
   name: minimaxm31flash-b300-dynamo-agg-tp8-c4
   roles:
     agg:
-      gpus: 8
       env:
         VLLM_NVFP4_PER_TOKEN_QUANT_SKIP_ZERO_FILL: '1'
         VLLM_MINIMAX_M3_DSPARK_SHARDED_MARKOV: '1'
