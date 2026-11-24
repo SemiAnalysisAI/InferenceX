@@ -1,0 +1,212 @@
+== ./performance_profile_tool -h
+Usage: ./performance_profile_tool [--profile <profile>] [--get-profile] [--get-supported-profiles]
+  --profile <profile>        : Set performance profile
+  --get-profile              : Get current performance profile
+  --get-supported-profiles   : Get supported profiles common to all devices
+  --set-pcie-profile <n>     : Set PCIe profile (numeric, 0-255) on all devices
+  --get-pcie-profile         : Get current PCIe profile from all devices
+  --help                     : Show this help
+
+Profiles are platform-specific; the tool detects the platform and accepts
+only that platform's profiles.
+
+Trainium2 profiles (string name or numeric index may be used interchangeably):
+  2.4ghz_balanced_peak_capability  (numeric: 0)
+  2.0ghz_high_peak_capability      (numeric: 1)
+  2.0ghz_moderate_peak_capability  (numeric: 2)
+  2.4ghz_moderate_peak_capability  (numeric: 3)
+  2.4ghz_high_peak_capability      (numeric: 4)
+  2.2ghz_balanced_peak_capability  (numeric: 5)
+  2.0ghz_balanced_peak_capability  (numeric: 6)
+  2.2ghz_moderate_peak_capability  (numeric: 7)
+  2.2ghz_high_peak_capability      (numeric: 8)
+  7.2ghz_hbm_clock                 (numeric: 9)
+  2.4ghz_reduced_peak_capability   (numeric: 10)
+  2.4ghz_low_peak_capability       (numeric: 11)
+
+Note: The HBM clock profile (7.2ghz_hbm_clock) is mutually exclusive with the power profiles.
+
+Trainium3 profiles (string name only):
+  2.4ghz_tpb_1.2ghz_soc
+  2.0ghz_tpb_1.2ghz_soc
+  2.2ghz_tpb_1.2ghz_soc
+  2.4ghz_tpb_1.1ghz_soc
+  2.6ghz_tpb_1.1ghz_soc
+  2.4ghz_tpb_1.2ghz_soc_low_peak_capablity
+  2.4ghz_tpb_1.2ghz_soc_reduced_peak_capablity
+  2.4ghz_tpb_1.2ghz_soc_balanced_peak_capablity
+  1.8ghz_tpb_0.9ghz_soc
+  2.0ghz_tpb_1.1ghz_soc
+
+Note: On Trainium3, --get-profile and --get-supported-profiles are not yet
+supported by the device firmware.
+Note: This tool will set/get the profile on ALL available Neuron devices.
+
+== sudo ./performance_profile_tool --get-profile  (exit code below)
+Error: --get-profile and --get-supported-profiles are not yet supported by the device firmware on Trainium3
+Found 16 Neuron device(s)
+Detected Trainium3 platform
+exit code 1
+
+== sudo ./performance_profile_tool --get-supported-profiles  (exit code below)
+Error: --get-profile and --get-supported-profiles are not yet supported by the device firmware on Trainium3
+Found 16 Neuron device(s)
+Detected Trainium3 platform
+exit code 1
+
+== as found, before any set: te_clock.py --seconds 2
+neuron0: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron1: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron2: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron3: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron4: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron5: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron6: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron7: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron8: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron9: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron10: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron11: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron12: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron13: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron14: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron15: 2.400 GHz (cores 8, min 2.400, max 2.400)
+
+== sudo ./performance_profile_tool --profile 2.0ghz_tpb_1.1ghz_soc  (exit code 255; repeated once with the same result)
+Error: Failed to set performance profile on device 0: No such file or directory
+Error: Failed to set performance profile on device 1: No such file or directory
+Error: Failed to set performance profile on device 2: No such file or directory
+Error: Failed to set performance profile on device 3: No such file or directory
+Error: Failed to set performance profile on device 4: No such file or directory
+Error: Failed to set performance profile on device 5: No such file or directory
+Error: Failed to set performance profile on device 6: No such file or directory
+Error: Failed to set performance profile on device 7: No such file or directory
+Error: Failed to set performance profile on device 8: No such file or directory
+Error: Failed to set performance profile on device 9: No such file or directory
+Error: Failed to set performance profile on device 10: No such file or directory
+Error: Failed to set performance profile on device 11: No such file or directory
+Error: Failed to set performance profile on device 12: No such file or directory
+Error: Failed to set performance profile on device 13: No such file or directory
+Error: Failed to set performance profile on device 14: No such file or directory
+Error: Failed to set performance profile on device 15: No such file or directory
+Found 16 Neuron device(s)
+Detected Trainium3 platform
+Checking if 128 cores are available
+All cores available, proceeding with profile change
+Opening Neuron device 0
+Opening Neuron device 1
+Opening Neuron device 2
+Opening Neuron device 3
+Opening Neuron device 4
+Opening Neuron device 5
+Opening Neuron device 6
+Opening Neuron device 7
+Opening Neuron device 8
+Opening Neuron device 9
+Opening Neuron device 10
+Opening Neuron device 11
+Opening Neuron device 12
+Opening Neuron device 13
+Opening Neuron device 14
+Opening Neuron device 15
+Setting performance profile to 2.0ghz_tpb_1.1ghz_soc on all devices
+Failed to set performance profile
+
+== kernel log at that set (sudo dmesg | grep fw_io)
+[13094.893177] neuron:fw_io_execute_request_new: seq: 92, cmd: 3 failed 1
+[13094.897169] neuron:fw_io_execute_request_new: seq: 92, cmd: 3 failed 1
+[13094.897547] neuron:fw_io_execute_request_new: seq: 92, cmd: 3 failed 1
+[13094.900175] neuron:fw_io_execute_request_new: seq: 92, cmd: 3 failed 1
+[13094.905169] neuron:fw_io_execute_request_new: seq: 92, cmd: 3 failed 1
+[13094.905176] neuron:fw_io_execute_request_new: seq: 92, cmd: 3 failed 1
+
+== sudo ./performance_profile_tool --profile 2.0ghz_tpb_1.2ghz_soc
+Found 16 Neuron device(s)
+Detected Trainium3 platform
+Checking if 128 cores are available
+All cores available, proceeding with profile change
+Opening Neuron device 0
+Opening Neuron device 1
+Opening Neuron device 2
+Opening Neuron device 3
+Opening Neuron device 4
+Opening Neuron device 5
+Opening Neuron device 6
+Opening Neuron device 7
+Opening Neuron device 8
+Opening Neuron device 9
+Opening Neuron device 10
+Opening Neuron device 11
+Opening Neuron device 12
+Opening Neuron device 13
+Opening Neuron device 14
+Opening Neuron device 15
+Setting performance profile to 2.0ghz_tpb_1.2ghz_soc on all devices
+Performance profile set successfully on all devices
+Note: --get-profile is not yet supported by Trainium3 firmware, so the profile
+cannot be verified with this tool.
+
+== after that set: te_clock.py --seconds 2
+neuron0: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron1: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron2: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron3: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron4: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron5: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron6: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron7: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron8: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron9: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron10: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron11: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron12: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron13: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron14: 2.000 GHz (cores 8, min 2.000, max 2.000)
+neuron15: 2.000 GHz (cores 8, min 2.000, max 2.000)
+
+== restore: sudo ./performance_profile_tool --profile 2.4ghz_tpb_1.2ghz_soc
+Found 16 Neuron device(s)
+Detected Trainium3 platform
+Checking if 128 cores are available
+All cores available, proceeding with profile change
+Opening Neuron device 0
+Opening Neuron device 1
+Opening Neuron device 2
+Opening Neuron device 3
+Opening Neuron device 4
+Opening Neuron device 5
+Opening Neuron device 6
+Opening Neuron device 7
+Opening Neuron device 8
+Opening Neuron device 9
+Opening Neuron device 10
+Opening Neuron device 11
+Opening Neuron device 12
+Opening Neuron device 13
+Opening Neuron device 14
+Opening Neuron device 15
+Setting performance profile to 2.4ghz_tpb_1.2ghz_soc on all devices
+Performance profile set successfully on all devices
+Note: --get-profile is not yet supported by Trainium3 firmware, so the profile
+cannot be verified with this tool.
+
+== after the restore: te_clock.py --seconds 2
+neuron0: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron1: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron2: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron3: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron4: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron5: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron6: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron7: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron8: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron9: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron10: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron11: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron12: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron13: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron14: 2.400 GHz (cores 8, min 2.400, max 2.400)
+neuron15: 2.400 GHz (cores 8, min 2.400, max 2.400)
+
+== after the restore: cat /sys/class/neuron_device/current_perf_profile
+6

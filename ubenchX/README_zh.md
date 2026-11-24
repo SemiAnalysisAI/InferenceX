@@ -15,6 +15,7 @@
 | [trn3_psum_bw](trn3_psum_bw/) | Trainium3 上 VectorE 与 ScalarE 的 PSUM 到 SBUF `tensor_copy` 带宽，含单引擎与双引擎并发 | 安装 Neuron 驱动和 Docker 的 Trainium3 实例 |
 | [trn3_exp_bw](trn3_exp_bw/) | Trainium3 上 VectorE 与 ScalarE 的 exp 及激活函数吞吐量 | 安装 Neuron 驱动和 Docker 的 Trainium3 实例 |
 | [trn3_matmul](trn3_matmul/) | Trainium3 TensorE bf16 矩阵乘法在不同 N 和 M 下的发射间隔与延迟，含固定或每次新加载的 stationary | 安装 Neuron 驱动和 Docker 的 Trainium3 实例 |
+| [full_chip_matmul](full_chip_matmul/) | Trainium3 整芯片 TensorE 矩阵乘法 TFLOP/s（bf16、fp8 double_row、MXFP8）：八个 NeuronCore 同时运行与单核单独运行的对比，以及各设备性能 profile 下的限速读数 | 安装 Neuron 驱动和 Docker 的 Trainium3 实例，以及 AWS 的 `performance_profile_tool`（需 `sudo`） |
 
 ## GEMM
 
@@ -259,4 +260,128 @@ Throttle 表记录其恢复全速的时刻。对恢复之后开始的 MATMUL，I
   矩阵乘法重叠。N = 32 时 II 升至 46 个周期，N = 8 时升至 80 个周期。
 
 只覆盖 bf16、K = 128 和互不依赖的矩阵乘法；一串相互依赖的矩阵乘法每次都要付出完整延迟。结果未与
+参考值比对。
+
+## Trainium3 整芯片矩阵乘法 TFLOP/s 与限速
+
+`full_chip_matmul` 在 LNC=1 下让一颗 Trainium3 芯片的全部八个 NeuronCore 同时运行 TensorE 矩阵
+乘法，把整芯片的 TFLOP/s 与单核单独运行时的八倍相比较，并在运行期间记录限速情况。它在用 AWS 的
+`performance_profile_tool`（AWS 提供的二进制，不在本仓库中）设置的每个设备性能 profile 下各测
+一遍。三个 kernel 沿用单核基准测试中固定 stationary 的 tile，M = 128，N = 512：
+
+- `mm_bf16`：`nisa.nc_matmul`，bf16，K = 128（即 `trn3_matmul` 的 `mm_bf16_fixed`）。
+- `mm_fp8dr`：`nisa.nc_matmul` 加 `perf_mode=double_row`，float8_e4m3，K = 256。
+- `mm_mx`：MXFP8，`nisa.nc_matmul_mx`，float8_e4m3fn_x4 加 e8m0 scale，K = 512。
+
+每个 kernel 是一个在设备上执行的循环（`nl.dynamic_range`），共 `REPS` 次迭代，每次迭代有 `NUM_MM`
+条矩阵乘法，写入 PSUM tile i % 8，因此一次执行可以连续发射约 0.25 s 的矩阵乘法而不返回主机。
+neuronx-cc 要求跨越循环边界仍存活的张量位于 HBM，所以每次迭代还要加载并转换操作数、排空 PSUM，
+每次 1.8 ms 的迭代中约占 20 us。
+
+```bash
+docker build -t trn3-ubench ubenchX/trn3_docker
+IMAGE=trn3-ubench PROFILE_TOOL=$HOME/performance_profile_tool \
+  PROFILES="as_found 2.0ghz_tpb_1.2ghz_soc" RESTORE_PROFILE=2.4ghz_tpb_1.2ghz_soc \
+  KERNELS="mm_bf16 mm_fp8dr mm_mx" N=512 NUM_MM=8192 REPS=128 PROBE_REPS=1024 SOLO_S=60 CHIP_S=180 \
+  IDLE_S=10 NCORES=8 CHIP=0 PROBE_LAST_S=12 SAMPLE_S=0.5 NEURON_TARGET=trn3 \
+  OUT_DIR=ubenchX/full_chip_matmul/runs/r1 ubenchX/full_chip_matmul/sweep.sh
+
+ubenchX/trn3_dma_bw/run.sh python ubenchX/full_chip_matmul/parse.py ubenchX/full_chip_matmul/runs/r1 --prefix chip
+ubenchX/trn3_dma_bw/run.sh python ubenchX/full_chip_matmul/report.py --prefix chip --bin-s 15 > chip_report.md
+python ubenchX/full_chip_matmul/plot.py --prefix chip --out chip_timeline.png \
+  --profiles as_found 2.0ghz_tpb_1.2ghz_soc
+```
+
+`sweep.sh` 在主机上运行，需要能免密 `sudo` 执行 profile 工具。对 `PROFILES` 中的每个名字，它先设置
+该 profile（`as_found` 表示保持节点现状），用 `te_clock.py` 记录每个设备的 TensorE 时钟，再在
+`IMAGE` 容器中为每个 kernel 运行 `fullchip.sh`；`OUT_DIR` 相对于仓库根目录。只要它改过 profile，
+退出时（包括失败或被中断时）就会设置 `RESTORE_PROFILE`。该工具会对节点上所有 Neuron 设备设置
+profile；在 Trainium3 上，设备固件不支持它的 `--get-profile` 和 `--get-supported-profiles`，因此
+无法读出节点起始的 profile，需要由调用方指定要恢复到的 profile。
+
+`fullchip.sh` 先编译 kernel，然后在 `sample_throttle.py` 每 `SAMPLE_S` 秒采样一次 sysfs 的同时，
+先让一个核单独运行 `SOLO_S` 秒（`solo`），再让芯片 `CHIP` 的 `NCORES` 个核一起运行 `CHIP_S` 秒
+（`chip`），之前、之间和之后各空闲 `IDLE_S` 秒。每个核对应一个 `run_point.py` 进程，通过 libnrt
+加载 NEFF（`NEURON_RT_VISIBLE_CORES`、`NEURON_LOGICAL_NC_CONFIG=1`）；所有进程在同一墙上时钟时刻
+开始，连续调用 `nrt_execute` 并为每次调用计时。
+
+TFLOP/s 按每条矩阵乘法指令 2 K M N 个 FLOP 计算，与单核基准测试一致。单核 TFLOP/s 为
+`REPS` x `NUM_MM` x 2 K M N x 执行次数除以在 `nrt_execute` 内花费的时间，因此包含每次迭代的操作数
+加载和 PSUM 排空。整芯片 TFLOP/s 是各核之和，scaling 为整芯片 TFLOP/s 除以 `NCORES` 乘以 solo
+TFLOP/s。利用率为 TFLOP/s 除以该 profile 时钟下的 TensorE 峰值：每个核每个时钟周期 2 K M 个 FLOP，
+2.4 GHz 下 bf16 为 78.6 TFLOP/s（即 `trn3_matmul` 使用的峰值），fp8 double_row 为 157.3，MXFP8 为
+314.6，整芯片为其八倍。`report.py` 的时钟取自 TensorE 计数器。
+
+限速通过三种方式记录：
+
+- **sysfs 限速统计。** `sample_throttle.py` 读取芯片上每个核的
+  `/sys/devices/virtual/neuron_device/neuron<chip>/neuron_core<c>/stats/hardware/ham_throttle/throttle`。
+  `mean`、`max` 和 `min` 是以 255 为满的限速水平，255 表示全速，空闲的核读数为 128（50%）。驱动
+  大约每 0.9 s 刷新一次这条记录。
+- **TensorE 计数器。** 同一次采样还读取 `tensor_engine/pe_cntrs`。`mm_active` / 2^14 + `idle`
+  按 TensorE 时钟递增，`mm_active` / 2^14 统计正在推进 moving 列的周期数，由此得到不依赖主机计时的
+  TFLOP/s。这些单位是从测量结果推断的，没有文档说明。
+- **Profiler。** 每次运行结束前 `PROBE_LAST_S` 秒，第一个核执行一次带 profile 的 kernel，迭代次数
+  为 `PROBE_REPS`。profiler 的 Throttle 表给出这次探测期间的限速水平及其来源（`activity_0`、
+  `activity_1`、`power_3`、`temp_0`），Instruction 表用于确认 opcode 和 dtype。profiler 就绪期间该核
+  会空闲约一秒，其他核在此期间加速，而且被 profile 过的核的 sysfs 统计不再更新，因此每次运行只做
+  一次探测，TFLOP/s 只统计探测之前的时间。
+
+`results/trn3n_48xlarge_rev2_2026-11-24_full_chip_*` 在一台 revision-v2 芯片的 trn3n.48xlarge 的
+芯片 0 上测得：每个 kernel 单核运行 60 s、八核运行 180 s，速率分别取探测之前的 48 s 和 168 s。
+`_report.md` 是 `report.py` 生成的表格，`_timeline.png` 是八核运行随时间的变化，
+`_profile_tool.txt` 是 profile 工具的输出和 TensorE 时钟，`_throttle_raw.jsonl.gz` 是全部 sysfs 采样。
+
+| profile | 模式（kernel） | solo TFLOP/s（利用率） | 整芯片 TFLOP/s（利用率） | 整芯片 / (8 x solo) | 八核时 sysfs 限速均值 | profiler 给出的来源与水平 |
+|---|---|---|---|---|---|---|
+| 起始状态（TensorE 2.4 GHz） | bf16（`mm_bf16`） | 76.86（97.7%） | 614.0（97.6%） | 0.999 | 99.1% | 无 |
+| 起始状态 | fp8 double_row（`mm_fp8dr`） | 153.72（97.7%） | 1,127.5（89.6%） | 0.917 | 90.9% | `power_3`，91.7% |
+| 起始状态 | MXFP8（`mm_mx`） | 297.08（94.4%） | 1,727.8（68.7%） | 0.727 | 73.6% | `power_3`，73.9% |
+| `2.0ghz_tpb_1.2ghz_soc` | bf16（`mm_bf16`） | 64.06（97.7%） | 512.4（97.7%） | 1.000 | 99.2% | 无 |
+| `2.0ghz_tpb_1.2ghz_soc` | fp8 double_row（`mm_fp8dr`） | 128.15（97.8%） | 1,025.1（97.8%） | 1.000 | 99.2% | 无 |
+| `2.0ghz_tpb_1.2ghz_soc` | MXFP8（`mm_mx`） | 248.35（94.7%） | 1,766.9（84.3%） | 0.889 | 90.7% | `power_3`，91.2% |
+
+- **起始状态下，八核同时运行 fp8 double_row 或 MXFP8 会被功耗限速。** 单核单独运行时从不被限速：其
+  sysfs 均值保持在 99.2%，其中已包含循环迭代之间的 50% 水平。八核时整芯片只达到单核速率八倍的
+  91.7%（fp8 double_row）和 72.7%（MXFP8），每个核减速的幅度相同（各核速率相差不超过 0.1%），sysfs
+  均值和 profiler 给出的水平按相同比例下降，profiler 标出的来源是 `power_3`。bf16 除了在 10 到
+  40 s 之间有一次 1.3% 的下探外不被限速。
+- **限速作用于整颗芯片，并且有延迟。** 八个核启动后 1 到 2 s 限速生效，15 到 30 s 时最深（1,105 和
+  1,707 TFLOP/s），约 90 s 后稳定（1,133 和 1,727）。某个核为探测而暂停时，其余七个核会加速约半秒，
+  fp8 double_row 回到单核速率；探测本身开始时不受限速，约 0.5 s 内重新被限速，因此远短于一秒的
+  探测会低估限速。
+- **AWS 建议的 profile 无法设置。** `--profile 2.0ghz_tpb_1.1ghz_soc` 两次都在全部 16 个设备上失败，
+  报错 `Failed to set performance profile on device N: No such file or directory`（内核日志：
+  `fw_io_execute_request_new: seq: 86, cmd: 3 failed 1`），时钟仍为 2.4 GHz。
+  `2.0ghz_tpb_1.2ghz_soc` 可以设置，于是改测它；之后计数器显示全部 16 个设备均为 2.000 GHz。
+- **2.0 GHz 下 fp8 double_row 不再被限速，但更慢。** 单核速率按 2.0 / 2.4 下降。bf16 和 fp8
+  double_row 扩展到八核的比例为 1.000，整芯片总量为 512 和 1,025 TFLOP/s，低于起始状态下带限速
+  测得的 614 和 1,128。MXFP8 仍被功耗限速到 88.9%，整芯片总量上升 2.3% 至 1,767 TFLOP/s：对 MXFP8 而言，
+  两种 profile 下整芯片都只能给出约 1,730 到 1,770 TFLOP/s。
+- **恢复。** 节点被设回 `2.4ghz_tpb_1.2ghz_soc`，即 AWS 所说的默认 profile；之后全部 16 个设备读数
+  均为 2.400 GHz，重跑 MXFP8（报告中的 `restored_2.4ghz_tpb_1.2ghz_soc`，以及第一次设置之后的
+  `set_2.4ghz_tpb_1.2ghz_soc`）与起始状态的结果相比，solo 相差不超过 0.1%，八核运行每 15 s 的速率
+  相差不超过 0.5%。驱动的 `/sys/class/neuron_device/current_perf_profile` 在这次设置后读数为 6，
+  在 `2.0ghz_tpb_1.2ghz_soc` 下为 7；从未设置过 profile 的节点读数为 0，即驱动在设备复位后赋的值。
+
+`results/trn3n_48xlarge_rev2_2026-11-24_full_chip_node3_*` 在另一台 trn3n.48xlarge 的芯片 0 上
+重复了起始状态下的测量，该节点从未设置过 profile
+（`current_perf_profile` 为 0，2.400 GHz），单核运行 30 s、八核运行 102 s（速率分别取 18 s 和
+90 s）。这颗芯片在每种模式下都被限速得更多：
+
+| 模式（kernel） | solo TFLOP/s（利用率） | 整芯片 TFLOP/s（利用率） | 整芯片 / (8 x solo) | 第一个节点同样 90 s |
+|---|---|---|---|---|
+| bf16（`mm_bf16`） | 76.85（97.7%） | 563.9（89.6%） | 0.917 | 613 |
+| fp8 double_row（`mm_fp8dr`） | 153.71（97.7%） | 1,032.7（82.1%） | 0.840 | 1,123 |
+| MXFP8（`mm_mx`） | 267.68（85.1%） | 1,592.0（63.3%） | 0.743 | 1,728 |
+
+它的八核总量在三种模式下（包括 bf16）都比第一个节点低 8%，主要来源是 `power_3`，`temp_0` 占每次
+探测的 8% 到 18%。在这颗芯片上，单个 MXFP8 核本身就会被限速：起始为 297 TFLOP/s，1.5 s 后为 270，
+15 s 后为 265，profiler 标出的来源是 `temp_0`。两个节点的测量时间和运行时长都不同，因此这只说明限速在不同
+芯片或节点之间存在差异，并不能说明原因；上面的 profile 对比全部在同一颗芯片上完成。
+
+芯片 0 上运行时的 LNC=1 核 0 到 7 对应 sysfs 的 `neuron_core` 4、5、6、7、2、3、0、1（逐核单独
+运行，根据其 `pe_cntrs` 判断）。sysfs 记录在每次采样中都打印 `Source attribution unavailable`，
+因此限速来源只来自 profiler。profile 对比只在一个节点的一颗芯片上进行，N = 512，stationary tile
+固定；没有读取功耗和温度（`stats/hardware/temperature` 返回 `Operation not supported`）。结果未与
 参考值比对。

@@ -16,6 +16,7 @@ repository root in an environment with the required device libraries.
 | [trn3_exp_bw](trn3_exp_bw/) | Trainium3 exp and activation-function throughput on VectorE and ScalarE | Trainium3 instance with the Neuron driver and Docker |
 | [trn3_matmul](trn3_matmul/) | Trainium3 TensorE bf16 matmul initiation interval and latency across N and M, with a fixed or a new stationary per matmul | Trainium3 instance with the Neuron driver and Docker |
 | [trn3_core_membw](trn3_core_membw/) | Trainium3 per-core memory bandwidth, core-to-core and chip-to-chip collectives across a node and the two racks, and a core-map shim for cross-SEngine runs | Trainium3 UltraServer with the Neuron driver and Docker |
+| [full_chip_matmul](full_chip_matmul/) | Trainium3 whole-chip TensorE matmul TFLOP/s (bf16, fp8 double_row, MXFP8) with all eight NeuronCores running at once against one core alone, and throttle readings under device performance profiles | Trainium3 instance with the Neuron driver, Docker, and AWS's `performance_profile_tool` with `sudo` |
 
 ## GEMM
 
@@ -280,3 +281,143 @@ revision-v2 silicon.
 
 Only bf16, K = 128 and independent matmuls are covered; a chain of dependent matmuls would pay the
 full latency each time. Results are not checked against a reference.
+
+## Trainium3 full-chip matmul TFLOP/s and throttling
+
+`full_chip_matmul` runs TensorE matmuls on all eight NeuronCores of one Trainium3 chip at LNC=1 at
+the same time, compares the chip's TFLOP/s with eight times one core running alone, and records
+throttling while it runs. It repeats this under each device performance profile set with AWS's
+`performance_profile_tool` (a binary AWS provides; it is not in this repository). Three kernels use
+the fixed-stationary tiles of the single-core benchmarks, with M = 128 and N = 512:
+
+- `mm_bf16`: `nisa.nc_matmul`, bf16, K = 128 (`trn3_matmul`'s `mm_bf16_fixed`).
+- `mm_fp8dr`: `nisa.nc_matmul` with `perf_mode=double_row`, float8_e4m3, K = 256.
+- `mm_mx`: MXFP8, `nisa.nc_matmul_mx`, float8_e4m3fn_x4 with e8m0 scales, K = 512.
+
+Each kernel is an on-device loop (`nl.dynamic_range`) of `REPS` iterations, each `NUM_MM` matmuls
+into PSUM tile i % 8, so one execution streams matmuls for about 0.25 s without returning to the
+host. neuronx-cc requires tensors that are live across the loop boundary to be in HBM, so every
+iteration also loads and casts its operands and drains PSUM, about 20 us per 1.8 ms iteration.
+
+```bash
+docker build -t trn3-ubench ubenchX/trn3_docker
+IMAGE=trn3-ubench PROFILE_TOOL=$HOME/performance_profile_tool \
+  PROFILES="as_found 2.0ghz_tpb_1.2ghz_soc" RESTORE_PROFILE=2.4ghz_tpb_1.2ghz_soc \
+  KERNELS="mm_bf16 mm_fp8dr mm_mx" N=512 NUM_MM=8192 REPS=128 PROBE_REPS=1024 SOLO_S=60 CHIP_S=180 \
+  IDLE_S=10 NCORES=8 CHIP=0 PROBE_LAST_S=12 SAMPLE_S=0.5 NEURON_TARGET=trn3 \
+  OUT_DIR=ubenchX/full_chip_matmul/runs/r1 ubenchX/full_chip_matmul/sweep.sh
+
+ubenchX/trn3_dma_bw/run.sh python ubenchX/full_chip_matmul/parse.py ubenchX/full_chip_matmul/runs/r1 --prefix chip
+ubenchX/trn3_dma_bw/run.sh python ubenchX/full_chip_matmul/report.py --prefix chip --bin-s 15 > chip_report.md
+python ubenchX/full_chip_matmul/plot.py --prefix chip --out chip_timeline.png \
+  --profiles as_found 2.0ghz_tpb_1.2ghz_soc
+```
+
+`sweep.sh` runs on the host and needs passwordless `sudo` for the profile tool. For each name in
+`PROFILES` it sets that profile (`as_found` leaves the node as it is), records every device's
+TensorE clock with `te_clock.py`, and runs `fullchip.sh` for each kernel in the `IMAGE` container;
+`OUT_DIR` is relative to the repository root. If it changed the profile it sets `RESTORE_PROFILE`
+on exit, also after a failure or an interrupt. The tool sets a profile on every Neuron device of
+the node, and on Trainium3 its `--get-profile` and `--get-supported-profiles` are not supported by
+the device firmware, so the profile a node starts with cannot be read and the caller names the one
+to restore.
+
+`fullchip.sh` compiles the kernel, then with `sample_throttle.py` sampling sysfs every `SAMPLE_S`
+seconds it runs one core alone for `SOLO_S` seconds (`solo`) and `NCORES` cores of chip `CHIP`
+together for `CHIP_S` seconds (`chip`), with `IDLE_S` idle seconds before, between and after. Each
+core is one `run_point.py` process that loads the NEFF through libnrt
+(`NEURON_RT_VISIBLE_CORES`, `NEURON_LOGICAL_NC_CONFIG=1`); all processes start at the same
+wall-clock time and call `nrt_execute` back to back, timing every call.
+
+TFLOP/s counts 2 K M N FLOPs per matmul instruction, as the single-core benchmarks do. A core's
+TFLOP/s is `REPS` x `NUM_MM` x 2 K M N x executions divided by the time spent inside `nrt_execute`,
+so it includes each iteration's operand load and PSUM drain. Chip TFLOP/s is the sum over the
+cores, and scaling is chip TFLOP/s over `NCORES` times the solo TFLOP/s. Utilization is TFLOP/s
+over the TensorE peak at the profile's clock: 2 K M FLOPs per clock cycle per core, which at
+2.4 GHz is 78.6 TFLOP/s for bf16 (the peak `trn3_matmul` uses), 157.3 for fp8 double_row and 314.6
+for MXFP8, and eight times that for the chip. `report.py` takes the clock from the TensorE counters.
+
+Throttling is recorded three ways:
+
+- **sysfs throttle statistic.** `sample_throttle.py` reads
+  `/sys/devices/virtual/neuron_device/neuron<chip>/neuron_core<c>/stats/hardware/ham_throttle/throttle`
+  for every core of the chip. `mean`, `max` and `min` are throttle levels out of 255, where 255 is
+  full rate and an idle core reads 128 (50%). The driver refreshes the record about every 0.9 s.
+- **TensorE counters.** The same sample reads `tensor_engine/pe_cntrs`. `mm_active` / 2^14 +
+  `idle` advances at the TensorE clock, and `mm_active` / 2^14 counts cycles that stream a moving
+  column, which gives a TFLOP/s that does not depend on host timing. These units are inferred from
+  the measurements, not documented.
+- **Profiler.** `PROBE_LAST_S` seconds before the end of each run the first core runs one profiled
+  execution of the kernel with `PROBE_REPS` iterations. The profiler's Throttle table gives the
+  throttle level and its source (`activity_0`, `activity_1`, `power_3`, `temp_0`) through the probe,
+  and its Instruction table confirms the opcode and dtypes. Arming the profiler idles that core for
+  about a second, the other cores speed up meanwhile, and a profiled core's sysfs statistic stops
+  updating, so there is one probe per run and TFLOP/s covers only the time before it.
+
+`results/trn3n_48xlarge_rev2_2026-11-24_full_chip_*` were measured on chip 0 of a trn3n.48xlarge
+with revision-v2 silicon: one core for 60 s and eight cores for 180 s per kernel, with rates over
+the 48 s and 168 s before the probe. `_report.md` holds the `report.py` tables, `_timeline.png`
+the chip runs over time, `_profile_tool.txt` the profile tool's output and the TensorE clocks, and
+`_throttle_raw.jsonl.gz` every sysfs sample.
+
+| profile | mode (kernel) | solo TFLOP/s (utilization) | chip TFLOP/s (utilization) | chip / (8 x solo) | sysfs throttle mean, chip | profiler source and level |
+|---|---|---|---|---|---|---|
+| as found (2.4 GHz TensorE) | bf16 (`mm_bf16`) | 76.86 (97.7%) | 614.0 (97.6%) | 0.999 | 99.1% | none |
+| as found | fp8 double_row (`mm_fp8dr`) | 153.72 (97.7%) | 1,127.5 (89.6%) | 0.917 | 90.9% | `power_3`, 91.7% |
+| as found | MXFP8 (`mm_mx`) | 297.08 (94.4%) | 1,727.8 (68.7%) | 0.727 | 73.6% | `power_3`, 73.9% |
+| `2.0ghz_tpb_1.2ghz_soc` | bf16 (`mm_bf16`) | 64.06 (97.7%) | 512.4 (97.7%) | 1.000 | 99.2% | none |
+| `2.0ghz_tpb_1.2ghz_soc` | fp8 double_row (`mm_fp8dr`) | 128.15 (97.8%) | 1,025.1 (97.8%) | 1.000 | 99.2% | none |
+| `2.0ghz_tpb_1.2ghz_soc` | MXFP8 (`mm_mx`) | 248.35 (94.7%) | 1,766.9 (84.3%) | 0.889 | 90.7% | `power_3`, 91.2% |
+
+- **As found, eight cores of fp8 double_row or MXFP8 are power-throttled.** One core alone is never
+  throttled: its sysfs mean stays at 99.2%, the 50% level between loop iterations included. With
+  eight cores the chip reaches 91.7% (fp8 double_row) and 72.7% (MXFP8) of eight times the solo rate,
+  every core slows by the same amount (per-core rates within 0.1%), the sysfs mean and the
+  profiler's level fall by the same ratio, and the profiler names the source `power_3`. bf16 is
+  not throttled apart from a 1.3% dip between 10 and 40 s.
+- **The throttle acts on the chip, with a delay.** It engages 1 to 2 s after the eight cores start,
+  is deepest after 15 to 30 s (1,105 and 1,707 TFLOP/s) and settles by about 90 s (1,133 and
+  1,727). While one core pauses for its probe the other seven speed up for about half a second,
+  fp8 double_row to its solo rate, and the probe itself starts unthrottled and is throttled again
+  within about 0.5 s, so a probe much shorter than a second understates the throttle.
+- **The profile AWS suggested could not be set.** `--profile 2.0ghz_tpb_1.1ghz_soc` failed twice on
+  all 16 devices with `Failed to set performance profile on device N: No such file or directory`
+  (kernel log: `fw_io_execute_request_new: seq: 86, cmd: 3 failed 1`) and left the clock at
+  2.4 GHz. `2.0ghz_tpb_1.2ghz_soc` was accepted and was measured in its place; the counters then
+  showed 2.000 GHz on all 16 devices.
+- **At 2.0 GHz fp8 double_row is no longer throttled but is slower.** Solo rates fall by 2.0 / 2.4.
+  bf16 and fp8 double_row scale to eight cores at 1.000, so the chip totals are 512 and 1,025
+  TFLOP/s, below the 614 and 1,128 measured as found with throttling. MXFP8 is still power-throttled,
+  to 88.9%, and its chip total rises 2.3% to 1,767 TFLOP/s: on MXFP8 the chip delivers about
+  1,730 to 1,770 TFLOP/s under either profile.
+- **Restoring.** The node was set back to `2.4ghz_tpb_1.2ghz_soc`, which AWS describes as the
+  default; all 16 devices then read 2.400 GHz and an MXFP8 rerun (`restored_2.4ghz_tpb_1.2ghz_soc` in
+  the report, `set_2.4ghz_tpb_1.2ghz_soc` after the first set) matched the as-found run within
+  0.1% solo and 0.5% per 15 s of the chip run. The driver's
+  `/sys/class/neuron_device/current_perf_profile` reads 6 after that set and 7 under
+  `2.0ghz_tpb_1.2ghz_soc`; nodes that never had a profile set read 0, the value the driver assigns
+  after a device reset.
+
+`results/trn3n_48xlarge_rev2_2026-11-24_full_chip_node3_*` repeat the as-found runs on chip 0 of a
+second trn3n.48xlarge, which never had a profile set (`current_perf_profile` 0, 2.400 GHz), with
+30 s solo and 102 s eight-core runs (rates over 18 s and 90 s). That chip is throttled more in every mode:
+
+| mode (kernel) | solo TFLOP/s (utilization) | chip TFLOP/s (utilization) | chip / (8 x solo) | first node, same 90 s |
+|---|---|---|---|---|
+| bf16 (`mm_bf16`) | 76.85 (97.7%) | 563.9 (89.6%) | 0.917 | 613 |
+| fp8 double_row (`mm_fp8dr`) | 153.71 (97.7%) | 1,032.7 (82.1%) | 0.840 | 1,123 |
+| MXFP8 (`mm_mx`) | 267.68 (85.1%) | 1,592.0 (63.3%) | 0.743 | 1,728 |
+
+Its eight-core totals are 8% below the first node's in all three modes, bf16 included, with
+`power_3` as the main source and `temp_0` for 8 to 18% of each probe. A single MXFP8 core is itself
+throttled there: it starts at 297 TFLOP/s, is at 270 after 1.5 s and at 265 after 15 s, and the
+profiler names `temp_0`. The two nodes were measured at different times and with different run lengths, so this
+shows that throttling differs between chips or nodes, not why; the profile comparison above is all
+on one chip.
+
+The runtime's LNC=1 cores 0 to 7 of chip 0 are sysfs `neuron_core` 4, 5, 6, 7, 2, 3, 0, 1 (one core
+at a time, by its `pe_cntrs`). The sysfs record printed `Source attribution unavailable` in every
+sample, so sources come only from the profiler. Profiles were compared on one chip of one node, with
+N = 512 and a fixed stationary tile; power and temperature were not read
+(`stats/hardware/temperature` returns `Operation not supported`). Results are not checked against a
+reference.
