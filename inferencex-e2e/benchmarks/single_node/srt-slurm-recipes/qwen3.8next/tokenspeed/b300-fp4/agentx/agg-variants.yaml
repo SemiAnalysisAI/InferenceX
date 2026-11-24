@@ -50,8 +50,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 1
       env:
         TOKENSPEED_JIT_COMPILE_CHECK: error
         TOKENSPEED_HEALTH_CHECK_TIMEOUT: '600'
@@ -97,7 +95,7 @@ base:
         max-cudagraph-capture-size: 104
         cudagraph-capture-sizes: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 84, 88, 92, 96, 100, 104]
         enable-prefix-caching: true
-        # Host L2 plus the retraction snapshot pool stay under the 241 GB per-GPU DRAM allowance.
+        # Host L2 plus the retraction snapshot pool stay within the GPU's share of host memory.
         kvstore-size: 236
         retraction-snapshot-host-gb: 4
         kvstore-io-backend: kernel
@@ -116,7 +114,6 @@ base:
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'tokenspeed:'
-      TOTAL_CPU_DRAM_GB: '241'
       KV_OFFLOADING: dram
 
 override_tp1_c1:
