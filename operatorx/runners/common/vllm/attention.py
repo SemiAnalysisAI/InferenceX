@@ -105,7 +105,9 @@ def _qwen35(a: dict, full: dict, linear: dict, target: str) -> _Build:
     c = _family("qwen3_5_moe")
     t = c["text_config"]
     t.update(num_hidden_layers=2, layer_types=["linear_attention", "full_attention"], mtp_num_hidden_layers=0,
-             num_experts=8, num_experts_per_tok=2, moe_intermediate_size=_MLP, shared_expert_intermediate_size=_MLP,
+             num_experts=8, num_experts_per_tok=2,
+             # the checkpoint's widths (1024): FP8 128-blocks still split eight ways
+             moe_intermediate_size=1024, shared_expert_intermediate_size=1024,
              vocab_size=_VOCAB, **full, **linear)
     return _Build("qwen3_5_moe", c, target, {"language_model_only": True})
 
@@ -392,17 +394,23 @@ class _Engine:
 
         for n in entries:
             setattr(module, n, wrap(n))
+        names = {id(m): n for n, m in self.runner.model.named_modules()}
+        called: list[str] = []
+        hook = torch.nn.modules.module.register_module_forward_pre_hook(
+            lambda m, _: called.append(names[id(m)]) if id(m) in names and len(called) < 4000 else None)
         try:
             with self._configured():
                 self.runner.execute_model(self._output(new, {r.request_id: r.num_tokens - r.num_computed_tokens
                                                              for r in self.reqs}, set()))
         finally:
+            hook.remove()
             for n in entries:
                 setattr(module, n, originals[n])
             self.runner.execute_model_state = None
         seen["fns"] = originals
         if "fc" not in seen:
-            raise RuntimeError("the model never called the attention module")
+            near = [n for n in dict.fromkeys(called) if n.count(".") <= path.count(".") + 3][:40]
+            raise RuntimeError(f"the model never called the attention module {path}; it called {near}")
         return seen
 
 
@@ -474,6 +482,12 @@ def _backends(runner) -> dict[str, str]:
             for gs in runner.attn_groups for g in gs}
 
 
+def _group_spec(group):
+    """A KV cache group's spec (newer vLLM keeps one per layer of the group)."""
+    spec = getattr(group, "kv_cache_spec", None)
+    return spec if spec is not None else next(iter(group.kv_cache_specs.values()))
+
+
 def _shapes(args: tuple, kwargs: dict) -> dict:
     out = {f"arg{i}": list(v.shape) for i, v in enumerate(args) if isinstance(v, torch.Tensor)}
     out.update({k: list(v.shape) for k, v in kwargs.items() if isinstance(v, torch.Tensor)})
@@ -515,9 +529,9 @@ def _prepare(op: Op) -> dict:
                     "module_calls": [{"call": n, **_shapes(a, k)} for n, a, k, _ in seen["calls"]],
                     "scheduled_tokens": sum(r.num_tokens - r.num_computed_tokens for r in eng.reqs),
                     "kv_cache_groups": [
-                        {"spec": type(g.kv_cache_spec).__name__, "block_size": g.kv_cache_spec.block_size,
-                         "dtype": str(getattr(g.kv_cache_spec, "dtype", "")).removeprefix("torch.")}
-                        for g in eng.runner.kv_cache_config.kv_cache_groups]}}
+                        {"spec": type(spec).__name__, "block_size": spec.block_size,
+                         "dtype": str(getattr(spec, "dtype", "")).removeprefix("torch.")}
+                        for spec in map(_group_spec, eng.runner.kv_cache_config.kv_cache_groups)]}}
     _kernel(ctx)
     torch.cuda.synchronize()
     return ctx
@@ -570,7 +584,7 @@ def _full_graph(eng: _Engine) -> bool:
     need = AttentionCGSupport.UNIFORM_SINGLE_TOKEN_DECODE if q == 1 else AttentionCGSupport.UNIFORM_BATCH
     for gs in eng.runner.attn_groups:
         for g in gs:
-            support = g.backend.get_builder_cls().get_cudagraph_support(eng.runner.vllm_config, g.kv_cache_spec)
+            support = g.backend.get_builder_cls().get_cudagraph_support(eng.runner.vllm_config, _group_spec(g))
             if support.value < need.value:
                 return False
     return True
