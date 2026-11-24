@@ -12,7 +12,6 @@ base:
 
   roles:
     prefill:
-      gpus: 4
       env:
         TLLM_OVERRIDE_LAYER_NUM: "61"
         TLLM_LOG_LEVEL: "INFO"
@@ -95,7 +94,6 @@ override_1p4d_tep8_b1_mtp3_c8:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -104,8 +102,6 @@ override_1p4d_tep8_b1_mtp3_c8:
           num_nextn_predict_layers: 3
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         allreduce_strategy: MNNVL
         cache_transceiver_config:
@@ -133,7 +129,6 @@ override_1p4d_tep8_b4_mtp3_c24:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -142,8 +137,6 @@ override_1p4d_tep8_b4_mtp3_c24:
           num_nextn_predict_layers: 3
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         allreduce_strategy: MNNVL
         cache_transceiver_config:
@@ -171,7 +164,6 @@ override_6p1d_dep32_b8_mtp3_c333:
   roles:
     prefill:
       nodes: 6
-      workers: 6
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -180,8 +172,6 @@ override_6p1d_dep32_b8_mtp3_c333:
           num_nextn_predict_layers: 3
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -209,7 +199,6 @@ override_8p1d_dep16_b32_mtp3_c666:
   roles:
     prefill:
       nodes: 8
-      workers: 8
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -218,8 +207,6 @@ override_8p1d_dep16_b32_mtp3_c666:
           num_nextn_predict_layers: 3
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -250,7 +237,6 @@ override_10p1d_dep16_b64_mtp1_c1229:
   roles:
     prefill:
       nodes: 10
-      workers: 10
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -259,8 +245,6 @@ override_10p1d_dep16_b64_mtp1_c1229:
           num_nextn_predict_layers: 1
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -295,7 +279,6 @@ override_7p1d_dep8_b128_mtp1_c1229:
   roles:
     prefill:
       nodes: 7
-      workers: 7
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 8192
@@ -304,8 +287,6 @@ override_7p1d_dep8_b128_mtp1_c1229:
           num_nextn_predict_layers: 1
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 8192
@@ -348,14 +329,11 @@ override_1p4d_tep8_b1_mtp0_c4:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         allreduce_strategy: MNNVL
         cache_transceiver_config:
@@ -380,14 +358,11 @@ override_1p4d_tep8_b4_mtp0_c24:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         allreduce_strategy: MNNVL
         cache_transceiver_config:
@@ -412,14 +387,11 @@ override_1p4d_tep8_b8_mtp0_c36:
   roles:
     prefill:
       nodes: 1
-      workers: 1
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         allreduce_strategy: MNNVL
         cache_transceiver_config:
@@ -445,14 +417,11 @@ override_6p1d_dep32_b16_mtp0_c512:
   roles:
     prefill:
       nodes: 6
-      workers: 6
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
     decode:
       nodes: 8
-      workers: 1
-      gpus: 32
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -478,14 +447,11 @@ override_4p1d_dep16_b32_mtp0_c666:
   roles:
     prefill:
       nodes: 4
-      workers: 4
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -513,14 +479,11 @@ override_7p1d_dep16_b64_mtp0_c1229:
   roles:
     prefill:
       nodes: 7
-      workers: 7
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
@@ -552,14 +515,11 @@ override_7p1d_dep8_b256_mtp0_c2151:
   roles:
     prefill:
       nodes: 7
-      workers: 7
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       args:
         cache_transceiver_config:
           max_tokens_in_buffer: 16384
