@@ -335,36 +335,117 @@ override_1p3d_k5_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-override_1p3d_k4:
+# One prefill and two decode workers; DSpark drafts 4 tokens. Decode turns on the image's small-batch
+# decode kernels.
+override_1p2d_k4:
   roles:
-    prefill: &override_1p3d_k4_prefill
+    prefill: &override_1p2d_k4_prefill
       nodes: 1
       workers: 1
-      args: &override_1p3d_k4_prefill_args {}
-    decode: &override_1p3d_k4_decode
-      nodes: 3
-      workers: 3
+      env:
+        # Lighter host-side work per eager prefill step; same outputs.
+        K31_CPU1: "1"
+      args: &override_1p2d_k4_prefill_args {}
+    decode: &override_1p2d_k4_decode
+      nodes: 2
+      workers: 2
       env: *ll_decode_env
-      args: &override_1p3d_k4_decode_args {}
+      args: &override_1p2d_k4_decode_args {}
 
-override_1p3d_k4_eval:
+override_1p2d_k4_eval:
   roles:
     prefill:
-      <<: *override_1p3d_k4_prefill
+      <<: *override_1p2d_k4_prefill
       args:
-        <<: *override_1p3d_k4_prefill_args
+        <<: *override_1p2d_k4_prefill_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
     decode:
-      <<: *override_1p3d_k4_decode
+      <<: *override_1p2d_k4_decode
       args:
-        <<: *override_1p3d_k4_decode_args
+        <<: *override_1p2d_k4_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
+
+# Two prefill and three decode workers; DSpark drafts 5 tokens. Decode admits up to 128 requests at 0.98 of
+# GPU memory with graphs every 24 rows. Prefill computes the indexer logits in FP32 and uses the default
+# indexer top-k, the Mooncake master evicts 10% of the store per round, and the frontend sends each request
+# to the least-loaded decode worker with no session affinity.
+override_2p3d_k5:
+  roles:
+    prefill: &override_2p3d_k5_prefill
+      nodes: 2
+      workers: 2
+      env:
+        K31_CPU1: "1"
+      args: &override_2p3d_k5_prefill_args
+        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        kernel-config: null
+        speculative-config: *spec_k5
+    decode: &override_2p3d_k5_decode
+      nodes: 3
+      workers: 3
+      args: &override_2p3d_k5_decode_args
+        gpu-memory-utilization: 0.98
+        max-num-seqs: 128
+        no-enable-flashinfer-autotune: null
+        enable-flashinfer-autotune: true
+        max-cudagraph-capture-size: 768
+        compilation-config: '{"cudagraph_capture_sizes":[24,48,72,96,120,144,168,192,216,240,264,288,312,336,360,384,408,432,456,480,504,528,552,576,600,624,648,672,696,720,744,768]}'
+        speculative-config: *spec_k5
+  frontend: &frontend_no_affinity
+    args:
+      router-session-affinity-ttl-secs: null
+  services: &services_evict_10pct
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: nats
+    type: nats
+    placement:
+      node: infra
+    options:
+      max_payload_mb: 32
+  - name: mooncake-master
+    type: mooncake-master
+    args:
+    - "--default_kv_lease_ttl=60000"
+    - "--eviction_high_watermark_ratio=0.95"
+    - "--eviction_ratio=0.10"
+    options:
+      store_config:
+        metadata_server: "P2PHANDSHAKE"
+        global_segment_size: "190GB"
+        local_buffer_size: "4GB"
+        protocol: "efa"
+        mode: "embedded"
+        enable_offload: false
+
+override_2p3d_k5_eval:
+  roles:
+    prefill:
+      <<: *override_2p3d_k5_prefill
+      args:
+        <<: *override_2p3d_k5_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_2p3d_k5_decode
+      args:
+        <<: *override_2p3d_k5_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+  frontend: *frontend_no_affinity
+  services: *services_evict_10pct
 
 override_4p5d_k5:
   roles:
@@ -403,6 +484,48 @@ override_4p5d_k5_eval:
       <<: *override_4p5d_k5_decode
       args:
         <<: *override_4p5d_k5_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# Concurrency 640: the 4P5D settings with 704-token prefix-match units. Sliding-window KV hits use sub-block
+# hash units (VLLM_SWA_FINE_GRAINED_HITS) and the DSpark draft's tail hit rule (VLLM_DFLASH_SWA_TAIL_HITS),
+# so the draft's sliding-window group keeps prefix-cache hits at 704-token granularity.
+override_4p5d_k5_pmu704:
+  roles:
+    prefill: &override_4p5d_k5_pmu704_prefill
+      <<: *override_4p5d_k5_prefill
+      env:
+        K31_CPU1: "1"
+        VLLM_SWA_FINE_GRAINED_HITS: "1"
+        VLLM_DFLASH_SWA_TAIL_HITS: "1"
+      args: &override_4p5d_k5_pmu704_prefill_args
+        <<: *override_4p5d_k5_prefill_args
+        prefix-match-unit: 704
+    decode: &override_4p5d_k5_pmu704_decode
+      <<: *override_4p5d_k5_decode
+      env:
+        VLLM_SWA_FINE_GRAINED_HITS: "1"
+        VLLM_DFLASH_SWA_TAIL_HITS: "1"
+      args: &override_4p5d_k5_pmu704_decode_args
+        <<: *override_4p5d_k5_decode_args
+        prefix-match-unit: 704
+
+override_4p5d_k5_pmu704_eval:
+  roles:
+    prefill:
+      <<: *override_4p5d_k5_pmu704_prefill
+      args:
+        <<: *override_4p5d_k5_pmu704_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_4p5d_k5_pmu704_decode
+      args:
+        <<: *override_4p5d_k5_pmu704_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
