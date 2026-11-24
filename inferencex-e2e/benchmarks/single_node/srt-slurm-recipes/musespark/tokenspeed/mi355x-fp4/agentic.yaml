@@ -48,8 +48,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       env:
         PYTHONNOUSERSITE: '1'
         # One HIP queue per graph keeps the two-stream speculative decode graph
@@ -262,7 +260,6 @@ override_tp8_c28:
 override_tp4_c28:
   roles:
     agg:
-      gpus: 4
       args:
         # Attention TP4; EP4 places 64 experts on each GPU.
         attn-tp-size: 4
@@ -289,7 +286,6 @@ override_tp4_c28:
 override_tp4_c36:
   roles:
     agg:
-      gpus: 4
       args:
         # Attention TP4; EP4 places 64 experts on each GPU.
         attn-tp-size: 4
@@ -316,7 +312,6 @@ override_tp4_c36:
 override_tp4_c40:
   roles:
     agg:
-      gpus: 4
       args:
         # Attention TP4; EP4 places 64 experts on each GPU.
         attn-tp-size: 4

@@ -16,7 +16,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: amd/GLM-5.2-MXFP4
         gpu-memory-utilization: 0.95
@@ -40,16 +39,9 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. Admission is 2x CONC, except TP4 C1/C2, which admit
-# exactly CONC with graphs captured up to it. TP4 C1/C2 run mono decode at
-# three draft tokens; C4/C8 draft five and C10 four on the production path. The
-# DCP4 arm shards the decode KV, adds the LMCache DRAM tier at 256 GiB per rank
-# (1024 GiB, 1099.5 GB per server, within the 1109 GB TP4 share at
-# dram-utilization 0.74) and drafts four tokens, three at C48.
 override_tp4_c1:
   roles:
     agg:
-      gpus: 4
       args:
         max-num-seqs: 1
         cudagraph-capture-sizes: '[1]'
@@ -63,7 +55,6 @@ override_tp4_c1:
 override_tp4_c2:
   roles:
     agg:
-      gpus: 4
       args:
         max-num-seqs: 2
         cudagraph-capture-sizes: '[1,2]'
@@ -77,7 +68,6 @@ override_tp4_c2:
 override_tp4_c4:
   roles:
     agg:
-      gpus: 4
       args:
         max-num-seqs: 8
         cudagraph-capture-sizes: '[1,2,4,8]'
@@ -89,7 +79,6 @@ override_tp4_c4:
 override_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         max-num-seqs: 16
         cudagraph-capture-sizes: '[1,2,4,8,12,16]'
@@ -101,7 +90,6 @@ override_tp4_c8:
 override_tp4_c10:
   roles:
     agg:
-      gpus: 4
       args:
         max-num-seqs: 20
         cudagraph-capture-sizes: '[1,2,4,8,12,16,20]'
@@ -113,7 +101,6 @@ override_tp4_c10:
 override_tp4_dcp4_c16_lmcache:
   roles:
     agg:
-      gpus: 4
       args:
         decode-context-parallel-size: 4
         max-num-seqs: 32
@@ -135,12 +122,10 @@ override_tp4_dcp4_c16_lmcache:
     env:
       CONC: '16'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp4_dcp4_c24_lmcache:
   roles:
     agg:
-      gpus: 4
       args:
         decode-context-parallel-size: 4
         max-num-seqs: 48
@@ -152,12 +137,10 @@ override_tp4_dcp4_c24_lmcache:
     env:
       CONC: '24'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp4_dcp4_c32_lmcache:
   roles:
     agg:
-      gpus: 4
       args:
         decode-context-parallel-size: 4
         max-num-seqs: 64
@@ -169,12 +152,10 @@ override_tp4_dcp4_c32_lmcache:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp4_dcp4_c40_lmcache:
   roles:
     agg:
-      gpus: 4
       args:
         decode-context-parallel-size: 4
         max-num-seqs: 80
@@ -186,12 +167,10 @@ override_tp4_dcp4_c40_lmcache:
     env:
       CONC: '40'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp4_dcp4_c48_lmcache:
   roles:
     agg:
-      gpus: 4
       args:
         decode-context-parallel-size: 4
         max-num-seqs: 96
@@ -203,12 +182,10 @@ override_tp4_dcp4_c48_lmcache:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp8_c1:
   roles:
     agg:
-      gpus: 8
       args:
         max-num-seqs: 2
         cudagraph-capture-sizes: '[1,2]'
@@ -220,7 +197,6 @@ override_tp8_c1:
 override_tp8_c2:
   roles:
     agg:
-      gpus: 8
       args:
         max-num-seqs: 4
         cudagraph-capture-sizes: '[1,2,4]'
@@ -232,7 +208,6 @@ override_tp8_c2:
 override_tp8_c4:
   roles:
     agg:
-      gpus: 8
       args:
         max-num-seqs: 8
         cudagraph-capture-sizes: '[1,2,4,8]'

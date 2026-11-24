@@ -41,7 +41,6 @@ base:
   engine: sglang
   roles:
     prefill:
-      gpus: 4
       env:
         PYTHONOPTIMIZE: '1'
         PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
@@ -133,8 +132,6 @@ base:
         enable-request-time-stats-logging: true
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         SGLANG_USE_SYMM_MEM_DP_SYNC: 'true'
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '1'
@@ -235,16 +232,13 @@ override_1p1d:
   roles:
     prefill:
       nodes: 1
-      workers: 1
 override_2p1d:
   name: disagg-2p1d-pp4-dep16-s1-mtp6-hicache
   roles:
     prefill:
       nodes: 2
-      workers: 2
 override_3p1d:
   name: disagg-3p1d-pp4-dep16-s1-mtp6-hicache
   roles:
     prefill:
       nodes: 3
-      workers: 3

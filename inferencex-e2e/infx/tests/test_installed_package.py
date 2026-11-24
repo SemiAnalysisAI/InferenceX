@@ -87,6 +87,7 @@ def test_installed_matrix_validation_rejects_zero_concurrency(run_installed):
             "isl": 128,
             "osl": 32,
             "tp": 1,
+            "gpus-per-worker": 1,
             "ep": 1,
             "dp-attn": False,
             "conc": 0,
