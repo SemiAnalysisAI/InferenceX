@@ -49,8 +49,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       args:
         <<: &common_args
           served-model-name: amd/MiniMax-M3.1-Flash-Quark-MXFP4
@@ -80,7 +78,7 @@ base:
         dbo-prefill-token-threshold: 16384
         dbo-decode-token-threshold: 32768
         compilation-config: '{"max_cudagraph_capture_size":2048}'
-        # The host KV tier: 1349 GB, the prefill's 0.9 dram-utilization share of its node.
+        # The host KV tier: 1349 GB, 0.9 of the prefill's share of its node.
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"MooncakeConnector","kv_role":"kv_producer","kv_connector_extra_config":{"mooncake_protocol":"rdma","num_workers":10}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1349000000000,"lazy_offload":false,"cpu_lru_eviction":true}}]}}'
       env:
         <<: &common_env
@@ -114,8 +112,6 @@ base:
         MC_MAX_MR_SIZE: '1073741824'
     decode:
       nodes: 1
-      workers: 2
-      gpus: 4
       args:
         <<: *common_args
         # Below both DBO thresholds, so decode runs without DBO.
@@ -184,7 +180,7 @@ override_c72:
     prefill:
       args:
         max-num-seqs: 144
-        # 1499 GB, the prefill's 1.0 dram-utilization share of its node.
+        # 1499 GB, the prefill's share of its node.
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"MooncakeConnector","kv_role":"kv_producer","kv_connector_extra_config":{"mooncake_protocol":"rdma","num_workers":10}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":false,"cpu_lru_eviction":true}}]}}'
     decode:
       args:
