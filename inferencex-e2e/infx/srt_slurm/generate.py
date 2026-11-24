@@ -325,6 +325,8 @@ def generate_recipes(
             )  # fmt: skip
             if fabric is not None:
                 recipe = resolve_fabric(recipe, fabric)
+            # A video server is a recipe service, not an inference worker role.
+            if fabric is not None and not is_video(point):
                 cluster = placement[1]
                 if cluster.available_cpu_dram_mib is None:
                     raise ValueError(f"cluster {cluster.id!r} must declare available-cpu-dram-mib")
