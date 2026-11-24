@@ -10,7 +10,8 @@ import torch
 from operatorx.core import BackendImpl, Op, Result, UnsupportedOpError
 from operatorx.runners.common import profiling, ranks, telemetry, timing
 
-_COOLDOWN_RATIO = float(os.environ.get("OPERATORX_COOLDOWN_RATIO", "4"))
+# off by default: telemetry flags a throttled op and the timing retries it
+_COOLDOWN_RATIO = float(os.environ.get("OPERATORX_COOLDOWN_RATIO", "0"))
 _COOLDOWN_MAX_S = float(os.environ.get("OPERATORX_COOLDOWN_MAX_S", "1.0"))
 
 _DISPATCH: dict[tuple[str, str], BackendImpl] = {}
