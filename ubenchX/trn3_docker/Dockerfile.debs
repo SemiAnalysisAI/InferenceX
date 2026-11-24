@@ -1,0 +1,7 @@
+FROM trn3-ubench
+
+# The build context is a directory of Neuron .deb files. They replace the SDK's runtime, collectives and tools; the
+# driver (aws-neuronx-dkms) is a host package and is not installed here.
+USER root
+RUN --mount=type=bind,target=/debs \
+    dpkg -i /debs/aws-neuronx-runtime-lib_*.deb /debs/aws-neuronx-collectives_*.deb /debs/aws-neuronx-tools_*.deb
