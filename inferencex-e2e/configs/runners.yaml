@@ -560,7 +560,7 @@ clusters:
         DeepSeek-V4.1-Flash: {root: data-models, dir: DeepSeek-V4.1-Flash}
         DeepSeek-V4-Pro-NVFP4: {root: scratch, dir: DeepSeek-V4-Pro-NVFP4}
         GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
-        GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
+        GLM-5.2-NVFP4: {root: data-models, dir: GLM-5.2-NVFP4}
         GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
         GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
         GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
