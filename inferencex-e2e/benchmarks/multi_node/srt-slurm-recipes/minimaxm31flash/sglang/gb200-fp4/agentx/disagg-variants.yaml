@@ -191,16 +191,15 @@ override_1p_dep8_dep16_linker_d1115:
   # needs it on, which DP attention marks experimental), so each decode node
   # hosts 4 x 190 GB stores instead. Prefetch mode loads a hit while its
   # request waits, before the forward pass.
-  # The infra node also runs the benchmark client, etcd and the frontend:
-  # with four 190 GB stores resident the client's post-run processing ran
-  # the node out of host memory, so the infra stores are 150 GB.
-  # L3 = 8 x 190 GB (prefill) + 4 x 4 x 190 GB (decode) + 4 x 150 GB (infra).
+  # KV offload DRAM sits only on nodes that run inference workers, in
+  # proportion to their GPUs: the infra node hosts no store.
+  # L3 = 8 x 190 GB (prefill) + 4 x 4 x 190 GB (decode).
   identity:
     frameworks:
       dynamo: "1.7.0.dev20261115"
       sglang: "0.0.0.dev1+g209741ec5"
   # Lists replace on merge, so this repeats every base service.
-  services: &linker-services-infra150
+  services: &linker-services
     - name: etcd
       type: etcd
       placement:
@@ -270,39 +269,6 @@ override_1p_dep8_dep16_linker_d1115:
       readiness:
         port: 8803
         timeout_seconds: 600
-    - &infra-store
-      <<: *decode-store
-      name: store-infra-0
-      placement:
-        node: infra
-      args: ["--port", "8810"]
-      env:
-        MOONCAKE_PROTOCOL: rdma
-        MOONCAKE_DEVICE: "@fabric.rdma-devices"
-        MOONCAKE_GLOBAL_SEGMENT_SIZE: 150gb
-        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
-        MC_TCP_BIND_ADDRESS: "{node_ip}"
-      readiness:
-        port: 8810
-        timeout_seconds: 600
-    - <<: *infra-store
-      name: store-infra-1
-      args: ["--port", "8811"]
-      readiness:
-        port: 8811
-        timeout_seconds: 600
-    - <<: *infra-store
-      name: store-infra-2
-      args: ["--port", "8812"]
-      readiness:
-        port: 8812
-        timeout_seconds: 600
-    - <<: *infra-store
-      name: store-infra-3
-      args: ["--port", "8813"]
-      readiness:
-        port: 8813
-        timeout_seconds: 600
     # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
     - name: otel-collector
       type: otel-collector
@@ -343,12 +309,12 @@ override_2p_dep8_dep16_linker_d1115:
   name: minimaxm31flash-fp4-gb200-dynamo-sglang-agentx-disagg-2p-dep8-dep16-linker-d1115
   # The d1115 point with two DEP8 prefill workers sharing the linker pool,
   # for conc 448 and 480.
-  # L3 = 16 x 190 GB (prefill) + 4 x 4 x 190 GB (decode) + 4 x 150 GB (infra).
+  # L3 = 16 x 190 GB (prefill) + 4 x 4 x 190 GB (decode).
   identity:
     frameworks:
       dynamo: "1.7.0.dev20261115"
       sglang: "0.0.0.dev1+g209741ec5"
-  services: *linker-services-infra150
+  services: *linker-services
   roles:
     prefill:
       nodes: 4
