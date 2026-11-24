@@ -197,8 +197,6 @@ base:
     prefill:
       kv_events: true
       nodes: 1
-      workers: 1
-      gpus: 2
       env:
         VLLM_FLOAT32_MATMUL_PRECISION: high
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
@@ -254,8 +252,6 @@ base:
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"lookup_timeout_s":5.0}}]}}'
     decode:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         VLLM_FLOAT32_MATMUL_PRECISION: high
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
@@ -418,11 +414,9 @@ override_2p1d_dep2_dep8_bs3:
   - *otel-collector
   roles:
     prefill:
-      workers: 2
       # One worker per socket.
       gpu_indices: [[0, 1], [4, 5]]
     decode:
-      gpus: 8
       args:
         enable-expert-parallel: true
         kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
@@ -513,7 +507,6 @@ override_8p1d_dep2_dep8_bs8:
   roles:
     prefill:
       nodes: 2
-      workers: 8
       env:
         VLLM_MOONCAKE_LOAD_RECV_THREADS: '16'
       args:
@@ -521,7 +514,6 @@ override_8p1d_dep2_dep8_bs8:
         # In pull mode it missed the 250 tokens/s target there.
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120,"transfer_mode":"push"}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"lookup_timeout_s":5.0}}]}}'
     decode:
-      gpus: 8
       args:
         kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"kv_lease_duration":120,"transfer_mode":"push"}}'
         gpu-memory-utilization: 0.92

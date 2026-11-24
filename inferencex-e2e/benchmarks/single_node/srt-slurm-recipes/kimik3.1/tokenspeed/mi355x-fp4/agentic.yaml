@@ -47,8 +47,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       env:
         GPU_MAX_HW_QUEUES: '2'
         PYTHONNOUSERSITE: '1'
@@ -154,7 +152,6 @@ override_tp8_dcp8_c8:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1025'
 
 override_tp8_dcp8_c16:
   roles:
@@ -174,7 +171,6 @@ override_tp8_dcp8_c16:
     env:
       CONC: '16'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1025'
 
 override_tp8_dcp8_c24:
   roles:
@@ -194,7 +190,6 @@ override_tp8_dcp8_c24:
     env:
       CONC: '24'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1025'
 
 override_tp8_dcp8_c32:
   roles:
@@ -215,7 +210,6 @@ override_tp8_dcp8_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1025'
 
 override_tp8_dcp8_c48:
   roles:
@@ -235,4 +229,3 @@ override_tp8_dcp8_c48:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1025'
