@@ -79,8 +79,6 @@ base:
   roles:
     agg:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         DYN_TCP_REQUEST_TIMEOUT: "120"
         VLLM_USE_DIRECT_DCP_A2A: "1"
@@ -173,7 +171,6 @@ override_agg16_c1:
   roles:
     agg:
       nodes: 4
-      gpus: 16
       args: &override_agg16_c1_args
         tensor-parallel-size: 16
         gpu-memory-utilization: 0.90
@@ -187,7 +184,6 @@ override_agg16_c1_eval:
   roles:
     agg:
       nodes: 4
-      gpus: 16
       args:
         <<: *override_agg16_c1_args
         reasoning-parser: kimi_k3
