@@ -113,8 +113,9 @@ selected artifact name and the SHA-256 of its raw `manifest.json` and of its `SH
 which lists every other file in the bundle. Deployments
 that succeeded in an earlier attempt keep that attempt's bundle unless superseded.
 The `publish-video-results` dispatch gives the App `source_run_id`, `merge_run_id`,
-`selection_artifact_id`, and `selection_sha256` (the digest of the JSON file).
-The App can verify the selection and publish the bundles it names. Mixed runs
+and `selection_artifact_id`. An artifact cannot change after upload, so the App checks
+only that the selection artifact belongs to this Merge Ingest run on `main`, then
+publishes the bundles it names. Mixed runs
 separately retain their existing LLM/AgentX ingest event.
 Verify the downstream publication and playback before claiming delivery. The
 trusted main-branch `/use` handler must support video artifacts before accepting

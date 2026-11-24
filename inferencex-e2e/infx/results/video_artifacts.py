@@ -13,9 +13,10 @@ from infx.bench.video import read_object, write_json
 VIDEO_ARTIFACT = re.compile(r"h3-results-([0-9]+)-([0-9]+)-([0-9a-f]{64})")
 
 
-def _inventory(root: Path) -> dict[str, str]:
+def _inventory(root: Path) -> tuple[dict[str, str], str]:
+    sums = (root / "SHA256SUMS").read_bytes()
     expected = {}
-    for line in (root / "SHA256SUMS").read_text().splitlines():
+    for line in sums.decode().splitlines():
         match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
         if not match or match[2] in expected:
             raise ValueError(f"{root.name}: malformed or duplicate checksum entry")
@@ -31,7 +32,7 @@ def _inventory(root: Path) -> dict[str, str]:
                 ).hexdigest()
     if actual != expected:
         raise ValueError(f"{root.name}: checksum mismatch or incomplete inventory")
-    return actual
+    return actual, hashlib.sha256(sums).hexdigest()
 
 
 def _reference(inventory: dict[str, str], reference: dict, *, prefix: str = "") -> str:
@@ -91,9 +92,8 @@ def validate_video_artifacts(
     run_attempt: str | None = None,
     head_sha: str | None = None,
     merged_plan: Path | None = None,
-    selection_output: Path | None = None,
-) -> int:
-    """Return the deployment count; reject missing rows, cells, provenance or sealed files.
+) -> dict:
+    """Return the publication selection; reject missing rows, cells, provenance or sealed files.
 
     The workflow supplies trusted run/head identity. ``git_commit`` remains the
     actual executed checkout, which can be the PR merge commit rather than its head.
@@ -135,7 +135,7 @@ def validate_video_artifacts(
         bundle_attempt = newest[fingerprint]
         name = f"h3-results-{source_run}-{bundle_attempt}-{fingerprint}"
         bundle = root / name
-        inventory = _inventory(bundle)
+        inventory, sums = _inventory(bundle)
         manifest, ci, matrix = (
             read_object(bundle / filename)
             for filename in ("manifest.json", "ci.json", "serving-smoke.json")
@@ -263,22 +263,16 @@ def validate_video_artifacts(
                 or len(matrix.get("gpu_uuids", [])) != row["gpus"]
             ):
                 raise ValueError(f"{name}: selected engine or GPU count mismatch")
-        sums = hashlib.sha256((bundle / "SHA256SUMS").read_bytes()).hexdigest()
         selected.append(
             {"name": name, "manifest_sha256": inventory["manifest.json"], "sha256sums_sha256": sums}
         )
-    if selection_output is not None:
-        write_json(
-            selection_output,
-            {
-                "version": 1,
-                "source_run_id": source_run,
-                "source_run_attempt": attempt,
-                "source_head_sha": head,
-                "artifacts": selected,
-            },
-        )
-    return len(selected)
+    return {
+        "version": 1,
+        "source_run_id": source_run,
+        "source_run_attempt": attempt,
+        "source_head_sha": head,
+        "artifacts": selected,
+    }
 
 
 def main() -> None:
@@ -297,17 +291,18 @@ def main() -> None:
     )
     args = parser.parse_args()
     try:
-        count = validate_video_artifacts(
+        selection = validate_video_artifacts(
             args.artifacts_dir,
             run_id=args.run_id,
             run_attempt=args.run_attempt,
             head_sha=args.head_sha,
             merged_plan=args.merged_plan,
-            selection_output=args.selection_output,
         )
+        if args.selection_output is not None:
+            write_json(args.selection_output, selection)
     except (OSError, KeyError, TypeError, ValueError) as error:
         parser.exit(1, f"Video sweep artifact validation failed: {error}\n")
-    print(f"Validated {count} complete native video deployment(s).")
+    print(f"Validated {len(selection['artifacts'])} complete native video deployment(s).")
 
 
 if __name__ == "__main__":
