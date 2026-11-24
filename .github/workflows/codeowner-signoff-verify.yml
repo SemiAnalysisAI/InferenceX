@@ -210,7 +210,12 @@ jobs:
         continue-on-error: true
         env:
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
-        run: jq -r "$CLAUDE_RUN_SUMMARY_JQ" "$EXECUTION_FILE"
+        # Agent text can be steered by the PR, so print it with workflow commands disabled.
+        run: |
+          token="$(openssl rand -hex 16)"
+          echo "::stop-commands::$token"
+          trap 'echo "::$token::"' EXIT
+          jq -r "$CLAUDE_RUN_SUMMARY_JQ" "$EXECUTION_FILE"
 
       - name: Check for verdict
         id: verdict
@@ -256,7 +261,11 @@ jobs:
         continue-on-error: true
         env:
           EXECUTION_FILE: ${{ steps.claude_resume.outputs.execution_file }}
-        run: jq -r "$CLAUDE_RUN_SUMMARY_JQ" "$EXECUTION_FILE"
+        run: |
+          token="$(openssl rand -hex 16)"
+          echo "::stop-commands::$token"
+          trap 'echo "::$token::"' EXIT
+          jq -r "$CLAUDE_RUN_SUMMARY_JQ" "$EXECUTION_FILE"
 
       - name: Record verification outcome
         id: outcome
