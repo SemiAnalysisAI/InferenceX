@@ -73,8 +73,6 @@ base:
     prefill:
       kv_events: true
       nodes: 3
-      workers: 3
-      gpus: 4
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache
@@ -131,8 +129,6 @@ base:
         data-parallel-size: 4
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         HF_HOME: /hf_hub_cache
         HF_HUB_CACHE: /hf_hub_cache
@@ -220,7 +216,6 @@ override_3p1d_dep16_c280:
   roles:
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
 override_3p1d_dep16_c320:
@@ -228,7 +223,6 @@ override_3p1d_dep16_c320:
   roles:
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
 override_4p1d_dep16_c352:
@@ -236,10 +230,8 @@ override_4p1d_dep16_c352:
   roles:
     prefill:
       nodes: 4
-      workers: 4
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
 override_3p1d_dep16_c360:
@@ -247,7 +239,6 @@ override_3p1d_dep16_c360:
   roles:
     decode:
       nodes: 4
-      gpus: 16
       args:
         data-parallel-size: 16
 override_2p1d_c224:
@@ -255,10 +246,8 @@ override_2p1d_c224:
   roles:
     prefill:
       nodes: 2
-      workers: 2
 override_2p1d_c256:
   name: minimaxm31flash-gb200-disagg-mooncake-2p1d-c256
   roles:
     prefill:
       nodes: 2
-      workers: 2
