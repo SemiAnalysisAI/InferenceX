@@ -24,38 +24,43 @@ artifact identity, reuse validation and post-merge publication.
 
 Draft. Scope: MiniMax-H3 ([`specs/h3-v2.yaml`](specs/h3-v2.yaml) set `release-v1`)
 and Wan2.2-T2V-A14B ([`specs/wan22.yaml`](specs/wan22.yaml) set `release-v1`),
-lossless tier only, one node with 1, 2, 4 or 8 GPUs, concurrency 1, on SGLang,
-vLLM-Omni and Sol-Engine. Not every deployment runs all four counts: H3 on H100
-and A100 starts at 2 GPUs, and Wan2.2 on SGLang H100 runs 4 and 8
-([deployments][gpu-counts]). Scope owner: `@edwingao28`.
+lossless tier only, one node with 1, 2, 4 or 8 GPUs, concurrency 1, on SGLang and
+vLLM-Omni. SGLang results are attested from the engine log; vLLM-Omni results are
+checked at recipe level (rule 7, G2). Sol-Engine is in scope but not supported yet
+(G8). Not every deployment runs all four GPU counts ([deployments][gpu-counts]).
+Scope owner: `@edwingao28`.
 
-A result counts toward VideoGenX v0.1 only when it meets every rule below. A rule
-change lands in this table and bumps the version. "Enforced by" links the code
-that blocks or computes the rule at commit `8dd3577`; "Gap" means no code checks
-it yet. Status is `Enforced`, `Gap (G#)` with the ID from
-[Open gaps](#open-gaps), or `Advisory` for a rule that never gates.
+A result counts toward VideoGenX v0.1 only when it meets every rule below. One
+exemption: Wan2.2 is exempt from rule 5 until it moves to spec schema 2 in v0.2.
+Changing a rule lands in this table and bumps the version. Adding a model under
+unchanged rules does not: it adds a spec and its released plan hash under
+CODEOWNER review. "Enforced by" links the code that blocks or computes the rule
+at commit `8dd3577`; "Gap" means no code checks it yet, and a branch or PR named
+as pending is not merged. Status is `Enforced`, `Partial` when code checks only
+part of the rule, `Gap (G#)` with the ID from [Open gaps](#open-gaps), or
+`Advisory` for a rule that never gates.
 
 | # | Rule | Why | Enforced by | Effect | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Every measured deployment runs its model's spec and set unchanged. H3: 20 prompts with one fixed seed each, 49 denoising updates, 124 frames at 24 fps and 1344×768, and a separate warmup prompt. Wan2.2: four prompts by five seeds, 40 steps, 81 frames at 16 fps and 832×480, and one warmup. | Deployments with the same plan hash ran the same work. | [`srt_selected.py:190`][plan-bind] binds the plan hash; [`video_artifacts.py:163`][plan-pub] rechecks it before publication | Blocking | `@functionstackx` | Enforced |
-| 2 | The image is pinned by SHA256 digest, the engine by its 40-character commit (`VIDEO_RUNTIME_REVISION`) and the model by revision. | Anyone can rerun the exact point. | [`srt_selected.py:266`][image], [`srt_slurm/video.py:336`][engine], [`srt_slurm/video.py:149`][model] | Blocking | recipe CODEOWNERS | Enforced |
-| 3 | One node per deployment. Each GPU count is its own deployment and names a `video/agg-<layout>.yaml` recipe; a deployment runs only the GPU counts its config row lists. Wan2.2 runs CFG parallel 1 × Ulysses 1 on one GPU, then CFG parallel 2 × Ulysses 1, 2 and 4 on 2, 4 and 8 GPUs. | Each layout qualifies on its own sweep. | [`validation.py:918`][single-node] (video is a single-node scenario only); [`validation.py:452`][naming]; [native video delivery][gpu-counts] lists each deployment's GPU counts | Blocking | `@edwingao28` | Enforced |
+| 1 | Every measured deployment runs its model's spec and set unchanged. H3: 20 prompts with one fixed seed each, 49 denoising updates, 124 frames at 24 fps and 1344×768, and a separate warmup prompt. Wan2.2: four prompts by five seeds, 40 steps, 81 frames at 16 fps and 832×480, and one warmup. | Deployments with the same plan hash ran the same work. | [`srt_selected.py:190`][plan-bind] binds the plan hash; [`video_artifacts.py:163`][plan-pub] rechecks it before publication. Not checked yet: that a released plan hash stays unchanged (pending `fix/vgx-release-plan-pins`) | Blocking | `@functionstackx` | Partial |
+| 2 | The image is pinned by SHA256 digest, the engine by its 40-character commit (`VIDEO_RUNTIME_REVISION`) and the model by revision. The engine commit is declared by the recipe; nothing verifies it against the image. | Anyone can rerun the exact point. | [`srt_selected.py:266`][image], [`srt_slurm/video.py:336`][engine], [`srt_slurm/video.py:149`][model]. [`runner.py:797`][engine-declared] accepts any 40-character commit as operator-declared | Blocking | `@edwingao28` | Partial |
+| 3 | One node per deployment. Each GPU count is its own deployment and names a `video/agg-<layout>.yaml` recipe, where `<layout>` states the GPU split. | Each layout qualifies on its own sweep. | [`validation.py:918`][single-node] (video is a single-node scenario only); [`validation.py:453`][naming] | Blocking | `@edwingao28` | Enforced |
 | 4 | Concurrency 1. | The failure tolerance and the sample population in rule 12 assume one request at a time. | Gap: [`validation.py:488`][conc] accepts any unique positive concurrency; every current row lists `[1]` | Blocking | `@edwingao28` | Gap (G1) |
-| 5 | Every engine encodes with libx264 `ultrafast`, CRF 18 and yuv420p; H3 adds AAC audio at 32 kHz stereo. | Encoding time is inside the measured latency. | H3: [`h3-v2.yaml:157`][encoding] puts the encoding in the plan hash and [`media.py:581`][sei] reads CRF and preset from the x264 SEI header. Gap for Wan2.2: `wan22.yaml` is schema 1, so [`runner.py:183`][encoding-v2] requests and checks no encoding; Wan2.2 moves to schema 2 in v0.2, which changes its plan hash and needs a new sweep | Blocking | `@functionstackx` | Enforced; Wan2.2 deferred to v0.2 |
-| 6 | No work is reused across requests: the prompt-embedding (conditioning) cache is off. | Every request does the full work. | H3: [`srt_slurm/video.py:329`][cache] requires each engine's off switch. Gap for Wan2.2: that check applies to schema 2 specs only, until the v0.2 move in rule 5 | Blocking | `@functionstackx` | Enforced; Wan2.2 deferred to v0.2 |
-| 7 | Lossless tier only; see [the lists below](#lossless-tier). | Lossy speedups change the output and need paired quality scores, which v0.1 does not have. | SGLang: engine-log attestation [`attestation.py:36`][policy], gated in [`srt_bundle.py:378`][attest-gate]. Gap for vLLM-Omni and Sol-Engine: [`attestation.py:66`][policies] has an SGLang policy only, and [`video_artifacts.py:146`][attest-presence] passes a bundle with no attestation | Blocking | `@functionstackx` | Gap (G2, G3) |
+| 5 | Every engine encodes with libx264 `ultrafast`, CRF 18 and yuv420p; H3 adds AAC audio at 32 kHz stereo. | Encoding time is inside the measured latency. | H3: [`h3-v2.yaml:157`][encoding] puts the encoding in the plan hash and [`media.py:581`][sei] reads CRF and preset from the x264 SEI header. Gap for Wan2.2: `wan22.yaml` is schema 1, so [`runner.py:183`][encoding-v2] requests and checks no encoding; Wan2.2 moves to schema 2 in v0.2, which changes its plan hash and needs a new sweep | Blocking | `@functionstackx` | Enforced; Wan2.2 exempt until v0.2 |
+| 6 | No work is reused across requests: the prompt-embedding (conditioning) cache is off. | Every request does the full work. | H3: [`srt_slurm/video.py:329`][cache] requires each engine's off switch. Wan2.2 on SGLang: the attestation requires `disable_conditioning_cache` ([`attestation.py:45`][sglang-no-reuse]). Not checked yet: Wan2.2 on vLLM-Omni (pending `fix/vgx-wan22-no-reuse`) | Blocking | `@functionstackx` | Partial |
+| 7 | Lossless tier only; see [the lists below](#lossless-tier). v0.1 publishes no lossy result. | Lossy speedups change the output and need paired quality scores, which v0.1 does not have. | SGLang: engine-log attestation [`attestation.py:36`][policy], gated in [`srt_bundle.py:378`][attest-gate]. Three parts are open: [`video_artifacts.py:146`][attest-presence] passes a bundle with no attestation (G3); the attestation does not fail on every optimization it can detect (G4); nothing checks that the recipe sets `--performance-mode` until [#5181](https://github.com/SemiAnalysisAI/InferenceX/pull/5181) merges, and the attestation records the mode but not the offload settings it resolves. vLLM-Omni: checked at recipe level, not attested from logs. [`attestation.py:66`][policies] has an SGLang policy only (G2); a bind-time check that refuses lossy switches is pending on `feat/vgx-vllm-omni-flag-check`. TF32 and reduced-precision settings are recorded, not gated, in v0.1 | Blocking | `@functionstackx` | Gap (G2, G3, G4; #5181) |
 | 8 | An optimization outside the registry counts as lossy; the registry, not the submitter, decides. | A new technique cannot enter the lossless ranking unreviewed. | App [`optimizations.ts:26`][registry]. Gap: no InferenceX code records a run's optimizations, so every published run reads as lossless | Blocking | `@SemiAnalysisAI/core` | Gap (G4) |
-| 9 | All configuration lives in the recipe and the master config row: no launcher or client change, no cache patching, no launch flags outside the recipe, no secrets in settings. | The recipe fingerprint describes the whole deployment. | [`srt_slurm/video.py:102`][env] rejects launcher-owned and credential-like environment names. Gap: a patched image is not detected | Blocking | recipe CODEOWNERS | Gap (G5) |
+| 9 | All configuration lives in the recipe and the master config row: no launcher or client change, no cache patching, no launch flags outside the recipe, no secrets in settings. | The recipe fingerprint describes the whole deployment. | [`srt_slurm/video.py:102`][env] rejects launcher-owned and credential-like environment names. Gap (G5): nothing checks who published the image. G5 is a provenance check on the image repository, not patch detection. Review only: code on the Python path (the shared block puts the repository checkout on the client's path at [`video.yaml:8`][python-path], and each recipe does the same for its server) and a service `preamble` | Blocking | `@edwingao28` | Gap (G5) |
 | 10 | Every clip passes the technical checks: it decodes fully; video is H.264 yuv420p at a stable resolution; frame count matches and fps is within 0.1% with even frame spacing; duration is within one frame; the picture is not blank; frames change where the prompt needs motion. H3 audio is AAC at 32 kHz stereo with continuous timestamps, above −80 dBFS where the prompt needs sound. | A clip that fails cannot count toward speed. | [`runner.py:946`][expected] builds the checks from the plan; [`media.py:806`][clip-valid] marks a clip valid only when every check passes | Blocking | `@functionstackx` | Enforced |
 | 11 | The frozen-frame fraction is recorded, not checked. | No calibrated threshold exists yet. | [`media.py:753`][frozen] checks it only when a plan sets `max_frozen_fraction`; neither spec does | Advisory | `@functionstackx` | Advisory |
 | 12 | A deployment qualifies only when its warmup clip is valid, all 20 measured clips are valid (no failure tolerance) and its native power is valid. | The median is taken over the complete population. | [`runner.py:1124`][warmup] stops before measuring after a failed warmup; [`bench/video.py:28`][complete]; [`video_artifacts.py:140`][power] and [`video_artifacts.py:183`][population] at publication | Blocking | `@functionstackx` | Enforced |
 | 13 | Latency per clip is `submit_to_media_seconds`: the time from submit until the finished MP4 is downloaded, including encoding and polling. Charts use the median over the valid measured clips; the warmup is not counted. | One definition for every engine. | Written at [`runner.py:1073`][latency]; median taken at [`serving.py:105`][median]; read per clip by the App at [`tradeoff.ts:93`][app-latency]. `summary.latency_median_seconds` ([`runner.py:750`][latency-summary]) is the median of a second field, `latency_seconds`, which the App uses only when a run has no per-clip value ([`tradeoff.ts:120`][app-fallback]) | Definition | `@functionstackx` | Enforced |
-| 14 | The qualifying run is a full regular sweep of the final changelog matrix on a PR commit, and its `validate-video-results` job passes. After merge the same run is published; nothing reruns on `main`. | The published number is the reviewed number. | [`plan.py:178`][append-only] rejects append-only; [`video_artifacts.py:76`][full-sweep] requires a full video sweep; [`run-sweep.yml:910`][validate-job] | Blocking | `@SemiAnalysisAI/core` | Enforced |
-| 15 | One eligible CODEOWNER posts the PR Review Checklist and a core maintainer approves. | Every rule change and result gets a second reviewer. | The `main` ruleset requires one approval from `@SemiAnalysisAI/core`. Gap: code-owner review is not required, and an admin merge bypasses the ruleset | Blocking | `@SemiAnalysisAI/core` | Gap (G6) |
+| 14 | The qualifying run is a full regular sweep of the final changelog matrix on a PR commit, and its `validate-video-results` job passes. After merge the same run is published; nothing reruns on `main`. | The published number is the reviewed number. | [`plan.py:178`][append-only] rejects append-only; [`video_artifacts.py:76`][full-sweep] requires a full video sweep. The gate at merge is [`merge-ingest.yml:131`][merge-gate], which validates the reused run's bundles before publishing them. Not complete: `validate-video-results` ([`run-sweep.yml:910`][validate-job]) is not a required check on `main`, and `fix/vgx-merge-matrix-check` is pending | Blocking | `@SemiAnalysisAI/core` | Partial |
+| 15 | One eligible CODEOWNER posts the PR Review Checklist and a core maintainer approves. | Every rule change and result gets a second reviewer. | The `main` ruleset requires one approval from `@SemiAnalysisAI/core`. Gap: code-owner review is not required, and an admin merge bypasses the ruleset. G6 names the video owners in CODEOWNERS; closing the gap needs an admin ruleset change | Blocking | `@SemiAnalysisAI/core` | Gap (G6) |
 | 16 | Reference PSNR is reported and never gates reuse or merge; `quality_status` stays `unjudged`. Wan2.2 has no reference, so its clips stay unscored. | Lossless engines and layouts already spread widely in PSNR against one reference. | [`quality.py:192`][unjudged]; no workflow reads the score as a gate | Advisory | `@functionstackx` | Advisory |
-| 17 | A VLM judge scores each measured clip, and the score is reported next to the clip. It does not block publication. | The technical checks cannot tell whether a clip shows its prompt. | Gap: no judge exists in this repository | Advisory | `@edwingao28` | Gap (G7) |
-| 18 | Every engine, SGLang, vLLM-Omni and Sol-Engine alike, meets the same rules: a PR rebased on `main`, a public image pinned by digest, and a passing engine-log attestation. | One evidence bar for every engine. | [`srt_selected.py:266`][image] for the digest; [`srt_bundle.py:378`][attest-gate] for the attestation. Gap: [`srt_slurm/video.py:253`][runtime] accepts only `sglang` and `vllm-omni`, and the attestation policy is SGLang only (rule 7). Sol-Engine's own PR adds its binder support; InferenceX adds the vLLM-Omni and Sol-Engine attestation policies | Blocking | `@edwingao28` | Gap (G8) |
-| 19 | Each workload states its size per clip: latent tokens, DiT forward passes (denoising steps × guidance branches) and estimated DiT FLOPs. Tokens count the latent tokens in the DiT self-attention sequence, including audio the model generates jointly; prompt text tokens vary by prompt and are left out. FLOPs per forward are 2 × tokens × the DiT weights applied to every token, plus 4 × tokens² × attention width (heads × head dimension) × layers; the clip total multiplies by the forward passes. The dashboard shows them in the workload summary. They describe the workload and never rank results; results from different workloads are never merged into one curve. | Video seconds do not measure work. H3 (5.17 s) and Wan2.2 (5.06 s) have nearly the same video seconds, yet H3 needs about 1.29× the DiT compute per clip: 1.71e17 against 1.33e17 FLOPs. H3 runs 49 forward passes over 37,710 latent tokens (37,296 video and 414 audio); Wan2.2 runs 80 over 32,760. Full attention grows with the square of the token count, and tokens per clip depend on each model's VAE and patch size: H3 packs 124 frames into 37 latent frames, Wan2.2 packs 81 into 21. | Gap: no spec, artifact or App field records them | Definition | `@edwingao28` | Gap (G9) |
+| 17 | A VLM judge is calibrated offline against human-rated clips; v0.1 requires only that calibration report. The judge never blocks publication, and the dashboard does not change in v0.1. | The technical checks cannot tell whether a clip shows its prompt. | Gap: no judge and no calibration report exist in this repository | Advisory | `@edwingao28` | Gap (G7) |
+| 18 | Every engine meets the same rules. What differs in v0.1 is the evidence behind rule 7: SGLang is attested from its engine log, vLLM-Omni is checked at recipe level, and Sol-Engine is not supported yet. | A reader can tell how strongly each engine's lossless claim is backed. | SGLang: [`attestation.py:66`][policies]. vLLM-Omni: Gap (G2). Sol-Engine: Gap, [`srt_slurm/video.py:253`][runtime] accepts only `sglang` and `vllm-omni` | Blocking | `@edwingao28` | Gap (G8) |
+| 19 | Each workload states its size per clip: latent tokens, DiT forward passes (denoising steps × guidance branches) and estimated DiT FLOPs. [`specs/README.md`](specs/README.md#workload-size) gives the derivation and each workload's numbers. They describe the workload and never rank results; results from different workloads are never merged into one curve. | Video seconds do not measure work: H3 (5.17 s) and Wan2.2 (5.06 s) are nearly the same length, yet H3 needs about 1.29× the DiT compute per clip. | Gap: no spec or artifact field records them, and the dashboard does not show them | Definition | `@edwingao28` | Gap (G9) |
 
 ### Lossless tier
 
@@ -67,10 +72,7 @@ it yet. Status is `Enforced`, `Gap (G#)` with the ID from
   time counts toward latency like any other work. SGLang's `--performance-mode`
   values `auto` (its default) and `memory` choose these settings from free GPU
   memory, and `speed` can turn on FSDP at 2 or more GPUs, so the recipe sets the
-  mode explicitly. Gap until [#5181](https://github.com/SemiAnalysisAI/InferenceX/pull/5181)
-  merges: nothing checks that the recipe sets it, and the SGLang attestation
-  records `performance_mode` but not the offload settings it resolves
-  ([`attestation.py:36`][policy]).
+  mode explicitly (rule 7 says what checks it).
 - Not allowed: changing any workload or encoding setting; any precision other
   than BF16, including FP8, FP4 and other quantization; work reused across
   requests; step caching such as TeaCache or FirstBlockCache; sparse attention;
@@ -82,36 +84,46 @@ it yet. Status is `Enforced`, `Gap (G#)` with the ID from
   imports or this table cites, such as `inferencex-e2e/infx/bench/env.py` and
   `inferencex-e2e/infx/srt_slurm/video.py`.
 - G1 (rule 4): a concurrency other than 1 is accepted.
-- G2 (rule 7): vLLM-Omni has no attestation policy.
+- G2 (rules 7 and 18): vLLM-Omni has no log attestation; its bind-time flag
+  check is pending on `feat/vgx-vllm-omni-flag-check`.
 - G3 (rule 7): publication passes a bundle that has no attestation.
-- G4 (rule 8): no run records its optimizations.
-- G5 (rule 9): a patched image is not detected.
+- G4 (rules 7 and 8): no run records its optimizations, and the attestation does
+  not fail on every one it can detect.
+- G5 (rule 9): nothing checks who published the image.
 - G6 (rule 15): code-owner review is not required, and an admin merge bypasses
   the ruleset.
-- G7 (rule 17): no VLM judge exists.
-- G8 (rule 18): Sol-Engine has no binder support and no attestation policy.
-- G9 (rule 19): no field records workload size.
+- G7 (rule 17): no VLM judge and no calibration report exist.
+- G8 (rule 18): Sol-Engine is not supported: no binder support and no attestation
+  policy.
+- G9 (rule 19): no spec or artifact field records workload size, and the
+  dashboard does not show it.
 
-Wan2.2's gaps on rules 5 and 6 close with its move to schema 2 in v0.2.
+Pending without a gap ID: `fix/vgx-release-plan-pins` (rule 1),
+`fix/vgx-wan22-no-reuse` (rule 6), `fix/vgx-merge-matrix-check` (rule 14) and
+[#5181](https://github.com/SemiAnalysisAI/InferenceX/pull/5181) (rule 7).
+Wan2.2's exemption from rule 5 ends with its move to schema 2 in v0.2.
 
 [plan-bind]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/srt_selected.py#L190-L191
 [plan-pub]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/results/video_artifacts.py#L163-L168
 [image]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/srt_selected.py#L266-L268
 [engine]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/srt_slurm/video.py#L336-L338
 [model]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/srt_slurm/video.py#L149-L150
+[engine-declared]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/runner.py#L797-L799
 [single-node]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/matrix/validation.py#L918-L920
-[naming]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/matrix/validation.py#L452-L467
+[naming]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/matrix/validation.py#L453-L467
 [conc]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/matrix/validation.py#L488
 [encoding]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/specs/h3-v2.yaml#L157-L164
 [sei]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/media.py#L581-L595
 [encoding-v2]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/runner.py#L182-L183
 [cache]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/srt_slurm/video.py#L329-L335
+[sglang-no-reuse]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/attestation.py#L45
 [policy]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/attestation.py#L36-L65
 [attest-gate]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/srt_bundle.py#L378-L389
 [policies]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/attestation.py#L66
 [attest-presence]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/results/video_artifacts.py#L146-L150
 [registry]: https://github.com/SemiAnalysisAI/InferenceX-app/blob/dbcd81e6dae24c83eb045db6a8e45a91ea428dc4/packages/app/src/components/video-benchmark/optimizations.ts#L26-L27
 [env]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/srt_slurm/video.py#L102-L108
+[python-path]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/configs/srt-recipes/video.yaml#L8
 [expected]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/runner.py#L946-L955
 [clip-valid]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/media.py#L806
 [frozen]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/media.py#L753-L763
@@ -123,6 +135,7 @@ Wan2.2's gaps on rules 5 and 6 close with its move to schema 2 in v0.2.
 [median]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/serving.py#L105-L107
 [append-only]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/matrix/plan.py#L178
 [full-sweep]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/results/video_artifacts.py#L75-L76
+[merge-gate]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/.github/workflows/merge-ingest.yml#L131-L160
 [validate-job]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/.github/workflows/run-sweep.yml#L910
 [unjudged]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/video-generation/evaluator/quality.py#L192-L193
 [runtime]: https://github.com/SemiAnalysisAI/InferenceX/blob/8dd3577fae706986d6786f5b8b174f44594eb202/inferencex-e2e/infx/srt_slurm/video.py#L246-L253

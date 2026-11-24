@@ -51,3 +51,23 @@ uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' python video-generation/
 
 The second command prints `spec_sha256` and each set's `plan_id` and `plan_sha256` as JSON.
 To hash another spec file, pass its path as the argument.
+
+## Workload size
+
+Rule 19 of the [VideoGenX Standard](../README.md#videogenx-standard-v01) states each workload's size per clip.
+
+- Latent tokens count the tokens in the DiT self-attention sequence, including audio the model generates jointly.
+  Prompt text tokens vary by prompt and are left out.
+- DiT forward passes are denoising steps × guidance branches.
+- Estimated DiT FLOPs per forward pass are 2 × tokens × the DiT weights applied to every token, plus 4 × tokens² × attention width (heads × head dimension) × layers.
+  The clip total multiplies by the forward passes.
+
+| | `h3-v2.yaml` | `wan22.yaml` |
+| --- | --- | --- |
+| Frames to latent frames | 124 to 37 | 81 to 21 |
+| Latent tokens | 37,710 (37,296 video, 414 audio) | 32,760 |
+| DiT forward passes | 49 | 80 |
+| Estimated DiT FLOPs per clip | 1.71e17 | 1.33e17 |
+
+Full attention grows with the square of the token count, and tokens per clip depend on each model's VAE and patch size.
+That is why two clips of nearly the same length differ in compute: H3 needs about 1.29× the DiT compute of Wan2.2 per clip.
