@@ -12727,3 +12727,9 @@
   description:
     - Use the integrated DI AMD-kernel image with inference-mode prefill warmup, FlyDSL released-draft attention and current UMBP recovery contracts. Keep K4 golden acceptance, 38 GiB prefill KV, EP shared experts and three distributed pools; guard incompatible EP, RecoverSSM and replicated-Q routes. Enable the reviewed prefill admission share and move shared MoRIIO discovery below the ephemeral TCP range. Retain full 3600-second profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p2d
+  description:
+    - Restore stock LM head fallback when the original logits row count exceeds the AKR exchange capacity. Use the validated b910252b7 image; retain the original 1P2D c64 K4 topology, precision, distributed pools, graph settings and full 3600-second workload.
+  pr-link: XXX

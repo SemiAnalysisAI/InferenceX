@@ -24,7 +24,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:d43d511a287ab8c2fe384dbeb04c7d90ff0023b18fcb41c11e3ffde6d25415f4
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:92b663747ca8104cb7f5d0e908e38238865ae571f02dcbb21ead2228fe12b877
   args:
     policy: consistent_hash
     prefill-policy: consistent_hash
@@ -45,7 +45,7 @@ engine:
   connector: moriio
 roles:
   prefill:
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:d43d511a287ab8c2fe384dbeb04c7d90ff0023b18fcb41c11e3ffde6d25415f4
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:92b663747ca8104cb7f5d0e908e38238865ae571f02dcbb21ead2228fe12b877
     nodes: 1
     workers: 1
     gpus: 8
@@ -351,7 +351,7 @@ roles:
       UMBP_ALLOW_4K_FALLBACK: '0'
       MORI_UMBP_LOG_LEVEL: info
       VLLM_SWA_FINE_GRAINED_PREFIX_HITS: '1'
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:d43d511a287ab8c2fe384dbeb04c7d90ff0023b18fcb41c11e3ffde6d25415f4
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:92b663747ca8104cb7f5d0e908e38238865ae571f02dcbb21ead2228fe12b877
 benchmark:
   env:
     AIPERF_BENCHMARK_GRACE_PERIOD: '30'
@@ -365,7 +365,7 @@ setup_script: k31-r10.sh
 services:
 - name: umbp-master
   type: generic
-  container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:d43d511a287ab8c2fe384dbeb04c7d90ff0023b18fcb41c11e3ffde6d25415f4
+  container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:92b663747ca8104cb7f5d0e908e38238865ae571f02dcbb21ead2228fe12b877
   placement:
     node: head
   start: before_workers
@@ -388,7 +388,7 @@ environment:
   TOTAL_CPU_DRAM_GB: '1799'
   DECODE_CPU_DRAM_GB: '1799'
   KV_P2P_TRANSFER: moriio
-  K31_CLEAN_RUN_ID: k31-di-1p2d-k4-c64-1124
+  K31_CLEAN_RUN_ID: k31-di-lmhead-1p2d-k4-c64-1124
   UMBP_HEALTH_POLL_SECONDS: '1'
   UMBP_HEALTH_FAILURE_INTERVALS: '3'
   UMBP_HEALTH_STOP_TIMEOUT: '10'
