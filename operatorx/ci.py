@@ -30,10 +30,22 @@ RUNNERS = {
     "cluster:gb200-nv": ("gb200_nvl72_4x", "gb200"),
     "cluster:gb300-nv": ("gb300_nvl72_4x", "gb300"),
     "cluster:mi300x-amd": ("mi300x_amds_8x", "mi300x"),
-    "cluster:mi325x-amds": ("mi325x_amds_8x", "mi325x"),
+    "cluster:mi325x-amd": ("mi325x_amds_8x", "mi325x"),
     "cluster:mi355x-amds": ("mi355x_8x", "mi355x"),
 }
 MODES = ("timing", "counters")
+MAX_CHUNK = 4000
+# Planning estimate of one shard's benchmark time, for sizing shards to the Slurm time (from
+# H100 runs): a part's processes start (imports, distributed init); a layer's first case pays
+# its kernel JIT and autotuning (attention: an engine); the rest of its ladder reuses it.
+EST_PART_S = 180.0
+# per op type; attention layers each start a fresh process and engine; DeepSeek-V4 attention
+# measured up to 20 s per case on B200
+EST_LAYER_S = {"gemm": 30.0, "moe": 60.0, "dsv4_attn": 240.0}
+EST_CASE_S = {"gemm": 1.0, "moe": 1.5, "dsv4_attn": 20.0}
+EST_ATTENTION_LAYER_S = 210.0
+EST_ATTENTION_CASE_S = 6.0
+EST_SHARD_S = 30 * 60
 # per-kernel hardware counters; a counters run's latencies are perturbed by the profiler
 NCU_METRICS = ",".join((
     "gpu__time_duration.sum", "sm__cycles_elapsed.avg.per_second",
@@ -156,6 +168,15 @@ def write_json(path: Path, value: object) -> None:
     temporary.replace(path)
 
 
+def layer_groups(cases: list[dict]) -> list[list[dict]]:
+    """Cases grouped by layer, in first-appearance order, each ladder kept in its order."""
+    from operatorx.core.ladder import layer_key
+    groups: dict[str, list[dict]] = {}
+    for c in cases:
+        groups.setdefault(layer_key(c["shape"]["type"], c["shape"]["args"]), []).append(c)
+    return list(groups.values())
+
+
 def plan(
     runner: str,
     backends: list[str],
@@ -201,8 +222,8 @@ def plan(
         raise ValueError(f"world size exceeds the runner's {gpus}-GPU physical node")
     if "torch" in backends and world_sizes != [1]:
         raise ValueError("the torch backend runs single-device GEMM only")
-    if not 1 <= chunk_size <= 500:
-        raise ValueError("chunk size must be between 1 and 500")
+    if not 1 <= chunk_size <= MAX_CHUNK:
+        raise ValueError(f"chunk size must be between 1 and {MAX_CHUNK}")
     groups = defaultdict(list)
     recipes_seen: dict[str, dict] = {}
     excluded = 0
@@ -226,42 +247,92 @@ def plan(
         # the image InferenceX serves the backend with on this hardware, else operatorx's own
         image = default_image and default_image(backend, family(runner))
         image_groups[image or images[backend]["image"]].append(backend)
-    cells = []
-    shards = []
-    for (split, recipe, _state), cases in sorted(groups.items()):
+    # units: one layer's ladder under one split, image and recipe
+    units = []
+    for (split, recipe, state), cases in sorted(groups.items()):
         split = json.loads(split)
-        ws = parallel.world_size(split)
         rest = image_groups
+        runs = []
         if recipe:
             r = recipes_seen[recipe]
             framework = next(b for b in backends if b in FRAMEWORKS)
-            shards.append((r["image"], [framework], ws, cases,
-                           {"parallel": split, "recipe": recipe, "recipe_match": r["match"],
-                            "checkpoint": r["checkpoint"], "env": r["env"], "engine_args": r["engine_args"]}))
+            runs.append((r["image"], [framework],
+                         {"recipe": recipe, "recipe_match": r["match"], "checkpoint": r["checkpoint"],
+                          "env": r["env"], "engine_args": r["engine_args"]}))
             # the other backends run the same cases on their own images
             rest = {i: [b for b in bs if b != framework] for i, bs in image_groups.items()}
-        shards += [(image, selected, ws, cases, {"parallel": split})
-                   for image, selected in sorted(rest.items()) if selected]
-    for image, selected, ws, cases, extra in shards:
-            for offset in range(0, len(cases), chunk_size):
-                cell = {
-                    "runner": runner,
-                    "cluster": RUNNERS[runner][0],
-                    "nodes": 1,
-                    "gpus_per_node": gpus,
-                    "image_platform": image_platform,
-                    "world_size": ws,
-                    "image": image,
-                    "mode": mode,
-                    "backends": selected,
-                    "offset": offset,
-                    "cases": cases[offset : offset + chunk_size],
-                    **extra,
-                }
-                identity = hashlib.sha256(
-                    json.dumps(cell, sort_keys=True).encode()
-                ).hexdigest()[:16]
-                cells.append({"id": f"{runner.removeprefix('cluster:')}-{identity}", **cell})
+        runs += [(image, selected, {}) for image, selected in sorted(rest.items()) if selected]
+        for image, selected, extra in runs:
+            for layer in layer_groups(cases):
+                for offset in range(0, len(layer), chunk_size):
+                    units.append((image, selected, extra, split, state, layer[offset : offset + chunk_size]))
+    # counters runs keep one split and one process per shard (profiler output is per rank)
+    lanes_for = (lambda ws: max(1, gpus // ws)) if mode == "timing" else (lambda ws: 1)
+    packs = defaultdict(list)  # (image, backends, recipe) -> shards in progress
+    shards = []
+    for image, selected, extra, split, state, cases in units:
+        key = json.dumps([image, selected, extra], sort_keys=True)
+        part_key = json.dumps([split, state], sort_keys=True)
+        op = cases[0]["shape"]["type"]
+        cost = (EST_LAYER_S.get(op, EST_ATTENTION_LAYER_S)
+                + EST_CASE_S.get(op, EST_ATTENTION_CASE_S) * len(cases))
+        open_ = packs[key][-1] if packs[key] else None
+        if open_ is not None and mode != "timing" and part_key not in open_["parts"]:
+            open_ = None
+        if open_ is not None:
+            part = open_["parts"].get(part_key) or {"loads": [0.0] * lanes_for(parallel.world_size(split))}
+            lane = min(range(len(part["loads"])), key=part["loads"].__getitem__)
+            before = max(part["loads"])
+            after = max(before, part["loads"][lane] + cost)
+            if part_key not in open_["parts"]:
+                after += EST_PART_S
+            if (len(open_["cases"]) + len(cases) > chunk_size
+                    or open_["cost"] - before + after > EST_SHARD_S and open_["cases"]):
+                open_ = None
+        if open_ is None:
+            # offset: cases planned before this shard under the same image and recipe
+            offset = sum(len(p["cases"]) for p in packs[key])
+            open_ = {"image": image, "backends": selected, "extra": extra, "parts": {}, "cases": [], "cost": 0.0,
+                     "offset": offset}
+            packs[key].append(open_)
+            shards.append(open_)
+        if part_key not in open_["parts"]:
+            open_["cost"] += EST_PART_S
+        part = open_["parts"].setdefault(
+            part_key, {"loads": [0.0] * lanes_for(parallel.world_size(split)), "index": len(open_["parts"])})
+        lane = min(range(len(part["loads"])), key=part["loads"].__getitem__)
+        before = max(part["loads"])
+        part["loads"][lane] += cost
+        open_["cost"] += max(part["loads"]) - before
+        part.setdefault("lanes", [[] for _ in part["loads"]])
+        part["lanes"][lane] += range(len(open_["cases"]), len(open_["cases"]) + len(cases))
+        part["split"] = split
+        open_["cases"] += cases
+    cells = []
+    for shard in shards:
+        splits = {json.dumps(json.loads(k)[0], sort_keys=True) for k in shard["parts"]}
+        sizes = [parallel.world_size(json.loads(k)[0]) for k in shard["parts"]]
+        cell = {
+            "runner": runner,
+            "cluster": RUNNERS[runner][0],
+            "nodes": 1,
+            "gpus_per_node": gpus,
+            "image_platform": image_platform,
+            "world_size": max(sizes),
+            "image": shard["image"],
+            "mode": mode,
+            "backends": shard["backends"],
+            "offset": shard["offset"],
+            "cases": shard["cases"],
+            **shard["extra"],
+        }
+        if len(splits) == 1:
+            cell["parallel"] = json.loads(next(iter(splits)))
+        # processes run part by part; a part's lanes (case indices) run side by side on the node
+        cell["parts"] = [{"parallel": p["split"], "lanes": [lane for lane in p["lanes"] if lane]}
+                         for p in sorted(shard["parts"].values(), key=lambda p: p["index"])]
+        identity = hashlib.sha256(json.dumps(cell, sort_keys=True).encode()).hexdigest()[:16]
+        cells.append({"id": f"{runner.removeprefix('cluster:')}-{identity}", **cell})
     if not cells:
         raise ValueError("selection contains no runnable shapes")
     if len(cells) > 256:
@@ -296,7 +367,7 @@ def command(argv: list[str], log: Path, *, env=None) -> None:
                     process.kill()
                     process.wait()
         if rc:
-            print(log.read_text()[-16000:], file=sys.stderr)
+            print(log.read_text(errors="replace")[-16000:], file=sys.stderr)
             raise subprocess.CalledProcessError(rc, argv)
 
 
@@ -388,9 +459,9 @@ def shared_base(profile: dict, runner: str) -> Path:
         ):
             raise ValueError("AMD staging requires the shared runner _work/_temp path")
         roots = [runner_temp.parent.parent]
-    elif family(runner) == "b300":
+    elif family(runner) in ("b300", "h100"):
         # compute-visible account home, as CollectiveX; the shared squash parent isn't
-        # writable by the GHA service account
+        # writable by the GHA service account (the dsxe pools share one setup)
         roots = [Path(pwd.getpwuid(os.getuid()).pw_dir)]
     elif profile.get("squash_dir"):
         roots = [Path(profile["squash_dir"]).parent]
@@ -505,6 +576,18 @@ def recover(
     print(f"Recovered {recovered} execution(s) from run {run_id}", flush=True)
 
 
+def parallel_world_size(split: dict | None) -> int:
+    split = split or {}
+    return int(split.get("tp", 1)) * int(split.get("dp", 1))
+
+
+def cell_parts(cell: dict) -> list[dict]:
+    """The cell's parts; a manifest planned before parts is one part of one process."""
+    if cell.get("parts"):
+        return cell["parts"]
+    return [{"parallel": cell.get("parallel") or {}, "lanes": [list(range(len(cell["cases"])))]}]
+
+
 def execute(args) -> None:
     root = args.output.resolve()
     root.mkdir(parents=True, exist_ok=False, mode=0o700)
@@ -523,6 +606,9 @@ def execute(args) -> None:
         or cell["world_size"] > gpus
     ):
         raise ValueError("manifest hardware differs from the selected runner")
+    parts = cell_parts(cell)
+    if any(parallel_world_size(p["parallel"]) * len(p["lanes"]) > gpus for p in parts):
+        raise ValueError("a part's processes need more GPUs than the node has")
     base = shared_base(profile, cell["runner"])
     base.mkdir(mode=0o700, exist_ok=True)
     if (
@@ -565,11 +651,15 @@ def execute(args) -> None:
             )
         if cell.get("checkpoint"):
             stage_model_config(cell["checkpoint"], stage / "models")
-        for name in sorted({c["testlist"] for c in cell["cases"]}):
-            write_json(
-                stage / "testlists" / f"{name}.json",
-                [c["shape"] for c in cell["cases"] if c["testlist"] == name],
-            )
+        (stage / "cache").mkdir()  # per-process compile caches, kept across parts
+        for i, part in enumerate(parts):
+            for j, lane in enumerate(part["lanes"]):
+                cases = [cell["cases"][k] for k in lane]
+                for name in sorted({c["testlist"] for c in cases}):
+                    write_json(
+                        stage / "testlists" / f"p{i}-l{j}" / f"{name}.json",
+                        [c["shape"] for c in cases if c["testlist"] == name],
+                    )
         (stage / "results").mkdir()
         allocation = [
             "salloc",
@@ -649,8 +739,6 @@ def execute(args) -> None:
             ),
             PYTHONPATH="/opx/source",
             PYTHONDONTWRITEBYTECODE="1",
-            WORLD_SIZE=str(cell["world_size"]),
-            OPERATORX_PARALLEL=json.dumps(cell.get("parallel") or {}),
             MASTER_ADDR="127.0.0.1",
             MASTER_PORT=str(29500 + int(hashlib.sha256(f"{job}:{cell['id']}".encode()).hexdigest(), 16) % 2000),
         )
@@ -677,12 +765,7 @@ def execute(args) -> None:
                 env["OPERATORX_NCU"] = str(ncu)
         if hw in ("mi300x", "mi325x"):
             mounts += ",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri"
-        run = [
-            "srun",
-            f"--jobid={job}",
-            "--nodes=1",
-            f"--ntasks={cell['world_size']}",
-            f"--ntasks-per-node={cell['world_size']}",
+        container = [
             "--kill-on-bad-exit=1",
             "--chdir=/tmp",
             f"--container-image={cache / (key + '.sqsh')}",
@@ -694,15 +777,39 @@ def execute(args) -> None:
             "--export=ALL",
         ]
         if hw in ("h200", "b300", "h100", "gb200", "gb300") or is_amd(cell["runner"]):
-            run.append("--container-remap-root")
+            container.append("--container-remap-root")
         # the AWS dsxe pools (b300, h100) share one Slurm and pyxis setup
         if hw in ("b300", "h100"):
-            run.append("--mpi=none")
-        # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's
-        run += ["python3", "/opx/source/operatorx/ci.py", "rank"]
-        # bound a collective that hangs without failing
-        run = ["timeout", "-k", "30", str(max(300, args.time_minutes * 60 - 300)), *run]
-        command(run, root / "benchmark.log", env=env)
+            container.append("--mpi=none")
+        # parts run one after another in the allocation, each part's lanes side by side
+        deadline = time.monotonic() + max(300, args.time_minutes * 60 - 300)
+        failed = None
+        for i, part in enumerate(parts):
+            ws = parallel_world_size(part["parallel"])
+            tasks = ws * len(part["lanes"])
+            left = int(deadline - time.monotonic())
+            if left < 60:
+                failed = failed or RuntimeError(f"no time left for parts {i}..{len(parts) - 1}")
+                break
+            part_env = dict(
+                env,
+                WORLD_SIZE=str(ws),
+                OPERATORX_PARALLEL=json.dumps(part["parallel"] or {}),
+                OPERATORX_PART=str(i),
+                OPERATORX_LANES=str(len(part["lanes"])),
+                MASTER_PORT=str(int(env["MASTER_PORT"]) + 40 * i),
+            )
+            # by path: an image's own PYTHONPATH (ROCm images set one) replaces the host's;
+            # timeout bounds a collective that hangs without failing
+            run = ["timeout", "-k", "30", str(left), "srun", f"--jobid={job}", "--nodes=1",
+                   f"--ntasks={tasks}", f"--ntasks-per-node={tasks}", *container,
+                   "python3", "/opx/source/operatorx/ci.py", "rank"]
+            try:
+                command(run, root / "benchmark.log", env=part_env)
+            except subprocess.CalledProcessError as e:  # later parts still run; finished rows are kept
+                failed = failed or e
+        if failed is not None:
+            raise failed
         rc = 0
     finally:
         # stop writers before collecting; a failed cleanup keeps the evidence
@@ -714,35 +821,164 @@ def execute(args) -> None:
         )
 
 
+def _visible_devices(lane: int, ws: int) -> None:
+    """Restrict this process to its lane's GPUs (the node's GPUs in order, ws per lane)."""
+    gpus = int(os.environ.get("OPERATORX_GPUS_PER_NODE", "8"))
+    pick = slice(lane * ws, (lane + 1) * ws)
+    if Path("/dev/kfd").exists():  # ROCm: the lowest layer, then HIP/CUDA renumber from 0
+        base = os.environ.get("ROCR_VISIBLE_DEVICES", "").split(",") if os.environ.get(
+            "ROCR_VISIBLE_DEVICES") else [str(i) for i in range(gpus)]
+        os.environ["ROCR_VISIBLE_DEVICES"] = ",".join(base[pick])
+        for name in ("HIP_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES"):
+            if os.environ.get(name):
+                os.environ[name] = ",".join(str(i) for i in range(ws))
+        return
+    base = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",") if os.environ.get(
+        "CUDA_VISIBLE_DEVICES") else [str(i) for i in range(gpus)]
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(base[pick])
+
+
+MAX_RESTARTS = 100
+RESTART = 75  # main.py: this process must not run another case
+# main.py's case watchdog exits 76 (TIMED_OUT): a crash, recorded against the case in flight
+
+
+def _supervise(bench: list[str], part: str, task: int, ws: int) -> int:
+    """Run the benchmark process and start a fresh one when it asks (RESTART) or dies mid-case.
+
+    A process group (the ws ranks of a lane) restarts as one: the rank that exits first marks
+    the attempt (/opx/progress/<lane>.gen<attempt>), and every other rank's supervisor sees the
+    mark, dumps its process's stacks (SIGUSR1, faulthandler) and kills it, so no rank is left
+    waiting in a collective or a rendezvous. The group's progress file is written by its rank 0;
+    all ranks resume from it. A crash (not RESTART) records the case in flight as an error.
+    """
+    lane = task // ws
+    root = Path("/opx/progress")
+    root.mkdir(parents=True, exist_ok=True)
+    progress = root / f"p{part}-l{lane}.json"
+    port = int(os.environ["MASTER_PORT"])
+    env = dict(os.environ, OPERATORX_PROGRESS=str(progress))
+    child = None
+
+    def stop(signum, frame):
+        if child is not None and child.poll() is None:
+            child.send_signal(signum)
+        raise SystemExit(128 + signum)
+
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, stop)
+
+    def state() -> dict:
+        try:
+            return json.loads(progress.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def mark(attempt: int) -> Path:
+        return root / f"p{part}-l{lane}.gen{attempt}"
+
+    for attempt in range(MAX_RESTARTS + 1):
+        # a fresh port per attempt (the last group's may linger), kept within 20000-59999
+        env["MASTER_PORT"] = str(20000 + (port - 20000 + 997 * attempt) % 40000)
+        before = state().get("next", 0)
+        child = subprocess.Popen(bench, env=env)
+        sibling = None
+        while (rc := child.poll()) is None:
+            if ws > 1 and mark(attempt).exists():  # another rank of the group ended this attempt
+                sibling = mark(attempt).read_text().strip() or "restart"
+                try:  # a rank that is only finishing its writes exits on its own
+                    rc = child.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    child.send_signal(signal.SIGUSR1)  # its stacks, for the log
+                    try:
+                        rc = child.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        child.kill()
+                        rc = child.wait()
+                break
+            time.sleep(0.5)
+        if rc == 0 and sibling is None:
+            return 0
+        if sibling is None and ws > 1:
+            try:  # the first to end the attempt tells the others why
+                with open(mark(attempt), "x") as f:
+                    f.write("restart" if rc == RESTART else f"crash {rc}")
+            except FileExistsError:
+                sibling = mark(attempt).read_text().strip() or "restart"
+        reason = sibling or ("restart" if rc == RESTART else f"crash {rc}")
+        crashed = reason.startswith("crash")  # including the case watchdog (TIMED_OUT)
+        ready = root / f"p{part}-l{lane}.ready{attempt}"
+        if task % ws == 0:
+            if not crashed and "running" in state():
+                # a restart the group agreed on that this rank did not reach: its case was not run
+                now = state()
+                now.pop("running", None)
+                progress.write_text(json.dumps(now))
+            ready.touch()  # its process is gone: the progress file is final for this attempt
+        else:
+            deadline = time.monotonic() + 120
+            while not ready.exists() and time.monotonic() < deadline:
+                time.sleep(0.2)
+        now = state()
+        if crashed and "running" not in now and now.get("next", 0) == before:
+            return rc or 1  # died before its first case (startup): a fresh process would too
+        if attempt == MAX_RESTARTS:
+            print(f"[operatorx] giving up after {MAX_RESTARTS} restarts", file=sys.stderr, flush=True)
+            return rc or 1
+        env["OPERATORX_CRASH_RC"] = reason.split()[-1] if crashed else str(RESTART)
+        print(f"[operatorx] task {task}: {reason}{' (another rank)' if sibling else ''}"
+              f" (restart {attempt + 1})", file=sys.stderr, flush=True)
+    return 1
+
+
 def rank() -> None:
     for key in ("SLURM_PROCID", "SLURM_LOCALID", "WORLD_SIZE"):
         if not os.environ.get(key):
             raise ValueError(f"required rank input missing: {key}")
-    os.environ["RANK"] = os.environ["SLURM_PROCID"]
+    # a part runs `lanes` independent process groups of WORLD_SIZE ranks side by side,
+    # each on its own GPUs, with its own cases (testlists/p<part>-l<lane>)
+    ws = int(os.environ["WORLD_SIZE"])
+    task = int(os.environ["SLURM_LOCALID"])
+    lane, local = divmod(task, ws)
+    lanes = int(os.environ.get("OPERATORX_LANES", "1"))
+    part = os.environ.get("OPERATORX_PART", "0")
+    os.environ["RANK"] = str(local)
+    os.environ["LOCAL_RANK"] = str(local)
+    os.environ["OPERATORX_LANE"] = str(lane)
+    os.environ["MASTER_PORT"] = str(int(os.environ["MASTER_PORT"]) + lane)
+    if lanes > 1:
+        _visible_devices(lane, ws)
     source = "/opx/source"
     paths = [x for x in os.environ.get("PYTHONPATH", "").split(":") if x and x != source]
     os.environ["PYTHONPATH"] = ":".join([source, *paths])
-    os.environ["LOCAL_RANK"] = os.environ["SLURM_LOCALID"]
-    cache = (
-        Path("/tmp") / f"operatorx-{os.environ['SLURM_JOB_ID']}-{os.environ['RANK']}"
-    )
-    cache.mkdir(mode=0o700, exist_ok=True)
+    # per task, kept on the stage across parts so later parts reuse the compiled kernels
+    cache = Path("/opx/cache") / f"task{task}"
+    if not Path("/opx/cache").is_dir():  # a stage planned before parts
+        cache = Path("/tmp") / f"operatorx-{os.environ['SLURM_JOB_ID']}-{task}"
+    cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.environ.update(
         HOME=str(cache),
         TRITON_CACHE_DIR=str(cache / "triton"),
         MPLCONFIGDIR=str(cache / "matplotlib"),
     )
+    testlists = Path("/opx/testlists") / f"p{part}-l{lane}"
+    if testlists.is_dir():  # this process's lists only (the shard env names them all)
+        os.environ["OPERATORX_TESTLISTS"] = ",".join(sorted(p.stem for p in testlists.glob("*.json")))
+    else:
+        testlists = Path("/opx/testlists")
     bench = [
         sys.executable,
         "-m",
         "operatorx",
         "--strict",
         "--testlist-dir",
-        "/opx/testlists",
+        str(testlists),
         "--results-dir",
         "/opx/results",
     ]
     if os.environ.get("OPERATORX_MODE", "timing") != "counters":
+        if Path("/opx/cache").is_dir():  # a stage planned with parts: recover from failures
+            sys.exit(_supervise(bench, part, task, ws))
         os.execv(sys.executable, bench)
     # one marked, profiled replay per op so counters join to ops; no timing warmups
     os.environ.update(
@@ -883,9 +1119,10 @@ def main() -> None:
         names = args.testlists.split(",")
         if any(not re.fullmatch(r"[A-Za-z0-9_-]+", n) for n in names):
             raise ValueError("invalid testlist name")
-        lists = {
-            n: json.loads((ROOT / "testlists" / f"{n}.json").read_text()) for n in names
-        }
+        paths = {p.stem: p for p in (ROOT / "testlists").glob("*/*.json")}
+        if missing := [n for n in names if n not in paths]:
+            raise ValueError(f"unknown testlist(s): {missing}")
+        lists = {n: json.loads(paths[n].read_text()) for n in names}
         vendor = "amd" if is_amd(args.runner) else "nvidia"
         images = tomllib.loads((ROOT / "containers.toml").read_text())[vendor]
         # fail before any node is allocated for a backend with no module

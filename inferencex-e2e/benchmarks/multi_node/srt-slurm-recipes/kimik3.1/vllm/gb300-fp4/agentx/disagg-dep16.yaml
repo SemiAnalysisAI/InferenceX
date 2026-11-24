@@ -79,8 +79,6 @@ base:
   roles:
     prefill:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         <<: &kimi_env
           DYN_TCP_REQUEST_TIMEOUT: "120"
@@ -153,8 +151,6 @@ base:
         speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         <<: *kimi_env
         VLLM_ENABLE_GEMM_RS: "0"
@@ -217,13 +213,11 @@ override_1p1d:
   roles:
     prefill:
       nodes: 4
-      workers: 1
 
 override_1p1d_eval:
   roles:
     prefill:
       nodes: 4
-      workers: 1
       args:
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
@@ -241,7 +235,6 @@ override_1p1d_kvb:
   roles:
     prefill:
       nodes: 4
-      workers: 1
       args:
         kv-cache-memory-bytes: 61926160384
     decode:
@@ -252,7 +245,6 @@ override_1p1d_kvb_eval:
   roles:
     prefill:
       nodes: 4
-      workers: 1
       args:
         kv-cache-memory-bytes: 61926160384
         reasoning-parser: kimi_k3
