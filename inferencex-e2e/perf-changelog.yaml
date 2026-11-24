@@ -13333,3 +13333,15 @@
     - "Bump utils/srt-slurm from 2d9079c to cc9db05 (21 commits), which adds NVIDIA/srt-slurm#669: one bootstrap port per prefill engine and Router start after every worker's health check. The shared vllm-router.sh setup script now raises the worker parent shell's soft RLIMIT_MEMLOCK to its hard limit."
     - "Draft data type unchanged: the DSpark draft from the checkpoint's dspark/ subfolder runs as shipped, with MXFP8 attention and MLP projections, BF16 fc, norms and the shared target embedding and LM head, and an FP8 E4M3 draft KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-sglang-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP2 c64, TP2 DPA c128, TP2 DPA EP2 c128 and TP4 DPA EP4 c128 and c256; drop TP2 DPA c32."
+    - "Cap running requests at TP2 c8 (2), TP2 c64 (32) and TP4 c4, c8 and c16 (1, 2 and 4); TP2 c8 and c64 use prefill-decode-interval 48 and 32, TP2 c64 the AMD monokernel."
+    - "TP2 c32 uses prefill-decode-interval 32 instead of 8."
+    - "DP attention points from c128 use shortest-prefill-first, the shared Engram host table and, with EP, SGLANG_DP_SHARED_EXPERT_LOCAL=1; TP4 DPA EP4 c256 adds a 65536-token prefill chunk, a 0.85 prefill-delayer low watermark and 12288 SWA prefix tails."
+    - "Every point uses --tokenizer-backend fastokens and --image-processor-backend pil."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5034
