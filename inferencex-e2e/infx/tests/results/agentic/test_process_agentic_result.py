@@ -1725,6 +1725,97 @@ def test_trtllm_endpoint_role_survives_generic_dynamo_labels():
     assert nested["sources"][0]["role"] == "prefill"
 
 
+def _openengine_phases(phases: dict[str, list[str]]) -> dict:
+    return {
+        "trtllm_openengine_rpc_outcomes": {
+            "type": "counter",
+            "series": [
+                {
+                    "endpoint_url": url,
+                    "labels": {"phase": phase, "outcome": "completed"},
+                    "stats": {"total": 1.0},
+                }
+                for url, endpoint_phases in phases.items()
+                for phase in endpoint_phases
+            ],
+        }
+    }
+
+
+def test_trtllm_sidecar_hit_rate_reads_roles_from_openengine_phase():
+    # Dynamo sidecar mode scrapes TRT-LLM's own OpenEngine endpoint, which carries no Dynamo
+    # role labels; decode endpoints re-report every prompt with no cached tokens.
+    metrics = {
+        "trtllm_prompt_tokens": _trtllm_series(
+            "counter", "total", {"ctx": 1000.0, "gen-a": 600.0, "gen-b": 400.0}
+        ),
+        "trtllm_prompt_cached_tokens": _trtllm_series(
+            "counter", "total", {"ctx": 970.0, "gen-a": 0.0, "gen-b": 0.0}
+        ),
+        **_openengine_phases({"ctx": ["prefill"], "gen-a": ["decode"], "gen-b": ["decode"]}),
+    }
+
+    flat, nested, _ = compute_server_metrics(
+        {"metrics": metrics}, framework="dynamo-trt", records=[]
+    )
+
+    assert flat["server_gpu_cache_hit_rate"] == pytest.approx(0.97)
+    assert nested["cache"]["prefix_cache_queries"] == 1000.0
+    assert {source["id"] for source in nested["sources"]} == {
+        "prefill|ctx",
+        "decode|gen-a",
+        "decode|gen-b",
+    }
+
+
+def test_trtllm_openengine_endpoint_serving_both_phases_is_combined():
+    metrics = {
+        "trtllm_prompt_tokens": _trtllm_series("counter", "total", {"agg": 1000.0}),
+        "trtllm_prompt_cached_tokens": _trtllm_series("counter", "total", {"agg": 900.0}),
+        **_openengine_phases({"agg": ["prefill", "decode"]}),
+    }
+
+    flat, nested, _ = compute_server_metrics(
+        {"metrics": metrics}, framework="dynamo-trt", records=[]
+    )
+
+    assert [source["role"] for source in nested["sources"]] == ["combined"]
+    assert flat["server_gpu_cache_hit_rate"] == pytest.approx(0.9)
+
+
+_DISAGG_ENV = {"KV_OFFLOADING": "none", "FRAMEWORK": "dynamo-trt", "GPU_COUNT": "2"}
+
+
+def test_builder_warns_when_disaggregated_run_has_no_prefill_endpoint():
+    metrics = {
+        "trtllm_prompt_tokens": _trtllm_series("counter", "total", {"a": 1000.0, "b": 1000.0}),
+        "trtllm_prompt_cached_tokens": _trtllm_series("counter", "total", {"a": 970.0, "b": 0.0}),
+    }
+
+    result = build_result([], {}, {"metrics": metrics}, {**_DISAGG_ENV, "DISAGG": "true"})
+    aggregated = build_result([], {}, {"metrics": metrics}, _DISAGG_ENV)
+
+    assert result["warnings"] == [
+        "Disaggregated run, but no server metrics endpoint is labelled prefill; "
+        "the server KV cache hit rate counts every endpoint"
+    ]
+    assert "warnings" not in aggregated
+
+
+@pytest.mark.parametrize(("cached", "warned"), [(450.0, True), (900.0, False)])
+def test_builder_warns_when_server_hit_rate_trails_theoretical(cached, warned):
+    metrics = {
+        "trtllm_prompt_tokens_total": _trtllm_series("counter", "total", {"a": 1000.0}),
+        "trtllm_prompt_cached_tokens_total": _trtllm_series("counter", "total", {"a": cached}),
+    }
+    aggregate = {"theoretical_prefix_cache_hit": {"unit": "%", "avg": 95.0}}
+
+    result = build_result([], aggregate, {"metrics": metrics}, _DISAGG_ENV)
+
+    expected = ["Server KV cache hit rate 45.0% is more than 25% below the theoretical 95.0%"]
+    assert result.get("warnings", []) == (expected if warned else [])
+
+
 def test_processor_normalizes_dynamo_server_metrics(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     artifact = result_dir / "aiperf_artifacts"
