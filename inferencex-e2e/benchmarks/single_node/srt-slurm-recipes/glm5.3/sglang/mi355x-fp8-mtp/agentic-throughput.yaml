@@ -54,7 +54,7 @@ override_tp8_c8_hicache:
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
         enable-hierarchical-cache: true
-        hicache-ratio: 1.5
+        hicache-size: 149
         hicache-write-policy: write_through_selective
         hicache-io-backend: direct
         hicache-mem-layout: page_first_direct
@@ -72,7 +72,7 @@ override_tp8_c10_hicache:
         max-running-requests: 20
         cuda-graph-max-bs-decode: 20
         enable-hierarchical-cache: true
-        hicache-ratio: 1.5
+        hicache-size: 149
         hicache-write-policy: write_through_selective
         hicache-io-backend: direct
         hicache-mem-layout: page_first_direct
@@ -90,7 +90,7 @@ override_tp8_c16_hicache:
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
         enable-hierarchical-cache: true
-        hicache-ratio: 1.5
+        hicache-size: 149
         hicache-write-policy: write_through_selective
         hicache-io-backend: direct
         hicache-mem-layout: page_first_direct
