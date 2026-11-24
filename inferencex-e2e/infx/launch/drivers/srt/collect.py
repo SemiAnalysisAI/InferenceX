@@ -159,6 +159,7 @@ def stage_video_identity(run: SrtRun, bound: Path) -> None:
     identity = {
         "plan_sha256": digest,
         "workload_plan": plan,
+        "workload_size": selected["workload_size"],
         "engine": {
             "name": environment["VIDEO_RUNTIME"],
             "revision": environment["VIDEO_RUNTIME_REVISION"],

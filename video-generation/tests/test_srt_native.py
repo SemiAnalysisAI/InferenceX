@@ -569,6 +569,7 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     identity = {
         "plan_sha256": PLAN_SHA,
         "workload_plan": PLAN,
+        "workload_size": {"latent_tokens": 37710},
         "engine": {"name": "vllm-omni", "revision": "a" * 40},
     }
     (workspace / "video-identity.json").write_text(json.dumps(identity))

@@ -53,13 +53,16 @@ def write_video_specs(repository: Path) -> None:
     (specs / VIDEO_SPEC).write_text(yaml.safe_dump({
         "schema_version": 1,
         "model": {"id": VIDEO_MODEL, "revision": "a" * 40},
-        "generation": {"num_inference_steps": 1},
+        "generation": {"num_inference_steps": 1, "width": 16, "height": 16},
         "prompts": {"fixture": {"text": "a fixture prompt", "requires_motion": False, "requires_sound": False}},
         "sets": {VIDEO_SET: {
             "plan_id": "fixture-plan", "repetitions": 1, "warmup_runs": 0,
             "cases": [{"case_id": "fixture", "prompt": "fixture", "seed": 1}],
         }},
         "reference": {},
+        "workload_size": {"latent_frames": 1, "latent_tokens_audio": 0, "guidance_branches": 1, "model": {
+            "latent_patch_pixels": 16, "dit_weights_per_token": 1, "attention_width": 1, "layers": 1,
+        }},
     }))  # fmt: skip
 
 

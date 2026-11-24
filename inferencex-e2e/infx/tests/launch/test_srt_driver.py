@@ -215,7 +215,7 @@ VIDEO_ENV = {
     "FRAMEWORK": "sglang", "MODEL": "MiniMaxAI/MiniMax-H3", "IMAGE": "test:tag", "PRECISION": "bf16",
     "MODEL_PREFIX": "h3", "SPEC_DECODING": "none", "IS_AGENTIC": "0", "ISL": "0", "OSL": "0",
     "SCENARIO_TYPE": "video-generation", "IS_MULTINODE": "false", "GPU_COUNT": "2",
-    "CONC_LIST": "1 2", "VIDEO_SPEC": "h3.yaml", "VIDEO_SET": "release-v1", "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
+    "CONC_LIST": "1 2", "VIDEO_SPEC": "h3-v2.yaml", "VIDEO_SET": "release-v1", "HF_HUB_CACHE": "/mnt/hf_hub_cache/",
     "SRT_RECIPE": "benchmarks/single_node/srt-slurm-recipes/h3/sglang/b200-bf16/video/agg-ulysses.yaml",
     "FAKE_RESULTS": "video",
 }  # fmt: skip
@@ -1174,6 +1174,8 @@ def test_video_startup_failure_keeps_a_failed_bundle_without_client_results(harn
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode != 0
     bundle = harness.workspace / "h3-results"
+    size = json.loads((bundle / "manifest.json").read_text())["workload_size"]
+    assert (size["latent_tokens"], size["dit_forward_passes"]) == (37710, 49)
     matrix = json.loads((bundle / "serving-smoke.json").read_text())
     assert matrix["status"] == "failed" and matrix["power_verified"] is False
     assert [cell["concurrency"] for cell in matrix["cells"]] == [1, 2]

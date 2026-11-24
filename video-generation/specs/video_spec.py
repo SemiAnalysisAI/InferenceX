@@ -95,13 +95,33 @@ def _validate_set(set_id: str, prompt_set: Any, prompts: dict[str, Any], version
             raise ValueError(f"{where}.warmup_case must be disjoint from measurements")
 
 
+def _validate_workload_size(size: Any, generation: dict[str, Any]) -> None:
+    where = "workload_size"
+    _fields(size, where, {"latent_frames", "latent_tokens_audio", "guidance_branches", "model"})
+    model = _fields(
+        size["model"],
+        f"{where}.model",
+        {"latent_patch_pixels", "dit_weights_per_token", "attention_width", "layers"},
+    )
+    _integer(size["latent_frames"], f"{where}.latent_frames", minimum=1)
+    _integer(size["latent_tokens_audio"], f"{where}.latent_tokens_audio", minimum=0)
+    _integer(size["guidance_branches"], f"{where}.guidance_branches", minimum=1)
+    for key, value in model.items():
+        _integer(value, f"{where}.model.{key}", minimum=1)
+    _integer(generation.get("num_inference_steps"), "generation.num_inference_steps", minimum=1)
+    for key in ("width", "height"):
+        _integer(generation.get(key), f"generation.{key}", minimum=1)
+        if generation[key] % model["latent_patch_pixels"]:
+            raise ValueError(f"generation.{key} must divide by {where}.model.latent_patch_pixels")
+
+
 def load_spec(path: str | Path) -> dict[str, Any]:
     """Parse and validate a spec file; raise ValueError naming the first bad field."""
     spec = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     version = spec.get("schema_version") if isinstance(spec, dict) else None
     if type(version) is not int or version not in _ROOT_KEYS:
         raise ValueError(f"schema_version must be one of {sorted(_ROOT_KEYS)}")
-    _fields(spec, "spec", _ROOT_KEYS[version])
+    _fields(spec, "spec", _ROOT_KEYS[version] | ({"workload_size"} & spec.keys()))
     model = _fields(spec["model"], "model", {"id", "revision"})
     _text(model["id"], "model.id")
     if not isinstance(model["revision"], str) or not _REVISION.fullmatch(model["revision"]):
@@ -207,6 +227,8 @@ def load_spec(path: str | Path) -> dict[str, Any]:
 
     elif not isinstance(spec["reference"], dict):
         raise ValueError("reference must be a mapping")
+    if "workload_size" in spec:
+        _validate_workload_size(spec["workload_size"], generation)
     return spec
 
 
@@ -265,6 +287,31 @@ def plan_for(
     if (plan["repetitions"], plan["warmup_runs"]) != counts:
         plan["plan_id"] += f"-r{plan['repetitions']}-w{plan['warmup_runs']}"
     return plan
+
+
+def workload_size(spec: dict[str, Any]) -> dict[str, Any]:
+    """One clip's latent tokens, DiT forward passes and estimated DiT FLOPs, with their inputs."""
+    if "workload_size" not in spec:
+        raise ValueError("the spec declares no workload_size")
+    declared, generation = spec["workload_size"], spec["generation"]
+    model = declared["model"]
+    patch = model["latent_patch_pixels"]
+    video = (
+        declared["latent_frames"] * (generation["width"] // patch) * (generation["height"] // patch)
+    )
+    tokens = video + declared["latent_tokens_audio"]
+    passes = generation["num_inference_steps"] * declared["guidance_branches"]
+    per_pass = (
+        2 * tokens * model["dit_weights_per_token"]
+        + 4 * tokens**2 * model["attention_width"] * model["layers"]
+    )
+    return {
+        **declared,
+        "latent_tokens_video": video,
+        "latent_tokens": tokens,
+        "dit_forward_passes": passes,
+        "dit_flops_per_clip": passes * per_pass,
+    }
 
 
 def plan_sha256(plan: dict[str, Any]) -> str:

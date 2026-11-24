@@ -91,6 +91,29 @@ def test_v01_plan_declares_schema_2_with_its_fairness_and_warmup() -> None:
     assert plan["warmup_case"]["case_id"] == "warmup-only"
 
 
+@pytest.mark.parametrize(
+    ("name", "video", "audio", "passes", "flops"),
+    [("h3-v2.yaml", 37296, 414, 49, "1.71e+17"), ("wan22.yaml", 32760, 0, 80, "1.33e+17")],
+)
+def test_workload_size_is_computed_from_generation_and_the_model_constants(
+    name: str, video: int, audio: int, passes: int, flops: str
+) -> None:
+    size = video_spec.workload_size(video_spec.load_spec(SPECS / name))
+    assert (size["latent_tokens_video"], size["latent_tokens"]) == (video, video + audio)
+    assert size["dit_forward_passes"] == passes
+    assert f"{size['dit_flops_per_clip']:.2e}" == flops
+
+
+def test_workload_size_stays_outside_the_plan_and_both_hashes(tmp_path: Path) -> None:
+    document = yaml.safe_load((SPECS / "wan22.yaml").read_text())
+    del document["workload_size"]
+    path = tmp_path / "unsized.yaml"
+    path.write_text(yaml.safe_dump(document))
+    sized, unsized = video_spec.load_spec(SPECS / "wan22.yaml"), video_spec.load_spec(path)
+    assert video_spec.plan_for(sized, "release-v1") == video_spec.plan_for(unsized, "release-v1")
+    assert video_spec.spec_sha256(sized) == video_spec.spec_sha256(unsized)
+
+
 def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
     return lambda doc: doc["prompts"][target].update(text=doc["prompts"][source]["text"])
 
@@ -132,6 +155,16 @@ def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
             "h3.yaml",
             lambda doc: doc["sets"]["engine-compare-v1"]["cases"][1].update(seed=11),
             "cases must not repeat a prompt text with the same seed",
+        ),
+        (
+            "wan22.yaml",
+            lambda doc: doc["workload_size"].update(guidance_branches=0),
+            "workload_size.guidance_branches must be an integer >= 1",
+        ),
+        (
+            "h3-v2.yaml",
+            lambda doc: doc["workload_size"]["model"].update(latent_patch_pixels=30),
+            "generation.width must divide by workload_size.model.latent_patch_pixels",
         ),
     ],
 )
