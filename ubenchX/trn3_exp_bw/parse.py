@@ -3,12 +3,12 @@
   python ubenchX/trn3_exp_bw/parse.py RUN_DIR... --csv exp.csv   # one row per profiled execution
 
 From the profiler's per-instruction Instruction table, the burst is the instructions on the kernel's
-engine that read one [P, F] fp32 source tile (plus, for the softmax kernels, the [P, 1] fp32 max or
+engine that read one [P, F] source tile (plus, for the softmax kernels, the [P, 1] fp32 max or
 bias tile) and share the one opcode that occurs exactly num_ops times among them (the closing
 reduce can read similar bytes, but only once). Other instructions on that engine
 inside the burst window (such as a separate reduce_res read-out) are counted in extra_instrs. II_ns is the initiation interval, (last op start - first op start) / (num_ops - 1);
 II_cycles uses the engine clock from the trace's Metadata. elem_per_cycle = fdim / II_cycles per
-partition. GBps = fp32 input bytes processed per second. report.py fits
+partition. GBps = input bytes (in the source dtype) processed per second. report.py fits
 II_cycles = issue + fdim * cycles_per_element per kernel.
 """
 
@@ -72,8 +72,8 @@ def main():
             continue
         meta = json.load(open(mp))
         for k in meta.get("profiled_execs", []):
-            r = {key: meta[key] for key in ("kernel", "engine", "dst_dtype", "pdim", "fdim", "op_elements", "op_bytes",
-                                            "num_ops", "core")}
+            r = {key: meta[key] for key in ("kernel", "engine", "src_dtype", "dst_dtype", "pdim", "fdim", "op_elements",
+                                            "op_bytes", "num_ops", "core")}
             r.update({"run": os.path.relpath(os.path.normpath(d), os.path.dirname(os.path.dirname(os.path.normpath(d)))),
                       "exec": k})
             r.update(parse_trace(meta, os.path.join(d, f"parquet_exec_{k}")))

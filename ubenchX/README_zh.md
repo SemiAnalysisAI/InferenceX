@@ -169,16 +169,19 @@ VectorE 上约 15 个周期（12.5 ns），在 ScalarE 上约 8 个周期（6.7 
 ## Trainium3 exp 与激活函数吞吐量
 
 `trn3_exp_bw` 在 LNC=1 下测量单个 Trainium3 NeuronCore 上超越函数的指令速率。每个 kernel 是一次
-由 1,024 条指令组成的突发，每条指令读取一个 fp32 `[128, fdim]` SBUF tile 并写回 SBUF：
+由 1,024 条指令组成的突发，每条指令读取一个 `[128, fdim]` SBUF tile（除特别说明外为 fp32）并写回
+SBUF：
 
 - Softmax exp，fp32 到 bf16，减去行最大值并在整个突发中累加行和：`exp_vector_softmax` 在 VectorE
   上使用 `nisa.exponential`，`exp_scalar_softmax` 在 ScalarE 上使用 `nisa.activation(nl.exp)`。
+- 同样的 softmax exp，16 位输入，bf16 到 bf16：`exp_vector_softmax_bf16` 在 VectorE 上使用
+  `nisa.exponential`。行最大值与行和仍为 fp32。
 - ScalarE 上不带 scale、bias 或归约的 `nisa.activation`：`act_silu`（fp32 到 bf16），以及
   `act_sigmoid`、`act_rsqrt`、`act_softplus`、`act_sqrt`、`act_tanh`（fp32 到 fp32）。
 
 ```bash
 NEURON_TARGET=trn3 OUT_DIR=ubenchX/trn3_exp_bw/runs/r0 CORE=0 \
-  KERNELS="exp_vector_softmax exp_scalar_softmax act_silu act_sigmoid act_rsqrt act_softplus act_sqrt act_tanh" \
+  KERNELS="exp_vector_softmax exp_vector_softmax_bf16 exp_scalar_softmax act_silu act_sigmoid act_rsqrt act_softplus act_sqrt act_tanh" \
   ubenchX/trn3_dma_bw/run.sh ubenchX/trn3_exp_bw/sweep.sh
 
 ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_exp_bw/parse.py ubenchX/trn3_exp_bw/runs/r0/* --csv act.csv
@@ -187,9 +190,10 @@ ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_exp_bw/report.py act.csv
 
 `sweep.sh` 在 pdim=128 下运行 fdim 8 到 4096。`parse.py` 从 profiler 的逐指令表计算发射间隔
 （II）：（最后一条开始时间 - 第一条开始时间）/ 1,023，并用 trace 中的引擎时钟（1.2 GHz）换算成
-周期。`report.py` 在 fdim >= 256 上拟合 II 周期 = 发射开销 + fdim x 每元素周期数。`plot.py` 画
-softmax exp 的每指令周期数，加 `--epc` 则画整个引擎的每周期元素数；`plot_act.py` 画激活函数的每
-周期元素数（均需要 `matplotlib`）。
+周期。`report.py` 在 fdim >= 256 上拟合 II 周期 = 发射开销 + fdim x 每元素周期数（可用
+`--fit-min-fdim` 修改下限）。`plot.py` 画 softmax exp 的每指令周期数，加 `--epc` 则画整个引擎的每
+周期元素数，CSV 中的每个 kernel 一条曲线，图例中标注其精度；`plot_act.py` 画激活函数的每周期元素
+数（均需要 `matplotlib`）。
 
 `results/trn3_48xlarge_rev2_2026-11-06_*` 在一台 revision-v2 芯片的 trn3.48xlarge 的 NeuronCore 0
 上测得。ScalarE 每个 partition 每周期处理一个 fp32 元素（每周期 128 个，即文档中的 fp32 宽度），
@@ -198,7 +202,18 @@ softmax exp 的每指令周期数，加 `--epc` 则画整个引擎的每周期�
 fdim 256 起发射开销为 25.1 个周期，但 fdim 低于 128 时每条指令至少约 56 个周期。fdim 为 8 / 64 /
 512 / 4096 时，整个引擎每周期处理的元素数在 VectorE 上为 18 / 147 / 233 / 253，在 ScalarE 上为
 33 / 94 / 123 / 127：fdim 低于 32 时 ScalarE 更快，fdim 较大时 VectorE 接近 ScalarE 的两倍。在
-fp32 输入下未观察到架构指南所说的 VectorE exp 4 倍优势；未测量 bf16 输入。结果未与参考值比对。
+fp32 输入下未观察到架构指南所说的 VectorE exp 4 倍优势；bf16 输入的测量见下文 2026-11-24 的结果。
+结果未与参考值比对。
+
+`results/trn3n_48xlarge_rev2_2026-11-24_exp*` 在一台 revision-v2 芯片的 trn3n.48xlarge 的
+NeuronCore 0 上重测了两个 softmax exp kernel，并新增 `exp_vector_softmax_bf16`。输入和输出均为
+bf16 时，VectorE 的 `nisa.exponential` 每个 partition 每周期处理四个元素（每周期 512 个），是其
+fp32 速率的两倍、ScalarE fp32 速率的四倍，从 fdim 512 起发射开销为 26.1 个周期；按输入字节计，
+两种精度的流式速率同为 1,229 GB/s。每条指令约 56 个周期的下限一直持续到 fdim 128，是 fp32 输入时
+的两倍，因此 fdim 不超过 64 时 bf16 输入并不比 fp32 输入快。fdim 为 8 / 64 / 512 / 4096 时，bf16
+输入下整个引擎每周期处理 18 / 146 / 425 / 499 个元素。报告在 fdim >= 512 上拟合，三个 kernel 在该
+范围内均为线性。两个 fp32 kernel 在每个 fdim 上与 2026-11-06 的结果相差不超过 1 个周期。未测量
+ScalarE 的 bf16 输入。
 
 ## Trainium3 Tensor Engine 矩阵乘法时序
 

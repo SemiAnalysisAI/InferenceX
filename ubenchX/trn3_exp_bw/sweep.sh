@@ -4,7 +4,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 source "$HERE/../../inferencex-e2e/benchmarks/check_env.sh"
 check_env_vars OUT_DIR CORE NEURON_TARGET KERNELS
 
-# 1,024 instructions per execution at every size, pdim=128. FDIMS overrides the fp32 elements per
+# 1,024 instructions per execution at every size, pdim=128. FDIMS overrides the elements per
 # partition read by each instruction.
 FDIMS=${FDIMS:-8 16 32 64 128 256 512 1024 2048 4096}
 mkdir -p "$OUT_DIR"

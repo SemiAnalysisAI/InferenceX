@@ -182,18 +182,20 @@ not checked.
 ## Trainium3 exp and activation throughput
 
 `trn3_exp_bw` measures the instruction rate of transcendental functions on one Trainium3
-NeuronCore at LNC=1. Each kernel is one burst of 1,024 instructions that each read one fp32
-`[128, fdim]` SBUF tile and write SBUF:
+NeuronCore at LNC=1. Each kernel is one burst of 1,024 instructions that each read one
+`[128, fdim]` SBUF tile (fp32 unless noted) and write SBUF:
 
 - Softmax exp, fp32 to bf16, subtracting the row max and accumulating the row sum across the
   burst: `exp_vector_softmax` uses `nisa.exponential` on VectorE, `exp_scalar_softmax` uses
   `nisa.activation(nl.exp)` on ScalarE.
+- The same softmax exp with a 16-bit source, bf16 to bf16: `exp_vector_softmax_bf16` uses
+  `nisa.exponential` on VectorE. The row max and row sum stay fp32.
 - ScalarE `nisa.activation` with no scale, bias or reduction: `act_silu` (fp32 to bf16) and
   `act_sigmoid`, `act_rsqrt`, `act_softplus`, `act_sqrt`, `act_tanh` (fp32 to fp32).
 
 ```bash
 NEURON_TARGET=trn3 OUT_DIR=ubenchX/trn3_exp_bw/runs/r0 CORE=0 \
-  KERNELS="exp_vector_softmax exp_scalar_softmax act_silu act_sigmoid act_rsqrt act_softplus act_sqrt act_tanh" \
+  KERNELS="exp_vector_softmax exp_vector_softmax_bf16 exp_scalar_softmax act_silu act_sigmoid act_rsqrt act_softplus act_sqrt act_tanh" \
   ubenchX/trn3_dma_bw/run.sh ubenchX/trn3_exp_bw/sweep.sh
 
 ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_exp_bw/parse.py ubenchX/trn3_exp_bw/runs/r0/* --csv act.csv
@@ -203,9 +205,10 @@ ubenchX/trn3_dma_bw/run.sh python ubenchX/trn3_exp_bw/report.py act.csv
 `sweep.sh` runs fdim 8 to 4096 at pdim=128. `parse.py` takes the initiation interval (II) from the
 profiler's per-instruction table: (last start - first start) / 1,023, converted to cycles with the
 engine clock in the trace (1.2 GHz). `report.py` fits II cycles = issue overhead + fdim x cycles
-per element over fdim >= 256. `plot.py` draws softmax exp cycles per instruction, or with `--epc`
-elements per cycle for the whole engine, and `plot_act.py` the activation functions' elements per
-cycle (both need `matplotlib`).
+per element over fdim >= 256 (`--fit-min-fdim` changes the bound). `plot.py` draws softmax exp
+cycles per instruction, or with `--epc` elements per cycle for the whole engine, one curve per
+kernel in the CSV with its precision in the legend, and `plot_act.py` the activation functions'
+elements per cycle (both need `matplotlib`).
 
 `results/trn3_48xlarge_rev2_2026-11-06_*` were measured on NeuronCore 0 of a trn3.48xlarge with
 revision-v2 silicon. ScalarE processes one fp32 element per partition per cycle (128 per cycle, its
@@ -216,7 +219,19 @@ from fdim 256, but takes at least about 56 cycles per instruction below fdim 128
 throughput at fdim 8 / 64 / 512 / 4096 is 18 / 147 / 233 / 253 elements per cycle on VectorE and
 33 / 94 / 123 / 127 on ScalarE: ScalarE is faster below fdim 32 and VectorE approaches twice
 ScalarE at large fdim. The architecture guide's 4x VectorE advantage for exp was not observed with
-fp32 input; bf16 input was not measured. Results are not checked against a reference.
+fp32 input; bf16 input is measured in the 2026-11-24 results below. Results are not checked against
+a reference.
+
+`results/trn3n_48xlarge_rev2_2026-11-24_exp*` repeat the two softmax exp kernels and add
+`exp_vector_softmax_bf16` on NeuronCore 0 of a trn3n.48xlarge with revision-v2 silicon. With bf16
+input and output, VectorE `nisa.exponential` processes four elements per partition per cycle (512
+per cycle), twice its fp32 rate and four times ScalarE's fp32 rate, with a 26.1-cycle overhead from
+fdim 512; in input bytes both precisions stream at 1,229 GB/s. The floor of about 56 cycles per
+instruction lasts to fdim 128, twice as far as with fp32 input, so bf16 input is no faster than
+fp32 input at fdim 64 and below. Whole-engine throughput with bf16 input at fdim 8 / 64 / 512 /
+4096 is 18 / 146 / 425 / 499 elements per cycle. The report fits fdim >= 512, where all three
+kernels are linear. The fp32 kernels are within 1 cycle of the 2026-11-06 results at every fdim.
+ScalarE with bf16 input was not measured.
 
 ## Trainium3 Tensor Engine matmul timing
 

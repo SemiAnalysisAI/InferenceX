@@ -58,7 +58,7 @@ def main():
     # trn3 is Trainium3 silicon revision v2 and trn3pre is revision v1.
     ap.add_argument("--target", required=True, choices=["trn3", "trn3pre"])
     ap.add_argument("--pdim", type=int, default=128, help="partitions per op (max 128)")
-    ap.add_argument("--fdim", type=int, required=True, help="fp32 elements per partition per op")
+    ap.add_argument("--fdim", type=int, required=True, help="elements per partition per op")
     ap.add_argument("--ops", type=int, default=1024, help="instructions per execution")
     ap.add_argument("--out", required=True)
     ap.add_argument("--core", type=int, default=0, help="NeuronCore to run on (NEURON_RT_VISIBLE_CORES)")
@@ -68,12 +68,14 @@ def main():
 
     out = os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
-    from kernels import ENGINE
-    dst_bytes = KERNELS[a.kernel][2]
-    meta = {"kernel": a.kernel, "engine": ENGINE.get(a.kernel, "scalar"), "dst_dtype": {2: "bf16", 4: "fp32"}[dst_bytes],
-            "pdim": a.pdim, "fdim": a.fdim, "op_elements": a.pdim * a.fdim, "op_bytes": a.pdim * a.fdim * 4,
-            "num_ops": a.ops, "total_bytes": a.ops * a.pdim * a.fdim * 4, "core": a.core, "num_exec": a.num_exec,
-            "profile_every": a.profile_every, "lnc": 1, "target": a.target}
+    from kernels import DTYPES, ENGINE
+    src, dst = KERNELS[a.kernel][1:3]
+    src_bytes = DTYPES[src][1]
+    # op_bytes / total_bytes are input bytes in the source dtype.
+    meta = {"kernel": a.kernel, "engine": ENGINE.get(a.kernel, "scalar"), "src_dtype": src, "dst_dtype": dst,
+            "pdim": a.pdim, "fdim": a.fdim, "op_elements": a.pdim * a.fdim, "op_bytes": a.pdim * a.fdim * src_bytes,
+            "num_ops": a.ops, "total_bytes": a.ops * a.pdim * a.fdim * src_bytes, "core": a.core,
+            "num_exec": a.num_exec, "profile_every": a.profile_every, "lnc": 1, "target": a.target}
 
     inp = os.path.join(out, "input.npy")
     np.save(inp, np.zeros((a.pdim, a.fdim), dtype=np.float32))  # shape carrier only
