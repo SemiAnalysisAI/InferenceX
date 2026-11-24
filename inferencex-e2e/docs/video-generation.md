@@ -104,7 +104,7 @@ Merge Ingest also requires the merge commit's planned video rows to be the manif
 rows: the two sets of `recipe-fingerprint` values must be equal. A row added, dropped,
 or changed after the sweep, through its recipe, its config row or a shared block, fails
 the run before anything is published, as does a planned row without a fingerprint.
-Sweep the final commit again and `/use` that run.
+Sweep the final commit and `/use` that run before merging.
 
 After authorized reuse and merge, Merge Ingest uploads `video-publication-selection.json`
 as the `video-publication-selection` artifact. Its version 1 payload records
