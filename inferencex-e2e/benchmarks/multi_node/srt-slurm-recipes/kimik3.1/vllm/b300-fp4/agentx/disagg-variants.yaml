@@ -79,8 +79,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 8
       env:
         <<: &kimi_env
           DYN_TCP_REQUEST_TIMEOUT: "120"
@@ -167,8 +165,6 @@ base:
         speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 1
-      workers: 1
-      gpus: 8
       env:
         <<: *kimi_env
         VLLM_ENABLE_GEMM_RS: "0"
@@ -225,13 +221,11 @@ override_1p1d_k7:
   roles:
     prefill: &override_1p1d_k7_prefill
       nodes: 1
-      workers: 1
       args: &override_1p1d_k7_prefill_args
         prefix-match-unit: 1536
         speculative-config: &spec_k7 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode: &override_1p1d_k7_decode
       nodes: 1
-      workers: 1
       env:
         <<: &ll_decode_env
           K31_DCPV8: "1"
@@ -301,12 +295,10 @@ override_1p3d_k5:
   roles:
     prefill: &override_1p3d_k5_prefill
       nodes: 1
-      workers: 1
       args: &override_1p3d_k5_prefill_args
         speculative-config: &spec_k5 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode: &override_1p3d_k5_decode
       nodes: 3
-      workers: 3
       env:
         <<: *ll_decode_env
         # Lays the small-batch decode kernels out for the 6 verify rows of 5 draft tokens.
@@ -339,11 +331,9 @@ override_1p3d_k4:
   roles:
     prefill: &override_1p3d_k4_prefill
       nodes: 1
-      workers: 1
       args: &override_1p3d_k4_prefill_args {}
     decode: &override_1p3d_k4_decode
       nodes: 3
-      workers: 3
       env: *ll_decode_env
       args: &override_1p3d_k4_decode_args {}
 
@@ -370,7 +360,6 @@ override_4p5d_k5:
   roles:
     prefill: &override_4p5d_k5_prefill
       nodes: 4
-      workers: 4
       env:
         # Lighter host-side work per eager prefill step; same outputs.
         K31_CPU1: "1"
@@ -378,7 +367,6 @@ override_4p5d_k5:
         speculative-config: *spec_k5
     decode: &override_4p5d_k5_decode
       nodes: 5
-      workers: 5
       args: &override_4p5d_k5_decode_args
         attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
         gpu-memory-utilization: 0.98
