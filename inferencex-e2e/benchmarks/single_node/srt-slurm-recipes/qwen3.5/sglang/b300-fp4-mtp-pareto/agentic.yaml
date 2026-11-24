@@ -15,7 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
         trust-remote-code: true
@@ -60,7 +59,6 @@ base:
 override_tp4_ep1_c4_cap1_arf:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -78,7 +76,6 @@ override_tp4_ep1_c4_cap1_arf:
 override_tp4_ep1_c6_cap1_arf:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -97,7 +94,6 @@ override_tp4_ep1_c6_cap1_arf:
 override_tp4_ep1_c12_cap2_arf:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -117,7 +113,6 @@ override_tp4_ep1_c12_cap2_arf:
 override_tp4_ep1_c14_cap2_arf:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -137,7 +132,6 @@ override_tp4_ep1_c14_cap2_arf:
 override_tp4_ep1_c16_cap3_arf:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 1
@@ -158,7 +152,6 @@ override_tp4_ep1_c16_cap3_arf:
 override_tp4_ep4_c22_cap4:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -174,7 +167,6 @@ override_tp4_ep4_c22_cap4:
 override_tp4_ep4_c26_cap5:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -190,7 +182,6 @@ override_tp4_ep4_c26_cap5:
 override_tp2_ep2_c16_cap4:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -213,7 +204,6 @@ override_tp2_ep2_c16_cap4:
 override_tp2_ep2_c20_cap5:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -231,7 +221,6 @@ override_tp2_ep2_c20_cap5:
 override_tp2_ep2_c24_cap8:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -249,7 +238,6 @@ override_tp2_ep2_c24_cap8:
 override_tp2_ep2_c32_cap13_pf:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         expert-parallel-size: 2
@@ -269,7 +257,6 @@ override_tp2_ep2_c32_cap13_pf:
 override_tp2_ep2_c40_cap17_pf:
   roles:
     agg:
-      gpus: 2
       args:
         mem-fraction-static: 0.85
         tensor-parallel-size: 2
@@ -292,7 +279,6 @@ override_tp2_ep2_c40_cap17_pf:
 override_tp2_ep2_c48_cap32_pf:
   roles:
     agg:
-      gpus: 2
       args:
         mem-fraction-static: 0.85
         tensor-parallel-size: 2
@@ -317,7 +303,6 @@ override_tp2_ep2_c48_cap32_pf:
 override_tp2_ep2_c64_cap128_pf_hicache:
   roles:
     agg:
-      gpus: 2
       args:
         mem-fraction-static: 0.88
         tensor-parallel-size: 2
@@ -345,4 +330,3 @@ override_tp2_ep2_c64_cap128_pf_hicache:
     env:
       CONC: '64'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '599'

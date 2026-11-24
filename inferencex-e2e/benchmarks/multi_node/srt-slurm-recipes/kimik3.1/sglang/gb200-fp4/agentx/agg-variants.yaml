@@ -49,8 +49,6 @@ base:
     # A single worker leaves the KV router nothing to choose, so it publishes no KV events.
     agg:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         PYTHONUNBUFFERED: '1'
@@ -90,7 +88,7 @@ base:
         # Without ReplaySSM, DFLASH keeps one KDA state per draft token and the KV pool collapses.
         enable-linear-replayssm-spec: true
         enable-hierarchical-cache: true
-        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 fits a tray's 487 GB offload share.
+        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 is ~475 GB per 4-GPU tray.
         hicache-size: 108
         hicache-io-backend: direct
         hicache-mem-layout: page_first_direct
