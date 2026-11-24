@@ -1,0 +1,12 @@
+--- a/src/srtctl/ports.py
++++ b/src/srtctl/ports.py
+@@ -82,7 +82,8 @@
+ # vLLM Router discovery endpoint (frontend.type: vllm-router with a discovery
+ # connector): the one ZMQ listener on the router node that MoRI-IO workers
+ # register their HTTP and transfer addresses with (--vllm-discovery-address).
+-VLLM_DISCOVERY_PORT = 36367
++# Keep discovery outside the ephemeral range used by bind(0) and outbound TCP.
++VLLM_DISCOVERY_PORT = 28667
+ # MoRI-IO adds rank offsets to both bases. Keep these blocks below Linux's
+ # default ephemeral range (32768-60999), used by its other bind(0) listeners.
+ VLLM_MORIIO_HANDSHAKE_PORT_BASE = 26000

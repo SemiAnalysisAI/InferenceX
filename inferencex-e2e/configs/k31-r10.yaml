@@ -45,7 +45,7 @@ kimik31-r10-1p1d:
           - DECODE_CPU_DRAM_GB=1799
 
 kimik31-r10-1p2d:
-  image: yukiozzz/vllm-openai-rocm@sha256:ed36d804912358c1463f931a0f2cdf49d42aa2f7389e9f62ab52e22b8f478786
+  image: yukiozzz/vllm-openai-rocm@sha256:d43d511a287ab8c2fe384dbeb04c7d90ff0023b18fcb41c11e3ffde6d25415f4
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds
@@ -77,7 +77,7 @@ kimik31-r10-1p2d:
           dp-attn: false
           additional-settings:
           - TOTAL_CPU_DRAM_GB=1799
-          - K31_CLEAN_RUN_ID=k31-1p2d-k4-c64-1124
+          - K31_CLEAN_RUN_ID=k31-di-1p2d-k4-c64-1124
           - K31_MODEL_METADATA_MANIFEST=/infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/k31-pro-metadata-6d0a0202.json
           - MODEL_PATH=/var/lib/hf-hub-cache/models--moonshotai--Kimi-K3.1-Pro/snapshots/6d0a0202956796543364d666ab19c6ad1a494ee1
         decode:
