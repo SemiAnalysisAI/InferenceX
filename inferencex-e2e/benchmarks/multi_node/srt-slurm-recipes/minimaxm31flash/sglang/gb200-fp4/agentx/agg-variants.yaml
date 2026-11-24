@@ -53,8 +53,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         PYTHONUNBUFFERED: "1"
         PYTHONNOUSERSITE: "1"

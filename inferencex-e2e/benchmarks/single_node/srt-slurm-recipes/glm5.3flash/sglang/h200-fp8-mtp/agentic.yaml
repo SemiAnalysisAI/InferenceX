@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: zai-org/GLM-5.3-Flash
         tensor-parallel-size: 8
@@ -51,4 +49,3 @@ override_hicache:
   benchmark:
     env:
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1020'

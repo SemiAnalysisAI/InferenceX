@@ -25,7 +25,6 @@ engine: sglang
 roles:
   prefill:
     nodes: 2
-    workers: 2
     env:
       SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
       NO_COLOR: "1"
@@ -78,7 +77,6 @@ roles:
 
   decode:
     nodes: 4
-    workers: 1
 
     env:
       SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
