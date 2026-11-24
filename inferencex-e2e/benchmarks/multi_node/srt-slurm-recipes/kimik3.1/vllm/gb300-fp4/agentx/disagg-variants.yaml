@@ -76,8 +76,6 @@ base:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         <<: &kimi_env
           DYN_TCP_REQUEST_TIMEOUT: "120"
@@ -147,8 +145,6 @@ base:
         speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         <<: *kimi_env
         VLLM_ENABLE_GEMM_RS: "0"
@@ -206,11 +202,9 @@ override_1p1d:
   roles:
     prefill: &override_1p1d_prefill
       nodes: 2
-      workers: 1
       args: &override_1p1d_prefill_args {}
     decode: &override_1p1d_decode
       nodes: 2
-      workers: 1
       args: &override_1p1d_decode_args {}
 
 override_1p1d_eval:
@@ -236,13 +230,11 @@ override_1p2d:
   roles:
     prefill: &override_1p2d_prefill
       nodes: 2
-      workers: 1
       args: &override_1p2d_prefill_args
         numa-bind: true
         numa-bind-nodes: [0, 0, 1, 1]
     decode: &override_1p2d_decode
       nodes: 4
-      workers: 2
       args: &override_1p2d_decode_args
         numa-bind: true
         numa-bind-nodes: [0, 0, 1, 1]
@@ -273,13 +265,11 @@ override_1p3d:
   roles:
     prefill: &override_1p3d_prefill
       nodes: 2
-      workers: 1
       env: &override_spawn_env
         VLLM_WORKER_MULTIPROC_METHOD: "spawn"
       args: &override_1p3d_prefill_args {}
     decode: &override_1p3d_decode
       nodes: 6
-      workers: 3
       env: *override_spawn_env
       args: &override_1p3d_decode_args {}
 
@@ -316,7 +306,6 @@ override_1p5d:
       <<: *override_1p3d_decode
       # One TP8 x DCP8 prefill keeps up with five decode engines at c44-c56.
       nodes: 10
-      workers: 5
 
 override_1p5d_eval:
   engine:
@@ -348,13 +337,11 @@ override_1p2d_mns256:
   roles:
     prefill: &override_1p2d_mns256_prefill
       nodes: 2
-      workers: 1
       env: &override_mns256_prefill_env
         VLLM_WORKER_MULTIPROC_METHOD: "spawn"
       args: &override_1p2d_mns256_prefill_args {}
     decode: &override_1p2d_mns256_decode
       nodes: 4
-      workers: 2
       env: &override_mns256_decode_env
         VLLM_WORKER_MULTIPROC_METHOD: "spawn"
       args: &override_1p2d_mns256_decode_args
@@ -392,12 +379,10 @@ override_1p3d_mns256:
   roles:
     prefill: &override_1p3d_mns256_prefill
       nodes: 2
-      workers: 1
       env: *override_mns256_prefill_env
       args: &override_1p3d_mns256_prefill_args {}
     decode: &override_1p3d_mns256_decode
       nodes: 6
-      workers: 3
       env: *override_mns256_decode_env
       args: &override_1p3d_mns256_decode_args
         max-num-seqs: 256
@@ -435,7 +420,6 @@ override_hyb4_3p1d:
   roles:
     prefill: &override_hyb4_3p1d_prefill
       nodes: 6
-      workers: 3
       env: &override_hyb_prefill_env
         VLLM_WORKER_MULTIPROC_METHOD: "spawn"
         # Mooncake store: keep the tail a hit loaded and drop consumed partial tails, so live prefixes are not evicted.
@@ -452,8 +436,6 @@ override_hyb4_3p1d:
         eplb-config: &eplb_cfg '{"num_redundant_experts":0,"window_size":1000,"step_interval":3000,"communicator":"symm_mem","log_balancedness":true,"log_balancedness_interval":500}'
     decode: &override_hyb4_3p1d_decode
       nodes: 8
-      workers: 1
-      gpus: 32
       env:
         <<: &override_hyb_decode_env
           VLLM_WORKER_MULTIPROC_METHOD: "spawn"
@@ -507,7 +489,6 @@ override_hyb4_2p1d_lpt4k:
     prefill: &override_hyb4_2p1d_lpt4k_prefill
       <<: *override_hyb4_3p1d_prefill
       nodes: 4
-      workers: 2
       args: &override_hyb4_2p1d_lpt4k_prefill_args
         <<: *override_hyb4_3p1d_prefill_args
         long-prefill-token-threshold: 4096
@@ -551,7 +532,6 @@ override_1p5d_lpt:
   roles:
     prefill: &override_1p5d_lpt_prefill
       nodes: 2
-      workers: 1
       env:
         VLLM_WORKER_MULTIPROC_METHOD: "spawn"
       args: &override_1p5d_lpt_prefill_args
@@ -561,7 +541,6 @@ override_1p5d_lpt:
         long-prefill-token-threshold-adaptive: true
     decode: &override_1p5d_lpt_decode
       nodes: 10
-      workers: 5
       # Opt-in TP8 x DCP8 decode paths of this image (default off) for the 1P5D points: specialized decode
       # steps at 5-40 rows (T8T/T8M/S21/S22/S23), KDA and attention kernels (KDA8/TCS/E32/EXP8), one-pass
       # decode prep (NP1), fused drafter layers (DRF/S31).
@@ -639,7 +618,6 @@ override_1p5d_k5:
   roles:
     prefill: &override_1p5d_k5_prefill
       nodes: 2
-      workers: 1
       env:
         VLLM_WORKER_MULTIPROC_METHOD: "spawn"
       args: &override_1p5d_k5_prefill_args
@@ -648,7 +626,6 @@ override_1p5d_k5:
         prefix-match-unit: 1408
     decode: &override_1p5d_k5_decode
       nodes: 10
-      workers: 5
       env:
         <<: *k31_tp8_decode_env
         # Specialized decode table for 6-token rows (5 drafts).
