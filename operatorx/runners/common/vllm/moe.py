@@ -89,7 +89,8 @@ def _dp_rank() -> int:
 
 
 def _dp_generator(seed: int, device=None):
-    """Generator for this data-parallel group's token draws. Group 0 returns None (draw as before)."""
+    """Generator for this data-parallel group's token draws. Group 0 returns None, so callers use
+    the generator every group shares."""
     r = _dp_rank()
     return None if r == 0 else torch.Generator(device=device).manual_seed(seed * 1000 + r)
 
@@ -465,6 +466,11 @@ def _prepare_moe(op: Op) -> dict:
     if "unsupported" in _BUILT:
         raise UnsupportedOpError(_BUILT["unsupported"])
     block, kernels = _BUILT["block"], _BUILT["kernels"]
+    if routing["distribution"] == "balanced" and _dp_rank():
+        # a group's round-robin offset follows the op's token count, which the ladder varies
+        ex = a["experts"]
+        block.forced_ids[: a["tokens"]].copy_(_forced_ids(
+            "balanced", a["tokens"], ex["num"], ex["top_k"], routing["seed"], _dp_rank()).to(torch.int32))
     # the tokens of one data-parallel group, identical on its tensor-parallel ranks
     g = torch.Generator(device=device()).manual_seed(routing["seed"] * 1000 + _dp_rank())
     x = torch.randn(a["tokens"], a["hidden"], device=device(), dtype=torch.bfloat16, generator=g)
