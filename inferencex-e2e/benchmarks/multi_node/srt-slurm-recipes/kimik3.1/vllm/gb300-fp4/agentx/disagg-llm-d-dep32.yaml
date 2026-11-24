@@ -80,6 +80,10 @@ base:
           scheme: http
           path: /metrics
           insecureSkipVerify: true
+          families:
+          - "vllm:num_requests_waiting"
+          - "vllm:num_requests_running"
+          - "vllm:kv_cache_usage_perc"
       - type: core-metrics-extractor
         parameters:
           engineConfigs:
@@ -100,13 +104,15 @@ base:
         parameters:
           addEstimatedOutputTokens: false
           syncCrossReplicaState: false
-      - type: approx-prefix-cache-producer
+      - type: session-affinity-scorer
         parameters:
-          autoTune: false
-          blockSizeTokens: 512
-          maxPrefixTokensToMatch: 262144
-          lruCapacityPerServer: 4096
-      - type: prefix-cache-scorer
+          profileName: prefill
+          strategy: session_id
+          sessionIdConfig:
+            sources:
+            - header: x-session-id
+            evictionTtlSeconds: 1
+            evictionSweepSeconds: 1
       - type: active-request-scorer
         parameters:
           idleThreshold: 0
@@ -135,7 +141,7 @@ base:
           weight: 16
         - pluginRef: queue-scorer
           weight: 8
-        - pluginRef: prefix-cache-scorer
+        - pluginRef: session-affinity-scorer
           weight: 4
         - pluginRef: max-score-picker
       - name: decode

@@ -67,6 +67,10 @@ base:
           scheme: http
           path: /metrics
           insecureSkipVerify: true
+          families:
+          - "vllm:num_requests_waiting"
+          - "vllm:num_requests_running"
+          - "vllm:kv_cache_usage_perc"
       - type: core-metrics-extractor
         parameters:
           engineConfigs:
