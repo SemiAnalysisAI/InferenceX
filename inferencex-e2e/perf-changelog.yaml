@@ -13380,3 +13380,9 @@
     - "TP8/DCP8 1P5D: concurrency 44 with 5 draft tokens (was 4), and concurrency 104 with 4 draft tokens and an adaptive 4096-token long-prefill threshold on the prefill engine; both decode engines turn on the image's opt-in TP8 x DCP8 decode paths (K31_* env). They replace 1P5D at 44 and 56 and 1P3D at 56."
     - "Aggregated TP16/DCP16 at concurrency 1: 7 draft tokens with the image's opt-in c=1 decode paths (K31_* env) and prefix-match-unit 768."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5109
+
+- config-keys:
+    - dsr1-fp8-h200-sglang
+  description:
+    - "Dummy entry to exercise the evals-last sweep label with one 8k1k point. Not for merge."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5230
