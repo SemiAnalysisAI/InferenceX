@@ -18,8 +18,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: zai-org/GLM-5.3-Flash
         revision: 46a050bec13002ad29ee795c16e61cf4fa3c4a9c
