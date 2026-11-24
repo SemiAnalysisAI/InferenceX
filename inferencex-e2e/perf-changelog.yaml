@@ -13300,6 +13300,55 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
 
 - config-keys:
+    - dsv41flash-fp4-gb300-tilert-agentic-dspark-dep
+    - dsv41flash-fp4-gb300-tilert-agentic-dspark-tp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add TileRT wide-EP decode on GB300 NVL72 for DeepSeek-V4.1-Flash FP4 AgentX: vLLM prefill workers (DP2 + expert parallel, two per tray; the official vllm/vllm-openai:cu134-nightly-a2bcb565 image by digest, unmodified) send the prompt KV over NVLink to one TileRT DEP32 decode (eight trays), at 4, 8 and 16 sequences per decode GPU (concurrency 1200, 2000 and 3200) with four, six and six prefill workers (40, 44 and 44 GPUs). Decode, prefill KV connector and router run tilert 0.2.1 from PyPI, sha256-checked; the decode is on the CUDA 13.2 runtime image by digest."
+    - "The prefill keeps a lazy CPU DRAM KV tier with vLLM's SimpleCPUOffloadConnector, 64 GiB per DP rank. The router has its own tray, tokenizes with the release's Rust port of vLLM's DeepSeek-V4.1 encoder, splits reasoning with vLLM's parser (no tool-call parsing), serves the client port with the release's Rust front, and sends each prefill straight to a worker and one of its DP ranks, keeping a conversation on one for its prefix cache."
+    - "DSpark with five drafts; acceptance is simulated at the golden AL 3.51 (TILERT_SIMULATE_ACC_LEN). 30-minute warm-up grace."
+    - "The prefill ships the FlashInfer autotune results vLLM itself saved for this exact prefill (configs/gb300-tilert-autotune/: a cold start of these prefill flags in the same image on GB300, files as written under vLLM's config hash); the setup script copies them into VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR, so each cold start loads them instead of re-tuning, as a warm deployment does. A cold tune's temporary buffers otherwise leave the prefill a KV cache of about 60 GiB per GPU instead of about 88 GiB. vLLM reads them only under the same config hash and FlashInfer only with the same library versions and GPU; anywhere else the prefill tunes as before."
+    - "Also rerun the existing concurrency-1 TP8 and TP24 points of dsv41flash-fp4-gb300-tilert-agentic-dspark-tp (tilert 0.1.8) with their recipes unchanged, so all five GB300 TileRT points publish together as one curve; an AgentX curve takes its points from a single run."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5094
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
+  description:
+    - "Add MiniMax-M3.1-Flash B300 Dynamo + vLLM AgentX recipes with minimax-m31-flash-arm64-cu135-f7d7346, including TP8 c1/c4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4826
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Rerun the single-node key minimaxm31flash-fp4-mi355x-vllm-agentic-dspark from #5035 unchanged, so both topologies are measured in one sweep."
+    - "Add MiniMax-M3.1-Flash PD-disaggregated AgentX on MI355X as minimaxm31flash-fp4-mi355x-vllm-agentic-dspark-disagg (framework vllm, disagg true), on the single-node key's image vllm/vllm-openai-rocm:minimax-m31-flash-75bc8cf1: one TP4 prefill and two TP4 decode vLLM engines move KV over MooncakeConnector (RDMA) behind vllm-router 0.1.16 with consistent-hash routing, at concurrency 40, 48, 56, 64, 72 and 80 (DRAM utilization 0.9 at c40-c64, 1.0 at c72-c80)."
+    - "Both roles keep the single-node serving args: NVFP4 KV and indexer caches, DSpark with 7 speculative tokens, AITER MoE, block size 128 and 1M context."
+    - "Prefill admits 2x CONC with DBO at 32768 batched tokens and holds a SimpleCPUOffloadConnector host KV tier of 1349 GB (1499 GB at c72 and c80); at c80 it schedules at most 4096 tokens of a prompt per step at 0.75 GPU memory utilization."
+    - "Each decode engine runs without DBO at 8192 batched tokens, with max-num-seqs 5, 6, 7, 8, 10 and 10 from c40 to c80 and CUDA graphs captured in multiples of 8 up to 8x that batch."
+    - "Both roles set NCCL_DMABUF_ENABLE=0, VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200, a 3600 s HTTP keep-alive (900 s on single node) and the Mooncake RDMA env (GID index, traffic class, one concurrent MR registration, 600 s connector timeout; 1 GiB max MR size on prefill, 256 MiB on decode)."
+    - "Bump utils/srt-slurm from 2d9079c to cc9db05 (21 commits), which adds NVIDIA/srt-slurm#669: one bootstrap port per prefill engine and Router start after every worker's health check. The shared vllm-router.sh setup script now raises the worker parent shell's soft RLIMIT_MEMLOCK to its hard limit."
+    - "Draft data type unchanged: the DSpark draft from the checkpoint's dspark/ subfolder runs as shipped, with MXFP8 attention and MLP projections, BF16 fc, norms and the shared target embedding and LM head, and an FP8 E4M3 draft KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "New MiniMax-M3.1-Flash AgentX config on MI355X with ATOM: rocm/atom-dev:nightly_202611200431 (ATOM 0.1.11.dev71+g17edc6157 and AITER a485545d3, built from ROCm/ATOM main; the atomesh frontend container_image pins its digest sha256:57c08153e332315b85c00bb3bb6c1dd71504950f7989be83915be456cfb6749f), serving amd/MiniMax-M3.1-Flash-Quark-MXFP4 as shipped: MXFP4 routed experts; MXFP8 attention, dense MLP and shared expert, the shared expert kept as its own MLP."
+    - "Points: TP4 at concurrency 1, 2, 4, 8, 16 and 32 on the GPU prefix cache, and at 48 with the LMCache 0.5.6.dev139+gf22dec28 CPU tier (200 GiB per rank, dram-utilization 0.58)."
+    - "Every point runs the NVFP4 KV and index caches (the checkpoint is QAT-trained for an NVFP4 KV cache), 128-token blocks, prefix caching, gpu-memory-utilization 0.85, max-num-batched-tokens 32768 (16384 at concurrency 32), max-num-seqs at twice the concurrency, and decode graphs at every batch size up to 8, then in steps of 2, 4, 8 and 16 up to max-num-seqs."
+    - "Concurrency 1 to 8 run ATOM's mono decode (on by default) for decode steps of up to 16 rows. From 16, decode indexer scoring splits across the TP ranks by context (ATOM_M3_INDEXER_CP=1), which mono decode does not run with. Concurrency 32 adds the prefill delayer (interval 8, target fill 0.05, stall 2 ticks). The LMCache point uses 256-token chunks."
+    - "All-reduce is not quantized: AITER_QUICK_REDUCE_QUANTIZATION is left unset, so tensor-parallel all-reduce runs in BF16. No online quantization and no shared-expert fusion. Throughput runs use the minimax-m3.1-flash__dspark__native__probabilistic-block golden AL (4.04 at seven draft tokens)."
+    - "Relevant ATOM changes in the image: ROCm/ATOM#3310 (NVFP4 KV and index caches), #3308 (mono decode with the MXFP8 shared expert), #3576 with ROCm/aiter#8285 (indexer CP over the NVFP4 caches) and #3591 (LMCache offload with an NVFP4 KV and a DSpark draft of its own dtype)."
+    - "Draft data types: the DSpark draft weights run as shipped, MXFP8 (1x32 UE8M0 scales) attention and MLP linears with BF16 fc, Markov and confidence heads, sharing the target's embedding and LM head; the draft path is the MiniMaxAI snapshot whose dspark/ files are byte-identical to the served checkpoint's. Its KV cache, in a pool of its own, is ATOM's default beside an NVFP4 target (BF16) up to concurrency 32; at 48, --spec-decode-kv-cache-dtype fp8 lowers it to FP8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5157
+
+- config-keys:
     - kimik3.1-fp4-mi355x-vllm-agentic-dspark
   scenario-type:
     - agentic-coding
