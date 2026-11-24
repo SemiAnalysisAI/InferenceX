@@ -13364,3 +13364,10 @@
     - "Relevant ATOM changes in the image: ROCm/ATOM#3266 (GLM-5.2 mono decode on the checkpoint's BF16 attention), #3350 (mono mailbox polling stalls during concurrent transfers), #3043 (FP8 indexer prefill logits and key gathers in bounded passes), #3097 and #3324 (shared Mooncake Store loads and restores) and #3147 (P/D decode admission bounded by pending receive KV bytes)."
     - "Draft data types: no change. The MTP draft (model.layers.78) ships in BF16 and is excluded from the checkpoint's MXFP4 quantization, so ATOM loads it in BF16 at both the old and new commit; it shares the target's FP8 KV cache, as before."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5120
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-linker-d1115
+  scenario-type: [agentic-coding]
+  description:
+    - "Remove the four 150 GB Mooncake stores from the infra node and rerun all five points (1P at concurrency 288, 320 and 352, 2P at 448 and 480). The infra node hosts no inference worker, so MODELS.md gives it no KV offload DRAM. The linker pool is now the 190 GB prefill segments and the decode-node stores only."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5226
