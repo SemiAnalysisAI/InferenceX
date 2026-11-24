@@ -380,16 +380,27 @@ class _Engine:
         # forward, and forward_kv where a layer writes its KV apart from its attention
         # (DeepSeek-V4.1's KV source layer writes every row's KV, then attends on each
         # request's trailing window in vLLM's decoder replay)
-        entries = [n for n in ("forward_kv", "forward") if callable(getattr(module, n, None))]
+        # A CustomOp / PluggableLayer module may be entered through its dispatch target rather
+        # than forward (vLLM's Gated DeltaNet): every entry point is wrapped, and only the
+        # outermost call of a nest is recorded.
+        entries = [n for n in ("forward_kv", "forward", "_forward_method", "forward_cuda", "forward_hip",
+                               "forward_native", "forward_xpu", "forward_tpu")
+                   if callable(getattr(module, n, None))]
         originals = {n: getattr(module, n) for n in entries}
         seen: dict = {"calls": []}
+        depth = [0]
 
         def wrap(name):
             def capture(*args, **kwargs):
                 fc = get_forward_context()
-                seen.setdefault("fc", fc)
-                seen["calls"].append((name, args, kwargs, fc))
-                return originals[name](*args, **kwargs)
+                if depth[0] == 0:
+                    seen.setdefault("fc", fc)
+                    seen["calls"].append((name, args, kwargs, fc))
+                depth[0] += 1
+                try:
+                    return originals[name](*args, **kwargs)
+                finally:
+                    depth[0] -= 1
             return capture
 
         for n in entries:
@@ -557,7 +568,7 @@ def _calls(ctx: dict):
     for name, args, kwargs, fc in ctx["calls"]:
         with override_forward_context(fc):
             r = ctx["fns"][name](*args, **kwargs)
-        if name == "forward":
+        if name != "forward_kv":
             out = r
     return out
 
