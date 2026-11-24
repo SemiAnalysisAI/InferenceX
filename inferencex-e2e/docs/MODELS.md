@@ -122,6 +122,8 @@ The amount of CPU DDR5 used for KV cache offloading must be proportional to the 
 
 This rule applies independently to each server.
 
+A server that runs none of the configuration's inference workers has no GPUs in use, so its allowance is zero. CPU DRAM on such a server (a frontend, router, benchmark-client or other infrastructure node) may not hold KV cache: no standalone store, such as a Mooncake store service, and no other offload pool may be placed there. A standalone store on a server that does run inference workers is allowed, and it counts toward that server's allowance together with the pools inside the workers.
+
 | CPU DRAM capacity class | Example SKUs | Per-server baseline and limit |
 |---|---|---|
 | No standardized CPU DRAM capacity | HGX B200, HGX B300, MI355X chassis | At most 3 TB per server. A configuration using 4 of 8 GPUs may therefore use at most 1.5 TB of CPU DRAM for KV cache offloading. |
