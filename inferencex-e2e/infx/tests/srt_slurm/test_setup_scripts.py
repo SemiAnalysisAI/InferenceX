@@ -68,6 +68,47 @@ def test_an_installer_installs_exactly_the_bound_version(tmp_path, script, env, 
     assert expected <= set(installs[0])
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="prlimit requires Linux")
+@pytest.mark.parametrize("start_at_hard_limit", [False, True])
+def test_vllm_router_setup_raises_the_worker_parent_memlock(tmp_path, start_at_hard_limit):
+    (tmp_path / "bin").mkdir()
+    executable(tmp_path / "bin/python3", f"""#!{sys.executable}
+import os, sys
+if sys.argv[1:4] == ["-m", "pip", "install"]:
+    if "--help" in sys.argv:
+        print("  --break-system-packages")
+else:
+    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
+""")
+    (tmp_path / "mount.sh").write_text(MOUNT)
+    parent = """
+import resource, subprocess, sys
+hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)[1]
+if hard == 0:
+    sys.exit(77)
+soft = hard if sys.argv[2] == "True" else 0
+resource.setrlimit(resource.RLIMIT_MEMLOCK, (soft, hard))
+subprocess.run(["bash", sys.argv[1]], check=True)
+assert resource.getrlimit(resource.RLIMIT_MEMLOCK) == (hard, hard)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", parent, str(CONFIGS / "vllm-router.sh"), str(start_at_hard_limit)],
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "BASH_ENV": str(tmp_path / "mount.sh"),
+            "STUB_WORKSPACE": str(ROOT),
+            "ROUTER_VERSION": "9.8.7",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 77:
+        pytest.skip("host disallows locked memory")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_tokenspeed_installer_uses_direct_private_wheels_and_one_public_index(tmp_path):
     result, installs = run(tmp_path, "tokenspeed-nightly.sh", {
         "TOKENSPEED_WHEEL_URL": "https://example.test/tokenspeed.whl#sha256=abc",
