@@ -18,7 +18,7 @@ from pathlib import Path
 
 import torch
 
-from operatorx.core import BackendImpl, Op, UnsupportedOpError, parallel
+from operatorx.core import BackendImpl, FreshProcessError, Op, UnsupportedOpError, parallel
 from operatorx.runners.common import ranks
 from operatorx.runners.common.vllm import engine as vllm_engine
 from operatorx.runners.common.vllm import linear as vllm_linear
@@ -324,12 +324,15 @@ class _Engine:
 
     def _output(self, new: list, scheduled: dict, finished: set):
         from vllm.v1.core.sched.output import CachedRequestData, SchedulerOutput
-        return SchedulerOutput(
+        kwargs = dict(
             scheduled_new_reqs=new, scheduled_cached_reqs=CachedRequestData.make_empty(),
             num_scheduled_tokens=scheduled, total_num_scheduled_tokens=sum(scheduled.values()),
             scheduled_spec_decode_tokens={}, scheduled_encoder_inputs={},
+            # no shared prefix (no cascade attention); newer vLLM no longer takes this field
             num_common_prefix_blocks=[0] * len(self.runner.kv_cache_config.kv_cache_groups),
             finished_req_ids=finished, free_encoder_mm_hashes=[])
+        accepted = {f.name for f in fields(SchedulerOutput)}
+        return SchedulerOutput(**{k: v for k, v in kwargs.items() if k in accepted})
 
     def _configured(self):
         from vllm.config import set_current_vllm_config
@@ -371,22 +374,33 @@ class _Engine:
             blocks = _shuffle(blocks, rng)
         new = [NewRequestData.from_request(r, b, r._all_token_ids) for r, b in zip(self.reqs, blocks)]
         module = next(m for n, m in self.runner.model.named_modules() if n.endswith(path))
-        forward = module.forward
-        seen: dict = {"forward": forward}
+        # every call the step makes into the module, in order, each with its forward context:
+        # forward, and forward_kv where a layer writes its KV apart from its attention
+        # (DeepSeek-V4.1's KV source layer writes every row's KV, then attends on each
+        # request's trailing window in vLLM's decoder replay)
+        entries = [n for n in ("forward_kv", "forward") if callable(getattr(module, n, None))]
+        originals = {n: getattr(module, n) for n in entries}
+        seen: dict = {"calls": []}
 
-        def capture(*args, **kwargs):
-            if "fc" not in seen:
-                seen.update(args=args, kwargs=kwargs, fc=get_forward_context())
-            return forward(*args, **kwargs)
+        def wrap(name):
+            def capture(*args, **kwargs):
+                fc = get_forward_context()
+                seen.setdefault("fc", fc)
+                seen["calls"].append((name, args, kwargs, fc))
+                return originals[name](*args, **kwargs)
+            return capture
 
-        module.forward = capture
+        for n in entries:
+            setattr(module, n, wrap(n))
         try:
             with self._configured():
                 self.runner.execute_model(self._output(new, {r.request_id: r.num_tokens - r.num_computed_tokens
                                                              for r in self.reqs}, set()))
         finally:
-            module.forward = forward
+            for n in entries:
+                setattr(module, n, originals[n])
             self.runner.execute_model_state = None
+        seen["fns"] = originals
         if "fc" not in seen:
             raise RuntimeError("the model never called the attention module")
         return seen
@@ -437,15 +451,33 @@ def _engine(b: _Build, split: dict | None) -> _Engine:
     if _ENGINE is not None and _ENGINE.key == key:
         return _ENGINE
     if _ENGINE is not None:
+        # a second engine in one process can hang in its process-group setup (seen on dcp and on
+        # ROCm images): under a CI part, build every engine in a fresh process instead
+        if os.environ.get("OPERATORX_PROGRESS"):
+            raise FreshProcessError(f"a {b.family} engine after {_ENGINE.key[:60]}...")
         _ENGINE.close()
         _ENGINE = None
+    # a failed startup leaves its tensors in reference cycles (its exception's frames): collect
+    # them first, or vLLM's free-memory check rejects every later engine in this process
+    gc.collect()
+    torch.cuda.empty_cache()
     _ENGINE = _Engine(key, b, split)
     return _ENGINE
+
+
+def resident() -> bool:
+    return _ENGINE is not None
 
 
 def _backends(runner) -> dict[str, str]:
     return {", ".join(g.layer_names): getattr(g.backend, "__name__", type(g.backend).__name__)
             for gs in runner.attn_groups for g in gs}
+
+
+def _shapes(args: tuple, kwargs: dict) -> dict:
+    out = {f"arg{i}": list(v.shape) for i, v in enumerate(args) if isinstance(v, torch.Tensor)}
+    out.update({k: list(v.shape) for k, v in kwargs.items() if isinstance(v, torch.Tensor)})
+    return out
 
 
 def _prepare(op: Op) -> dict:
@@ -479,6 +511,9 @@ def _prepare(op: Op) -> dict:
            "meta": {"vllm_engine": vllm_engine.meta(), "vllm_family": b.family, "vllm_repo": _MODELS[b.family]["repo"], "vllm_module": b.module,
                     "vllm_backends": _backends(eng.runner),
                     "vllm_attn_metadata": {k: type(v).__name__ for k, v in (seen["fc"].attn_metadata or {}).items()},
+                    # the tensors the module was called with on this rank (tokens it computes)
+                    "module_calls": [{"call": n, **_shapes(a, k)} for n, a, k, _ in seen["calls"]],
+                    "scheduled_tokens": sum(r.num_tokens - r.num_computed_tokens for r in eng.reqs),
                     "kv_cache_groups": [
                         {"spec": type(g.kv_cache_spec).__name__, "block_size": g.kv_cache_spec.block_size,
                          "dtype": str(getattr(g.kv_cache_spec, "dtype", "")).removeprefix("torch.")}
@@ -501,9 +536,21 @@ def _replaying(ctx: dict):
     return stack
 
 
+def _calls(ctx: dict):
+    """Every call the step made into the module, in order, each under its forward context."""
+    from vllm.forward_context import override_forward_context
+    out = None
+    for name, args, kwargs, fc in ctx["calls"]:
+        with override_forward_context(fc):
+            r = ctx["fns"][name](*args, **kwargs)
+        if name == "forward":
+            out = r
+    return out
+
+
 def _kernel(ctx: dict) -> None:
     with _replaying(ctx):
-        ctx["out"] = ctx["forward"](*ctx["args"], **ctx["kwargs"])
+        ctx["out"] = _calls(ctx)
 
 
 def _cudagraph(ctx: dict) -> bool:
@@ -550,13 +597,13 @@ def _launcher(ctx: dict):
     try:
         with _replaying(ctx):
             for _ in range(2):
-                ctx["forward"](*ctx["args"], **ctx["kwargs"])
+                _calls(ctx)
             torch.cuda.synchronize()
             g = torch.cuda.CUDAGraph()
             with graph_capture(torch.device("cuda", torch.cuda.current_device())) as gc_, \
                     torch.cuda.graph(g, pool=torch.cuda.graph_pool_handle(), stream=gc_.stream):
                 _ready_upstream(ctx)
-                ctx["graph_out"] = ctx["forward"](*ctx["args"], **ctx["kwargs"])
+                ctx["graph_out"] = _calls(ctx)
         torch.cuda.synchronize()
     except Exception as e:  # fall back to eager, as the linear launcher does
         if vllm_linear._is_fault(e):
