@@ -66,7 +66,7 @@ def run_single_node(launch: Launch) -> int:
         hf_cache = models.single_node_hf_cache(run.cluster, request)
         time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
         root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
-        checkout, job_mib = prepare_single_node(run, request, root, power=not request.eval_only)
+        checkout = prepare_single_node(run, root, power=not request.eval_only)
         native_power = not request.eval_only
         cpu_source = config.cpu_power_source(
             run.cluster, run.srt, native_power and request.cpu_power, default=native_power
@@ -88,7 +88,6 @@ def run_single_node(launch: Launch) -> int:
             request,
             checkout,
             time_limit,
-            job_mib,
             nginx=config.NGINX_IMAGE if run.srt.nginx_aliases else None,
             containers=containers,
             model_paths={f"hf:{request.model}": model_path},
@@ -131,7 +130,7 @@ def run_video(launch: Launch) -> int:
         hf_cache = models.single_node_hf_cache(run.cluster, request)
         time_limit = str(request.salloc_time_limit)
         root = Path(tempfile.mkdtemp(prefix="srt-video.", dir=run.workspace))
-        checkout, job_mib = prepare_single_node(run, request, root, power=True)
+        checkout = prepare_single_node(run, root, power=True)
         if rc := submit.bind_video(run, checkout, root / "arguments"):
             return rc
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
@@ -150,7 +149,6 @@ def run_video(launch: Launch) -> int:
             request,
             checkout,
             time_limit,
-            job_mib,
             containers={image: reference},
             model_paths={f"hf:{request.model}": f"hf:{request.model}"},
             mounts=[(str(hf_cache), request.hf_hub_cache), (str(package), PACKAGE_MOUNT)],
@@ -167,18 +165,13 @@ def run_video(launch: Launch) -> int:
     )
 
 
-def prepare_single_node(
-    run: SrtRun, request: SingleNodeRequest | VideoRequest, root: Path, *, power: bool
-) -> tuple[Checkout, int | None]:
-    """Install srt-slurm under ``root`` and route the job's GPU share into srun's options."""
+def prepare_single_node(run: SrtRun, root: Path, *, power: bool) -> Checkout:
+    """Install srt-slurm under ``root`` and forward the cluster's srun options."""
     checkout = prepare_checkout(run, root / "checkout", power=power)
     install_srtctl(run, checkout)
-    step_mib = job_mib = config.gpu_share_mib(run.cluster, request.gpu_count)
-    if run.srt.single_node_exclusive and job_mib is not None:
-        step_mib, job_mib = None, 0
-    if (options := config.srun_options(run.backend.settings, step_mib)) is not None:
+    if (options := config.srun_options(run.backend.settings)) is not None:
         run.env["SRT_SRUN_OPTIONS"] = options
-    return checkout, job_mib
+    return checkout
 
 
 def write_single_node_job(
@@ -186,7 +179,6 @@ def write_single_node_job(
     request: SingleNodeRequest | VideoRequest,
     checkout: Checkout,
     time_limit: str,
-    job_mib: int | None,
     **fields: Any,
 ) -> None:
     """Write the single-node srtslurm.yaml; ``fields`` are the job's own SrtJob inputs."""
@@ -198,7 +190,6 @@ def write_single_node_job(
         container=run.backend.stage_image(request.image, single_node=True).reference,
         single_node=True,
         account=run.account,
-        mem_mib=job_mib,
         **fields,
     )
     config.create_volume_mounts(run)

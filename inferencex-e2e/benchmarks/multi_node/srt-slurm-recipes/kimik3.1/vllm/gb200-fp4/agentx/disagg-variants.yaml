@@ -56,7 +56,7 @@ base:
         HF_HUB_CACHE: "/hf_hub_cache"
         HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
       args:
-        # 112742379520 bytes per rank is the dram-utilization 0.5 share of a 4-GPU tray.
+        # 112742379520 bytes per rank is half of each GPU's share of a 4-GPU tray.
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda"},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112742379520,"lazy_offload":false}}]}}'
         served-model-name: "moonshotai/Kimi-K3.1-Pro"
         # NixlConnector rejects pipeline parallelism on KDA hybrids, so each role is one TP16 group.

@@ -312,7 +312,7 @@ override_dp2_umbp_c256:
     - P=$(python3 -c 'import mori, os; print(os.path.dirname(mori.__file__))') && LD_LIBRARY_PATH=$P:$LD_LIBRARY_PATH exec $P/umbp_standalone_server unix:///umbp-host/umbp/standalone.grpc.sock
     env:
       UMBP_STANDALONE_ADDRESS: unix:///umbp-host/umbp/standalone.grpc.sock
-      # TOTAL_CPU_DRAM_GB in bytes.
+      # 449 GB in bytes.
       UMBP_DRAM_CAPACITY: '449000000000'
       # The mi355x-amds host setup releases hugepages, so the pool uses 4 KiB pages.
       UMBP_DRAM_USE_HUGEPAGES: '0'
@@ -344,7 +344,6 @@ override_dp2_umbp_c256:
     env:
       CONC: '256'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '449'
 
 override_dp2_umbp_c384:
   container_mounts: *umbp_host_dir
@@ -357,7 +356,6 @@ override_dp2_umbp_c384:
     env:
       CONC: '384'
       KV_OFFLOADING: 'dram'
-      TOTAL_CPU_DRAM_GB: '449'
 
 override_dp2_c128:
   frontend: *dp2_router

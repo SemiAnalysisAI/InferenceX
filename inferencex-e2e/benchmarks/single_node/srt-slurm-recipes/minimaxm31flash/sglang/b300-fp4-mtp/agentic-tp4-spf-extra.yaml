@@ -73,7 +73,6 @@ zip_override_tp4_dram_spf_interval32:
     env:
       CONC: ['20', '44', '52', '60']
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1199'
 
 # At conc 16 the working set fits in HBM; host offload only adds overhead.
 override_tp4_c16_spf_interval32:

@@ -93,7 +93,6 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             if agentic and point.get("kv-offload-backend")
             else ""
         ),
-        "TOTAL_CPU_DRAM_GB": str(point.get("total-cpu-dram-gb", 0)),
     }
     if agentic:
         environment["KV_OFFLOADING"] = str(point["kv-offloading"])
@@ -104,7 +103,6 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             POWER="1" if point.get("power") else "0",
             CPU_POWER="1" if point.get("cpu-power") else "0",
             CONC_LIST=" ".join(map(str, point["conc"])),
-            DECODE_CPU_DRAM_GB=str(point.get("decode-cpu-dram-gb", 0)),
         )
         if agentic:
             environment["CONC"] = str(point["conc"][0])

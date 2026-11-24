@@ -105,7 +105,7 @@ base:
         max-running-requests: 256
         mem-fraction-static: 0.88
         enable-hierarchical-cache: true
-        # 200 GB per rank: 800 GB per node, inside the matrix's 0.89 DRAM share.
+        # 200 GB per rank: 800 GB per node.
         hicache-size: 200
         hicache-write-policy: write_back
         speculative-algorithm: DSPARK

@@ -40,12 +40,6 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'atom:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
 
-# One variant per point. Admission is 2x CONC, except TP4 C1/C2, which admit
-# exactly CONC with graphs captured up to it. TP4 C1/C2 run mono decode at
-# three draft tokens; C4/C8 draft five and C10 four on the production path. The
-# DCP4 arm shards the decode KV, adds the LMCache DRAM tier at 256 GiB per rank
-# (1024 GiB, 1099.5 GB per server, within the 1109 GB TP4 share at
-# dram-utilization 0.74) and drafts four tokens, three at C48.
 override_tp4_c1:
   roles:
     agg:
@@ -135,7 +129,6 @@ override_tp4_dcp4_c16_lmcache:
     env:
       CONC: '16'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp4_dcp4_c24_lmcache:
   roles:
@@ -152,7 +145,6 @@ override_tp4_dcp4_c24_lmcache:
     env:
       CONC: '24'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp4_dcp4_c32_lmcache:
   roles:
@@ -169,7 +161,6 @@ override_tp4_dcp4_c32_lmcache:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp4_dcp4_c40_lmcache:
   roles:
@@ -186,7 +177,6 @@ override_tp4_dcp4_c40_lmcache:
     env:
       CONC: '40'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp4_dcp4_c48_lmcache:
   roles:
@@ -203,7 +193,6 @@ override_tp4_dcp4_c48_lmcache:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1109'
 
 override_tp8_c1:
   roles:

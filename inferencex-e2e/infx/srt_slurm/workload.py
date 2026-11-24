@@ -69,7 +69,7 @@ _WORKFLOW_ENV = (
     "SPEC_ALGORITHM", "SPEC_DRAFT_MODEL",
 )  # fmt: skip
 _MULTINODE_ENV = (
-    "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "DECODE_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
+    "SPEC_DECODING", "KV_OFFLOADING", "PREFILL_DWDP_SIZE",
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
       for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip

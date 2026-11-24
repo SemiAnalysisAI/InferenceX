@@ -50,7 +50,7 @@ base:
         gpu-memory-utilization: 0.9
         stream-interval: 10
         disable-uvicorn-access-log: true
-        # TOTAL_CPU_DRAM_GB split across the 8 TP ranks.
+        # 2249 GB split across the 8 TP ranks.
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":281125000000,"lazy_offload":false}}'
       env:
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
@@ -73,7 +73,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2249'
 
 # Admission is 2 at c1 and 6 at c6. FULL_DECODE_ONLY graphs cover decode steps of 5 rows
 # (1 + 4 draft tokens) per admitted request (up to 30 rows at c6) with the fused Kimi-K3 decode (decode_backend

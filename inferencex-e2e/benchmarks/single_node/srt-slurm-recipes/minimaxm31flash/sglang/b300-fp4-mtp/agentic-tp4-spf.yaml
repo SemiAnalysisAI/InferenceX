@@ -72,4 +72,3 @@ zip_override_tp4_dram_spf_interval32:
     env:
       CONC: ['24', '32', '40', '8', '16']
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1199'
