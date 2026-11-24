@@ -65,7 +65,6 @@ base:
     dp_launch_mode: per_node
   roles:
     prefill:
-      gpus: 2
       kv_events: true
       env:
         HF_HUB_CACHE: "/hf_hub_cache"
@@ -117,8 +116,6 @@ base:
         numa-bind: true
     decode:
       nodes: 1
-      workers: 1
-      gpus: 8
       env:
         HF_HUB_CACHE: "/hf_hub_cache"
         HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
@@ -186,7 +183,6 @@ override_2p1d_dep2_dep8_c256:
   roles:
     prefill:
       nodes: 1
-      workers: 2
     decode:
       args:
         max-num-seqs: 18
@@ -198,7 +194,6 @@ override_2p1d_dep2_dep8_c768:
   roles:
     prefill:
       nodes: 1
-      workers: 2
     decode:
       args:
         max-num-seqs: 40
@@ -210,7 +205,6 @@ override_3p1d_dep2_dep8_c1280:
   roles:
     prefill:
       nodes: 1
-      workers: 3
     decode:
       args:
         max-num-seqs: 72
@@ -222,7 +216,6 @@ override_4p1d_dep2_dep8_c2048:
   roles:
     prefill:
       nodes: 1
-      workers: 4
     decode:
       args:
         max-num-seqs: 132
@@ -234,7 +227,6 @@ override_5p1d_dep2_dep8_c3584:
   roles:
     prefill:
       nodes: 2
-      workers: 5
     decode:
       args:
         max-num-seqs: 168

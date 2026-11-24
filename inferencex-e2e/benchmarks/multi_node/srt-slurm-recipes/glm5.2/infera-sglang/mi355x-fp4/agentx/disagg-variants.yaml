@@ -34,8 +34,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       kv_events: true
       env:
         <<: &environment
@@ -111,8 +109,6 @@ base:
         hicache-mem-layout: page_first
     decode:
       nodes: 1
-      workers: 1
-      gpus: 8
       env: *environment
       args:
         <<: *server
@@ -158,7 +154,6 @@ override_1p1d:
 override_1p1d_d4:
   roles:
     decode:
-      gpus: 4
       args:
         tp-size: 4
         dp-size: 4

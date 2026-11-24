@@ -1,0 +1,103 @@
+diff --git a/src/srtctl/frontends/tilert_router.py b/src/srtctl/frontends/tilert_router.py
+index 35f9776a..4aeccba1 100644
+--- a/src/srtctl/frontends/tilert_router.py
++++ b/src/srtctl/frontends/tilert_router.py
+@@ -24,6 +24,9 @@ ROUTER_MANAGED_ARGS = frozenset({"vllm-url", "decode", "host", "port"})
+ # the supervisor serves the client port with the packaged front and moves the router to 127.0.0.1 on the next port.
+ RUST_FRONT_ARG = "rust-front"
+ RUST_FRONT_SUPERVISOR = ("python", "-m", "infx_rs_front_strict")
++# TileRT 0.2.0's router sends each prefill straight to one of the prefill workers listed in this variable (in this order);
++# earlier releases do not read it.
++PREFILL_URLS_ENV = "TILERT_ROUTER_P_URLS"
+ ROUTER_WORKERS_REQUIRED = "TileRT router requires at least one prefill worker and at least one decode worker"
+ 
+ 
+@@ -140,12 +143,15 @@ class TileRTRouterFrontend(StaticRouterFrontend):
+             decode_specs.append(f"{parsed.hostname}:{worker.bootstrap_port}:{parsed.port}")
+         # --decode is a single nargs="+" option; repeating the flag would keep only the last worker.
+         # --vllm-url takes every prefill worker as one comma-separated value (TileRT 0.1.8 pd_router splits it on
+-        # commas; 0.1.6 accepts one URL); one worker renders its URL alone.
++        # commas; 0.1.6 accepts one URL); one worker renders its URL alone. PREFILL_URLS_ENV carries the same list.
++        prefill_urls = ",".join(worker.url for worker in prefills)
+         return [
++            "env",
++            f"{PREFILL_URLS_ENV}={prefill_urls}",
+             *(RUST_FRONT_SUPERVISOR if self.rust_front else ()),
+             *self.executable,
+             "--vllm-url",
+-            ",".join(worker.url for worker in prefills),
++            prefill_urls,
+             "--decode",
+             *decode_specs,
+             "--host",
+diff --git a/tests/snapshots/launch/tilert__dsv41flash-gb300-multinode-decode.txt b/tests/snapshots/launch/tilert__dsv41flash-gb300-multinode-decode.txt
+index 532d0c22..cfe5d9fb 100644
+--- a/tests/snapshots/launch/tilert__dsv41flash-gb300-multinode-decode.txt
++++ b/tests/snapshots/launch/tilert__dsv41flash-gb300-multinode-decode.txt
+@@ -80,7 +80,7 @@ container_mounts:
+     <model>: /model
+     <output>/logs: /logs
+ command: |
+-    python -m tilert.pd_vllm.pd_router --vllm-url http://127.0.0.1:6100 --decode 127.0.0.1:5401:6100 --host 0.0.0.0 --port 8000 --model dsv41 --parser none --model-path /model --queue-timeout 1800
++    env TILERT_ROUTER_P_URLS=http://127.0.0.1:6100 python -m tilert.pd_vllm.pd_router --vllm-url http://127.0.0.1:6100 --decode 127.0.0.1:5401:6100 --host 0.0.0.0 --port 8000 --model dsv41 --parser none --model-path /model --queue-timeout 1800
+ 
+ ## service_dcgm-exporter_node-01
+ nodelist: node-01
+diff --git a/tests/snapshots/launch/tilert__glm5-disagg.txt b/tests/snapshots/launch/tilert__glm5-disagg.txt
+index b23616b0..eedeb0fc 100644
+--- a/tests/snapshots/launch/tilert__glm5-disagg.txt
++++ b/tests/snapshots/launch/tilert__glm5-disagg.txt
+@@ -56,7 +56,7 @@ container_mounts:
+     <model>: /model
+     <output>/logs: /logs
+ command: |
+-    python -m tilert.pd_vllm.pd_router --vllm-url http://127.0.0.1:6100 --decode 127.0.0.1:5401:6100 --host 0.0.0.0 --port 8000 --parser none --model-path zai-org/GLM-5.1-FP8 --queue-timeout 1800
++    env TILERT_ROUTER_P_URLS=http://127.0.0.1:6100 python -m tilert.pd_vllm.pd_router --vllm-url http://127.0.0.1:6100 --decode 127.0.0.1:5401:6100 --host 0.0.0.0 --port 8000 --parser none --model-path zai-org/GLM-5.1-FP8 --queue-timeout 1800
+ 
+ ## service_dcgm-exporter_node-01
+ nodelist: node-01
+diff --git a/tests/snapshots/launch/tilert__glm5-rocm-mooncake-disagg.txt b/tests/snapshots/launch/tilert__glm5-rocm-mooncake-disagg.txt
+index 4b637d86..f8916a8e 100644
+--- a/tests/snapshots/launch/tilert__glm5-rocm-mooncake-disagg.txt
++++ b/tests/snapshots/launch/tilert__glm5-rocm-mooncake-disagg.txt
+@@ -65,7 +65,7 @@ container_mounts:
+ env_to_set:
+     RDMAV_FORK_SAFE: 1
+ command: |
+-    python -m tilert.pd_vllm.pd_router --vllm-url http://127.0.0.1:6100 --decode 127.0.0.1:5401:6100 --host 0.0.0.0 --port 8000 --parser none --model-path /model --queue-timeout 1800
++    env TILERT_ROUTER_P_URLS=http://127.0.0.1:6100 python -m tilert.pd_vllm.pd_router --vllm-url http://127.0.0.1:6100 --decode 127.0.0.1:5401:6100 --host 0.0.0.0 --port 8000 --parser none --model-path /model --queue-timeout 1800
+ 
+ ## service_dcgm-exporter_node-01
+ nodelist: node-01
+diff --git a/tests/test_tilert.py b/tests/test_tilert.py
+index 7793c28c..b6f53eeb 100644
+--- a/tests/test_tilert.py
++++ b/tests/test_tilert.py
+@@ -231,7 +231,9 @@ def test_router_joins_every_prefill_url(tmp_path: Path) -> None:
+         workers = frontend.collect_workers(config.backend, orchestrator.backend_processes)
+     command = frontend.build_router_command(workers, "0.0.0.0", 8000, config.backend)
+     prefills = [p for p in orchestrator.backend_processes if p.endpoint_mode == "prefill"]
+-    assert _flag(command, "--vllm-url") == ",".join(f"http://{hosts[p.node]}:{p.http_port}" for p in prefills)
++    urls = ",".join(f"http://{hosts[p.node]}:{p.http_port}" for p in prefills)
++    assert _flag(command, "--vllm-url") == urls
++    assert command[:2] == ["env", f"TILERT_ROUTER_P_URLS={urls}"]
+ 
+ 
+ def test_benchmark_model_matches_prefill_without_a_decode_alias(tmp_path: Path) -> None:
+@@ -306,12 +308,13 @@ def test_rust_front_wraps_the_router_and_is_not_a_router_flag(tmp_path: Path) ->
+     with patch("srtctl.frontends.static_router.get_hostname_ip", side_effect=lambda node, _: hosts[node]):
+         workers = frontend.collect_workers(config.backend, orchestrator.backend_processes)
+     plain = frontend.build_router_command(workers, "0.0.0.0", 8000, config.backend)
+-    assert plain[:3] == ["python", "-m", "tilert.pd_vllm.pd_router"]
++    assert plain[2:5] == ["python", "-m", "tilert.pd_vllm.pd_router"]
+     frontend.rust_front = True
+     command = frontend.build_router_command(workers, "0.0.0.0", 8000, config.backend)
+     command.extend(frontend.get_frontend_args_list(config.frontend.args))
+-    assert command[:6] == ["python", "-m", "infx_rs_front_strict", "python", "-m", "tilert.pd_vllm.pd_router"]
+-    assert command[3:3 + len(plain)] == plain
++    assert command[2:8] == ["python", "-m", "infx_rs_front_strict", "python", "-m", "tilert.pd_vllm.pd_router"]
++    assert command[:2] == plain[:2]
++    assert command[5:3 + len(plain)] == plain[2:]
+     assert "--rust-front" not in command
+     assert _flag(command, "--port") == "8000"
+ 

@@ -69,6 +69,47 @@ def test_an_installer_installs_exactly_the_bound_version(tmp_path, script, env, 
     assert expected <= set(installs[0])
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="prlimit requires Linux")
+@pytest.mark.parametrize("start_at_hard_limit", [False, True])
+def test_vllm_router_setup_raises_the_worker_parent_memlock(tmp_path, start_at_hard_limit):
+    (tmp_path / "bin").mkdir()
+    executable(tmp_path / "bin/python3", f"""#!{sys.executable}
+import os, sys
+if sys.argv[1:4] == ["-m", "pip", "install"]:
+    if "--help" in sys.argv:
+        print("  --break-system-packages")
+else:
+    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
+""")
+    (tmp_path / "mount.sh").write_text(MOUNT)
+    parent = """
+import resource, subprocess, sys
+hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)[1]
+if hard == 0:
+    sys.exit(77)
+soft = hard if sys.argv[2] == "True" else 0
+resource.setrlimit(resource.RLIMIT_MEMLOCK, (soft, hard))
+subprocess.run(["bash", sys.argv[1]], check=True)
+assert resource.getrlimit(resource.RLIMIT_MEMLOCK) == (hard, hard)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", parent, str(CONFIGS / "vllm-router.sh"), str(start_at_hard_limit)],
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}",
+            "BASH_ENV": str(tmp_path / "mount.sh"),
+            "STUB_WORKSPACE": str(ROOT),
+            "ROUTER_VERSION": "9.8.7",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 77:
+        pytest.skip("host disallows locked memory")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_tokenspeed_installer_uses_direct_private_wheels_and_one_public_index(tmp_path):
     result, installs = run(tmp_path, "tokenspeed-nightly.sh", {
         "TOKENSPEED_WHEEL_URL": "https://example.test/tokenspeed.whl#sha256=abc",
@@ -96,3 +137,30 @@ def test_tokenspeed_installer_uses_direct_private_wheels_and_one_public_index(tm
          "--flashinfer-version", "0.7.2.post1"],
         ["-m", "pip", "check"],
     ]
+
+
+def test_tokenspeed_rocm_installer_keeps_the_image_torch_and_checks_it(tmp_path):
+    result, installs = run(tmp_path, "tokenspeed-nightly-rocm.sh", {
+        "TOKENSPEED_WHEEL_URL": "https://example.test/tokenspeed.whl#sha256=abc",
+        "TOKENSPEED_KERNEL_WHEEL_URL": "https://example.test/kernel.whl#sha256=def",
+        "TOKENSPEED_KERNEL_AMD_WHEEL_URL": "https://example.test/kernel_amd.whl#sha256=456",
+        "TOKENSPEED_ENGINE_WHEEL_URL": "https://example.test/engine.whl#sha256=123",
+        "TOKENSPEED_SCHEDULER_VERSION": "0.1.52",
+        "ROUTER_VERSION": "1.13.0.post20261027",
+    })
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert installs == [[
+        "-m", "pip", "install", "--break-system-packages", "--upgrade",
+        "--upgrade-strategy", "only-if-needed",
+        "--index-url", "https://pypi.org/simple",
+        "https://example.test/tokenspeed.whl#sha256=abc",
+        "https://example.test/kernel.whl#sha256=def",
+        "https://example.test/kernel_amd.whl#sha256=456",
+        "https://example.test/engine.whl#sha256=123",
+        "tokenspeed-scheduler==0.1.52",
+        "tokenspeed-smg==1.13.0.post20261027",
+    ]]
+    calls = [json.loads(line) for line in (tmp_path / "python3.jsonl").read_text().splitlines()]
+    assert calls[-2][0] == "-c" and "torch.version.hip" in calls[-2][1]
+    assert calls[-1] == ["-m", "pip", "check"]
