@@ -19,8 +19,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       # Serve flags follow the cookbook's GB300 cells at
       # https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1.
       args:
@@ -90,12 +88,11 @@ override_tp4_hicache_c64:
       KV_OFFLOADING: dram
 
 # TP2 with L2 HiCache: two-GPU engines at 180 GB per rank, inside their share of the
-# node's step memory cap. The scheduler batch is 2x CONC and the decode graph batch matches it.
+# node's 920,000 MiB of host DRAM. The scheduler batch is 2x CONC and the decode graph batch matches it.
 
 zip_override_tp2_hicache:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         moe-runner-backend: flashinfer_trtllm_routed
@@ -113,7 +110,7 @@ zip_override_tp2_hicache:
 
 # High-Throughput cell: TP4 with EP4 (MegaMoE). The scheduler batch and decode graph
 # batch are the cookbook's 128. Above conc 32 L2 HiCache spills KV to host DRAM; the
-# per-rank pool keeps all four ranks inside the node's 920,000 MiB step memory cap.
+# per-rank pool keeps all four ranks inside the node's 920,000 MiB of host DRAM.
 
 override_tp4_ep4_c32:
   roles:

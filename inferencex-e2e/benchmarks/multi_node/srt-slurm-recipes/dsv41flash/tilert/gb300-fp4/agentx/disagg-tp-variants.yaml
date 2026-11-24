@@ -23,8 +23,6 @@ base:
         set_visible_devices: true
       container: vllm/vllm-openai:nightly-00b6c4c565a8732c131e1f452d4a17803bb0842b@sha256:76a9614ed4ed20694914c87e82a0344bd73e1c6e081459a2467175ab903657e4
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         TILERT_ROLE: prefill
         HF_HUB_CACHE: "/hf_hub_cache"
@@ -79,7 +77,6 @@ base:
         # and receives the KV.
         multi_node_launch: node-env
       container: nvidia/cuda:13.2.0-runtime-ubuntu24.04@sha256:5f070a8f89e13ce9247188d7ed71a77119ed44e8be360e53c9ae1719e3089ea0
-      workers: 1
       env:
         TILERT_ROLE: decode
         # The CUDA runtime image (arm64) carries no Python stack: the setup script installs the
@@ -159,7 +156,6 @@ override_1p1d_tp4_tp8_c1:
   roles:
     decode:
       nodes: 2
-      gpus: 8
       env:
         # The public point: 1 = TP8.
         TILERT_DSV41_TP8XN: "1"
@@ -169,7 +165,6 @@ override_1p1d_tp4_tp8x3_c1:
   roles:
     decode:
       nodes: 6
-      gpus: 24
       env:
         # The public point: 3 = TP8x3 (three TP8 groups, MoE over all 24 ranks).
         TILERT_DSV41_TP8XN: "3"
