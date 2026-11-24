@@ -20,7 +20,7 @@ Use a fresh result directory for a changed plan, source, hardware identity or ti
 
 ## Unquantized GEMM
 
-The bundled examples include the large BF16 shape `M=49152, N=7168, K=6144`. A normal testlist such as `operatorx/testlists/gemm_deepseek_v4.json` can replace the example input; multiple files are accepted. Case identity includes every argument, including output precision and scale descriptors.
+The bundled examples include the large BF16 shape `M=49152, N=7168, K=6144`. A normal testlist such as `operatorx/testlists/official/gemm_deepseek_v4.json` can replace the example input; multiple files are accepted. Case identity includes every argument, including output precision and scale descriptors.
 
 ```bash
 python "$ASCEND_SCRIPTS/prepare.py" \

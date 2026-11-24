@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: nvidia/GLM-5.2-NVFP4
         trust-remote-code: true
@@ -55,7 +53,6 @@ base:
       AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2399'
 
 # One variant per point: admission is 2x CONC and the graph batch matches it,
 # capped at 64. Use K=5 at c1/c4/c8/c20; retain K=3 elsewhere. The connector
