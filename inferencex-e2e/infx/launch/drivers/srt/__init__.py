@@ -66,7 +66,7 @@ def run_single_node(launch: Launch) -> int:
         hf_cache = models.single_node_hf_cache(run.cluster, request)
         time_limit = lanes.srt_time_limit(run.cluster.id, request, None, run.srt)
         root = Path(tempfile.mkdtemp(prefix="srt-single.", dir=run.workspace))
-        checkout = prepare_single_node(run, request, root, power=not request.eval_only)
+        checkout = prepare_single_node(run, root, power=not request.eval_only)
         native_power = not request.eval_only
         cpu_source = config.cpu_power_source(
             run.cluster, run.srt, native_power and request.cpu_power, default=native_power
@@ -130,7 +130,7 @@ def run_video(launch: Launch) -> int:
         hf_cache = models.single_node_hf_cache(run.cluster, request)
         time_limit = str(request.salloc_time_limit)
         root = Path(tempfile.mkdtemp(prefix="srt-video.", dir=run.workspace))
-        checkout = prepare_single_node(run, request, root, power=True)
+        checkout = prepare_single_node(run, root, power=True)
         if rc := submit.bind_video(run, checkout, root / "arguments"):
             return rc
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
@@ -165,9 +165,7 @@ def run_video(launch: Launch) -> int:
     )
 
 
-def prepare_single_node(
-    run: SrtRun, request: SingleNodeRequest | VideoRequest, root: Path, *, power: bool
-) -> Checkout:
+def prepare_single_node(run: SrtRun, root: Path, *, power: bool) -> Checkout:
     """Install srt-slurm under ``root`` and forward the cluster's srun options."""
     checkout = prepare_checkout(run, root / "checkout", power=power)
     install_srtctl(run, checkout)
