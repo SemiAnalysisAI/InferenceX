@@ -16,8 +16,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       # The Quark MXFP4 export served as shipped: routed experts MXFP4,
       # attention, dense MLP and the shared expert MXFP8 (the shared expert stays
       # its own MLP), the dspark/ draft MXFP8. No online quantization and no
@@ -167,4 +165,3 @@ override_tp4_c48_lmcache:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '869'
