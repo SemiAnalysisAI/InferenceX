@@ -64,11 +64,8 @@ def _by_fingerprint(rows: list[dict], kind: str) -> dict[str, dict]:
 
 
 def require_merged_rows(swept: dict[str, dict], merged: dict[str, dict]) -> None:
-    """Reject a merge whose video rows are not exactly the rows the reused sweep measured.
-
-    Both map recipe fingerprint to row. A fingerprint digests the row and its bound recipe,
-    so equal sets mean the merge commit would run what the sweep ran.
-    """
+    # A fingerprint digests the row and its bound recipe, so equal sets mean the merge commit
+    # runs what the sweep ran.
     if merged.keys() == swept.keys():
         return
 
@@ -99,7 +96,6 @@ def validate_video_artifacts(
     actual executed checkout, which can be the PR merge commit rather than its head.
     Each deployment counts only its newest bundle up to the manifest attempt, so a
     rerun's measurement replaces the earlier one and an older attempt never fills a hole.
-    ``merged_plan`` is the merge commit's planned matrix; its video rows must be the swept rows.
     """
     sweep = read_object(root / "video-sweep-manifest/sweep_manifest.json")
     source_run, attempt, head = str(sweep["run-id"]), str(sweep["run-attempt"]), sweep["head"]

@@ -709,9 +709,8 @@ def test_reuse_requires_the_merged_video_rows_to_be_the_swept_rows(tmp_path, fau
             merged_plan=plan,
         )
 
-    assert (
-        len(validate({"video": [second, first], "8k1k": [{"exp-name": "llm"}]})["artifacts"]) == 2
-    )
+    planned = {"video": [second, first], "8k1k": [{"exp-name": "llm"}]}
+    assert len(validate(planned)["artifacts"]) == 2
     changed = {**second, "recipe-fingerprint": "3" * 64}
     merged = {
         "recipe": {"video": [first, changed]},
