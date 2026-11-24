@@ -57,6 +57,8 @@ override_tp4_c4_hicache:
         expert-parallel-size: 4
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
+        prefill-decode-interval: 64
+        prefill-decode-interval-min-bs: 2
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
@@ -73,6 +75,8 @@ override_tp4_c8_hicache:
         expert-parallel-size: 4
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
+        prefill-decode-interval: 128
+        prefill-decode-interval-min-bs: 2
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
@@ -89,6 +93,8 @@ override_tp4_c10_hicache:
         expert-parallel-size: 4
         max-running-requests: 20
         cuda-graph-max-bs-decode: 20
+        prefill-decode-interval: 128
+        prefill-decode-interval-min-bs: 2
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
@@ -105,6 +111,8 @@ override_tp4_c12_hicache:
         expert-parallel-size: 4
         max-running-requests: 24
         cuda-graph-max-bs-decode: 24
+        prefill-decode-interval: 128
+        prefill-decode-interval-min-bs: 3
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
@@ -121,6 +129,8 @@ override_tp4_c14_hicache:
         expert-parallel-size: 4
         max-running-requests: 28
         cuda-graph-max-bs-decode: 28
+        prefill-decode-interval: 128
+        prefill-decode-interval-min-bs: 3
         enable-hierarchical-cache: true
         hicache-size: 180
         hicache-write-policy: write_through
@@ -129,6 +139,7 @@ override_tp4_c14_hicache:
       CONC: '14'
       KV_OFFLOADING: dram
 
+# The dense c16 point, selected only at dcp-size 1; the matrix runs c16 on the DCP4 variant below.
 override_tp4_c16_hicache:
   roles:
     agg:
@@ -145,7 +156,7 @@ override_tp4_c16_hicache:
       CONC: '16'
       KV_OFFLOADING: dram
 
-# DSA DCP rejects HiCache; DCP4 stripes the latent KV across the TP4 ranks instead.
+# sgl-project/sglang#45205 lets a host tier sit under DCP4; 256 GB a rank leaves the DSA indexer its host allocation and fits two groups on a node.
 override_tp4_dcp4_c16:
   roles:
     agg:
@@ -155,10 +166,13 @@ override_tp4_dcp4_c16:
         decode-context-parallel-size: 4
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
+        enable-hierarchical-cache: true
+        hicache-size: 256
+        hicache-write-policy: write_through
   benchmark:
     env:
       CONC: '16'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
 override_tp4_dcp4_c24:
   roles:
@@ -169,10 +183,30 @@ override_tp4_dcp4_c24:
         decode-context-parallel-size: 4
         max-running-requests: 48
         cuda-graph-max-bs-decode: 48
+        enable-hierarchical-cache: true
+        hicache-size: 256
+        hicache-write-policy: write_through
   benchmark:
     env:
       CONC: '24'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
+
+override_tp4_dcp4_c32:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 4
+        decode-context-parallel-size: 4
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        enable-hierarchical-cache: true
+        hicache-size: 256
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
 
 override_tp4_dcp4_c40:
   roles:
@@ -183,10 +217,13 @@ override_tp4_dcp4_c40:
         decode-context-parallel-size: 4
         max-running-requests: 80
         cuda-graph-max-bs-decode: 64
+        enable-hierarchical-cache: true
+        hicache-size: 256
+        hicache-write-policy: write_through
   benchmark:
     env:
       CONC: '40'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
 override_tp4_dcp4_c48:
   roles:
@@ -197,10 +234,13 @@ override_tp4_dcp4_c48:
         decode-context-parallel-size: 4
         max-running-requests: 96
         cuda-graph-max-bs-decode: 64
+        enable-hierarchical-cache: true
+        hicache-size: 256
+        hicache-write-policy: write_through
   benchmark:
     env:
       CONC: '48'
-      KV_OFFLOADING: none
+      KV_OFFLOADING: dram
 
 override_tp8_c1:
   roles:

@@ -99,3 +99,65 @@ override_tp8_c10:
     env:
       CONC: '10'
       KV_OFFLOADING: none
+
+# sgl-project/sglang#45205 lets a host tier sit under DCP8, which on ROCm runs only on the triton backends and not on the monokernel.
+# The replicated index-K host mirror costs about half of hicache-size again a rank, so 256 GB a rank runs out of host memory and 192 GB does not.
+override_tp8_dcp8_c16:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        decode-context-parallel-size: 8
+        dsa-prefill-backend: triton
+        dsa-decode-backend: triton
+        enable-amd-monokernel: false
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        enable-hierarchical-cache: true
+        hicache-size: 192
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c20:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        decode-context-parallel-size: 8
+        dsa-prefill-backend: triton
+        dsa-decode-backend: triton
+        enable-amd-monokernel: false
+        max-running-requests: 40
+        cuda-graph-max-bs-decode: 40
+        enable-hierarchical-cache: true
+        hicache-size: 192
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: dram
+
+override_tp8_dcp8_c24:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        decode-context-parallel-size: 8
+        dsa-prefill-backend: triton
+        dsa-decode-backend: triton
+        enable-amd-monokernel: false
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        enable-hierarchical-cache: true
+        hicache-size: 192
+        hicache-write-policy: write_through
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: dram
