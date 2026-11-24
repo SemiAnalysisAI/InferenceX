@@ -114,26 +114,30 @@ def video_package(root: Path) -> Path:
     return root.parent / VIDEO_PACKAGE
 
 
-def _restated(shared: Mapping[str, Any], service: Mapping[str, Any]) -> list[str]:
-    """The keys of ``service``, one mapping deep, that the shared service of its name sets."""
+def _restated(shared: Mapping[str, Any], fragment: Mapping[str, Any], depth: int) -> list[str]:
+    """The keys of ``fragment``, down to ``depth`` nested mappings, that ``shared`` sets."""
     found = []
-    for key, value in service.items():
+    for key, value in fragment.items():
         if key == "name" or key not in shared:
             continue
-        if isinstance(shared[key], Mapping) and isinstance(value, Mapping):
-            found.extend(f"{key}.{inner}" for inner in value if inner in shared[key])
+        if depth and isinstance(shared[key], Mapping) and isinstance(value, Mapping):
+            found.extend(f"{key}.{inner}" for inner in _restated(shared[key], value, depth - 1))
         else:
             found.append(key)
     return found
 
 
 def check_video_fragment(
-    raw: Mapping[str, Any], source: Path, shared: Mapping[str, Mapping[str, Any]]
+    raw: Mapping[str, Any],
+    source: Path,
+    shared: Mapping[str, Any],
+    services: Mapping[str, Mapping[str, Any]],
 ) -> None:
     """Reject a fragment that sets a launcher-owned or shared key, or carries engine roles.
 
-    ``shared`` maps the shared block's services by name. A fragment service may add to the
-    one of its name but not set a key it already sets.
+    ``shared`` is the shared block and ``services`` its services by name. The fragment may
+    add to a shared block, and each of its services to the one of its name, but neither may
+    set a key the shared one already sets.
     """
     found = [
         f"{'.'.join(key)} (= {value!r})"
@@ -149,21 +153,27 @@ def check_video_fragment(
         raise ValueError(
             f"{source}: remove {', '.join(found)} from the fragment; the launcher sets them"
         )
+    blocks = {key: value for key, value in shared.items() if key != "services"}
+    scopes = [("the fragment", blocks, raw, 2)]
     if isinstance(raw.get("services"), list):
-        for service in raw["services"]:
-            restated = _restated(shared.get(service["name"], {}), service)
-            if restated:
-                raise ValueError(
-                    f"{source}: remove {', '.join(restated)} from service {service['name']!r}; "
-                    f"{VIDEO_BLOCK} sets them for every recipe"
-                )
+        scopes += [
+            (f"service {service['name']!r}", services.get(service["name"], {}), service, 1)
+            for service in raw["services"]
+        ]
+    for where, fixed, declared, depth in scopes:
+        restated = _restated(fixed, declared, depth)
+        if restated:
+            raise ValueError(
+                f"{source}: remove {', '.join(restated)} from {where}; "
+                f"{VIDEO_BLOCK} sets them for every recipe"
+            )
 
 
 def compose_video_recipe(path: Path, *, root: Path) -> dict[str, Any]:
     """The fragment at ``path`` over the shared video and native telemetry blocks.
 
-    Each fragment service also merges over the shared service of the same name, whose keys
-    it may extend but not restate.
+    Each fragment service also merges over the shared service of the same name. The fragment
+    may extend what the shared blocks set but not restate it.
     """
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
@@ -171,7 +181,7 @@ def compose_video_recipe(path: Path, *, root: Path) -> dict[str, Any]:
     shared = merge_blocks(_block(root / VIDEO_BLOCK), _block(root / NATIVE_TELEMETRY_BLOCK))
     # infx.matrix.changed binds a base revision's recipes with this code; its block may hold none.
     by_name = {service["name"]: service for service in shared.get("services", [])}
-    check_video_fragment(raw, path, by_name)
+    check_video_fragment(raw, path, shared, by_name)
     recipe = merge_blocks(shared, raw)
     if isinstance(raw.get("services"), list):
         recipe["services"] = [

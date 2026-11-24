@@ -73,7 +73,6 @@ def native_fragment(tmp_path):
         "schema": 2,
         "name": "video-fixture",
         "resources": {"gpu_type": "test-gpu"},
-        "frontend": {"type": "none"},
         "services": [{
             "name": "video-server",
             "args": [
@@ -90,11 +89,6 @@ def native_fragment(tmp_path):
                 "MODEL_REVISION_IN_ENV": "{model_revision}", "TUNABLE_ENV": "keep-this-value",
             },
         }],
-        "benchmark": {
-            "type": "custom",
-            "command": "python3 -m infx.bench video client --request-seconds 73",
-            "env": {"VIDEO_SERVER_SERVICE": "video-server", "VIDEO_SERVER_PORT": "30283"},
-        },
     }
     path = tmp_path / "agg-ulysses.yaml"
 
@@ -186,21 +180,23 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     assert launch["model_revision"] == spec["baseline"]["model_revision"]
 
 
-def test_fragment_service_extends_the_shared_service_and_may_not_restate_its_keys(tmp_path):
+def test_fragment_extends_the_shared_blocks_and_may_not_restate_their_keys(tmp_path):
     shared = {
         "name": "video-server", "type": "generic", "nodes": 1,
         "env": {"VIDEO_SERVER_PORT": "30283", "HF_HUB_OFFLINE": "1"},
         "readiness": {"http": {"port": 30283, "path": "/health"}, "interval_seconds": 5},
     }
-    blocks = {VIDEO_BLOCK: {"services": [shared]}, NATIVE_TELEMETRY_BLOCK: {}}
+    client = {"type": "custom", "env": {"VIDEO_SERVER_PORT": "30283"}}
+    video_block = {"frontend": {"type": "none"}, "benchmark": client, "services": [shared]}
+    blocks = {VIDEO_BLOCK: video_block, NATIVE_TELEMETRY_BLOCK: {}}
     for block, content in blocks.items():
         (tmp_path / block).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / block).write_text(yaml.safe_dump(content))
     fragment = tmp_path / "agg-tp1.yaml"
 
-    def services(*declared):
-        fragment.write_text(yaml.safe_dump({"schema": 2, "services": list(declared)}))
-        return video.compose_video_recipe(fragment, root=tmp_path)["services"]
+    def compose(*declared, **blocks):
+        fragment.write_text(yaml.safe_dump({"schema": 2, "services": list(declared), **blocks}))
+        return video.compose_video_recipe(fragment, root=tmp_path)
 
     lean = {
         "name": "video-server", "args": ["--tp-size", "1"],
@@ -218,14 +214,25 @@ def test_fragment_service_extends_the_shared_service_and_may_not_restate_its_key
         },
     }
     sidecar = {"name": "sidecar", "command": ["true"]}
-    assert services(lean, sidecar) == [complete, sidecar]
+    extended = compose(lean, sidecar, benchmark={"env": {"CLIENT_ENV": "kept"}})
+    assert extended["services"] == [complete, sidecar]
+    assert extended["benchmark"] == {**client, "env": {**client["env"], "CLIENT_ENV": "kept"}}
 
-    for restated, keys in (
-        ({**lean, "nodes": 2, "env": {"HF_HUB_OFFLINE": "0"}}, "env.HF_HUB_OFFLINE, nodes"),
-        (complete, "env.HF_HUB_OFFLINE, env.VIDEO_SERVER_PORT, nodes, readiness.http, "
-                   "readiness.interval_seconds, type"),
+    for declared, blocks, refusal in (
+        (
+            {**lean, "nodes": 2, "env": {"HF_HUB_OFFLINE": "0"}}, {},
+            "env.HF_HUB_OFFLINE, nodes from service 'video-server'",
+        ),
+        (
+            complete, {},
+            "env.HF_HUB_OFFLINE, env.VIDEO_SERVER_PORT, nodes, readiness.http, "
+            "readiness.interval_seconds, type from service 'video-server'",
+        ),
+        (
+            lean, {"benchmark": {"type": "custom", "env": {"VIDEO_SERVER_PORT": "1"}}},
+            "benchmark.env.VIDEO_SERVER_PORT, benchmark.type from the fragment",
+        ),
+        (lean, {"frontend": {"type": "none"}}, "frontend.type from the fragment"),
     ):
-        with pytest.raises(
-            ValueError, match=f"agg-tp1.yaml: remove {keys} from service 'video-server'"
-        ):
-            services(restated)
+        with pytest.raises(ValueError, match=f"agg-tp1.yaml: remove {refusal}"):
+            compose(declared, **blocks)
