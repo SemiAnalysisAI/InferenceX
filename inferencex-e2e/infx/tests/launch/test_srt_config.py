@@ -219,6 +219,15 @@ def test_node_exclusions_cpus_and_image_aliases_are_rendered():
     assert config["default_partition"] == "batch"
 
 
+def test_multi_node_exclusions_apply_to_multi_node_jobs_only():
+    record = cluster(slurm={"exclude": ["node-1"]}, srt={"multi-node-exclude": ["node-2"]})
+    assert render(record, job(single_node=True))["default_sbatch_directives"]["exclude"] == "node-1"
+    assert render(record, job())["default_sbatch_directives"]["exclude"] == "node-1,node-2"
+    only_multi = cluster(srt={"multi-node-exclude": ["node-2"]})
+    assert "exclude" not in render(only_multi, job(single_node=True)).get("default_sbatch_directives", {})
+    assert render(only_multi, job())["default_sbatch_directives"]["exclude"] == "node-2"
+
+
 @pytest.mark.parametrize(("image", "spelling"), [
     ("nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1", "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1"),
     ("nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc24", "nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc24"),

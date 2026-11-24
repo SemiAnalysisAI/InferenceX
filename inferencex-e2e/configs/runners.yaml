@@ -836,7 +836,7 @@ clusters:
       partition: compute
       exclusive: true
       # Known bad nodes.
-      exclude: [mia1-p01-g09, mia1-p01-g11]
+      exclude: [mia1-p01-g11]
       gres: "gpu:{gpus}"
       cpus-per-task: 128
       srun-args: [--container-remap-root, --container-writable]
@@ -861,6 +861,8 @@ clusters:
         single-node-time-limit: 500
         gpus-per-node-directive: true
         segment-directive: false
+        # 7 of g09's 8 RDMA rails run LINK pause instead of PFC.
+        multi-node-exclude: [mia1-p01-g09]
         outputs: /it-share/gharunners2/srt-slurm/outputs
         cpu-power-exporter: {source: rapl}
         host-setup:
