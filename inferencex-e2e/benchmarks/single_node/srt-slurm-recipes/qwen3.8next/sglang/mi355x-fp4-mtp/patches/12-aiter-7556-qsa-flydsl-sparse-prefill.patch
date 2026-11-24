@@ -1,0 +1,3042 @@
+# [FlyDSL] [QSA] Sparse prefill attention on gfx950: union and packed-direct ports, strided K/V rows
+# https://github.com/ROCm/aiter/pull/7556  (files at e6a31510c9; the PR head 1c8725c7f3 has the same kernels/qsa/ files
+# and differs only in qsa_sparse_prefill.py's argument checks: main's ROCm/aiter#8083 selection-width query, which patch
+# 13 does not use; a softmax_scale that float() cannot convert is rejected instead of raising; out is checked for overlap
+# against the K/V rows instead of their strided span, so an out in the padding between rows is accepted)
+# Replaces aiter/ops/flydsl/qsa_sparse_prefill.py and aiter/ops/flydsl/kernels/qsa/ of the 20261117 image's editable
+# AITER checkout (/sgl-workspace/aiter, 581579ab, 0.1.29.dev156). Nothing calls these kernels unless patch 13 is applied
+# and SGLANG_AMD_QSA_FLYDSL_PREFILL is set.
+# Port from the 20261102 recipe, which applied it to the AITER v0.1.29 wheel's site-packages: the body is unchanged
+# (these files are identical in v0.1.29 and 581579ab); only the target directory changed.
+# Apply in /sgl-workspace/aiter with git apply.
+
+diff --git a/aiter/ops/flydsl/kernels/qsa/__init__.py b/aiter/ops/flydsl/kernels/qsa/__init__.py
+index 7d72898..ce57cf5 100644
+--- a/aiter/ops/flydsl/kernels/qsa/__init__.py
++++ b/aiter/ops/flydsl/kernels/qsa/__init__.py
+@@ -6,8 +6,8 @@
+   ``sparse_decode_attn.py``    one CTA per (row, kv head, KV split), reading the
+                                selected KV straight from the token pool
+   ``sparse_decode_reduce.py``  merges the KV-split partials
+-  ``sparse_prefill_*.py``      gfx942 BF16 D256 sparse prefill/extend attention
++  ``sparse_prefill_*.py``      gfx942/gfx950 BF16 D256 sparse prefill/extend attention
+ 
+ The public entry points are ``aiter.ops.flydsl.qsa_sparse_decode`` (gfx950) and
+-``aiter.ops.flydsl.qsa_sparse_prefill`` (gfx942).
++``aiter.ops.flydsl.qsa_sparse_prefill`` (gfx942, gfx950).
+ """
+diff --git a/aiter/ops/flydsl/kernels/qsa/sparse_prefill_common.py b/aiter/ops/flydsl/kernels/qsa/sparse_prefill_common.py
+index 8269101..ffb8e19 100644
+--- a/aiter/ops/flydsl/kernels/qsa/sparse_prefill_common.py
++++ b/aiter/ops/flydsl/kernels/qsa/sparse_prefill_common.py
+@@ -1,6 +1,6 @@
+ # SPDX-License-Identifier: MIT
+ # Copyright (C) 2026, Advanced Micro Devices, Inc. All rights reserved.
+-"""Settings and gfx942 BF16 D256 helpers shared by the QSA sparse attention kernels.
++"""Settings and gfx942/gfx950 BF16 D256 helpers shared by the QSA sparse attention kernels.
+ 
+ The first part holds the per-platform calibration and the private resource
+ policy. The platform entry is picked by gfx model and CU count (nearest
+@@ -10,7 +10,10 @@ AITER_QSA_PLATFORM overrides fields of the picked entry, e.g.
+ 
+ The second part holds raw-buffer operations, register pinning and pipeline
+ barriers. The third part holds the BM128/BN64 MFMA, softmax and LDS pieces
+-of the eight-wave staggered D256 pipeline that the union kernel runs.
++of the eight-wave staggered D256 pipeline that the union kernel runs; the fourth
++holds their gfx950 (CDNA4) forms: 16x16x32 MFMAs, ds_read_b64_tr_b16 V operands,
++v_cvt_pk_bf16_f32 and K/V LDS swizzles for 64 banks. On gfx950 the union kernel and the
++packed direct kernel take their gfx950 paths; the raw direct kernel runs as on gfx942.
+ """
+ 
+ import dataclasses
+@@ -18,6 +21,8 @@ import functools
+ import logging
+ import math
+ import os
++from collections.abc import Callable
++from typing import NamedTuple
+ 
+ import flydsl.compiler as flyc
+ import flydsl.expr as fx
+@@ -25,6 +30,14 @@ import flydsl.expr as fx
+ # for inline asm and target features
+ from flydsl._mlir import ir
+ from flydsl._mlir.dialects import llvm
++
++# Raw rocdl ops, here and in the sparse_prefill kernels, that flydsl.expr.rocdl.__all__
++# (FlyDSL 0.4) has no stable form of: s_setprio and s_barrier; sched_barrier, and
++# sched_group_barrier with mask_mfma or VALU/TRANS masks (sched_mfma, sched_vmem, sched_dsrd
++# and sched_dswr name only their groups); ballot, readlane, readfirstlane, mbcnt_lo/hi,
++# update_dpp and ds_bpermute; perm_b32 and cvt_pk_bf16_f32; exp2 as a bare v_exp_f32;
++# raw_ptr_buffer_load (the union's membership bits) and gfx942's LDS DMA
++# raw_ptr_buffer_load_lds.
+ from flydsl.expr import rocdl
+ 
+ from aiter.jit.utils.chip_info import get_cu_num, get_gfx_runtime
+@@ -41,7 +54,9 @@ MAX_ROW_PACKED_KV_BYTES = 1 << 30  # PK+PV bytes of the pack_tokens_per_row rule
+ 
+ @dataclasses.dataclass(frozen=True)
+ class Platform:
+-    """Calibrated per GPU; the route-model terms are microseconds."""
++    """Calibrated per GPU. The route-model terms are microseconds where an entry says
++    they are phase timings (gfx942); a decision-tuned entry (gfx950) gives weights
++    chosen for the route they produce, not timings."""
+ 
+     union_fixed: float  # fixed cost of the union phase
+     union_step: float  # per N64 step of the slowest union CTA
+@@ -58,6 +73,10 @@ class Platform:
+     # Past that budget, direct still packs a context of at most this many tokens per query row
+     # (packing copies the whole context each call).
+     pack_tokens_per_row: int
++    # sparse_prefill_order_masks also weighs keeping every union tile against none when the
++    # union phase is set by throughput (sparse_prefill_prepare.py _route); a compile-time
++    # switch of that kernel.
++    route_all_or_none: bool = False
+ 
+ 
+ PLATFORMS = {
+@@ -77,6 +96,29 @@ PLATFORMS = {
+         max_packed_kv_bytes=64 * 1024 * 1024,
+         pack_tokens_per_row=32,
+     ),
++    # MI355X, decision-tuned: the route terms and route_margin of sparse_prefill_order_masks
++    # were chosen on 91 calibration layouts so that routed calls stay near the faster of
++    # all-union and all-direct under a union plan (90 within 1.05x, worst 1.06x); they are not
++    # phase timings.
++    # union_ratio 1e30: sparse_prefill_compact proposes union for every tile;
++    # route_all_or_none: sparse_prefill_order_masks also weighs keeping every union tile
++    # against none when the union phase is throughput-bound.
++    ("gfx950", 256): Platform(
++        union_fixed=345.2,
++        union_step=2.228,
++        row_step=8.528,
++        route_margin=0.0,
++        direct_fixed=0.001456,
++        pack_block=0.001067,
++        direct_cu_step=0.5711,
++        union_ratio=1e30,
++        union_min_rows=1536,
++        union_min_rows_per_head=0,
++        wide_tiles_per_cu=8 / 21,  # BQ21 from 2048 rows, BQ42 from 4096 (256 CUs)
++        max_packed_kv_bytes=64 * 1024 * 1024,
++        pack_tokens_per_row=32,
++        route_all_or_none=True,
++    ),
+ }
+ OVERRIDE = "AITER_QSA_PLATFORM"
+ 
+@@ -107,7 +149,10 @@ def platform() -> Platform:
+             raise ValueError(
+                 f"{OVERRIDE}: expected name=value with name in {sorted(names)}"
+             )
+-        values[name] = type(getattr(entry, name))(value)
++        kind = type(getattr(entry, name))
++        if kind is bool and value not in ("0", "1"):
++            raise ValueError(f"{OVERRIDE}: {name} is a switch, written 0 or 1")
++        values[name] = value == "1" if kind is bool else kind(value)
+     entry = dataclasses.replace(entry, **values)
+     values = dataclasses.astuple(entry)
+     if not all(math.isfinite(v) and v >= 0 for v in values) or entry.route_margin >= 1:
+@@ -189,16 +234,19 @@ def _exp(value):
+     return fx.Float32(rocdl.exp2(fx.Float32.ir_type, fx.Float32(value).ir_value()))
+ 
+ 
+-def _mfma(a, b, c):
+-    """One 16x16x16 BF16 MFMA on register vectors: a/b hold 4 BF16 bit patterns, c 4 FP32."""
+-    frag_a = fx.make_rmem_tensor(4, fx.BFloat16)
+-    frag_b = fx.make_rmem_tensor(4, fx.BFloat16)
++def _mfma(a, b, c, depth=16):
++    """One 16x16xdepth BF16 MFMA on register vectors (depth 32: gfx950): a/b hold
++    depth // 4 BF16 values, their bit patterns or their words, c 4 FP32."""
++    frags = []
++    for value in (a, b):
++        value = fx.Vector(value)
++        frag = fx.make_rmem_tensor(depth // 4, fx.BFloat16)
++        frag.store(value if value.dtype is fx.BFloat16 else value.bitcast(fx.BFloat16))
++        frags.append(frag)
+     frag_c = fx.make_rmem_tensor(4, fx.Float32)
+-    frag_a.store(fx.Vector(a).bitcast(fx.BFloat16))
+-    frag_b.store(fx.Vector(b).bitcast(fx.BFloat16))
+     frag_c.store(fx.Vector(c))
+-    mma = fx.make_mma_atom(rocdl.MFMA(16, 16, 16, fx.BFloat16))
+-    fx.gemm(mma, frag_c, frag_a, frag_b, frag_c)
++    mma = fx.make_mma_atom(rocdl.MFMA(16, 16, depth, fx.BFloat16))
++    fx.gemm(mma, frag_c, frags[0], frags[1], frag_c)
+     return fx.Vector(frag_c.load())
+ 
+ 
+@@ -237,10 +285,11 @@ def _schedule(pairs, count, group, exp=False):
+         rocdl.sched_group_barrier(0x400 if exp else 0x002, count, group)
+ 
+ 
+-def _schedule_exps(count, group):
+-    # Per value: subtraction, MFMA, exp, MFMA (the fastest order measured).
++def _schedule_exps(count, group, mfmas=2):
++    # Per value: subtraction, MFMA, exp, MFMA (the fastest order measured on gfx942); gfx950's
++    # K32 QK has one MFMA per value.
+     for _ in range(count):
+-        for mask in (0x002, rocdl.mask_mfma, 0x400, rocdl.mask_mfma):
++        for mask in (0x002, rocdl.mask_mfma, 0x400, rocdl.mask_mfma)[: 2 + mfmas]:
+             rocdl.sched_group_barrier(mask, 1, group)
+ 
+ 
+@@ -257,8 +306,11 @@ class _LdsQueue:
+         return lambda done: self.wait(first + done)
+ 
+     def wait(self, upto=None, vmcnt=None):
+-        """Wait until the ops issued before index upto (default: all) have retired."""
+-        lgkmcnt = 0 if upto is None else self.issued - upto
++        """Wait until the ops issued before index upto (default: all) have retired.
++
++        lgkmcnt has 4 bits: past 15 younger ops it waits for 15, which retires more than needed.
++        """
++        lgkmcnt = 0 if upto is None else min(self.issued - upto, 15)
+         rocdl.s_waitcnt(vmcnt=vmcnt, lgkmcnt=lgkmcnt)
+ 
+ 
+@@ -279,6 +331,26 @@ def _buffer_at(address, size_bytes):
+     return rocdl.make_buffer_ptr(pointer, num_records_bytes=size_bytes)
+ 
+ 
++# K/V rows: hk * 256 values (KV heads of 256 dims), then gap elements of padding.
++def _kv_extent(rows, hkv, hk, gap):
++    """Bytes from KV head hkv of the first of `rows` K/V rows to the end of the last."""
++    extent = (fx.Uint32(rows) * hk - hkv) * 512
++    if gap:
++        extent = extent + fx.Uint32(rows - 1) * (gap * 2)
++    return extent
++
++
++def _kv_offset(row, head, hk, gap, scale=1, dim=None):
++    """Element offset of dim `dim` (None: 0) of KV head `head` of K/V row `row`, times
++    scale (2: the byte offset), in row's integer type."""
++    offset = (row * hk + head) * (256 * scale)
++    if dim is not None:
++        offset = offset + dim * scale
++    if gap:
++        offset = offset + row * (gap * scale)
++    return offset
++
++
+ def _buffer_words(buffer, offset, words=4):
+     data = fx.make_rmem_tensor(4 * words, fx.Int8)
+     fx.copy(
+@@ -347,32 +419,39 @@ def _rescale(o0, o1, row_sum, old_max, new_max, ballot):
+ BM, BN, D, THREADS = 128, 64, 256, 512
+ 
+ 
+-def _mma():
++def _mma(depth=16):
++    """Eight waves along the query rows, each 16x16xdepth BF16 MFMAs (depth 32: gfx950)."""
+     return fx.make_tiled_mma(
+-        fx.make_mma_atom(rocdl.MFMA(16, 16, 16, fx.BFloat16)),
++        fx.make_mma_atom(rocdl.MFMA(16, 16, depth, fx.BFloat16)),
+         fx.make_layout((1, 8, 1), (1, 1, 0)),
+     )
+ 
+ 
+-def _read_q_g2r(resource, offset, lane):
++def _read_q_words(resource, offset, lane):
++    """Q words of the lane: four-word load k holds the eight BF16 dims from
++    32k + 8 * (lane >> 4) on; offsets are in bytes."""
+     parts = [
+         _buffer_words(resource, offset + (lane >> 4) * 16 + k * 64) for k in range(8)
+     ]
+-    words = fx.Vector.from_elements([p[i] for p in parts for i in range(4)], fx.Int32)
+-    frag = _mma().make_fragment_B(
++    return fx.Vector.from_elements([p[i] for p in parts for i in range(4)], fx.Int32)
++
++
++def _read_q_g2r(resource, offset, lane, depth=16):
++    words = _read_q_words(resource, offset, lane)
++    frag = _mma(depth).make_fragment_B(
+         fx.make_rmem_tensor(fx.make_layout((BM, D), (1, BM)), fx.BFloat16)
+     )
+     frag.store(words.bitcast(fx.BFloat16))
+     return frag
+ 
+ 
+-def _qk(q, k):
+-    mma = _mma()
++def _qk(q, k, depth=16, order="kmn"):
++    mma = _mma(depth)
+     acc = mma.make_fragment_C(
+         fx.make_rmem_tensor(fx.make_layout((32, BM), (1, 32)), fx.Float32)
+     )
+     acc.fill(0.0)
+-    fx.gemm(mma, acc, k, q, acc, traversal_order="kmn")
++    fx.gemm(mma, acc, k, q, acc, traversal_order=order)
+     return acc.load()
+ 
+ 
+@@ -411,6 +490,12 @@ def _exps(values, maximum):
+     )
+ 
+ 
++def _key_row(lane):
++    """Key of the lane's first K read: lane 16g + 4b + a reads keys a + 8b (+ 4n, + 32 per
++    half), in the mask order of sparse_prefill_order_masks."""
++    return (lane & 3) + ((lane & 12) << 1)
++
++
+ def _k_phase(token):
+     return (token & 3) | ((token >> 3) & 1) * 4
+ 
+@@ -428,16 +513,20 @@ def _copy_coordinates(wave, packet, page=0):
+     return token, (wave >> 2) * 128
+ 
+ 
++def _k_read_order(lower_first):
++    """(n, k) of a K half's 16 reads in issue order; lower_first takes k 0-3 of both n first."""
++    if lower_first:
++        return [
++            (n, k + high * 4) for high in range(2) for n in range(2) for k in range(4)
++        ]
++    return [(n, k) for n in range(2) for k in range(8)]
++
++
+ def _k_reads(addresses, half, lower_first=False):
+     """(slot, address, immediate) of one K half's 16 LDS reads, in issue order."""
+-    order = (
+-        [(n, k + high * 4) for high in range(2) for n in range(2) for k in range(4)]
+-        if lower_first
+-        else [(n, k) for n in range(2) for k in range(8)]
+-    )
+     return [
+         (n * 8 + k, addresses[n * 2 + k % 2], half * 16384 + (k // 2) * 128)
+-        for n, k in order
++        for n, k in _k_read_order(lower_first)
+     ]
+ 
+ 
+@@ -452,17 +541,24 @@ def _v_reads(address, half):
+ 
+ def _lds_words(parts):
+     return fx.Vector.from_elements(
+-        [part[i] for part in parts for i in range(4)], fx.Int32
++        [part[i] for part in parts for i in range(part.numel)], fx.Int32
+     )
+ 
+ 
++class _ReadPlan(NamedTuple):
++    """LDS reads of one K or V operand, each issued with load from storage."""
++
++    storage: object
++    reads: list  # (slot, address, immediate) in issue order
++    load: Callable  # load(storage, address, immediate) -> words
++
++
+ def _read_s2r(plan, queue):
+-    """Issue a (storage, reads) plan; ready(n) waits until its first n reads have landed."""
+-    storage, reads = plan
+-    parts = [None] * len(reads)
+-    for slot, address, immediate in reads:
+-        parts[slot] = _load_lds(storage, address, immediate)
+-    return _lds_words(parts), queue.issue(len(reads))
++    """Issue a _ReadPlan; ready(n) waits until its first n reads have landed."""
++    parts = [None] * len(plan.reads)
++    for slot, address, immediate in plan.reads:
++        parts[slot] = plan.load(plan.storage, address, immediate)
++    return _lds_words(parts), queue.issue(len(plan.reads))
+ 
+ 
+ def _k_operands(words):
+@@ -501,6 +597,23 @@ def _v_operands(values, step, ready=None):
+     return fx.Vector.from_elements(words, fx.Int32)
+ 
+ 
++def _new_max(center):
++    """m' (the row max + 1 once it exceeds m + 7) and its ballot, from center's lane and cross-lane maxima."""
++    _, candidate, maxima, scale, maximum = center
++    candidate = (
++        _maximum(_maximum(candidate, maxima[0]), _maximum(maxima[1], maxima[2])) * scale
++    )
++    predicate = candidate > maximum + 7.0
++    ballot = fx.Int64(rocdl.ballot(fx.Int64.ir_type, predicate))
++    return predicate.select(candidate + 1.0, maximum), ballot
++
++
++def _sum_and_max(sum_max):
++    """l + the lane row sums and the lane max of S, from sum_max = (S, lane sum, other sums, l)."""
++    current, total, sums, row_sum = sum_max
++    return row_sum + ((total + sums[0]) + (sums[1] + sums[2])), _max(current)
++
++
+ def _pv(
+     probabilities,
+     values,
+@@ -545,23 +658,12 @@ def _pv(
+             ).bitcast(fx.Int16)
+             acc[n] = _mfma(a, b.bitcast(fx.Int16), acc[n])
+         if center is not None:
+-            current, candidate, maxima, scale, maximum = center
+             if step == 0:
+-                candidate = (
+-                    _maximum(
+-                        _maximum(candidate, maxima[0]), _maximum(maxima[1], maxima[2])
+-                    )
+-                    * scale
+-                )
+-                predicate = candidate > maximum + 7.0
+-                ballot = fx.Int64(rocdl.ballot(fx.Int64.ir_type, predicate))
+-                new_max = predicate.select(candidate + 1.0, maximum)
++                new_max, ballot = _new_max(center)
+             for i in range(step * 4, step * 4 + 4):
+-                scaled.append(fx.Float32(current[i]) * scale)
++                scaled.append(fx.Float32(center[0][i]) * center[3])
+         if sum_max is not None and step == 3:
+-            current, total, sums, row_sum = sum_max
+-            row_sum = row_sum + ((total + sums[0]) + (sums[1] + sums[2]))
+-            candidate = _max(current)
++            row_sum, candidate = _sum_and_max(sum_max)
+         if step + 1 < steps and step + 1 >= prepared_steps:
+             _schedule(8, 3 if center is not None else 2, 20 + step)
+         elif sum_max is not None:
+@@ -578,3 +680,221 @@ def _pv(
+     if sum_max is not None:
+         return result, row_sum, candidate
+     return result
++
++
++# ---- gfx950 (CDNA4): K32 MFMAs, transposed V reads, native BF16, 64-bank swizzles ----
++#
++# The union pipeline keeps its stages and data flow (lgkmcnt waits capped at 15, the
++# rendezvous its double buffer makes redundant dropped: sparse_prefill_union._body); the
++# MFMA shape, the V operand path, the BF16 conversion and the K/V LDS layouts change
++# (g = lane >> 4 below).
++#   QK: per K half, two M tiles of eight v_mfma_f32_16x16x32_bf16; step s takes K read
++#       m * 8 + s and Q part s, both dims 32s + 8g .. + 7. The K reads keep gfx942's keys
++#       and the S order (value i + 4m), so the masks of sparse_prefill_order_masks are
++#       unchanged.
++#   PV: per V half, two K32 steps (keys 32s + 8g .. + 7: P values 8s .. 8s + 7) over eight
++#       16-dim groups n; the A operand of (s, n) is two ds_read_b64_tr_b16 of four keys.
++#       Output word 4n + i of a half is dim 32g + 4(n ^ (g & 1)) + i (_v_tr_bases950).
++#   LDS: K and V are half-major: dims half h of key t at _lds_row950(t, h), so one 16-byte
++#       (x4) LDS DMA writes four keys' half rows, 1 KiB. The 16-byte chunks of a half row are
++#       swizzled by _k_swizzle950 (K) and _v_swizzle950 (V); the DMA (sparse_prefill_union)
++#       and the reads below take their addresses from these. Each swizzle stays inside its
++#       256-byte half row and leaves the bits the read immediates move alone.
++
++
++HALF950 = 64 * 256  # bytes of one dims half of a 64-key K or V tile in LDS
++
++
++def _k_phase950(token):
++    """4-bit K chunk swizzle from token bits 0, 1, 3, 4 (keys of one read: token & 3 and token >> 3 & 3). A bijection,
++    so the 16 keys of a 16-lane ds_read_b128 group take 16 chunk positions of a 256-byte bank row; bit 1 is the parity
++    of the four bits, so lanes 0-7 with 32-39 (bit 4 equal, dims 32 bytes apart) take 16 distinct positions too.
++    """
++    a0, a1 = token & 1, (token >> 1) & 1
++    b0, b1 = (token >> 3) & 1, (token >> 4) & 1
++    return a0 | (a0 ^ a1 ^ b0 ^ b1) * 2 | a1 * 4 | b0 * 8
++
++
++def _k_swizzle950(token, chunk):
++    """K LDS swizzle: position of 16-byte chunk `chunk` (0-15) in key `token`'s half row. An XOR, so its own inverse:
++    position p holds chunk _k_swizzle950(token, p)."""
++    return chunk ^ _k_phase950(token)
++
++
++def _v_swizzle950(token, chunk):
++    """V LDS swizzle: the chunk XORed with gfx942's K phase _k_phase (K uses _k_phase950). In BF16 elements of (key, (dim, dims half)),
++    it is Swizzle<2,3,4> o Swizzle<1,5,5> over the layout (64,(128,2)):(128,(1,8192)) of _lds_row950's rows.
++    """
++    return chunk ^ _k_phase(token)
++
++
++def _lds_row950(token, half):
++    """Byte address of dims half `half` of key `token` in a half-major K or V tile."""
++    return half * HALF950 + token * 256
++
++
++def _k_lds_address950(token, chunk):
++    """Byte address of 16-byte chunk `chunk` (0-31, dims 8 * chunk ..) of key `token` in k_lds."""
++    half, chunk = chunk >> 4, _k_swizzle950(token, chunk & 15)
++    return _lds_row950(token, half) + chunk * 16
++
++
++def _k_bases950(lane):
++    """Per-lane addresses of _k_reads950: key _key_row(lane), chunks (lane >> 4) + 4j, j = 0..3."""
++    return tuple(
++        _k_lds_address950(_key_row(lane), (lane >> 4) + 4 * j) for j in range(4)
++    )
++
++
++def _k_reads950(addresses, half, lower_first=False):
++    """(slot, address, immediate) of one K half's 16 LDS reads (_k_reads' order and slots; read (n, k) is key
++    key_row + 4n + 32 * half, dims 8g + 32k .. + 7); addresses = _k_bases950(lane)."""
++    return [
++        (n * 8 + k, addresses[k & 3], _lds_row950(half * 32 + n * 4, k >> 2))
++        for n, k in _k_read_order(lower_first)
++    ]
++
++
++def _v_lds_address950(token, granule):
++    """Byte address of 8-byte granule `granule` (0-63, dims 4 * granule .. + 3) of value `token` in v_lds."""
++    chunk = _v_swizzle950(token, (granule & 31) >> 1)
++    return _lds_row950(token, granule >> 5) + chunk * 16 + (granule & 1) * 8
++
++
++def _v_tr_bases950(lane):
++    """Per-lane addresses of a V half's eight 16-dim groups n for ds_read_b64_tr_b16: lane 16g + 4r + q reads key
++    8g + r, dims 32q + 4(n ^ (q & 1)) .. + 3 (n's XOR is the address bits 3-5). The q & 1 term gives the lanes of a
++    32-lane group both 8-byte halves of the 16-byte chunks, so they cover the 64 banks once; output word 4n + i is
++    then dim 32g + 4(n ^ (g & 1)) + i (_o_piece950). Keys + 4h + 32s and dims + 128 go by immediate.
++    """
++    q = lane & 3
++    token = (lane >> 4) * 8 + ((lane & 15) >> 2)
++    base = _v_lds_address950(token, q * 8 + (q & 1))
++    return tuple(base ^ (n * 8) for n in range(8))
++
++
++def _v_tr_reads950(bases, half):
++    """(slot, address, immediate) of one V half's 32 transposed reads in issue order: PV step s, group n, key quad h
++    (keys 32s + 8g + 4h .. + 3); slot (s * 8 + n) * 2 + h, so PV step s needs the first 16 (s + 1).
++    """
++    return [
++        ((s * 8 + n) * 2 + h, bases[n], _lds_row950(s * 32 + h * 4, half))
++        for s in range(2)
++        for n in range(8)
++        for h in range(2)
++    ]
++
++
++def _load_lds_tr(storage, address, immediate=0):
++    """ds_read_b64_tr_b16 at an LDS byte address; 2 words. Lane 4r + q of each 16-lane group reads four BF16 at its
++    address; lane i then holds element i % 4 of lane 4r + i // 4's read as BF16 r = 0..3.
++    """
++    pointer = fx.recast_iter(
++        fx.PointerType.get(fx.BFloat16.ir_type, fx.AddressSpace.Shared, 8),
++        fx.get_iter(storage) + (fx.Int32(address) + immediate),
++    )
++    data = fx.make_rmem_tensor(4, fx.BFloat16)
++    fx.copy(
++        fx.make_copy_atom(rocdl.cdna4.LDSReadTrans(16, 64), fx.BFloat16),
++        fx.make_view(pointer, fx.make_layout(4, 1)),
++        data,
++    )
++    return fx.Vector(data.load()).bitcast(fx.Int32)
++
++
++def _pack_bf16_950(values):
++    """_pack_bf16 with v_cvt_pk_bf16_f32 (round to nearest even): element i in the low half."""
++    values = fx.Vector(values)
++    return fx.Vector.from_elements(
++        [
++            fx.Uint32(rocdl.cvt_pk_bf16_f32(values[i], values[i + 1]))
++            for i in range(0, values.numel, 2)
++        ],
++        fx.Uint32,
++    )
++
++
++def _k_operands950(words):
++    # As _k_operands, with the K32 operands: read m * 8 + s holds K step s of M tile m.
++    _keep_vgpr(words)
++    rocdl.sched_barrier(0)
++    frag = fx.make_rmem_tensor(fx.make_layout((8, 8, 2), (1, 8, 64)), fx.BFloat16)
++    frag.store(words.bitcast(fx.BFloat16))
++    return fx.make_view(fx.get_iter(frag), fx.make_layout((8, 2, 8), (1, 64, 8)))
++
++
++def _qk950(q, k):
++    """_qk with K32 MFMAs, issued a K step at a time (both M tiles of a step together)."""
++    return _qk(q, k, 32, "mkn")
++
++
++def _pv950_words(step, n):
++    """V words of PV MFMA (step, n): reads (step * 8 + n) * 2 + h, h = 0 (keys 0-3 of the lane's eight), 1 (4-7)."""
++    return [(step * 8 + n) * 4 + i for i in range(4)]
++
++
++def _o_piece950(i, g):
++    """Output words of the lane's dims 8i .. 8i + 7 of a half in lane group g (dim 32g + 4n + j is word
++    4(n ^ (g & 1)) + j, _v_tr_bases950)."""
++    return [i * 8 + (e ^ (g & 1) * 4) for e in range(8)]
++
++
++def _v_operands950(values, step, ready=None):
++    """The 32 words of PV step `step`; with ready, waits for its reads and keeps them in VGPRs (as _v_operands)."""
++    raw = fx.Vector(values)
++    words = fx.Vector.from_elements([raw[step * 32 + i] for i in range(32)], fx.Int32)
++    if ready is not None:
++        ready(16 * (step + 1))
++        _keep_vgpr(words)
++        rocdl.sched_barrier(0)
++    return words
++
++
++def _pv950(
++    probabilities,
++    values,
++    output,
++    ready=None,
++    prepared=None,
++    center=None,
++    sum_max=None,
++):
++    """_pv on gfx950: O += P V over one V half in two K32 steps of eight MFMAs. values holds the words of one
++    _v_tr_reads950 plan; prepared (any value) says the memory stage already ran _v_operands950(values, 0, ready).
++    center and sum_max as for _pv."""
++    p, raw = fx.Vector(probabilities), fx.Vector(values)
++    acc = [
++        fx.Vector.from_elements([output[n * 4 + i] for i in range(4)], fx.Float32)
++        for n in range(8)
++    ]
++    scaled = []
++    rocdl.sched_barrier(0)
++    for step in range(2):
++        if ready is not None and (step or prepared is None):
++            _v_operands950(raw, step, ready)
++        b = fx.Vector.from_elements([p[step * 8 + i] for i in range(8)], fx.BFloat16)
++        for n in range(8):
++            a = fx.Vector.from_elements(
++                [raw[i] for i in _pv950_words(step, n)], fx.Int32
++            )
++            acc[n] = _mfma(a, b, acc[n], 32)
++        if center is not None:
++            if step == 0:
++                new_max, ballot = _new_max(center)
++            for i in range(step * 8, step * 8 + 8):
++                scaled.append(fx.Float32(center[0][i]) * center[3])
++        if sum_max is not None and step == 1:
++            row_sum, candidate = _sum_and_max(sum_max)
++        if center is not None or sum_max is not None:
++            _schedule(8, 2, 20 + step)
++        rocdl.sched_barrier(0)
++    result = fx.Vector.from_elements(
++        [acc[n][i] for n in range(8) for i in range(4)], fx.Float32
++    )
++    if center is not None:
++        # Pinned, as in _pv.
++        scaled = _pin(fx.Vector.from_elements(scaled, fx.Float32))
++        return result, scaled, new_max, ballot
++    if sum_max is not None:
++        return result, row_sum, candidate
++    return result
+diff --git a/aiter/ops/flydsl/kernels/qsa/sparse_prefill_direct.py b/aiter/ops/flydsl/kernels/qsa/sparse_prefill_direct.py
+index 72a0c23..48166d9 100644
+--- a/aiter/ops/flydsl/kernels/qsa/sparse_prefill_direct.py
++++ b/aiter/ops/flydsl/kernels/qsa/sparse_prefill_direct.py
+@@ -1,6 +1,6 @@
+ # SPDX-License-Identifier: MIT
+ # Copyright (C) 2026, Advanced Micro Devices, Inc. All rights reserved.
+-"""Block-native gfx942 QSA sparse attention, without cross-query union construction.
++"""Block-native QSA sparse attention (gfx942, gfx950), without cross-query union construction.
+ 
+ Layouts whose packed PK/PV scratch fits the platform's packed-KV budget, or whose
+ context has at most pack_tokens_per_row tokens per query row, use the private
+@@ -39,6 +39,8 @@ from .sparse_prefill_common import (
+     _buffer,
+     _buffer_words,
+     _exp,
++    _kv_extent,
++    _kv_offset,
+     _lds_load,
+     _lds_store,
+     _maximum,
+@@ -185,18 +187,19 @@ def prepare(
+     slotted = inputs.kv_slots is not None
+     pack_bytes = int(blocks.sum()) * 4 * hk * 1024
+     # Pack while PK+PV fit the budget, or while the context has at most pack_tokens_per_row
+-    # tokens per query row. PK/PV, and without a slot table all of K/V, take unsigned 32-bit
+-    # byte offsets in the pack kernel (a slot table gives each source block a 64-bit base).
+-    addressed = int(blocks.sum()) * 4
++    # tokens per query row. PK/PV, and without a slot table all of K/V (rows kv_stride
++    # elements apart), take unsigned 32-bit byte offsets in the pack kernel (a slot table
++    # gives each source block a 64-bit base).
++    addressed = int(blocks.sum()) * 4 * hk * 512
+     if not slotted:
+-        addressed = max(addressed, int(lengths.sum()))
++        addressed = max(addressed, int(lengths.sum()) * inputs.kv_stride * 2)
+     packed = (
+         pack_bytes <= config.max_packed_kv_bytes
+         or (
+             int(blocks.sum()) * 4 <= config.pack_tokens_per_row * int(q_lens.sum())
+             and pack_bytes <= MAX_ROW_PACKED_KV_BYTES
+         )
+-    ) and addressed * hk * 512 < 2**32
++    ) and addressed < 2**32
+     waves = 1 if packed else 4
+     k_starts, p_starts = np.cumsum(lengths) - lengths, np.cumsum(blocks) - blocks
+     counts = -(-q_lens // waves)
+@@ -268,27 +271,32 @@ def _source_token(cached_blocks, n, visible, tail_start, topk):
+     return token, n < width
+ 
+ 
+-def _source_offset(cached_blocks, n, visible, extent, hk, topk, tail_start):
++def _source_offset(cached_blocks, n, visible, extent, row_bytes, topk, tail_start):
+     token, valid = _source_token(cached_blocks, n, visible, tail_start, topk)
+-    return valid.select(fx.Uint32(token) * (hk * 256 * 2), extent)
++    return valid.select(fx.Uint32(token) * row_bytes, extent)
+ 
+ 
+-def _source_row(cached_blocks, n, visible, fallback, hk, topk, tail_start):
++def _source_row(cached_blocks, n, visible, fallback, row_bytes, topk, tail_start):
+     # Global loads have no range check: positions past the selection read the request's
+     # first row (K masked, V weighted 0) instead of an out-of-range offset.
+     token, valid = _source_token(cached_blocks, n, visible, tail_start, topk)
+     return valid.select(token, fx.Int32(fallback))
+ 
+ 
+-def _kv_resources(K, V, k0, kv_len, nk, hkv, hk, slotted):
++def _kv_resources(K, V, k0, kv_len, nk, hkv, hk, slotted, stride):
+     """(K, V buffers, byte extent) over the request in packed K/V, or the whole slot-table
+-    pool (whose span the host keeps within unsigned 32-bit offsets)."""
+-    first = fx.Int64(0) if slotted else fx.Int64(k0) * hk
+-    extent = (fx.Uint32(nk if slotted else kv_len) * hk - hkv) * 512
++    pool (whose span the host keeps within unsigned 32-bit offsets). K/V rows sit stride
++    elements apart: hk * 256 values, then a gap of padding."""
++    rows, gap = nk if slotted else kv_len, stride - hk * 256
++    first = fx.Int64(0) if slotted else fx.Int64(k0)
++    extent = _kv_extent(rows, hkv, hk, gap)
+     layout = fx.make_layout(extent // 2, 1)
+-    kr = _buffer(fx.make_view(fx.get_iter(K) + (first + hkv) * 256, layout), extent)
+-    vr = _buffer(fx.make_view(fx.get_iter(V) + (first + hkv) * 256, layout), extent)
+-    return kr, vr, extent
++
++    def resource(tensor):
++        pointer = fx.get_iter(tensor) + _kv_offset(first, hkv, hk, gap)
++        return _buffer(fx.make_view(pointer, layout), extent)
++
++    return resource(K), resource(V), extent
+ 
+ 
+ def _pool_bases(K, V, hkv):
+@@ -303,7 +311,17 @@ def _pool_bases(K, V, hkv):
+ 
+ 
+ def _load_v_global(
+-    resource, source_base, tile, segment, half, lane, visible, extent, hk, bn, topk
++    resource,
++    source_base,
++    tile,
++    segment,
++    half,
++    lane,
++    visible,
++    extent,
++    row_bytes,
++    bn,
++    topk,
+ ):
+     first = tile * bn + segment * 16 + (lane >> 4) * 4
+     complete = _min(visible >> 2, fx.Int32(topk))
+@@ -311,13 +329,13 @@ def _load_v_global(
+     base = fx.Uint32(source_base) + (lane & 15) * 16 + half * 256
+     parts = []
+     for r in range(4):
+-        offset = (first + r < width).select(base + r * (hk * 256 * 2), extent)
++        offset = (first + r < width).select(base + r * row_bytes, extent)
+         parts.append(_buffer_words(resource, offset))
+     return fx.Vector.from_elements([p[i] for p in parts for i in range(4)], fx.Int32)
+ 
+ 
+ def _load_v_rows(
+-    base, source_row, tile, segment, half, lane, visible, fallback, hk, bn, topk
++    base, source_row, tile, segment, half, lane, visible, fallback, row_bytes, bn, topk
+ ):
+     first = tile * bn + segment * 16 + (lane >> 4) * 4
+     complete = _min(visible >> 2, fx.Int32(topk))
+@@ -326,7 +344,7 @@ def _load_v_rows(
+     parts = []
+     for r in range(4):
+         row = (first + r < width).select(source_row + r, fx.Int32(fallback))
+-        parts.append(_global_words(base + fx.Int64(row) * (hk * 512) + lane_bytes))
++        parts.append(_global_words(base + fx.Int64(row) * row_bytes + lane_bytes))
+     return fx.Vector.from_elements([p[i] for p in parts for i in range(4)], fx.Int32)
+ 
+ 
+@@ -354,9 +372,12 @@ def _body(
+     TOPK: fx.Constexpr[int],
+     SLOTTED: fx.Constexpr[bool],
+     WIDE: fx.Constexpr[bool],
++    KV_STRIDE: fx.Constexpr[int],
+ ):
+     load, qk, pv = _load, _qk_pair, _pv
+-    load_key = functools.partial(_wide_key, row_bytes=HK * 512) if WIDE else _load_key
++    # K/V rows sit KV_STRIDE elements apart (HK * 256 when dense).
++    row_bytes = KV_STRIDE * 2
++    load_key = functools.partial(_wide_key, row_bytes=row_bytes) if WIDE else _load_key
+     source_offset, load_v, output_fn, enabled = (
+         _source_row if WIDE else _source_offset,
+         _load_v_rows if WIDE else _load_v_global,
+@@ -392,7 +413,9 @@ def _body(
+     if fx.const_expr(WIDE):
+         kr, vr, invalid = _pool_bases(K, V, hkv)
+     else:
+-        kr, vr, invalid = _kv_resources(K, V, k0, kv_len, NK, hkv, HK, SLOTTED)
++        kr, vr, invalid = _kv_resources(
++            K, V, k0, kv_len, NK, hkv, HK, SLOTTED, KV_STRIDE
++        )
+     row = _min(first + wave, fx.Int32(NQ - 1))
+     blocks = rocdl.make_buffer_tensor(BLOCKS)
+     maximum, total = fx.Float32(_MAX_FLOOR), fx.Float32(0.0)
+@@ -428,7 +451,7 @@ def _body(
+             _lds_store(table + (chunk + 1) * 256, pools[chunk + 1] >> 2)
+         cached_blocks, tail_start = pools[0] >> 2, pool_tail
+     initial = source_offset(
+-        cached_blocks, lane >> 2, visible, invalid, HK, TOPK, tail_start
++        cached_blocks, lane >> 2, visible, invalid, row_bytes, TOPK, tail_start
+     )
+     initial = valid_wave.select(initial, invalid)
+     kval = load_key(kr, initial, lane)
+@@ -438,7 +461,7 @@ def _body(
+         _min(fx.Int32(16), (((count + 15) >> 4) - 1) * 16) + (lane >> 2),
+         visible,
+         invalid,
+-        HK,
++        row_bytes,
+         TOPK,
+         tail_start,
+     )
+@@ -465,8 +488,12 @@ def _body(
+             )
+         rocdl.s_waitcnt(lgkmcnt=0)
+         rocdl.sched_barrier(0)
+-        values0 = load_v(vr, v_rows[0], t, 0, 0, lane, visible, invalid, HK, BN, TOPK)
+-        values1 = load_v(vr, v_rows[0], t, 0, 1, lane, visible, invalid, HK, BN, TOPK)
++        values0 = load_v(
++            vr, v_rows[0], t, 0, 0, lane, visible, invalid, row_bytes, BN, TOPK
++        )
++        values1 = load_v(
++            vr, v_rows[0], t, 0, 1, lane, visible, invalid, row_bytes, BN, TOPK
++        )
+         if fx.const_expr(SLOTTED):
+             if ((t + 1) & 7) == 0:
+                 chunk = _min((t + 1) >> 3, fx.Int32(TOPK // 64 - 1))
+@@ -521,7 +548,7 @@ def _body(
+             following + (lane >> 2),
+             visible,
+             invalid,
+-            HK,
++            row_bytes,
+             TOPK,
+             tail_start,
+         )
+@@ -530,7 +557,7 @@ def _body(
+             following1 + (lane >> 2),
+             visible,
+             invalid,
+-            HK,
++            row_bytes,
+             TOPK,
+             tail_start,
+         )
+@@ -543,10 +570,10 @@ def _body(
+             )
+         ).bitcast(fx.Int16)
+         next_values0 = load_v(
+-            vr, v_rows[1], t, 1, 0, lane, visible, invalid, HK, BN, TOPK
++            vr, v_rows[1], t, 1, 0, lane, visible, invalid, row_bytes, BN, TOPK
+         )
+         next_values1 = load_v(
+-            vr, v_rows[1], t, 1, 1, lane, visible, invalid, HK, BN, TOPK
++            vr, v_rows[1], t, 1, 1, lane, visible, invalid, row_bytes, BN, TOPK
+         )
+         rocdl.sched_barrier(0)
+         o0 = pv(p0, values0, o0, fx.Float32(1.0))
+@@ -617,6 +644,7 @@ def _kernel(
+     TOPK: fx.Constexpr[int],
+     SLOTTED: fx.Constexpr[bool],
+     WIDE: fx.Constexpr[bool],
++    KV_STRIDE: fx.Constexpr[int],
+ ):
+     body = _body
+     if fx.const_expr(GATED):
+@@ -648,6 +676,7 @@ def _kernel(
+                 TOPK,
+                 SLOTTED,
+                 WIDE,
++                KV_STRIDE,
+             )
+     else:
+         body(
+@@ -673,6 +702,7 @@ def _kernel(
+             TOPK,
+             SLOTTED,
+             WIDE,
++            KV_STRIDE,
+         )
+ 
+ 
+@@ -701,6 +731,7 @@ def _launch(
+     TOPK: fx.Constexpr[int],
+     SLOTTED: fx.Constexpr[bool],
+     WIDE: fx.Constexpr[bool],
++    KV_STRIDE: fx.Constexpr[int],
+     stream: fx.Stream,
+ ):
+     if TASKS > 0:
+@@ -728,6 +759,7 @@ def _launch(
+             TOPK,
+             SLOTTED,
+             WIDE,
++            KV_STRIDE,
+             value_attrs={"llvm.target_features": _target_features()},
+         ).launch(grid=(TASKS, 1, 1), block=(THREADS, 1, 1), stream=stream)
+ 
+@@ -770,6 +802,7 @@ def _bound(inputs, prepared, out, stream):
+         inputs.topk,
+         prepared.slotted,
+         prepared.wide,
++        inputs.kv_stride,
+         stream,
+     )
+     key = (
+@@ -780,6 +813,7 @@ def _bound(inputs, prepared, out, stream):
+         inputs.scale,
+         inputs.topk,
+         prepared.slotted,
++        inputs.kv_stride,
+     )
+     compiled = _COMPILED.get((*key, prepared.wide))
+     if compiled is None:
+diff --git a/aiter/ops/flydsl/kernels/qsa/sparse_prefill_direct_packed.py b/aiter/ops/flydsl/kernels/qsa/sparse_prefill_direct_packed.py
+index c850890..89d3ad2 100644
+--- a/aiter/ops/flydsl/kernels/qsa/sparse_prefill_direct_packed.py
++++ b/aiter/ops/flydsl/kernels/qsa/sparse_prefill_direct_packed.py
+@@ -5,6 +5,9 @@
+ Four-token KV blocks are stored in the native QK/PV operand layouts. One query
+ wave then needs no K-data bpermutes or PV byte permutations. Original public
+ KV tensors remain unchanged; private scratch is refreshed on every call.
++
++On gfx950 the same operand words feed 16x16x32 MFMAs and probabilities convert
++with v_cvt_pk_bf16_f32; each key tile then takes one V round trip (gfx950 part).
+ """
+ 
+ import math
+@@ -13,6 +16,8 @@ import flydsl.compiler as flyc
+ import flydsl.expr as fx
+ from flydsl.expr import rocdl
+ 
++from aiter.jit.utils.chip_info import get_gfx_runtime
++
+ from .sparse_prefill_common import (
+     _MAX_FLOOR,
+     _buffer,
+@@ -20,11 +25,14 @@ from .sparse_prefill_common import (
+     _buffer_store_words,
+     _buffer_words,
+     _exp,
++    _kv_extent,
++    _kv_offset,
+     _load_lds,
+     _maximum,
+     _mfma,
+     _min,
+     _pack_bf16,
++    _pack_bf16_950,
+     _pin,
+     _stage_end,
+     _target_features,
+@@ -66,6 +74,7 @@ def _output(
+     active,
+     gated,
+     nq,
++    gfx950=False,
+ ):
+     shared = fx.Int32(fx.ptrtoint(fx.get_iter(storage)))
+     row = (tid >> 6) * 16 + (tid & 15)
+@@ -75,7 +84,7 @@ def _output(
+             values = fx.Vector.from_elements(
+                 [acc[n * 4 + i] * inv for n in range(8)], fx.Float32
+             )
+-            words = _pack_bf16(values)
++            words = (_pack_bf16_950 if gfx950 else _pack_bf16)(values)
+             col = (((tid >> 4) & 3) * 4 + i) * 8 + half * 128
+             address = fx.Int32(shared + ((row * 256 + col) ^ ((row & 7) * 8)) * 2)
+             _write_address(address, words)
+@@ -117,6 +126,7 @@ def _pack_block(
+     lane,
+     packed,
+     hk,
++    stride,
+     source_extent,
+     extent,
+     slots,
+@@ -127,22 +137,22 @@ def _pack_block(
+     start = fx.Int32(sources[_min(block, packed - 1)])
+     token, chunk = lane >> 4, lane & 15
+     dim = half * 128 + chunk * 8
++    # K/V rows sit stride elements apart: hk * 256 values, then a gap of padding.
++    row_bytes, gap = stride * 2, stride - hk * 256
+     if slotted:
+         # A wave packs one block, four consecutive pool rows from the slot table's first:
+         # give it its own 64-bit base, so the pool may exceed 4 GiB. kr/vr are the pool
+         # addresses here.
+         row = _uniform(fx.Int32(slots[_uniform(start)]))
+-        base = (fx.Int64(row) * hk + _uniform(head)) * 512
+-        kr = _buffer_at(kr + base, 4 * hk * 512)
+-        vr = _buffer_at(vr + base, 4 * hk * 512)
+-        source = valid.select(
+-            fx.Uint32(token * hk * 512 + dim * 2), fx.Uint32(4 * hk * 512)
+-        )
++        base = _kv_offset(fx.Int64(row), _uniform(head), hk, gap, 2)
++        kr = _buffer_at(kr + base, 4 * row_bytes)
++        vr = _buffer_at(vr + base, 4 * row_bytes)
++        offset = _kv_offset(token, 0, hk, gap, 2, dim)
++        source = valid.select(fx.Uint32(offset), fx.Uint32(4 * row_bytes))
+     else:
+         # Tokens past a request's end are masked by the direct kernel.
+-        source = valid.select(
+-            fx.Uint32((start + token) * hk + head) * 512 + dim * 2, source_extent
+-        )
++        offset = _kv_offset(fx.Uint32(start + token), head, hk, gap, 2, dim)
++        source = valid.select(offset, source_extent)
+     key = _buffer_words(kr, source)
+     target = (
+         fx.Uint32(
+@@ -191,11 +201,12 @@ def _pack_block(
+ 
+ 
+ @flyc.jit
+-def _pack_body(K, V, PK, PV, SOURCES, SLOTS, N, PACKED, HK, SLOTTED):
++def _pack_body(K, V, PK, PV, SOURCES, SLOTS, N, PACKED, HK, SLOTTED, KV_STRIDE):
+     tid = fx.thread_idx.x
+     lane, half = tid & 63, (tid >> 6) & 1
+     first = fx.block_idx.x * 8 + (tid >> 7)
+-    source_extent = fx.Uint32(N) * HK * 512
++    # K/V rows sit KV_STRIDE elements apart: HK * 256 values, then a gap of padding.
++    source_extent = _kv_extent(N, 0, HK, KV_STRIDE - HK * 256)
+     extent = fx.Uint32(PACKED) * 4 * HK * 512
+     if fx.const_expr(SLOTTED):
+         kr = fx.Int64(fx.ptrtoint(fx.get_iter(K)))
+@@ -216,6 +227,7 @@ def _pack_body(K, V, PK, PV, SOURCES, SLOTS, N, PACKED, HK, SLOTTED):
+             lane,
+             PACKED,
+             HK,
++            KV_STRIDE,
+             source_extent,
+             extent,
+             slots,
+@@ -235,8 +247,9 @@ def _pack(
+     PACKED: fx.Int32,
+     HK: fx.Constexpr[int],
+     SLOTTED: fx.Constexpr[bool],
++    KV_STRIDE: fx.Constexpr[int],
+ ):
+-    _pack_body(K, V, PK, PV, SOURCES, SLOTS, N, PACKED, HK, SLOTTED)
++    _pack_body(K, V, PK, PV, SOURCES, SLOTS, N, PACKED, HK, SLOTTED, KV_STRIDE)
+ 
+ 
+ @flyc.kernel(name="sparse_prefill_pack_kv_gated_bf16_d256")
+@@ -252,9 +265,10 @@ def _pack_gated(
+     PACKED: fx.Int32,
+     HK: fx.Constexpr[int],
+     SLOTTED: fx.Constexpr[bool],
++    KV_STRIDE: fx.Constexpr[int],
+ ):
+     if _uniform(DIRECT_FLAG[0]) != 0:
+-        _pack_body(K, V, PK, PV, SOURCES, SLOTS, N, PACKED, HK, SLOTTED)
++        _pack_body(K, V, PK, PV, SOURCES, SLOTS, N, PACKED, HK, SLOTTED, KV_STRIDE)
+ 
+ 
+ def _key_offset(cached, n, visible, extent, hk, topk):
+@@ -298,15 +312,19 @@ def _mask_value_tail(value, tile, segment, lane, visible, TOPK: fx.Constexpr[int
+     return value
+ 
+ 
+-def _value_load(resource, source_base, tile, segment, half, lane, visible, hk, topk):
++def _value_words(resource, source_base, half, lane, hk):
+     base = fx.Uint32(source_base) + half * 2 * hk * 512 + (lane & 15) * 16
+     parts = [
+         _buffer_words(resource, base + (part // 2) * hk * 512 + (part % 2) * 256)
+         for part in range(4)
+     ]
+-    value = fx.Vector.from_elements(
++    return fx.Vector.from_elements(
+         [part[i] for part in parts for i in range(4)], fx.Int32
+     )
++
++
++def _value_load(resource, source_base, tile, segment, half, lane, visible, hk, topk):
++    value = _value_words(resource, source_base, half, lane, hk)
+     # A packed block may contain later tokens with NaNs; zero those BF16
+     # elements before MFMA rather than relying on zero probabilities.
+     return _mask_value_tail(value, tile, segment, lane, visible, topk)
+@@ -387,6 +405,114 @@ def _rescale(output0, output1, alpha):
+     return output0, output1
+ 
+ 
++def _softmax(scores0, scores1, count, tile, lane, scale, maximum, total, o0, o1):
++    """Online softmax of one BN32 tile: (new max, P of its 8 lane keys, l, rescaled O)."""
++    scaled0, scaled1 = _scale_scores(scores0, scores1, count, tile, lane, scale)
++    scores = [scaled0[i] for i in range(4)] + [scaled1[i] for i in range(4)]
++    candidate = fx.Float32(_MAX_FLOOR)
++    for score in scores:
++        candidate = _maximum(candidate, score)
++    candidate = _reduce(candidate, True)
++    updated = _maximum(maximum, candidate)
++    alpha = _exp(maximum - updated)
++    probabilities = fx.Vector.from_elements(
++        [_exp(value - updated) for value in scores], fx.Float32
++    )
++    current = fx.Float32(0.0)
++    for i in fx.range_constexpr(8):
++        current = current + probabilities[i]
++    current = _reduce(current, False)
++    total = total * alpha + current
++    o0, o1 = _rescale(o0, o1, alpha)
++    return updated, probabilities, total, o0, o1
++
++
++# ---- gfx950 (CDNA4): 16x16x32 MFMAs, native BF16 ----
++#
++# A K32 MFMA is two K16 MFMAs of the gfx942 loop side by side: lane l holds A row and
++# B column l % 16 and K values (K / 4) * (l >> 4) .. (FlyDSL's MFMA layouts), so the
++# K32 operands are the K16 ones concatenated and S and O keep their layouts. V never
++# passes through LDS here: packed V is stored in the PV operand order by the pack
++# kernel, raw V is transposed in registers (v_perm), so ds_read_b64_tr_b16 does not
++# apply. Per tile, with g = lane >> 4 and the two 16-key segments s of BN32:
++#   QK: segment s's K32 step j merges K16 steps 2j, 2j + 1: K and Q words 4j .. 4j + 3
++#       (dims 32j + 8g .. + 7).
++#   PV: lane group g's eight K32 keys are segment 0's keys 4g .. 4g + 3, then segment
++#       1's: B is P of both segments (4 words), and A of dims group n is segment 0's
++#       K16 operand words of n, then segment 1's.
++# The gfx942 loop requests segment 1's V only after segment 0's has landed, and runs
++# segment 0's PV meanwhile: two V round trips a tile. A K32 PV MFMA reads both
++# segments, so the gfx950 loop splits a tile's V by dims half instead: half 0 of both
++# segments before QK, half 1 after it, and K of the next tile before PV, so a tile
++# takes one round trip. So that both V halves and the next tile's K fit in the VGPRs
++# of two waves a SIMD, Q waits between tiles in LDS that the epilogue uses later
++# (_store_q950, reloaded each tile); the block-ID prefetch moves one tile ahead so
++# that K's addresses do not wait for V.
++
++QK950 = tuple((step, s) for step in range(8) for s in range(2))  # K32 QK, issue order
++
++
++def _qk_words950(step):
++    """K and Q words of K32 QK step `step`: the words of K16 steps 2 * step, + 1."""
++    return [step * 4 + i for i in range(4)]
++
++
++def _pv_words950(n):
++    """(key segment, packed V word) of the A operand of K32 PV MFMA n."""
++    return [(segment, n * 2 + i) for segment in range(2) for i in range(2)]
++
++
++def _store_q950(storage, q, lane, base):
++    """Q words of the lane into LDS at base: words 4j .. 4j + 3 at base + 1024j + 16 lane."""
++    shared = fx.Int32(fx.ptrtoint(fx.get_iter(storage)))
++    q = fx.Vector(q)
++    for j in range(8):
++        _write_address(
++            shared + base + lane * 16 + j * 1024,
++            fx.Vector.from_elements([q[j * 4 + i] for i in range(4)], fx.Int32),
++        )
++
++
++def _load_q950(storage, lane, base):
++    """_store_q950's words back (eight ds_read_b128)."""
++    parts = [_load_lds(storage, base + lane * 16, j * 1024) for j in range(8)]
++    return fx.Vector.from_elements([p[i] for p in parts for i in range(4)], fx.Int32)
++
++
++def _qk950(q, k0, k1):
++    """_qk on gfx950: S of key segments 0 and 1, in _qk's layout, from K32 MFMAs."""
++    q, keys = fx.Vector(q), (fx.Vector(k0), fx.Vector(k1))
++    acc = [fx.Vector.filled(4, 0.0, fx.Float32) for _ in range(2)]
++    for step, segment in QK950:
++        words = _qk_words950(step)
++        acc[segment] = _mfma(
++            fx.Vector.from_elements([keys[segment][i] for i in words], fx.Int32),
++            fx.Vector.from_elements([q[i] for i in words], fx.Int32),
++            acc[segment],
++            32,
++        )
++    return acc[0], acc[1]
++
++
++def _pv950(p, values, output):
++    """_pv on gfx950: O += P V of both key segments. p holds P of both (4 words),
++    values the two segments' packed V words of one dims half."""
++    rocdl.s_setprio(2)
++    output = fx.Vector(output)
++    values = [fx.Vector(value) for value in values]
++    acc = []
++    for n in range(8):
++        c = fx.Vector.from_elements([output[n * 4 + i] for i in range(4)], fx.Float32)
++        a = fx.Vector.from_elements(
++            [values[segment][word] for segment, word in _pv_words950(n)], fx.Int32
++        )
++        acc.append(_mfma(a, p, c, 32))
++    rocdl.s_setprio(0)
++    return fx.Vector.from_elements(
++        [acc[n][i] for n in range(8) for i in range(4)], fx.Float32
++    )
++
++
+ @flyc.jit
+ def _body(
+     Q: fx.Tensor,
+@@ -402,6 +528,7 @@ def _body(
+     NQ: fx.Int32,
+     SCALE: fx.Constexpr[float],
+     TOPK: fx.Constexpr[int],
++    GFX950: fx.Constexpr[bool],
+ ):
+     storage = (
+         fx.SharedAllocator()
+@@ -425,17 +552,18 @@ def _body(
+         fx.Uint32((wave * H + (lane & 15)) * 512), qe
+     )
+     q = _load(qr, qoffset, lane)
+-    extent = (fx.Uint32(kv_len) * HK - hkv) * 512
++    # Packed K/V: dense rows.
++    extent = _kv_extent(kv_len, hkv, HK, 0)
+     kr = _buffer(
+         fx.make_view(
+-            fx.get_iter(K) + (fx.Int64(k0) * HK + hkv) * 256,
++            fx.get_iter(K) + _kv_offset(fx.Int64(k0), hkv, HK, 0),
+             fx.make_layout(extent // 2, 1),
+         ),
+         extent,
+     )
+     vr = _buffer(
+         fx.make_view(
+-            fx.get_iter(V) + (fx.Int64(k0) * HK + hkv) * 256,
++            fx.get_iter(V) + _kv_offset(fx.Int64(k0), hkv, HK, 0),
+             fx.make_layout(extent // 2, 1),
+         ),
+         extent,
+@@ -465,81 +593,132 @@ def _body(
+     rocdl.s_waitcnt(vmcnt=0)
+     rocdl.sched_barrier(0)
+     next_cached = cached
+-    for t in range(fx.Int32(0), tiles, fx.Int32(1)):
+-        vrow0 = fx.Int32(
+-            rocdl.ds_bpermute(fx.Int32.ir_type, (lane >> 4) * 16, fx.Int32(offset0))
+-        )
+-        vrow1 = fx.Int32(
+-            rocdl.ds_bpermute(fx.Int32.ir_type, (lane >> 4) * 16, fx.Int32(offset1))
+-        )
+-        rocdl.s_waitcnt(lgkmcnt=0)
+-        rocdl.sched_barrier(0)
+-        values0 = _value_load(vr, vrow0, t, 0, 0, lane, visible, HK, TOPK)
+-        values1 = _value_load(vr, vrow0, t, 0, 1, lane, visible, HK, TOPK)
+-        if ((t + 1) & 7) == 0:
+-            chunk = _min((t + 1) >> 3, fx.Int32(TOPK // 64 - 1)) * 64
+-            next_cached = fx.Int32(blocks[row * TOPK + chunk + lane])
+-        rocdl.sched_barrier(0)
+-        # The next index-cache load is younger than V0. vmcnt(8) is
+-        # conservative on those boundary iterations and still releases K.
+-        rocdl.s_waitcnt(vmcnt=8)
+-        rocdl.sched_barrier(0)
+-        scores0, scores1 = _qk(q, kval0, kval1)
+-        scaled0, scaled1 = _scale_scores(scores0, scores1, count, t, lane, scale)
+-        scores = [scaled0[i] for i in range(4)] + [scaled1[i] for i in range(4)]
+-        candidate = fx.Float32(_MAX_FLOOR)
+-        for score in scores:
+-            candidate = _maximum(candidate, score)
+-        candidate = _reduce(candidate, True)
+-        updated = _maximum(maximum, candidate)
+-        alpha = _exp(maximum - updated)
+-        probabilities = fx.Vector.from_elements(
+-            [_exp(value - updated) for value in scores], fx.Float32
+-        )
+-        current = fx.Float32(0.0)
+-        for i in fx.range_constexpr(8):
+-            current = current + probabilities[i]
+-        current = _reduce(current, False)
+-        total = total * alpha + current
+-        o0, o1 = _rescale(o0, o1, alpha)
+-        rocdl.s_waitcnt(lgkmcnt=0)
+-        rocdl.sched_barrier(0)
+-        rocdl.s_waitcnt(vmcnt=0)
+-        rocdl.sched_barrier(0)
+-        if ((t + 1) & 7) == 0:
+-            cached = next_cached
+-        following0 = _min((t + 1) * 32, (((count + 15) >> 4) - 1) * 16)
+-        following1 = _min((t + 1) * 32 + 16, (((count + 15) >> 4) - 1) * 16)
+-        offset0 = _key_offset(
+-            cached, following0 + (lane & 15), visible, extent, HK, TOPK
+-        )
+-        offset1 = _key_offset(
+-            cached, following1 + (lane & 15), visible, extent, HK, TOPK
+-        )
+-        p0 = _pack_bf16(
+-            fx.Vector.from_elements([probabilities[i] for i in range(4)], fx.Float32)
+-        ).bitcast(fx.Int16)
+-        p1 = _pack_bf16(
+-            fx.Vector.from_elements(
+-                [probabilities[4 + i] for i in range(4)], fx.Float32
++    if fx.const_expr(not GFX950):
++        for t in range(fx.Int32(0), tiles, fx.Int32(1)):
++            vrow0 = fx.Int32(
++                rocdl.ds_bpermute(fx.Int32.ir_type, (lane >> 4) * 16, fx.Int32(offset0))
+             )
+-        ).bitcast(fx.Int16)
+-        next_values0 = _value_load(vr, vrow1, t, 1, 0, lane, visible, HK, TOPK)
+-        next_values1 = _value_load(vr, vrow1, t, 1, 1, lane, visible, HK, TOPK)
+-        rocdl.sched_barrier(0)
+-        o0 = _pv(p0, values0, o0)
+-        rocdl.sched_barrier(0)
+-        kval0 = _key_load(kr, offset0, lane, HK)
+-        rocdl.sched_barrier(0)
+-        o1 = _pv(p0, values1, o1)
+-        rocdl.sched_barrier(0)
+-        kval1 = _key_load(kr, offset1, lane, HK)
+-        rocdl.sched_barrier(0)
+-        rocdl.s_waitcnt(vmcnt=16)
+-        rocdl.sched_barrier(0)
+-        o0 = _pv(p1, next_values0, o0)
+-        o1 = _pv(p1, next_values1, o1)
+-        maximum = updated
++            vrow1 = fx.Int32(
++                rocdl.ds_bpermute(fx.Int32.ir_type, (lane >> 4) * 16, fx.Int32(offset1))
++            )
++            rocdl.s_waitcnt(lgkmcnt=0)
++            rocdl.sched_barrier(0)
++            values0 = _value_load(vr, vrow0, t, 0, 0, lane, visible, HK, TOPK)
++            values1 = _value_load(vr, vrow0, t, 0, 1, lane, visible, HK, TOPK)
++            if ((t + 1) & 7) == 0:
++                chunk = _min((t + 1) >> 3, fx.Int32(TOPK // 64 - 1)) * 64
++                next_cached = fx.Int32(blocks[row * TOPK + chunk + lane])
++            rocdl.sched_barrier(0)
++            # The next index-cache load is younger than V0. vmcnt(8) is
++            # conservative on those boundary iterations and still releases K.
++            rocdl.s_waitcnt(vmcnt=8)
++            rocdl.sched_barrier(0)
++            scores0, scores1 = _qk(q, kval0, kval1)
++            updated, probabilities, total, o0, o1 = _softmax(
++                scores0, scores1, count, t, lane, scale, maximum, total, o0, o1
++            )
++            rocdl.s_waitcnt(lgkmcnt=0)
++            rocdl.sched_barrier(0)
++            rocdl.s_waitcnt(vmcnt=0)
++            rocdl.sched_barrier(0)
++            if ((t + 1) & 7) == 0:
++                cached = next_cached
++            following0 = _min((t + 1) * 32, (((count + 15) >> 4) - 1) * 16)
++            following1 = _min((t + 1) * 32 + 16, (((count + 15) >> 4) - 1) * 16)
++            offset0 = _key_offset(
++                cached, following0 + (lane & 15), visible, extent, HK, TOPK
++            )
++            offset1 = _key_offset(
++                cached, following1 + (lane & 15), visible, extent, HK, TOPK
++            )
++            p0 = _pack_bf16(
++                fx.Vector.from_elements(
++                    [probabilities[i] for i in range(4)], fx.Float32
++                )
++            ).bitcast(fx.Int16)
++            p1 = _pack_bf16(
++                fx.Vector.from_elements(
++                    [probabilities[4 + i] for i in range(4)], fx.Float32
++                )
++            ).bitcast(fx.Int16)
++            next_values0 = _value_load(vr, vrow1, t, 1, 0, lane, visible, HK, TOPK)
++            next_values1 = _value_load(vr, vrow1, t, 1, 1, lane, visible, HK, TOPK)
++            rocdl.sched_barrier(0)
++            o0 = _pv(p0, values0, o0)
++            rocdl.sched_barrier(0)
++            kval0 = _key_load(kr, offset0, lane, HK)
++            rocdl.sched_barrier(0)
++            o1 = _pv(p0, values1, o1)
++            rocdl.sched_barrier(0)
++            kval1 = _key_load(kr, offset1, lane, HK)
++            rocdl.sched_barrier(0)
++            rocdl.s_waitcnt(vmcnt=16)
++            rocdl.sched_barrier(0)
++            o0 = _pv(p1, next_values0, o0)
++            o1 = _pv(p1, next_values1, o1)
++            maximum = updated
++    else:
++        _store_q950(storage, q, lane, 0)
++        for t in range(fx.Int32(0), tiles, fx.Int32(1)):
++            vrows = [
++                fx.gpu.shuffle_idx(fx.Int32(offset), (lane >> 4) << 2, 64)
++                for offset in (offset0, offset1)
++            ]
++            rocdl.s_waitcnt(lgkmcnt=0)
++            rocdl.sched_barrier(0)
++            # Switch to the block IDs prefetched a tile ago here, where they have
++            # landed: a switch after this tile's prefetch would make LLVM wait for it.
++            if ((t + 1) & 7) == 0:
++                cached = next_cached
++            values0 = [_value_words(vr, vrow, 0, lane, HK) for vrow in vrows]
++            q_words = _load_q950(storage, lane, 0)
++            rocdl.sched_barrier(0)
++            # Only this tile's K, requested a tile ago, is older than the eight V
++            # loads of dims half 0: vmcnt(8) waits for K, leaving V in flight.
++            rocdl.s_waitcnt(vmcnt=8)
++            rocdl.sched_barrier(0)
++            scores0, scores1 = _qk950(q_words, kval0, kval1)
++            rocdl.sched_barrier(0)
++            values1 = [_value_words(vr, vrow, 1, lane, HK) for vrow in vrows]
++            if ((t + 2) & 7) == 0:
++                chunk = _min((t + 2) >> 3, fx.Int32(TOPK // 64 - 1)) * 64
++                next_cached = fx.Int32(blocks[row * TOPK + chunk + lane])
++            rocdl.sched_barrier(0)
++            updated, probabilities, total, o0, o1 = _softmax(
++                scores0, scores1, count, t, lane, scale, maximum, total, o0, o1
++            )
++            p = _pack_bf16_950(probabilities)
++            rocdl.sched_barrier(0)
++            following0 = _min((t + 1) * 32, (((count + 15) >> 4) - 1) * 16)
++            following1 = _min((t + 1) * 32 + 16, (((count + 15) >> 4) - 1) * 16)
++            offset0 = _key_offset(
++                cached, following0 + (lane & 15), visible, extent, HK, TOPK
++            )
++            offset1 = _key_offset(
++                cached, following1 + (lane & 15), visible, extent, HK, TOPK
++            )
++            kval0 = _key_load(kr, offset0, lane, HK)
++            kval1 = _key_load(kr, offset1, lane, HK)
++            rocdl.sched_barrier(0)
++            # V half 0 is the oldest; younger are half 1, a global block-ID prefetch
++            # (every eighth tile) and the sixteen K loads: vmcnt(24) waits for half 0.
++            rocdl.s_waitcnt(vmcnt=24)
++            rocdl.sched_barrier(0)
++            values0 = [
++                _mask_value_tail(value, t, segment, lane, visible, TOPK)
++                for segment, value in enumerate(values0)
++            ]
++            o0 = _pv950(p, values0, o0)
++            rocdl.sched_barrier(0)
++            # Only K's sixteen loads are younger than half 1 and the block IDs.
++            rocdl.s_waitcnt(vmcnt=16)
++            rocdl.sched_barrier(0)
++            values1 = [
++                _mask_value_tail(value, t, segment, lane, visible, TOPK)
++                for segment, value in enumerate(values1)
++            ]
++            o1 = _pv950(p, values1, o1)
++            maximum = updated
+     rocdl.s_waitcnt(vmcnt=0)
+     _stage_end()
+     inv = (total > 0).select(fx.Float32(1.0) / total, fx.Float32(0.0))
+@@ -564,6 +743,7 @@ def _body(
+         None,
+         False,
+         NQ,
++        GFX950,
+     )
+ 
+ 
+@@ -583,6 +763,7 @@ def _kernel(
+     GATED: fx.Constexpr[bool],
+     SCALE: fx.Constexpr[float],
+     TOPK: fx.Constexpr[int],
++    GFX950: fx.Constexpr[bool],
+ ):
+     task = fx.block_idx.x
+     if fx.const_expr(GATED):
+@@ -604,6 +785,7 @@ def _kernel(
+                 NQ,
+                 SCALE,
+                 TOPK,
++                GFX950,
+             )
+     else:
+         _body(
+@@ -620,6 +802,7 @@ def _kernel(
+             NQ,
+             SCALE,
+             TOPK,
++            GFX950,
+         )
+ 
+ 
+@@ -650,17 +833,32 @@ def _launch(
+     SCALE: fx.Constexpr[float],
+     TOPK: fx.Constexpr[int],
+     SLOTTED: fx.Constexpr[bool],
++    GFX950: fx.Constexpr[bool],
++    KV_STRIDE: fx.Constexpr[int],
+     stream: fx.Stream,
+ ):
+     if TASKS > 0:
+         if fx.const_expr(GATED):
+             _pack_gated(
+-                K, V, PK, PV, SOURCES, SLOTS, DIRECT_FLAG, NK, PACKED, HK, SLOTTED
++                K,
++                V,
++                PK,
++                PV,
++                SOURCES,
++                SLOTS,
++                DIRECT_FLAG,
++                NK,
++                PACKED,
++                HK,
++                SLOTTED,
++                KV_STRIDE,
+             ).launch(
+                 grid=((PACKED * HK + 7) // 8, 1, 1), block=(256, 1, 1), stream=stream
+             )
+         else:
+-            _pack(K, V, PK, PV, SOURCES, SLOTS, NK, PACKED, HK, SLOTTED).launch(
++            _pack(
++                K, V, PK, PV, SOURCES, SLOTS, NK, PACKED, HK, SLOTTED, KV_STRIDE
++            ).launch(
+                 grid=((PACKED * HK + 7) // 8, 1, 1), block=(256, 1, 1), stream=stream
+             )
+         kernel = _kernel(
+@@ -678,6 +876,7 @@ def _launch(
+             GATED,
+             SCALE,
+             TOPK,
++            GFX950,
+             value_attrs={"llvm.target_features": _target_features()},
+         )
+         if fx.const_expr(GATED):
+@@ -723,6 +922,8 @@ def launch_args(inputs, prepared, out, tasks, stream):
+         inputs.scale,
+         inputs.topk,
+         prepared.slotted,
++        get_gfx_runtime() == "gfx950",
++        inputs.kv_stride,
+         stream,
+     )
+ 
+diff --git a/aiter/ops/flydsl/kernels/qsa/sparse_prefill_prepare.py b/aiter/ops/flydsl/kernels/qsa/sparse_prefill_prepare.py
+index 23dd9bd..8c0581e 100644
+--- a/aiter/ops/flydsl/kernels/qsa/sparse_prefill_prepare.py
++++ b/aiter/ops/flydsl/kernels/qsa/sparse_prefill_prepare.py
+@@ -65,7 +65,7 @@ class SparsePlan:
+     num_tiles: int
+     grid: int
+     route_costs: tuple
+-    route_model: tuple  # platform union_fixed, union_step, row_step, route_margin
++    route_model: tuple  # platform union_fixed, union_step, row_step, route_margin, route_all_or_none
+     union_ratio: float
+     routing: bool = True
+     # Slot-table launches (K/V read from a token pool through kv_slots): K3 writes each union block's
+@@ -857,7 +857,7 @@ def _route_cost(
+     union_sum, union_max, direct_sum, direct_max, task_share, step, fixed, model
+ ):
+     # Separate multiplies and adds, as in the fitted model.
+-    union_fixed, union_step, row_step, _ = model
++    union_fixed, union_step, row_step = model[:3]
+     union = fx.Float32(union_fixed) + fx.Float32(union_step) * fx.max(
+         fx.Float32(union_max), fx.Float32(union_sum) * task_share
+     )
+@@ -870,7 +870,7 @@ def _route_cost(
+ 
+ def _route_choice(totals, limits, task_share, step, fixed, model):
+     """The limit of the cheapest candidate; totals hold 4 sums per candidate."""
+-    for j in range(LIMITS):
++    for j in range(len(limits)):
+         cost = _route_cost(*totals[4 * j : 4 * j + 4], task_share, step, fixed, model)
+         if j == 0:
+             # Keeping every union tile wins ties and must be route_margin slower to lose.
+@@ -914,7 +914,13 @@ def _route(
+     ] + [fx.Int32(-1)]
+     threshold = union_max
+     # Only a union phase set by its longest task, not by throughput, gains from a shorter one.
+-    if fx.Float32(union_max) > fx.Float32(union_sum) * TASK_SHARE:
++    # A throughput-bound one can still cost more than no union at all: a tile's union grows with
++    # how far its rows' selections spread, its direct work only with each row's top-k. So with
++    # route_all_or_none (ROUTE_MODEL[4]), sparse_prefill_order_masks weighs keeping every union
++    # tile against none there.
++    longest = fx.Float32(union_max) > fx.Float32(union_sum) * TASK_SHARE
++    compare = True if fx.const_expr(ROUTE_MODEL[4]) else longest
++    if compare:
+         kept_sum, kept_max = [zero] * LIMITS, [zero] * LIMITS
+         direct_sum, direct_max = [zero] * LIMITS, [zero] * LIMITS
+         for tile in range(tid, TILES, THREADS):
+@@ -942,6 +948,16 @@ def _route(
+         threshold = _route_choice(
+             totals, limits, TASK_SHARE, DIRECT_STEP, DIRECT_FIXED, ROUTE_MODEL
+         )
++        if fx.const_expr(ROUTE_MODEL[4]):
++            every_or_none = _route_choice(
++                totals[:4] + totals[-4:],
++                [limits[0], limits[-1]],
++                TASK_SHARE,
++                DIRECT_STEP,
++                DIRECT_FIXED,
++                ROUTE_MODEL,
++            )
++            threshold = longest.select(threshold, every_or_none)
+     return threshold
+ 
+ 
+@@ -1360,6 +1376,22 @@ def wide_tile_rows(query_tile: int) -> int:
+     return math.ceil(query_tile * get_cu_num() * platform().wide_tiles_per_cu)
+ 
+ 
++def plan_query_tile(group, hk, query_lens, prefix_lens, query_tile: int) -> int:
++    """BQ of a union plan for a layout of Q heads per KV head `group`, `hk` KV heads and
++    these requests, from the `query_tile` asked for."""
++    # Full H6/H3 prefill fills 126/128 MFMA rows (BQ21 / BQ42 with 64-bit membership). Keep the
++    # established tiles for prefix/ragged work and batches too small to fill the persistent grid.
++    full = hk == 1 and len(query_lens) == 1 and prefix_lens[0] == 0
++    if group == 6 and full and query_tile >= 21 and query_lens[0] >= wide_tile_rows(21):
++        return 21
++    if group == 3 and full and query_tile == 32 and query_lens[0] >= wide_tile_rows(42):
++        return 42
++    return min(
++        query_tile,
++        128 // group if group == 12 else 1 << ((128 // group).bit_length() - 1),
++    )
++
++
+ def allocate_plan(
+     *, inputs, query_tile: int, scratch: bool = True, slotted: bool = False
+ ) -> SparsePlan:
+@@ -1368,32 +1400,9 @@ def allocate_plan(
+         raise ValueError("Require 1<=BQ<=32")
+     config = platform()
+     num_cus = get_cu_num()
+-    # Full H6/H3 prefill fills 126/128 MFMA rows (BQ21 / BQ42 with 64-bit membership). Keep the
+-    # established tiles for prefix/ragged work and batches too small to fill the persistent grid.
+-    full = (
+-        inputs.k.shape[1] == 1
+-        and len(inputs.query_lens) == 1
+-        and inputs.prefix_lens[0] == 0
++    query_tile = plan_query_tile(
++        group, inputs.k.shape[1], inputs.query_lens, inputs.prefix_lens, query_tile
+     )
+-    if (
+-        group == 6
+-        and full
+-        and query_tile >= 21
+-        and inputs.query_lens[0] >= wide_tile_rows(21)
+-    ):
+-        query_tile = 21
+-    elif (
+-        group == 3
+-        and full
+-        and query_tile == 32
+-        and inputs.query_lens[0] >= wide_tile_rows(42)
+-    ):
+-        query_tile = 42
+-    else:
+-        query_tile = min(
+-            query_tile,
+-            128 // group if group == 12 else 1 << ((128 // group).bit_length() - 1),
+-        )
+     q_lens = np.asarray(inputs.query_lens, dtype=np.int64)
+     lengths = q_lens + np.asarray(inputs.prefix_lens, dtype=np.int64)
+     # Equal tiles per request, larger first: a tiny last tile would route its few rows direct, after union.
+@@ -1454,6 +1463,7 @@ def allocate_plan(
+             config.union_step,
+             config.row_step,
+             config.route_margin,
++            config.route_all_or_none,
+         ),
+         union_ratio=config.union_ratio,
+         slotted=slotted,
+diff --git a/aiter/ops/flydsl/kernels/qsa/sparse_prefill_union.py b/aiter/ops/flydsl/kernels/qsa/sparse_prefill_union.py
+index 4f43234..ab71e7a 100644
+--- a/aiter/ops/flydsl/kernels/qsa/sparse_prefill_union.py
++++ b/aiter/ops/flydsl/kernels/qsa/sparse_prefill_union.py
+@@ -1,9 +1,12 @@
+ # SPDX-License-Identifier: MIT
+ # Copyright (C) 2026, Advanced Micro Devices, Inc. All rights reserved.
+-"""gfx942 D256 multi-query/multi-head QSA sparse attention with exact membership.
++"""gfx942/gfx950 D256 multi-query/multi-head QSA sparse attention with exact membership.
+ 
+ The LDS, QK/PV MFMA and staggered pipeline come from a dense BM128/BN64 D256
+ attention kernel (see sparse_prefill_common). Q/O rows and sparse masks differ.
++On gfx950 the same pipeline runs K32 MFMAs, transposed V reads, native BF16
++conversion and 64-bank K/V swizzles (sparse_prefill_common's gfx950 part), and
++double-buffers K and V in LDS (STAGES950).
+ """
+ 
+ import math
+@@ -13,6 +16,8 @@ import flydsl.expr as fx
+ import torch
+ from flydsl.expr import rocdl
+ 
++from aiter.jit.utils.chip_info import get_gfx_runtime
++
+ from .sparse_prefill_common import (
+     _MAX_FLOOR,
+     _buffer,
+@@ -22,23 +27,37 @@ from .sparse_prefill_common import (
+     _cross,
+     _exps,
+     _join,
++    _k_bases950,
+     _k_lds_address,
+     _k_operands,
++    _k_operands950,
+     _k_phase,
+     _k_reads,
++    _k_reads950,
++    _k_swizzle950,
++    _key_row,
++    _kv_extent,
++    _kv_offset,
++    _lds_row950,
+     _lds_words,
+     _LdsQueue,
+     _load_lds,
++    _load_lds_tr,
+     _max,
+     _maximum,
+     _min,
++    _o_piece950,
+     _pack_bf16,
++    _pack_bf16_950,
+     _pin,
+     _pin_i32,
+     _pv,
++    _pv950,
+     _qk,
++    _qk950,
+     _read_q_g2r,
+     _read_s2r,
++    _ReadPlan,
+     _rescale,
+     _schedule,
+     _schedule_exps,
+@@ -48,13 +67,29 @@ from .sparse_prefill_common import (
+     _uniform,
+     _v_lds_address,
+     _v_operands,
++    _v_operands950,
+     _v_reads,
++    _v_swizzle950,
++    _v_tr_bases950,
++    _v_tr_reads950,
+     _write_address,
+ )
+ 
+ __all__ = ["run"]
+ 
+ BM, BN, D, THREADS, LDS_BYTES = 128, 64, 256, 512, 65536
++# gfx950: k_lds and v_lds hold STAGES950 tiles each, stage t & 1 holding tile t (LDS_BYTES per
++# store, 128 KiB in all). A DMA then never overwrites the tile the previous reads use, so these
++# rendezvous (_body's numbering) keep only their compiler fences there:
++#   prologue 4  K(1) DMA after the K(0) reads of the other group
++#   phase 0     V(t - 1) DMA of waves 4-7 after their V(t - 2) reads
++#   phase 3     K(t + 1) DMA of waves 0-3 after the K(t) keys 32-63 reads of waves 4-7
++#   phase 4     K(t + 1) DMA of waves 4-7 after their K(t) reads
++#   prologue 7, epilogue 0  phase 0 of the phase that follows (or of none)
++STAGES950 = 2
++DROPPED_PROLOGUE950 = (4, 7)
++DROPPED_PHASE950 = (0, 3, 4)
++DROPPED_EPILOGUE950 = (0,)
+ 
+ 
+ def _read_ids_g2r(blocks, tile, count, offset):
+@@ -64,19 +99,58 @@ def _read_ids_g2r(blocks, tile, count, offset):
+     return _buffer_words(_buffer(view, (count - tile * 16) * 4), offset, 1)[0]
+ 
+ 
+-def _kv_rows(ids, wave, hk, slotted):
+-    """SOFFSET rows of the wave's four blocks for the K/V DMA: lanes 0..3 hold their ids.
++def _kv_rows(ids, wave, row_bytes, slotted):
++    """Row offsets of the wave's four blocks for the K/V DMA (K/V rows row_bytes apart; the
++    DMA's SOFFSET on gfx942, added to its VOFFSET on gfx950): lanes 0..3 hold their ids.
+ 
+     With a slot table the ids are pool blocks, kept as is for per-block descriptors."""
+     rows = []
+     for slot in range(4):
+         block = fx.Uint32(rocdl.readlane(fx.Int32.ir_type, ids, slot))
+         if not slotted:
+-            block = block * (4 * hk * D * 2) + (wave >> 2) * 256
++            block = block * (4 * row_bytes) + (wave >> 2) * 256
+         rows.append(fx.Int32(block))
+     return fx.Vector.from_elements(rows, fx.Int32)
+ 
+ 
++def _request_buffer(tensor, k0, hkv, hk, gap, extent):
++    """Buffer pointer over KV head hkv of a request's K or V rows from row k0 (hk * D
++    values, then gap elements of padding, a row); loads at or past extent return zero.
++    """
++    pointer = fx.get_iter(tensor) + _kv_offset(fx.Int64(k0), hkv, hk, gap)
++    return _buffer(fx.make_view(pointer, fx.make_layout(extent // 2, 1)), extent)
++
++
++def _shift(reads, offset):
++    """A read plan [(slot, address, immediate)] moved by offset bytes: a static offset goes into the immediates, a
++    runtime one into the addresses."""
++    if isinstance(offset, int):
++        return [
++            (slot, address, immediate + offset) for slot, address, immediate in reads
++        ]
++    return [(slot, address + offset, immediate) for slot, address, immediate in reads]
++
++
++def _dma_word(lane, token, is_v):
++    """Word of the token's 256-byte half row that the lane fetches (gfx942); the LDS DMA stores it at word lane. The
++    XOR is the K swizzle, chunks by _k_phase."""
++    return lane if is_v else lane ^ (_k_phase(token) * 4)
++
++
++def _dma_chunk950(lane, token, is_v):
++    """16-byte chunk of the token's 256-byte half row that the lane fetches in a gfx950 x4 LDS DMA, which stores it
++    at position lane & 15 of that half row: the LDS swizzle of that position (its own inverse).
++    """
++    return (_v_swizzle950 if is_v else _k_swizzle950)(token, lane & 15)
++
++
++def _dma_block950(wave, block):
++    """(first key, LDS byte offset) of the wave's x4 DMA block `block`: keys (wave & 3) * 16 +
++    4 * block + 0..3, dims half wave >> 2."""
++    first = (wave & 3) * 16 + block * 4
++    return first, _lds_row950(first, wave >> 2)
++
++
+ def _read_packet_g2s(
+     resource,
+     storage,
+@@ -85,16 +159,18 @@ def _read_packet_g2s(
+     rows,
+     compact_len,
+     limits,
+-    hk,
++    row_bytes,
+     packet,
+     is_v,
+     extent,
+     tail_tile=None,
+-    read=None,
++    reads=(),
++    load=_load_lds,
+ ):
+-    """LDS DMA of key (wave & 3) * 16 + packet, dims (wave >> 2) * 128 + 0..127.
++    """LDS DMA of key (wave & 3) * 16 + packet, dims (wave >> 2) * 128 + 0..127 (gfx942;
++    gfx950: _read_block_g2s950).
+ 
+-    The optional LDS read (storage, address, immediate) is issued just before it.
++    The LDS reads (storage, address, immediate), issued with load, go just before it.
+     """
+     # Token k of a block reads SOFFSET min(row, limits[k]) + k rows: a partial final block re-reads
+     # the request's last token, whose K is masked and V weighted 0; with fewer than k + 1 tokens
+@@ -104,8 +180,8 @@ def _read_packet_g2s(
+     # descriptor (64-bit base), whose records end at the request's last token.
+     slotted = limits is None
+     token, _ = _copy_coordinates(wave, packet, 4)
+-    voffset = lane * 4 if is_v else (lane ^ (_k_phase(token) * 4)) * 4
+-    step = (packet & 3) * hk * D * 2
++    voffset = _dma_word(lane, token, is_v) * 4
++    step = (packet & 3) * row_bytes
+     # The instruction offset also moves the LDS destination, which M0 takes back; M0 must stay
+     # non-negative, otherwise (HK > 1) the step goes into VOFFSET.
+     destination_offset = packet * 512
+@@ -124,14 +200,15 @@ def _read_packet_g2s(
+         block = rows[packet // 4]
+         records = (block == final).select(partial, full)
+         resource = rocdl.get_buffer_rsrc(
+-            _buffer_at(base + fx.Int64(fx.Uint32(block)) * (4 * hk * D * 2), records)
++            _buffer_at(base + fx.Int64(fx.Uint32(block)) * (4 * row_bytes), records)
+         )
+         soffset = fx.Uint32(0)
+     else:
+         row, limit = fx.Uint32(rows[packet // 4]), limits[packet & 3]
+         soffset = _min(row, limit)
+-    data = None if read is None else _load_lds(*read)
+-    # Raw LDS DMA: BufferCopyLDS adds its own vmcnt wait; the pipeline waits itself.
++    data = [load(*read) for read in reads]
++    # Raw LDS DMA; the pipeline places the vmcnt waits. (BufferCopyLDS32b compiles to the
++    # same code: the compiler's wait before the LDS reads falls where the pipeline's does.)
+     rocdl.raw_ptr_buffer_load_lds(
+         resource,
+         fx.to_llvm_ptr(fx.get_iter(storage) + (base_destination + immediate)),
+@@ -143,6 +220,64 @@ def _read_packet_g2s(
+     return data
+ 
+ 
++def _read_block_g2s950(
++    resource,
++    storage,
++    wave,
++    lane,
++    rows,
++    compact_len,
++    limit,
++    row_bytes,
++    block,
++    is_v,
++    extent,
++    tail_tile=None,
++    reads=(),
++    load=_load_lds,
++    lds_offset=0,
++):
++    """gfx950 x4 LDS DMA of the wave's block `block`: keys (wave & 3) * 16 + 4 * block + 0..3,
++    dims (wave >> 2) * 128 + 0..127, into storage at lds_offset (the tile's stage).
++
++    buffer_load_dwordx4 ... lds writes 16 bytes per lane at M0 + 16 * lane (CDNA4 ISA 9.1.9):
++    lane l moves chunk _dma_chunk950 of key l >> 4's half row to its chunk l & 15, so the four
++    half rows are the 1 KiB at _dma_block950's offset. limit is limits[l >> 4] (None: slot
++    table). The LDS reads go just before it, as in _read_packet_g2s.
++    """
++    first, destination = _dma_block950(wave, block)
++    key = lane >> 4
++    token = first + key
++    voffset = key * row_bytes + _dma_chunk950(lane, token, is_v) * 16
++    if limit is None:
++        # The block's own descriptor, as in _read_packet_g2s.
++        base, final, partial, full = resource
++        block_id = rows[block]
++        records = (block_id == final).select(partial, full)
++        resource = _buffer_at(
++            base + fx.Int64(fx.Uint32(block_id)) * (4 * row_bytes), records
++        )
++    else:
++        # _read_packet_g2s' SOFFSET min(row, limits[k]), per lane; with key k's row step it is
++        # at most the request's last key (limit), or k rows past the request start (limit 0):
++        # the range check returns 0 past the request's end, and with k + 1 tokens that row is
++        # the last key. Below 4 GiB either way.
++        voffset = fx.Int32(_min(fx.Uint32(rows[block]), limit)) + voffset
++    if tail_tile is not None:
++        voffset = (tail_tile * BN + token < compact_len).select(
++            voffset, fx.Int32(extent)
++        )
++    data = [load(*read) for read in reads]
++    fx.copy(
++        fx.make_copy_atom(rocdl.BufferCopyLDS128b(), fx.Int8),
++        fx.make_view(resource + fx.Int32(voffset), fx.make_layout(16, 1)),
++        fx.make_view(
++            fx.get_iter(storage) + (destination + lds_offset), fx.make_layout(16, 1)
++        ),
++    )
++    return data
++
++
+ def _read_mask_g2r(resource, tile, offset, bq):
+     """Membership bits of this lane's query over the 16 keys it scores in a key tile."""
+     # The next vmcnt(0) retires it before the compute stage that applies it.
+@@ -164,8 +299,12 @@ def _apply_mask(scores, bits):
+     return fx.Vector.from_elements(result, fx.Int32).bitcast(fx.Float32)
+ 
+ 
+-def _shuffle_o_r2s2r(o_lo, o_hi, inv, storages, tid):
+-    """O * inv as BF16 through LDS; returns the thread's eight 16-byte pieces of O rows."""
++def _shuffle_o_r2s2r(o_lo, o_hi, inv, storages, tid, gfx950=False):
++    """O * inv as BF16 through LDS; returns the thread's eight 16-byte pieces of O rows.
++
++    Piece i of a half is the lane's dims 8i .. 8i + 7: output words n * 4 + i (gfx942), _o_piece950(i, g) (gfx950,
++    lane group g).
++    """
+     # O rows 0-63 go to the K buffer, rows 64-127 to the V buffer.
+     row = (tid >> 6) * 16 + (tid & 15)
+     shared = [fx.Int32(fx.ptrtoint(fx.get_iter(storage))) for storage in storages]
+@@ -173,10 +312,26 @@ def _shuffle_o_r2s2r(o_lo, o_hi, inv, storages, tid):
+     for half in range(2):
+         output = o_hi if half else o_lo
+         for i in range(4):
+-            values = fx.Vector.from_elements(
+-                [output[n * 4 + i] * inv for n in range(8)], fx.Float32
+-            )
+-            words = _pack_bf16(values)
++            if gfx950:
++                # Both lane-group parities pack the same pairs (_o_piece950), so the
++                # select only reorders words.
++                words = [
++                    _pack_bf16_950(
++                        fx.Vector.from_elements(
++                            [output[j] * inv for j in _o_piece950(i, g)], fx.Float32
++                        )
++                    )
++                    for g in range(2)
++                ]
++                odd = ((tid >> 4) & 1) == 1
++                words = fx.Vector.from_elements(
++                    [odd.select(words[1][p], words[0][p]) for p in range(4)], fx.Uint32
++                )
++            else:
++                values = fx.Vector.from_elements(
++                    [output[n * 4 + i] * inv for n in range(8)], fx.Float32
++                )
++                words = _pack_bf16(values)
+             column = (((tid >> 4) & 3) * 4 + i) * 8 + half * 128
+             address = fx.Int32(
+                 base + (((row & 63) * 256 + column) ^ ((row & 7) * 8)) * 2
+@@ -238,6 +393,8 @@ def _body(
+     SCALE: fx.Constexpr[float],
+     STAGGER: fx.Constexpr[bool],
+     SLOTTED: fx.Constexpr[bool],
++    GFX950: fx.Constexpr[bool],
++    KV_STRIDE: fx.Constexpr[int],
+ ):
+     """One task: 128 (query, head) rows of a union tile over its compact key list.
+ 
+@@ -250,6 +407,22 @@ def _body(
+     Softmax in log2 units: S' = S * scale * log2(e) - m, P = exp2(S'), l = sum(P) and
+     O = sum(P V); the output is O / l. m starts at the first row max + 1 and moves to a
+     later row max + 1 only when that exceeds m + 7, rescaling O and l.
++
++    GFX950 swaps the per-arch pieces (sparse_prefill_common's gfx950 part): half the MFMAs
++    (K32), 32 transposed V reads per half (eight before each of its four x4 LDS DMA blocks),
++    native BF16, and the half-major K/V layout and swizzles of its LDS DMA and reads. Stages
++    and data flow are unchanged; lgkmcnt waits are capped at 15, and the double buffer below
++    drops the rendezvous it makes redundant.
++
++    GFX950 also double-buffers K and V: tile t sits in stage t & 1 of k_lds / v_lds. Each
++    stage end is a rendezvous of all eight waves; waves 4-7 reach rendezvous r one stage
++    later than waves 0-3 (prologue: stage k ends at r = k, plus one past the staggered
++    rendezvous 1 for waves 4-7; phase: stage s ends at r = (s + lag) % 8; epilogue: stage k
++    at r = k + lag). With two stages the rendezvous in DROPPED_*950 order no LDS producer and
++    consumer (module comment), and keep only their compiler fences.
++
++    K/V rows sit KV_STRIDE elements apart: HK * D values, then a gap of padding (e.g. the
++    V half of an interleaved K|V record per token); only padded rows compile its terms.
+     """
+     slices = (BQ * GP + 127) // 128
+     tile_id, hkv = work // (HK * slices), work % HK
+@@ -276,11 +449,15 @@ def _body(
+     gq = _buffer(fx.make_view(qptr, fx.make_layout(NQ * H * D, 1)), qextent)
+     qoffset = valid_row.select(fx.Uint32((query * H * D + head * D) * 2), qextent)
+     # Q stays in registers for all key tiles.
+-    q = _read_q_g2r(gq, qoffset, lane)
++    if fx.const_expr(GFX950):
++        q = _read_q_g2r(gq, qoffset, lane, 32)
++    else:
++        q = _read_q_g2r(gq, qoffset, lane)
++    row_bytes, gap = KV_STRIDE * 2, KV_STRIDE - HK * D
+     if fx.const_expr(SLOTTED):
+         # BLOCKS holds K3's pool blocks: each gets a descriptor from the pool's base (no 4 GiB
+         # limit); TAILS holds the final partial block's first pool row (-1: none).
+-        row_bytes, half = HK * D * 2, (wave >> 2) * 256
++        half = (wave >> 2) * 256
+         tail = _uniform(TAILS[tile_id])
+         final = (tail >= 0).select(tail >> 2, fx.Int32(-1))
+         partial = (kv_len & 3) * row_bytes - half
+@@ -291,42 +468,73 @@ def _body(
+         extent = fx.Uint32(4 * row_bytes)
+         limits = None
+     else:
+-        extent = (fx.Uint32(kv_len) * HK - hkv) * D * 2
+-        limit = fx.Uint32(kv_len - 1) * (HK * D * 2) + (wave >> 2) * 256
++        extent = _kv_extent(kv_len, hkv, HK, gap)
++        limit = fx.Uint32(kv_len - 1) * row_bytes + (wave >> 2) * 256
+         limits = tuple(
+-            (limit > k * HK * D * 2).select(limit - k * HK * D * 2, fx.Uint32(0))
++            (limit > k * row_bytes).select(limit - k * row_bytes, fx.Uint32(0))
+             for k in range(4)
+         )
+-        gk = rocdl.get_buffer_rsrc(
+-            _buffer(
+-                fx.make_view(
+-                    fx.get_iter(K) + (fx.Int64(k0) * HK + hkv) * D,
+-                    fx.make_layout(extent // 2, 1),
+-                ),
+-                extent,
+-            )
+-        )
+-        gv = rocdl.get_buffer_rsrc(
+-            _buffer(
+-                fx.make_view(
+-                    fx.get_iter(V) + (fx.Int64(k0) * HK + hkv) * D,
+-                    fx.make_layout(extent // 2, 1),
+-                ),
+-                extent,
+-            )
+-        )
++        gk = _request_buffer(K, k0, hkv, HK, gap, extent)
++        gv = _request_buffer(V, k0, hkv, HK, gap, extent)
++        if fx.const_expr(not GFX950):
++            # _read_packet_g2s' raw LDS DMA takes the buffer resources.
++            gk, gv = rocdl.get_buffer_rsrc(gk), rocdl.get_buffer_rsrc(gv)
++    # gfx950 x4 DMA: each lane's own limits[lane >> 4] (_read_block_g2s950); slot tables none.
++    dma_limit = None
++    if fx.const_expr(GFX950 and not SLOTTED):
++        key_bytes = fx.Uint32(lane >> 4) * row_bytes
++        dma_limit = (limit > key_bytes).select(limit - key_bytes, fx.Uint32(0))
+     scale = fx.Float32(SCALE * math.log2(math.e))
+     compact_len = count * 4
+     key_tiles = (compact_len + BN - 1) // BN
+     last_tile = key_tiles - 1
+-    key_row = (lane & 3) + ((lane & 12) << 1)
+-    k_s2r_base = tuple(
+-        _k_lds_address(key_row + n * 4, (lane >> 4) * 8 + parity * 32)
+-        for n in range(2)
+-        for parity in range(2)
+-    )
+-    v_s2r_base = _v_lds_address((lane >> 4) * 8, (lane & 15) * 8)
++    # Per-arch pieces; the stages below are shared. Schedules: (MFMAs, VALU per MFMA).
++    if fx.const_expr(GFX950):
++        k_s2r_base = _k_bases950(lane)
++        v_s2r_base = _v_tr_bases950(lane)
++        k_reads, v_reads, v_load = _k_reads950, _v_tr_reads950, _load_lds_tr
++        k_operands, qk_mfma, pack_bf16 = _k_operands950, _qk950, _pack_bf16_950
++        v_operands, pv = _v_operands950, _pv950
++        qk_schedule, mask_schedule, pv_schedule, exp_mfmas = (
++            (16, 4),
++            (16, 5),
++            (16, 3),
++            1,
++        )
++    else:
++        key_row = _key_row(lane)
++        k_s2r_base = tuple(
++            _k_lds_address(key_row + n * 4, (lane >> 4) * 8 + parity * 32)
++            for n in range(2)
++            for parity in range(2)
++        )
++        v_s2r_base = _v_lds_address((lane >> 4) * 8, (lane & 15) * 8)
++        k_reads, v_reads, v_load = _k_reads, _v_reads, _load_lds
++        k_operands, qk_mfma, pack_bf16 = _k_operands, _qk, _pack_bf16
++        v_operands, pv = _v_operands, _pv
++        qk_schedule, mask_schedule, pv_schedule, exp_mfmas = (
++            (32, 3),
++            (32, 2),
++            (32, 3),
++            2,
++        )
+     cross_addresses = tuple((lane ^ offset) * 4 for offset in (16, 32, 48))
++    # gfx950 double buffer: byte offset of stage 1 in k_lds / v_lds, and the rendezvous it
++    # makes redundant (gfx942: one stage, every rendezvous kept). lag: waves 4-7 run one behind.
++    stage = (LDS_BYTES // 2) * int(GFX950)
++    dropped_prologue, dropped_phase, dropped_epilogue = (
++        ((), (), ()),
++        (DROPPED_PROLOGUE950, DROPPED_PHASE950, DROPPED_EPILOGUE950),
++    )[int(GFX950)]
++    lag = int(STAGGER)
++
++    def stage_end(rendezvous, dropped):
++        """_stage_end at rendezvous; one the double buffer made redundant keeps only its fences."""
++        if fx.const_expr(rendezvous in dropped):
++            rocdl.sched_barrier(0)
++            rocdl.sched_barrier(0)
++        else:
++            _stage_end()
+ 
+     # g = global, s = LDS, r = registers; reads only issue, the stages place the waits.
+     def read_ids_g2r(tile):
+@@ -336,51 +544,81 @@ def _body(
+         return _read_mask_g2r(mask_resource, tile, mask_offset, BQ)
+ 
+     def kv_rows(ids):
+-        return _kv_rows(ids, wave, HK, SLOTTED)
+-
+-    def k_s2r(half, lower_first=False):
+-        """Read plan of K keys 32 * half .. 32 * half + 31."""
+-        return k_lds, _k_reads(k_s2r_base, half, lower_first)
+-
+-    def v_s2r(half):
+-        """Read plan of V dims 128 * half .. 128 * half + 127."""
+-        return v_lds, _v_reads(v_s2r_base, half)
+-
+-    def read_tile_g2s(resource, storage, rows, is_v, s2r, lgkm, tail_tile):
+-        # 16 LDS-DMA packets; read i of the s2r plan is issued just before packet i.
+-        parts = [None] * 16
+-        for packet in fx.range_constexpr(16):
+-            read, slot = None, packet
+-            if fx.const_expr(s2r is not None):
+-                slot, address, immediate = s2r[1][packet]
+-                read = (s2r[0], address, immediate)
+-            parts[slot] = _read_packet_g2s(
+-                resource,
+-                storage,
+-                wave,
+-                lane,
+-                rows,
+-                compact_len,
+-                limits,
+-                HK,
+-                packet,
+-                is_v,
+-                extent,
+-                tail_tile,
+-                read,
+-            )
++        return _kv_rows(ids, wave, row_bytes, SLOTTED)
++
++    def k_s2r(half, lower_first=False, offset=0):
++        """Read plan of K keys 32 * half .. 32 * half + 31 of the K stage at byte offset."""
++        return _ReadPlan(
++            k_lds, _shift(k_reads(k_s2r_base, half, lower_first), offset), _load_lds
++        )
++
++    def v_s2r(half, offset=0):
++        """Read plan of V dims 128 * half .. 128 * half + 127 of the V stage at byte offset."""
++        return _ReadPlan(v_lds, _shift(v_reads(v_s2r_base, half), offset), v_load)
++
++    def read_tile_g2s(resource, storage, rows, is_v, s2r, lgkm, tail_tile, offset):
++        # 16 LDS-DMA packets (gfx950: 4 x4 blocks); the s2r plan's reads go in plan order, an
++        # equal share (one; gfx950: four K or eight V) just before each.
++        reads, load = (), _load_lds
++        if fx.const_expr(s2r is not None):
++            reads, load = s2r.reads, s2r.load
++        packets = (16, 4)[int(GFX950)]
++        share = len(reads) // packets
++        parts = [None] * len(reads)
++        for packet in fx.range_constexpr(packets):
++            batch = reads[packet * share : (packet + 1) * share]
++            issued = [
++                (s2r.storage, address, immediate) for _, address, immediate in batch
++            ]
++            if fx.const_expr(GFX950):
++                data = _read_block_g2s950(
++                    resource,
++                    storage,
++                    wave,
++                    lane,
++                    rows,
++                    compact_len,
++                    dma_limit,
++                    row_bytes,
++                    packet,
++                    is_v,
++                    extent,
++                    tail_tile,
++                    issued,
++                    load,
++                    offset,
++                )
++            else:
++                data = _read_packet_g2s(
++                    resource,
++                    storage,
++                    wave,
++                    lane,
++                    rows,
++                    compact_len,
++                    limits,
++                    row_bytes,
++                    packet,
++                    is_v,
++                    extent,
++                    tail_tile,
++                    issued,
++                    load,
++                )
++            for i in fx.range_constexpr(share):
++                parts[batch[i][0]] = data[i]
+         if fx.const_expr(s2r is None):
+             return None
+-        return _lds_words(parts), lgkm.issue(16)
++        return _lds_words(parts), lgkm.issue(len(reads))
+ 
+-    def read_k_g2s(rows, s2r=None, lgkm=None):
+-        return read_tile_g2s(gk, k_lds, rows, False, s2r, lgkm, None)
++    def read_k_g2s(rows, s2r=None, lgkm=None, offset=0):
++        return read_tile_g2s(gk, k_lds, rows, False, s2r, lgkm, None, offset)
+ 
+-    def read_v_g2s(rows, s2r=None, lgkm=None, tail_tile=None):
+-        return read_tile_g2s(gv, v_lds, rows, True, s2r, lgkm, tail_tile)
++    def read_v_g2s(rows, s2r=None, lgkm=None, tail_tile=None, offset=0):
++        return read_tile_g2s(gv, v_lds, rows, True, s2r, lgkm, tail_tile, offset)
+ 
+     def qk(k):
+-        return _qk(q, _k_operands(k))
++        return qk_mfma(q, k_operands(k))
+ 
+     def prologue():
+         """Ids of tiles 0-2 and mask(0) g2r; K(0) g2s, QK(0), m and S'(0); K(1) g2s."""
+@@ -390,27 +628,27 @@ def _body(
+         ids_2 = read_ids_g2r(_min(fx.Int32(2), last_tile))
+         mask_0 = read_mask_g2r(fx.Int32(0))
+         rows_0 = kv_rows(ids_0)
+-        # Memory: K(0) g2s.
++        # Memory: K(0) g2s (stage 0).
+         read_k_g2s(rows_0)
+         lgkm.wait(vmcnt=0)
+-        _stage_end()
++        stage_end(0, dropped_prologue)
+         if fx.const_expr(STAGGER):
+             # Waves 4-7 fall one stage behind.
+-            _stage_end()
++            stage_end(1, dropped_prologue)
+         # Memory: K(0) keys 0-31 s2r.
+         k_lo, _ = _read_s2r(k_s2r(0), lgkm)
+         lgkm.wait()
+-        _stage_end()
++        stage_end(1 + lag, dropped_prologue)
+         # Compute: QK S(0) keys 0-31; O = 0.
+         s_lo = qk(k_lo)
+         o_lo = _pin(fx.Vector.filled(32, 0.0, fx.Float32))
+         o_hi = _pin(fx.Vector.filled(32, 0.0, fx.Float32))
+-        _schedule(32, 3, 5)
+-        _stage_end()
++        _schedule(*qk_schedule, 5)
++        stage_end(2 + lag, dropped_prologue)
+         # Memory: K(0) keys 32-63 s2r.
+         k_hi, _ = _read_s2r(k_s2r(1), lgkm)
+         lgkm.wait()
+-        _stage_end()
++        stage_end(3 + lag, dropped_prologue)
+         # Compute: QK S(0) keys 32-63 and mask(0); softmax m and S'(0).
+         s_hi = qk(k_hi)
+         s_0 = _apply_mask(_join(s_lo, s_hi), mask_0) * scale
+@@ -419,21 +657,25 @@ def _body(
+         row_max = _maximum(row_max, row_max.shuffle_xor(32, 64))
+         row_max = _maximum(row_max, fx.Float32(_MAX_FLOOR)) + 1.0
+         row_sum = fx.Float32(0.0)
+-        _stage_end()
+-        # Memory: K(1) g2s; no compute.
++        stage_end(4 + lag, dropped_prologue)
++        # Memory: K(1) g2s (stage 1 on gfx950); no compute.
+         rows_1, rows_2 = kv_rows(ids_1), kv_rows(ids_2)
+-        read_k_g2s(rows_1)
++        read_k_g2s(rows_1, offset=stage)
+         lgkm.wait(vmcnt=0)
+-        _stage_end()
+-        _stage_end()
++        stage_end(5 + lag, dropped_prologue)
++        stage_end(6 + lag, dropped_prologue)
+         return s_0, row_max, row_sum, o_lo, o_hi, rows_0, rows_1, rows_2
+ 
+     @flyc.jit
+-    def phase(s_prev, row_max, row_sum, o_lo, o_hi, rows_prev, rows_cur, rows_next, t):
++    def phase(
++        s_prev, row_max, row_sum, o_lo, o_hi, rows_prev, rows_cur, rows_next, t, odd
++    ):
+         """Phase t: QK and row max of key tile t; exp, row sum and PV of tile t - 1.
+ 
+-        rows_prev, rows_cur and rows_next are the DMA rows of tiles t - 1, t and t + 1.
+-        k_lds holds K(t) up to step 1 and K(t + 1) from step 2; v_lds holds V(t - 1).
++        rows_prev, rows_cur and rows_next are the DMA rows of tiles t - 1, t and t + 1; odd is
++        t & 1, a Python int (the loop runs odd and even phases in pairs).
++        k_lds holds K(t) up to step 1 and K(t + 1) from step 2; v_lds holds V(t - 1). On gfx950
++        K(t) sits in stage odd, K(t + 1) and V(t - 1) in stage 1 - odd.
+         S' = S * scale; m tracks the row max of S' lazily (S' - m <= 7).
+ 
+         step  memory stage                              compute stage
+@@ -456,42 +698,47 @@ def _body(
+         rows_cur, rows_next = fx.Vector(rows_cur), fx.Vector(rows_next)
+         # Each phase ends with every LDS op retired, so the ledger starts empty.
+         lgkm = _LdsQueue()
++        cur, other = stage * odd, stage * (1 - odd)
+ 
+         # Step 0 memory.
+         mask_t = read_mask_g2r(t)
+         ids_next2 = read_ids_g2r(_min(t + 2, last_tile))
+-        k_lo, _ = read_v_g2s(rows_prev, s2r=k_s2r(0), lgkm=lgkm)
+-        _stage_end()
++        k_lo, _ = read_v_g2s(
++            rows_prev, s2r=k_s2r(0, offset=cur), lgkm=lgkm, offset=other
++        )
++        stage_end(lag, dropped_phase)
+         # Step 0 compute.
+         lgkm.wait()
+         s_lo = qk(k_lo)
+         p_prev = _exps(s_prev, row_max)
+-        _schedule_exps(16, 1)
+-        _stage_end()
++        _schedule_exps(16, 1, exp_mfmas)
++        stage_end(1 + lag, dropped_phase)
+ 
+         # Step 1 memory.
+-        k_hi, ready = _read_s2r(k_s2r(1, lower_first=STAGGER), lgkm)
++        k_hi, ready = _read_s2r(k_s2r(1, lower_first=STAGGER, offset=cur), lgkm)
+         rocdl.s_waitcnt(vmcnt=0)
+         if fx.const_expr(STAGGER):
+             ready(8)
+-        _stage_end()
++        stage_end(2 + lag, dropped_phase)
+         # Step 1 compute.
+         lgkm.wait()
+         s_hi = qk(k_hi)
+         s_cur = _apply_mask(_join(s_lo, s_hi), mask_t)
+-        sum_prev, p_bf16 = _sum(p_prev), _pack_bf16(p_prev).bitcast(fx.BFloat16)
++        sum_prev, p_bf16 = _sum(p_prev), pack_bf16(p_prev).bitcast(fx.BFloat16)
+         # ids(t+2) landed at the vmcnt(0) above; only the SGPR rows cross iterations.
+         rows_next2 = kv_rows(ids_next2)
+-        _schedule(32, 2, 2)
+-        _stage_end()
++        _schedule(*mask_schedule, 2)
++        stage_end(3 + lag, dropped_phase)
+ 
+         # Step 2 memory.
+         sum_others = _cross(sum_prev, cross_addresses, lgkm)
+-        v_lo, ready = read_k_g2s(rows_next, s2r=v_s2r(0), lgkm=lgkm)
+-        v_ops = _v_operands(v_lo, 0, ready)
+-        _stage_end()
++        v_lo, ready = read_k_g2s(
++            rows_next, s2r=v_s2r(0, other), lgkm=lgkm, offset=other
++        )
++        v_ops = v_operands(v_lo, 0, ready)
++        stage_end(4 + lag, dropped_phase)
+         # Step 2 compute.
+-        o_lo, row_sum, max_cur = _pv(
++        o_lo, row_sum, max_cur = pv(
+             p_bf16,
+             v_lo,
+             o_lo,
+@@ -499,17 +746,17 @@ def _body(
+             v_ops,
+             sum_max=(s_cur, sum_prev, sum_others, row_sum),
+         )
+-        _schedule(32, 3, 3)
+-        _stage_end()
++        _schedule(*pv_schedule, 3)
++        stage_end(5 + lag, dropped_phase)
+ 
+         # Step 3 memory.
+         max_others = _cross(max_cur, cross_addresses, lgkm)
+         rocdl.s_waitcnt(vmcnt=0)
+-        v_hi, ready = _read_s2r(v_s2r(1), lgkm)
+-        v_ops = _v_operands(v_hi, 0, ready)
+-        _stage_end()
++        v_hi, ready = _read_s2r(v_s2r(1, other), lgkm)
++        v_ops = v_operands(v_hi, 0, ready)
++        stage_end(6 + lag, dropped_phase)
+         # Step 3 compute.
+-        o_hi, s_cur, new_max, ballot = _pv(
++        o_hi, s_cur, new_max, ballot = pv(
+             p_bf16,
+             v_hi,
+             o_hi,
+@@ -517,51 +764,56 @@ def _body(
+             v_ops,
+             center=(s_cur, max_cur, max_others, scale, row_max),
+         )
+-        _schedule(32, 3, 4)
++        _schedule(*pv_schedule, 4)
+         o_lo, o_hi, row_sum = _rescale(o_lo, o_hi, row_sum, row_max, new_max, ballot)
+-        _stage_end()
++        stage_end((7 + lag) % 8, dropped_phase)
+         return s_cur, new_max, row_sum, o_lo, o_hi, rows_cur, rows_next, rows_next2
+ 
+     def epilogue(state):
+         """V(last) g2s, keys past the list read 0; exp, row sum and PV of the last tile."""
+         s_last, row_max, row_sum, o_lo, o_hi, rows_last, _, _ = state
+         lgkm = _LdsQueue()
++        # V(last) goes to stage last & 1 (gfx950), not the stage V(last - 1) was read from.
++        if fx.const_expr(GFX950):
++            v_stage = (last_tile & 1) * stage
++        else:
++            v_stage = 0
+         # Memory: V(last) g2s, with P(last) and l computed while it lands.
+-        read_v_g2s(fx.Vector(rows_last), tail_tile=last_tile)
++        read_v_g2s(fx.Vector(rows_last), tail_tile=last_tile, offset=v_stage)
+         p_last = _exps(fx.Vector(s_last), fx.Float32(row_max))
+         sum_last = _sum(p_last)
+         sum_last = sum_last + sum_last.shuffle_xor(16, 64)
+         sum_last = sum_last + sum_last.shuffle_xor(32, 64)
+         row_sum = fx.Float32(row_sum) + sum_last
+-        p_bf16 = _pack_bf16(p_last).bitcast(fx.BFloat16)
++        p_bf16 = pack_bf16(p_last).bitcast(fx.BFloat16)
+         lgkm.wait(vmcnt=0)
+-        _stage_end()
+-        _stage_end()
++        stage_end(lag, dropped_epilogue)
++        stage_end(1 + lag, dropped_epilogue)
+         # Memory: V(last) dims 0-127 s2r.  Compute: PV O dims 0-127.
+-        v_lo, _ = _read_s2r(v_s2r(0), lgkm)
++        v_lo, _ = _read_s2r(v_s2r(0, v_stage), lgkm)
+         lgkm.wait()
+-        _stage_end()
+-        o_lo = _pv(p_bf16, v_lo, o_lo)
+-        _stage_end()
++        stage_end(2 + lag, dropped_epilogue)
++        o_lo = pv(p_bf16, v_lo, o_lo)
++        stage_end(3 + lag, dropped_epilogue)
+         # Memory: V(last) dims 128-255 s2r.  Compute: PV O dims 128-255.
+-        v_hi, _ = _read_s2r(v_s2r(1), lgkm)
++        v_hi, _ = _read_s2r(v_s2r(1, v_stage), lgkm)
+         lgkm.wait()
+-        _stage_end()
+-        o_hi = _pv(p_bf16, v_hi, o_hi)
+-        _stage_end()
++        stage_end(4 + lag, dropped_epilogue)
++        o_hi = pv(p_bf16, v_hi, o_hi)
++        stage_end(5 + lag, dropped_epilogue)
+         if fx.const_expr(not STAGGER):
+             # Waves 0-3 wait one stage for waves 4-7.
+-            _stage_end()
++            stage_end(6, dropped_epilogue)
+         return o_lo, o_hi, row_sum
+ 
+     # Block ids run two tiles ahead of QK and K one tile ahead; PV runs one tile behind.
+     state = prologue()
+     # Two phases per trip swap the max registers; one phase copies it after its barrier.
+     for t in range(fx.Int32(1), key_tiles - 1, fx.Int32(2)):
+-        state = phase(*state, t)
+-        state = phase(*state, fx.Int32(t) + 1)
++        state = phase(*state, t, 1)
++        state = phase(*state, fx.Int32(t) + 1, 0)
+     if (key_tiles > 1) & ((key_tiles & 1) == 0):
+-        state = phase(*state, key_tiles - 1)
++        state = phase(*state, key_tiles - 1, 1)
+     o_lo, o_hi, row_sum = epilogue(state)
+     inv = (row_sum > 0.0).select(fx.Float32(1.0) / row_sum, fx.Float32(0.0))
+     out = rocdl.make_buffer_tensor(
+@@ -573,7 +825,7 @@ def _body(
+     )
+     # Pin keeps output addressing inside the task loop; the mask restores tid's range.
+     pinned_tid = _pin_i32(tid) & (THREADS - 1)
+-    o_parts = _shuffle_o_r2s2r(o_lo, o_hi, inv, (k_lds, v_lds), pinned_tid)
++    o_parts = _shuffle_o_r2s2r(o_lo, o_hi, inv, (k_lds, v_lds), pinned_tid, GFX950)
+     _store_o_r2g(
+         o_parts, out, pinned_tid, H, H // HK, GP, BQ, qvalid, qextent, row_offset
+     )
+@@ -604,13 +856,17 @@ def _kernel(
+     GRID: fx.Int32,
+     SCALE: fx.Constexpr[float],
+     SLOTTED: fx.Constexpr[bool],
++    GFX950: fx.Constexpr[bool],
++    KV_STRIDE: fx.Constexpr[int],
+ ):
+     body = _body
+     allocator = fx.SharedAllocator()
++    # gfx950: two stages of each (K/V double buffer); gfx942: one.
++    store = (LDS_BYTES // 2) * (STAGES950 if GFX950 else 1)
+     k_lds, v_lds = (
+-        allocator.allocate(fx.Array[fx.Int8, LDS_BYTES // 2, 16])
++        allocator.allocate(fx.Array[fx.Int8, store, 16])
+         .peek()
+-        .view(fx.make_layout(LDS_BYTES // 2, 1))
++        .view(fx.make_layout(store, 1))
+         for _ in range(2)
+     )
+     work = fx.block_idx.x
+@@ -645,6 +901,8 @@ def _kernel(
+                     SCALE,
+                     True,
+                     SLOTTED,
++                    GFX950,
++                    KV_STRIDE,
+                 )
+             else:
+                 body(
+@@ -669,6 +927,8 @@ def _kernel(
+                     SCALE,
+                     False,
+                     SLOTTED,
++                    GFX950,
++                    KV_STRIDE,
+                 )
+         work = work + GRID
+ 
+@@ -696,6 +956,8 @@ def _launch(
+     GRID: fx.Int32,
+     SCALE: fx.Constexpr[float],
+     SLOTTED: fx.Constexpr[bool],
++    GFX950: fx.Constexpr[bool],
++    KV_STRIDE: fx.Constexpr[int],
+     stream: fx.Stream,
+ ):
+     if GRID > 0:
+@@ -721,6 +983,8 @@ def _launch(
+             GRID,
+             SCALE,
+             SLOTTED,
++            GFX950,
++            KV_STRIDE,
+             value_attrs={
+                 "rocdl.waves_per_eu": 2,
+                 "llvm.target_features": _target_features(),
+@@ -757,19 +1021,31 @@ def _args(inputs, plan, out, stream):
+         plan.grid,
+         inputs.scale,
+         plan.slotted,
++        get_gfx_runtime() == "gfx950",
++        inputs.kv_stride,
+         stream,
+     )
+ 
+ 
+ def _compiled(inputs, args, stream):
+-    key = (inputs.q.device, args[11], args[12], args[15], args[16], args[19], args[20])
++    key = (
++        inputs.q.device,
++        args[11],
++        args[12],
++        args[15],
++        args[16],
++        args[19],
++        args[20],
++        args[21],
++        args[22],
++    )
+     compiled = _COMPILED.get(key)
+     if compiled is None:
+         if torch.cuda.is_current_stream_capturing():
+             raise RuntimeError("Warm the QSA specialization before graph capture")
+         with torch.cuda.device(inputs.q.device), torch.cuda.stream(stream):
+             compiled = _COMPILED[key] = flyc.compile(
+-                _launch, *args[:18], 0, *args[19:21], stream
++                _launch, *args[:18], 0, *args[19:23], stream
+             )
+     return compiled
+ 
+diff --git a/aiter/ops/flydsl/qsa_sparse_prefill.py b/aiter/ops/flydsl/qsa_sparse_prefill.py
+index 0647045..a27f149 100644
+--- a/aiter/ops/flydsl/qsa_sparse_prefill.py
++++ b/aiter/ops/flydsl/qsa_sparse_prefill.py
+@@ -1,13 +1,14 @@
+ # SPDX-License-Identifier: MIT
+ # Copyright (C) 2026, Advanced Micro Devices, Inc. All rights reserved.
+-"""QSA sparse prefill on gfx942: BF16 D256 sparse attention over packed K/V.
++"""QSA sparse prefill on gfx942 and gfx950: BF16 D256 sparse attention over packed K/V.
+ 
+ Public entry for the ``sparse_prefill_*`` kernels in ``kernels/qsa/``. Each call
+ recovers the selected four-token blocks (FlyDSL K1-K3), routes every query tile to
+ the union kernel (queries of a tile share one compact block list with exact
+ per-query membership) or to the direct kernel (one query per wave over its own
+ blocks), and writes O in place. Plans and scratch are private. K/V may also be a
+-token pool read in place through a slot table.
++token pool read in place through a slot table, and on gfx950 their rows may be
++strided (an interleaved K|V cache read in place).
+ """
+ 
+ import math
+@@ -15,6 +16,7 @@ import threading
+ import weakref
+ from collections import OrderedDict
+ from types import SimpleNamespace
++from typing import NamedTuple
+ 
+ import numpy as np
+ import torch
+@@ -32,11 +34,18 @@ from .kernels.qsa.sparse_prefill_common import (
+     platform,
+ )
+ 
+-__all__ = ["flydsl_qsa_sparse_prefill"]
++__all__ = [
++    "flydsl_qsa_sparse_prefill",
++    "qsa_sparse_prefill_problem",
++    "qsa_sparse_prefill_warmup",
++]
+ 
+ # Kernels use unsigned 32-bit buffer byte offsets; the 1 MiB margin keeps out-of-range
+ # sentinels plus their lane offsets from wrapping.
+ _MAX_SPAN = 2**32 - 2**20
++# Kernels form a four-row K/V block's extent and offsets (up to 4 x a row's bytes) as
++# 32-bit values: a row stride below 2**28 elements keeps them below 2**31.
++_MAX_KV_STRIDE = 2**28
+ 
+ 
+ def _union_min_rows(group):
+@@ -48,6 +57,30 @@ def _aligned(nbytes):
+     return -(-nbytes // SCRATCH_ALIGN) * SCRATCH_ALIGN
+ 
+ 
++def _kv_stride(tensor):
++    """Elements between the rows of K or V [rows, heads, 256], or None unless every row
++    holds dense [heads, 256] values, 16-byte aligned, before the next row starts, and
++    the next row starts fewer than _MAX_KV_STRIDE elements on. Size-1 dims have no
++    stride of their own (torch's contiguity rule): one row is dense."""
++    rows, heads, dim = tensor.shape
++    stride = tensor.stride(0) if rows > 1 else heads * dim
++    if (
++        tensor.stride(2) != 1
++        or (heads > 1 and tensor.stride(1) != dim)
++        or stride < heads * dim
++        or stride % 8
++        or stride >= _MAX_KV_STRIDE
++    ):
++        return None
++    return stride
++
++
++def _span_bytes(rows, stride, heads):
++    """Bytes from the first of rows BF16 [heads, 256] rows, stride elements apart, to the
++    end of the last."""
++    return ((rows - 1) * stride + heads * 256) * 2 if rows else 0
++
++
+ class _Arena:
+     """Scratch shared by one stream's workspaces: every call rewrites what it reads.
+ 
+@@ -75,7 +108,9 @@ _arenas = weakref.WeakValueDictionary()
+ 
+ 
+ class _Workspace:
+-    def __init__(self, q, k, v, indices, query_lens, prefix_lens, scale, kv_slots=None):
++    def __init__(
++        self, q, k, v, indices, query_lens, prefix_lens, scale, kv_stride, kv_slots=None
++    ):
+         topk = (indices.shape[1] - 3) // 4
+         q_lens = np.asarray(query_lens, dtype=np.int64)
+         lengths = q_lens + np.asarray(prefix_lens, dtype=np.int64)
+@@ -83,7 +118,7 @@ class _Workspace:
+         positions = np.arange(len(sequence)) + (lengths - np.cumsum(q_lens))[sequence]
+         slotted = kv_slots is not None
+         # Past this pool span raw direct byte offsets no longer reach every row.
+-        wide = slotted and k.numel() * k.element_size() > _MAX_SPAN
++        wide = slotted and _span_bytes(k.shape[0], kv_stride, k.shape[1]) > _MAX_SPAN
+         self.metadata = {
+             "query_lens": query_lens,
+             "prefix_lens": prefix_lens,
+@@ -92,6 +127,7 @@ class _Workspace:
+             "query_positions": prepare.upload(positions, q.device),
+             "max_seqlen_k": int(lengths.max(initial=0)),
+             "wide": wide,
++            "kv_stride": kv_stride,
+         }
+         self.captured = False
+         self.block_indices = None
+@@ -214,57 +250,40 @@ _lock = threading.RLock()
+ _device = None
+ 
+ 
+-def flydsl_qsa_sparse_prefill(
+-    q,
+-    k,
+-    v,
+-    indices,
+-    *,
+-    query_lens=None,
+-    prefix_lens=None,
+-    softmax_scale=None,
+-    out=None,
+-    kv_slots=None,
+-):
+-    """Return QSA sparse attention for BF16 Q[M,H,256] and K/V[N,HK,256].
++class _Rejected(NamedTuple):
++    error: type[Exception]
++    message: str
+ 
+-    indices is contiguous int32[M,4T+3] (T = 256, 512, 768 or 1024, set by the width).
+-    For a row whose causal window holds v tokens (request-local 0 .. v - 1, the last
+-    being its own), columns [0, 4 * min(v // 4, T)) hold exactly min(v // 4, T)
+-    distinct complete blocks j < v // 4, each as its tokens 4j .. 4j + 3, in any
+-    order; the next v % 4 columns hold the tail tokens 4 * (v // 4) .. v - 1 and the
+-    rest are -1. The kernels derive both counts from v, so fewer blocks or a missing
+-    tail give wrong results. K/V must be finite: rows of a request share union tiles,
+-    so a non-finite value can also reach rows that did not select it. The layout is
+-    not validated: a selection that breaks it gives wrong results, also in later
+-    calls on the same stream.
+ 
+-    Host query_lens/prefix_lens describe packed requests. For one request they
+-    default to (M,) and (N-M,). Plans are built and cached per layout. With kv_slots
+-    (contiguous int32[N] of at most 2**32 - 2**20 bytes, packed token -> pool row),
+-    K/V are a token pool [P,HK,256] read in place: each request's four-token blocks,
+-    the final partial one included, must occupy four consecutive pool rows starting
+-    at a multiple of four (paged pools whose pages are a multiple of four tokens
+-    satisfy this), and the result is the same as for K/V packed by those slots. A
+-    pool may exceed 4 GiB (raw direct then uses 64-bit loads); slot values are not
+-    validated. Hot calls rebuild the selection: per-layout plans share one private
+-    per-stream scratch arena. out is optional and must not overlap Q/K/V, indices or
+-    kv_slots. Warm the same stream and layout before graph capture. Captured
+-    workspaces stay pinned for graph pointer lifetime and share their stream's
+-    scratch: do not replay them concurrently with each other or with that stream's
+-    calls. Each kernel variant compiles on its first use: a few seconds with empty
+-    FlyDSL caches. One GPU per process (TP uses separate workers).
+-    """
+-    global _device
++class _Checked(NamedTuple):
++    scale: float
++    query_lens: tuple
++    prefix_lens: tuple
++    stride: int
++    topk: int
++
++
++def _on_rocm_device(q):
++    return q.device.type == "cuda" and torch.version.hip is not None
++
++
++def _check_call(
++    q, k, v, indices, query_lens, prefix_lens, softmax_scale, out, kv_slots
++):
++    """The call's operand rules in order: the first one it breaks as _Rejected (what the
++    op raises and qsa_sparse_prefill_problem reports), else its normalized arguments.
++    Rules on state (graph capture, one GPU per process) stay in the op."""
+     if q.ndim != 3 or k.ndim != 3 or v.ndim != 3:
+-        raise ValueError("Q/K/V must be contiguous BF16 [tokens, heads, 256]")
++        return _Rejected(ValueError, "Q/K/V must be BF16 [tokens, heads, 256]")
+     if isinstance(softmax_scale, (torch.Tensor, bool)):
+-        raise TypeError("softmax_scale must be a host scalar or None")
++        return _Rejected(TypeError, "softmax_scale must be a host scalar or None")
+     scale = 0.0625 if softmax_scale is None else float(softmax_scale)
+     # The kernels multiply masked -inf scores by it: an FP32 zero would give NaN.
+     scaled = scale * math.log2(math.e)
+     if not math.isfinite(scaled) or not 2**-149 <= scaled <= (2 - 2**-23) * 2**127:
+-        raise ValueError("softmax_scale * log2(e) must be finite and positive in FP32")
++        return _Rejected(
++            ValueError, "softmax_scale * log2(e) must be finite and positive in FP32"
++        )
+     if kv_slots is not None and (
+         not isinstance(kv_slots, torch.Tensor)
+         or kv_slots.dtype != torch.int32
+@@ -272,11 +291,13 @@ def flydsl_qsa_sparse_prefill(
+         or kv_slots.device != q.device
+         or not kv_slots.is_contiguous()
+     ):
+-        raise ValueError("kv_slots must be a contiguous device int32 [N] tensor")
++        return _Rejected(
++            ValueError, "kv_slots must be a contiguous device int32 [N] tensor"
++        )
+     # The kernels read the slot table at unsigned 32-bit buffer offsets and upload
+     # each request's start in it as int32.
+     if kv_slots is not None and kv_slots.numel() * kv_slots.element_size() > _MAX_SPAN:
+-        raise ValueError("kv_slots requires a byte span <= 2**32 - 2**20")
++        return _Rejected(ValueError, "kv_slots requires a byte span <= 2**32 - 2**20")
+     keys = k.shape[0] if kv_slots is None else kv_slots.shape[0]
+     query_lens = (q.shape[0],) if query_lens is None else tuple(query_lens)
+     if prefix_lens is None:
+@@ -295,40 +316,63 @@ def flydsl_qsa_sparse_prefill(
+         or sum(query_lens) != q.shape[0]
+         or sum(query_lens) + sum(prefix_lens) != keys
+     ):
+-        raise ValueError("Host query/prefix lengths must describe the packed Q/K/V")
+-    if q.device.type != "cuda" or torch.version.hip is None:
+-        raise ValueError("QSA sparse attention requires ROCm gfx942")
++        return _Rejected(
++            ValueError, "Host query/prefix lengths must describe the packed Q/K/V"
++        )
++    if not _on_rocm_device(q):
++        return _Rejected(
++            ValueError, "QSA sparse attention requires ROCm gfx942 or gfx950"
++        )
+     for tensor in (q, k, v):
+         if (
+             tensor.dtype != torch.bfloat16
+             or tensor.device != q.device
+             or tensor.layout != torch.strided
+-            or not tensor.is_contiguous()
+             or tensor.shape[-1] != 256
+         ):
+-            raise ValueError("Q/K/V must be contiguous BF16 [tokens, heads, 256]")
++            return _Rejected(ValueError, "Q/K/V must be BF16 [tokens, heads, 256]")
+         if tensor.data_ptr() % 16:
+-            raise ValueError("Q/K/V require 16-byte alignment")
++            return _Rejected(ValueError, "Q/K/V require 16-byte alignment")
++    if not q.is_contiguous():
++        return _Rejected(ValueError, "Q must be contiguous")
+     if (
+         k.shape != v.shape
+         or q.shape[1] <= 0
+         or k.shape[1] <= 0
+         or q.shape[1] % k.shape[1]
+     ):
+-        raise ValueError(
+-            "K/V must match and Q heads must be a positive multiple of KV heads"
++        return _Rejected(
++            ValueError,
++            "K/V must match and Q heads must be a positive multiple of KV heads",
++        )
++    stride = _kv_stride(k)
++    if stride is None or _kv_stride(v) != stride:
++        return _Rejected(
++            ValueError,
++            "K/V rows must hold dense [heads, 256] values one 16-byte aligned stride "
++            ">= heads x 256 and < 2**28 elements apart, the same for K and V",
+         )
+     if q.shape[1] // k.shape[1] > 16:
+-        raise ValueError("At most 16 Q heads per KV head fit the direct fallback wave")
++        return _Rejected(
++            ValueError, "At most 16 Q heads per KV head fit the direct fallback wave"
++        )
+     # K/V are addressed per request, so only each request's K (or V) span is bounded,
+-    # not the packed total: about 8M context tokens at HK1, 4M at HK2. A slot-table
+-    # pool is addressed from its base instead.
++    # not the packed total: about 8M context tokens at HK1, 4M at HK2 (dense rows). A
++    # slot-table pool is addressed from its base instead.
+     tokens = max(map(sum, zip(query_lens, prefix_lens)), default=0)
+-    span = q.numel() if kv_slots is not None else max(q.numel(), tokens * k.stride(0))
+-    if span * q.element_size() > _MAX_SPAN:
+-        raise ValueError("Q and each request's K/V require byte spans <= 2**32 - 2**20")
+-    if get_gfx_runtime() != "gfx942":
+-        raise ValueError("QSA sparse attention requires gfx942")
++    span = q.numel() * q.element_size()
++    if kv_slots is None:
++        span = max(span, _span_bytes(tokens, stride, k.shape[1]))
++    if span > _MAX_SPAN:
++        return _Rejected(
++            ValueError, "Q and each request's K/V require byte spans <= 2**32 - 2**20"
++        )
++    gfx = get_gfx_runtime()
++    if gfx not in ("gfx942", "gfx950"):
++        return _Rejected(ValueError, "QSA sparse attention requires gfx942 or gfx950")
++    # Strided rows are validated on gfx950 only.
++    if stride != k.shape[1] * 256 and gfx != "gfx950":
++        return _Rejected(ValueError, "Strided K/V rows are supported on gfx950 only")
+     topk = (indices.shape[-1] - 3) // 4 if indices.ndim else 0
+     if (
+         indices.shape != (q.shape[0], 4 * topk + 3)
+@@ -339,28 +383,173 @@ def flydsl_qsa_sparse_prefill(
+         or not indices.is_contiguous()
+         or indices.numel() * indices.element_size() >= 2**31
+     ):
+-        raise ValueError(
++        return _Rejected(
++            ValueError,
+             "indices must be contiguous device int32 [M,4T+3], T = 256/512/768/1024, "
+-            "with byte span < 2**31"
++            "with byte span < 2**31",
+         )
+-    if out is None:
+-        out = torch.empty_like(q)
+-    if (
+-        out.shape != q.shape
+-        or out.dtype != q.dtype
+-        or out.device != q.device
+-        or not out.is_contiguous()
+-        or out.data_ptr() % 16
+-    ):
+-        raise ValueError("out must be aligned, contiguous and match Q")
+-    begin, end = out.data_ptr(), out.data_ptr() + out.numel() * out.element_size()
+-    sources = (q, k, v, indices) + (() if kv_slots is None else (kv_slots,))
+-    for source in sources:
++    if out is not None:
+         if (
+-            begin < source.data_ptr() + source.numel() * source.element_size()
+-            and source.data_ptr() < end
++            out.shape != q.shape
++            or out.dtype != q.dtype
++            or out.device != q.device
++            or not out.is_contiguous()
++            or out.data_ptr() % 16
+         ):
+-            raise ValueError("out must not overlap Q/K/V, indices or kv_slots")
++            return _Rejected(ValueError, "out must be aligned, contiguous and match Q")
++        begin, end = out.data_ptr(), out.data_ptr() + out.numel() * out.element_size()
++        # Strided K/V rows span more bytes than they hold.
++        kv_bytes = _span_bytes(k.shape[0], stride, k.shape[1])
++        sources = [(k.data_ptr(), kv_bytes), (v.data_ptr(), kv_bytes)] + [
++            (source.data_ptr(), source.numel() * source.element_size())
++            for source in (q, indices) + (() if kv_slots is None else (kv_slots,))
++        ]
++        for pointer, size in sources:
++            if begin < pointer + size and pointer < end:
++                return _Rejected(
++                    ValueError, "out must not overlap Q/K/V, indices or kv_slots"
++                )
++    return _Checked(scale, query_lens, prefix_lens, stride, topk)
++
++
++def qsa_sparse_prefill_problem(
++    q,
++    k,
++    v,
++    indices,
++    *,
++    query_lens=None,
++    prefix_lens=None,
++    softmax_scale=None,
++    out=None,
++    kv_slots=None,
++):
++    """The first operand rule this call breaks, as the message flydsl_qsa_sparse_prefill
++    would raise it, or None when the operands are accepted. Takes the op's arguments;
++    states of the process (graph capture, one GPU per process) are not operand rules,
++    so a call accepted here can still raise them."""
++    checked = _check_call(
++        q, k, v, indices, query_lens, prefix_lens, softmax_scale, out, kv_slots
++    )
++    return checked.message if isinstance(checked, _Rejected) else None
++
++
++def _warmup_layouts(group, hk):
++    """Request lengths, none with a prefix, of one call per kernel-variant class of Q
++    heads per KV head `group` and `hk` KV heads. A call's variants follow from whether
++    it gets a union plan (from `_union_min_rows` rows) and that plan's query tile; the
++    rest of what a variant compiles in (heads, scale, width, stride, pool span) is the
++    caller's and fixed across calls."""
++    union_rows = _union_min_rows(group)
++    # Direct kernels only; then the base tile (a second request keeps a full prefill off
++    # the wide tiles).
++    layouts = [(max(union_rows - 1, 1),), (-(-union_rows // 2),) * 2]
++    for tile in (21, 42):
++        # The first row count that has a union plan and takes the wide tile (a device
++        # with few CUs takes it from fewer rows than the union gate).
++        rows = max(prepare.wide_tile_rows(tile), union_rows)
++        if prepare.plan_query_tile(group, hk, (rows,), (0,), 32) == tile:
++            layouts.append((rows,))
++    return tuple(layouts)
++
++
++def _prefill_selection(query_lens, topk, device):
++    """indices [rows, 4 topk + 3] of requests without a prefix, in the layout the op
++    takes: the row at request position p (v = p + 1 tokens) selects its last
++    min(v // 4, topk) complete four-token blocks, then its v % 4 tail tokens; the rest of
++    the row is -1."""
++    visible = torch.cat([torch.arange(1, n + 1, device=device) for n in query_lens])
++    first = 4 * (visible // 4 - topk).clamp(min=0)
++    indices = first[:, None] + torch.arange(4 * topk + 3, device=device)
++    return torch.where(indices < visible[:, None], indices, -1).to(torch.int32)
++
++
++def qsa_sparse_prefill_warmup(
++    run, *, num_q_heads, num_kv_heads, selection_width, device
++):
++    """Compile the kernels the op's calls can use, so that no served call compiles them.
++
++    ``run(q, indices, query_lens, prefix_lens)`` makes one call to the op the way the
++    caller serves it (its K/V, scale, slot table and out), and returns whether it did;
++    the compile keys are those of that call. It is called once per kernel-variant
++    class, on synthetic Q (zeros) and indices, with requests of no prefix: below the
++    union threshold, over it, and at each wide tile's first row count where the tile
++    policy takes one. Returns the request lengths for which ``run`` returned true; none
++    on an architecture other than gfx942 and gfx950 (which have no tile policy), or when
++    `selection_width` is not a width the op takes.
++    """
++    if get_gfx_runtime() not in ("gfx942", "gfx950"):
++        return ()
++    topk, rest = divmod(selection_width - 3, 4)
++    if rest or topk % 256 or not 256 <= topk <= 1024:
++        return ()
++    warmed = []
++    for query_lens in _warmup_layouts(num_q_heads // num_kv_heads, num_kv_heads):
++        q = torch.zeros(
++            sum(query_lens), num_q_heads, 256, dtype=torch.bfloat16, device=device
++        )
++        indices = _prefill_selection(query_lens, topk, device)
++        if run(q, indices, query_lens, (0,) * len(query_lens)):
++            warmed.append(query_lens)
++    torch.cuda.synchronize(device)
++    return tuple(warmed)
++
++
++def flydsl_qsa_sparse_prefill(
++    q,
++    k,
++    v,
++    indices,
++    *,
++    query_lens=None,
++    prefix_lens=None,
++    softmax_scale=None,
++    out=None,
++    kv_slots=None,
++):
++    """Return QSA sparse attention for BF16 Q[M,H,256] and K/V[N,HK,256].
++
++    indices is contiguous int32[M,4T+3] (T = 256, 512, 768 or 1024, set by the width).
++    For a row whose causal window holds v tokens (request-local 0 .. v - 1, the last
++    being its own), columns [0, 4 * min(v // 4, T)) hold exactly min(v // 4, T)
++    distinct complete blocks j < v // 4, each as its tokens 4j .. 4j + 3, in any
++    order; the next v % 4 columns hold the tail tokens 4 * (v // 4) .. v - 1 and the
++    rest are -1. The kernels derive both counts from v, so fewer blocks or a missing
++    tail give wrong results. K/V must be finite: rows of a request share union tiles,
++    so a non-finite value can also reach rows that did not select it. The layout is
++    not validated: a selection that breaks it gives wrong results, also in later
++    calls on the same stream.
++
++    Host query_lens/prefix_lens describe packed requests. For one request they
++    default to (M,) and (N-M,). Plans are built and cached per layout. With kv_slots
++    (contiguous int32[N] of at most 2**32 - 2**20 bytes, packed token -> pool row),
++    K/V are a token pool [P,HK,256] read in place: each request's four-token blocks,
++    the final partial one included, must occupy four consecutive pool rows starting
++    at a multiple of four (paged pools whose pages are a multiple of four tokens
++    satisfy this), and the result is the same as for K/V packed by those slots. A
++    pool may exceed 4 GiB (raw direct then uses 64-bit loads); slot values are not
++    validated. On gfx950, K/V may be strided views: every row holds dense [HK, 256]
++    values and rows sit one 16-byte aligned stride >= HK x 256 and < 2**28 elements
++    apart, the same for K and V (e.g. the halves of one interleaved K|V record per
++    token, read in place); each stride compiles its own kernels. Hot calls rebuild
++    the selection: per-layout plans share one private per-stream scratch arena. out
++    is optional and must not overlap Q/K/V, indices or kv_slots. Warm the same
++    stream and layout before graph capture. Captured workspaces stay pinned for graph
++    pointer lifetime and share their stream's scratch: do not replay them
++    concurrently with each other or with that stream's calls. Each kernel variant
++    compiles on its first use, a few seconds with empty FlyDSL caches; none is
++    prebuilt (PREBUILD_KERNELS / AOT do not cover QSA). One GPU per process (TP uses
++    separate workers).
++    """
++    global _device
++    checked = _check_call(
++        q, k, v, indices, query_lens, prefix_lens, softmax_scale, out, kv_slots
++    )
++    if isinstance(checked, _Rejected):
++        raise checked.error(checked.message)
++    scale, query_lens, prefix_lens, stride, topk = checked
++    if out is None:
++        out = torch.empty_like(q)
+     if q.shape[0] == 0:
+         return out
+     with _lock, torch.cuda.device(q.device):
+@@ -379,6 +568,8 @@ def flydsl_qsa_sparse_prefill(
+             topk,
+             # Pool rows: they set the raw direct extent and the WIDE path.
+             None if kv_slots is None else k.shape[0],
++            # Row stride: every kernel that reads K/V compiles it in.
++            stride,
+         )
+         workspace = _workspaces.get(key)
+         if workspace is None:
+@@ -387,7 +578,7 @@ def flydsl_qsa_sparse_prefill(
+                     "Warm attention on this stream and layout before graph capture"
+                 )
+             workspace = _Workspace(
+-                q, k, v, indices, query_lens, prefix_lens, scale, kv_slots
++                q, k, v, indices, query_lens, prefix_lens, scale, stride, kv_slots
+             )
+             _workspaces[key] = workspace
+             for stale in list(_workspaces):

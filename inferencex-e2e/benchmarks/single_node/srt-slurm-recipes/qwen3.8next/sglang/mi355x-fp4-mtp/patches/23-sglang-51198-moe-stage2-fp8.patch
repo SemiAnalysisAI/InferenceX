@@ -1,0 +1,97 @@
+# [Perf] [AMD] quark: Add opt-in FP8 stage-2 route output for MXFP4 MoE
+# https://github.com/sgl-project/sglang/pull/51198  (PR head c3e210ed3b)
+# Generated against the 20261117 image's SGLang checkout (c67db7c762) with patches 01-07, 09, 11, 13-16, 21 and 24
+# applied; source files only (tests and docs dropped).
+# Opt-in SGLANG_AITER_MOE_STAGE2_FP8=1: on gfx95, Quark MXFP4 MoE calls aiter.fused_moe with stage2_fp8=True in every
+# MoE layer except a speculative draft's; needs patch 22 (the server refuses to start without it).
+# Port: unchanged; it applies with offsets on patch 14 (sglang#49852), which edits the same scheme file.
+# Apply in /sgl-workspace/sglang with git apply.
+
+diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
+index e2005a6985..9dbb8e93f7 100644
+--- a/python/sglang/srt/environ.py
++++ b/python/sglang/srt/environ.py
+@@ -1166,6 +1166,12 @@ class Envs:
+     # oneshot below ~24 tokens, which on gfx950 costs 11-16 us vs 6-7 us for multi-phase at
+     # E=385 / 129; outputs are identical and multi-phase is never slower up to 16384 tokens.
+     SGLANG_AITER_MOE_SORTING_DISPATCH_POLICY = EnvInt(2)
++    # Quark MXFP4 MoE on gfx95: call aiter.fused_moe with stage2_fp8=True in every MoE
++    # layer except a speculative draft's. AITER then writes FP8 per-route outputs and sums
++    # them in fp32 where the tuned stage 2 allows it (a FlyDSL reduce, or an MXFP4 scatter
++    # after an MXMOE stage 1); not bitwise equal to the default. Needs an AITER whose
++    # fused_moe takes stage2_fp8. AITER_FLYDSL_STAGE2_FP8=1 applies to the draft as well.
++    SGLANG_AITER_MOE_STAGE2_FP8 = EnvBool(False)
+     # Fold `silu(gate) * up` into the triton MoE up-GEMM epilogue. W13 rows are
+     # permuted in place at load so gate/up land in adjacent columns of the same
+     # output tile, which removes intermediate_cache1 and the standalone
+diff --git a/python/sglang/srt/layers/moe/moe_runner/aiter.py b/python/sglang/srt/layers/moe/moe_runner/aiter.py
+index 6057b50ccd..aa98906a68 100644
+--- a/python/sglang/srt/layers/moe/moe_runner/aiter.py
++++ b/python/sglang/srt/layers/moe/moe_runner/aiter.py
+@@ -167,6 +167,13 @@ def _aiter_fused_moe_supports_output() -> bool:
+     return "output" in inspect.signature(fused_moe).parameters
+ 
+ 
++@functools.cache
++def _aiter_fused_moe_supports_stage2_fp8() -> bool:
++    from aiter.fused_moe import fused_moe
++
++    return "stage2_fp8" in inspect.signature(fused_moe).parameters
++
++
+ class AiterRunnerCore(MoeRunnerCore):
+     def __init__(self, *args, **kwargs):
+         super().__init__(*args, **kwargs)
+diff --git a/python/sglang/srt/layers/quantization/quark/schemes/quark_w4a4_mxfp4_moe.py b/python/sglang/srt/layers/quantization/quark/schemes/quark_w4a4_mxfp4_moe.py
+index 29e0df0091..97b060e091 100644
+--- a/python/sglang/srt/layers/quantization/quark/schemes/quark_w4a4_mxfp4_moe.py
++++ b/python/sglang/srt/layers/quantization/quark/schemes/quark_w4a4_mxfp4_moe.py
+@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
+ 
+ import torch
+ 
++from sglang.srt.environ import envs
+ from sglang.srt.layers.moe import MoeRunner, MoeRunnerBackend, MoeRunnerConfig
+ from sglang.srt.layers.moe.utils import get_moe_weight_sizes
+ from sglang.srt.layers.quantization.base_config import QuantizationConfig
+@@ -247,6 +248,8 @@ class QuarkW4A4MXFp4MoE(QuarkMoEScheme):
+ 
+         self.static_input_scales = not self.input_quant.get("is_dynamic")
+         self.with_bias = False
++        # Set per layer by create_moe_runner.
++        self._aiter_stage2_fp8 = False
+ 
+         if not self.is_checkpoint_mxfp4_serialized:
+             if not is_gfx95_supported():
+@@ -1203,6 +1206,22 @@ class QuarkW4A4MXFp4MoE(QuarkMoEScheme):
+             self.runner = MoeRunner(moe_runner_backend, moe_runner_config)
+             self._owns_moe_runner = True
+             self._owns_moe_weight_layout = True
++            # A speculative draft's MoE keeps the default stage 2.
++            self._aiter_stage2_fp8 = (
++                _is_gfx95
++                and envs.SGLANG_AITER_MOE_STAGE2_FP8.get()
++                and not layer.is_draft
++            )
++            if self._aiter_stage2_fp8:
++                from sglang.srt.layers.moe.moe_runner.aiter import (
++                    _aiter_fused_moe_supports_stage2_fp8,
++                )
++
++                if not _aiter_fused_moe_supports_stage2_fp8():
++                    raise RuntimeError(
++                        "SGLANG_AITER_MOE_STAGE2_FP8=1 needs an AITER build whose "
++                        "aiter.fused_moe accepts stage2_fp8."
++                    )
+         else:
+             raise NotImplementedError(
+                 "Quark MXFP4 MoE currently requires the AITER runner; "
+@@ -1244,6 +1263,8 @@ class QuarkW4A4MXFp4MoE(QuarkMoEScheme):
+             # Quark checkpoints store gate and up projections as separate
+             # contiguous row ranges. Keep that ordering for correctness.
+             _fused_moe_kwargs = {"gate_mode": GateMode.SEPARATED.value}
++            if self._aiter_stage2_fp8:
++                _fused_moe_kwargs["stage2_fp8"] = True
+         else:
+             _fused_moe_kwargs = None
+ 
