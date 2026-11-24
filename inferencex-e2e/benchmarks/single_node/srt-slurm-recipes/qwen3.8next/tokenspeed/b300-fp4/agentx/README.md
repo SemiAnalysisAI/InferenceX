@@ -24,10 +24,8 @@ supported drafter extend graphs automatically. The wheel has no
 path where supported and the CuTe DSL sparse attention kernel otherwise.
 
 Host L2 uses 236 decimal GB with kernel I/O and write-back, alongside a 4 GB
-retraction snapshot pool. The B300 master config sets `dram-utilization: 0.645`:
-the 3 TB node policy cap, divided across eight GPUs and rounded down
-to whole decimal GB, gives `TOTAL_CPU_DRAM_GB=241`. PLE embeddings stay on
-pinned host memory, and state checkpoints use plain LRU retention.
+retraction snapshot pool; both fit within the GPU's share of host memory. PLE
+embeddings stay on pinned host memory, and state checkpoints use plain LRU retention.
 
 The master config pins the amd64 CUDA 13 / PyTorch 2.14.0 / FlashInfer 0.7.4
 runner image by digest. The recipe pins TokenSpeed `0.1.1.post20261117`,
