@@ -13338,7 +13338,6 @@
     - glm5.3-fp4-gb300-dynamo-sglang-agentic-agg
     - glm5.3-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
-    - "Add the GLM-5.3 NVFP4 GB300 Dynamo-SGLang AgentX aggregated recipe (TP4 and TP8 at conc 1) and disaggregated recipe (six PP4-prefill points at conc 30 to 264), ported from GLM-5.2 GB300 with NEXTN K=3 MTP and weights loaded from /data/models at the pinned revision."
-    - "Every point sets power: true, so GB300 multi-node default power collection measures DCGM GPU power with AgentX accounting and does not treat it as best effort."
+    - "Add GLM-5.3 NVFP4 GB300 Dynamo-SGLang AgentX aggregated and disaggregated recipes with measured power."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4706
   scenario-type: [agentic-coding]
