@@ -19,8 +19,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       # Serve flags follow the cookbook's B300 cells at
       # https://docs.sglang.io/cookbook/autoregressive/MiniMax/MiniMax-M3.1.
       args:
@@ -72,4 +70,3 @@ zip_override_tp4_dram_spf_interval32:
     env:
       CONC: ['24', '32', '40', '8', '16']
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1199'

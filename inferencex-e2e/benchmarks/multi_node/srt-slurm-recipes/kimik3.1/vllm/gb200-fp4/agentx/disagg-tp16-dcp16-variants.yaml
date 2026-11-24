@@ -39,8 +39,6 @@ base:
   roles:
     prefill:
       nodes: 4
-      workers: 1
-      gpus: 16
       env: &kimi_env
         VLLM_ENGINE_READY_TIMEOUT_S: "3600"
         VLLM_RPC_TIMEOUT: "600000"
@@ -93,8 +91,6 @@ base:
         speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","attention_backend":"TOKENSPEED_MLA","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         <<: *kimi_env
         VLLM_ENABLE_GEMM_RS: "0"
