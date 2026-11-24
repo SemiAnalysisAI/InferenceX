@@ -293,6 +293,9 @@ schema; unknown keys fail.
   resolve to the main image and to the staged nginx, and `outputs`,
   `shared-run-root` and `uv-cache-root` are the directories the srt-slurm launcher
   itself uses.
+- `slurm.srt-slurm.multi-node-exclude` lists nodes that multi-node srt-slurm jobs leave
+  out on top of `slurm.exclude`; single-node jobs still run there. It keeps a node whose
+  inter-node fabric is not fit for cross-node traffic in single-node rotation.
 - `slurm.srt-slurm.fabric` holds the hosts' network facts that recipes take as
   `'@fabric.<name>'` values: the lists `rdma-devices` (the RDMA HCAs, as NCCL, Mooncake,
   SGLang `disaggregation-ib-device` and `IBDEVICES` read them), `rdma-device-ports` (the
