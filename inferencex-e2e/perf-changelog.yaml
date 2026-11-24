@@ -13340,5 +13340,5 @@
     - agentic-coding
   description:
     - "Run GLM-5.3 FP8 MI355X SGLang AgentX on the pinned ROCm10 20261119 image at TP8/EP1. C1/2/4 use Triton DSA, EAGLE MTP 3/1/4, GPU-resident FP8 KV, the AMD monokernel and admission/decode graph caps of 80."
-    - "C8/10/16 use Triton DSA, EAGLE MTP 3/1/4 and admission/decode graph caps of twice the concurrency. All three use HiCache with a fixed 149 GB host KV pool per rank and selective write-through."
+    - "C8/10/16 use Triton DSA, EAGLE MTP 3/1/4 and admission/decode graph caps of twice the concurrency. All three use HiCache with a host-to-device KV ratio of 1.0 and selective write-through."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5168
