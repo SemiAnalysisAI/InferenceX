@@ -38,6 +38,7 @@ from infx.launch.drivers.srt.recipe import (
     staged_recipe,
 )
 from infx.launch.drivers.srt.run import SrtRun, require, slurm_backend
+from infx.launch.memory import gpu_share_mib
 from infx.launch.request import (
     BATCH_REENTRY_ENV,
     MultiNodeRequest,
@@ -182,6 +183,13 @@ def write_single_node_job(
     **fields: Any,
 ) -> None:
     """Write the single-node srtslurm.yaml; ``fields`` are the job's own SrtJob inputs."""
+    job_mib = (
+        0
+        if run.srt.single_node_exclusive
+        else gpu_share_mib(
+            run.cluster.available_cpu_dram_mib, request.gpu_count, run.cluster.gpus_per_node
+        )
+    )
     job_config = config.SrtJob(
         srtctl_root=checkout.root,
         workspace=run.workspace,
@@ -190,6 +198,7 @@ def write_single_node_job(
         container=run.backend.stage_image(request.image, single_node=True).reference,
         single_node=True,
         account=run.account,
+        mem_mib=job_mib,
         **fields,
     )
     config.create_volume_mounts(run)

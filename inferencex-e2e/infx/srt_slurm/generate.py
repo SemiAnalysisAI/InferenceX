@@ -19,8 +19,10 @@ from infx.launch.context import LaunchError
 from infx.launch.drivers.srt import config, lanes, power
 from infx.launch.policy import launch_path
 from infx.launch.request import MultiNodeRequest
+from infx.launch.resources import worker_resources
 from infx.matrix.generate import SCENARIO_TYPES, expand_config_keys, generate_config_matrix
 from infx.matrix.validation import config_root, load_config_files, load_runner_file
+from infx.srt_slurm.memory import bind_memory
 from infx.srt_slurm.single_node import select_recipe
 from infx.srt_slurm.synthetic_acceptance import build_overrides, selected_recipes
 from infx.srt_slurm.video import prepare as prepare_video
@@ -80,6 +82,7 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
         "FRAMEWORK": point["framework"],
         "SPEC_DECODING": point["spec-decoding"],
         "IS_AGENTIC": "1" if agentic else "0",
+        "IS_MULTINODE": "true" if "prefill" in point else "false",
         "ISL": "0" if agentic else str(point["isl"]),
         "OSL": "0" if agentic else str(point["osl"]),
         "RANDOM_RANGE_RATIO": RANDOM_RANGE_RATIO,
@@ -99,6 +102,21 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
     if "prefill" in point:
         environment.update(
             IS_MULTINODE="true",
+            DISAGG=str(point["disagg"]).lower(),
+            **{
+                f"{role.upper()}_{field}": str(point[role][key]).lower()
+                for role in ("prefill", "decode")
+                for field, key in (
+                    ("NUM_WORKERS", "num-worker"),
+                    ("GPUS_PER_WORKER", "gpus-per-worker"),
+                    ("TP", "tp"),
+                    ("EP", "ep"),
+                    ("PP_SIZE", "pp"),
+                    ("DCP_SIZE", "dcp-size"),
+                    ("PCP_SIZE", "pcp-size"),
+                    ("DP_ATTN", "dp-attn"),
+                )
+            },
             SRT_RECIPE=point["srt-recipe"],
             POWER="1" if point.get("power") else "0",
             CPU_POWER="1" if point.get("cpu-power") else "0",
@@ -116,7 +134,7 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
         "DCP_SIZE": str(point["dcp-size"]),
         "PCP_SIZE": str(point["pcp-size"]),
         "DP_ATTENTION": str(point["dp-attn"]).lower(),
-        "GPU_COUNT": str(point["tp"] * point["pp"] * point["pcp-size"]),
+        "GPU_COUNT": str(point["gpus-per-worker"]),
     }
 
 
@@ -307,6 +325,17 @@ def generate_recipes(
             )  # fmt: skip
             if fabric is not None:
                 recipe = resolve_fabric(recipe, fabric)
+            # A video server is a recipe service, not an inference worker role.
+            if fabric is not None and not is_video(point):
+                cluster = placement[1]
+                if cluster.available_cpu_dram_mib is None:
+                    raise ValueError(f"cluster {cluster.id!r} must declare available-cpu-dram-mib")
+                bind_memory(
+                    recipe,
+                    cluster.available_cpu_dram_mib,
+                    cluster.gpus_per_node,
+                    worker_resources(environment),
+                )
             check_setup_script(recipe, root / point["srt-recipe"].partition(":")[0], root)
             clusters = {
                 inventory.cluster_for(runner).id: inventory.cluster_for(runner)
