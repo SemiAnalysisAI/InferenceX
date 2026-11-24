@@ -1,14 +1,16 @@
 # [Perf] [AMD] qsa: Share compressed-key reads across the four verify rows of a request
 # https://github.com/sgl-project/sglang/pull/48625  (PR head 5fc1c1ce7c; it carries sgl-project/sglang#46631, head 123cfdd0f8)
-# Generated against the image's SGLang checkout (1ced9a9eb0) with patches 01-10 applied; source files only (tests dropped).
+# Generated against the 20261117 image's SGLang checkout (c67db7c762) with patches 01-07 and 09 applied; source files only (tests dropped).
 # Differs from the PR: opt-in through SGLANG_AMD_QSA_GROUPED_VERIFY=1 (the per-row kernel unless set) and one log line
 # per verify size. The row cap is the PRs' 380: a target verify carries 4 rows per request (512 rows at batch 128), so
 # at this recipe's concurrencies (at most 80) a verify graph has at most 320 rows and the cap never binds; a 512-row
 # cap would only change the CUDA graphs captured for batch 96 and above.
+# Port from the 20261102 image (SGLang 1ced9a9eb0): is_gfx95_supported is imported from sglang.srt.utils.device, where
+# sglang#48781 moved mqa.py's imports, next to the is_npu of sglang#37570; the code is unchanged.
 # Apply in /sgl-workspace/sglang with git apply.
 
 diff --git a/python/sglang/srt/layers/attention/qsa/mqa.py b/python/sglang/srt/layers/attention/qsa/mqa.py
-index b6280ac..0099e82 100644
+index 2109506010..7e47e11fe0 100644
 --- a/python/sglang/srt/layers/attention/qsa/mqa.py
 +++ b/python/sglang/srt/layers/attention/qsa/mqa.py
 @@ -2,12 +2,14 @@
@@ -22,12 +24,12 @@ index b6280ac..0099e82 100644
  
  import torch
  
--from sglang.srt.utils.common import is_hip
-+from sglang.srt.utils.common import is_gfx95_supported, is_hip
+-from sglang.srt.utils.device import is_hip, is_npu
++from sglang.srt.utils.device import is_gfx95_supported, is_hip, is_npu
  
- try:
-     import flashinfer.comm  # noqa: F401
-@@ -399,6 +401,130 @@ if HAS_TILELANG:
+ _is_npu = is_npu()
+ 
+@@ -401,6 +403,130 @@ if HAS_TILELANG:
  
          return kernel
  
@@ -158,7 +160,7 @@ index b6280ac..0099e82 100644
  
  def tilelang_qsa_mqa_prefill(
      q: torch.Tensor,
-@@ -564,6 +690,24 @@ _DECODE_THREADS = 256 if is_hip() else 128
+@@ -566,6 +692,24 @@ _DECODE_THREADS = 256 if is_hip() else 128
  # ROCm: four consecutive groups per CTA over a page-table-wide grid is 1.2-1.7x
  # faster than the fixed CTAs per row on MI355X at 50k-200k context (bit-exact).
  _DECODE_GROUPS_PER_CTA = 4 if is_hip() else 0
@@ -183,7 +185,7 @@ index b6280ac..0099e82 100644
  
  
  @functools.lru_cache(maxsize=None)
-@@ -588,6 +732,8 @@ def tilelang_qsa_mqa_decode(
+@@ -590,6 +734,8 @@ def tilelang_qsa_mqa_decode(
      score_scale: Optional[float] = None,
      *,
      min_scored_len: int = 0,
@@ -192,7 +194,7 @@ index b6280ac..0099e82 100644
  ) -> torch.Tensor:
      """Validated TileLang paged decode kernel with weights removed.
  
-@@ -618,9 +764,32 @@ def tilelang_qsa_mqa_decode(
+@@ -620,9 +766,32 @@ def tilelang_qsa_mqa_decode(
          )
      if not q.shape[0] or not max_model_len:
          return logits
@@ -227,7 +229,7 @@ index b6280ac..0099e82 100644
      kernel_heads = max(
          head_alignment,
          ((query_heads + head_alignment - 1) // head_alignment) * head_alignment,
-@@ -635,20 +804,33 @@ def tilelang_qsa_mqa_decode(
+@@ -637,20 +806,33 @@ def tilelang_qsa_mqa_decode(
              ],
              dim=1,
          )
@@ -275,16 +277,16 @@ index b6280ac..0099e82 100644
          q_kernel.unsqueeze(1).contiguous(),
          k_cache.to(scoring_dtype).contiguous(),
          page_table.to(device=q.device, dtype=torch.int32).contiguous(),
-@@ -698,6 +880,8 @@ def qsa_mqa_decode(
+@@ -706,6 +888,8 @@ def qsa_mqa_decode(
      score_scale: Optional[float] = None,
      *,
      min_scored_len: int = 0,
 +    rows_per_request: int = 1,
 +    num_query_heads: Optional[int] = None,
  ) -> torch.Tensor:
-     if q.is_cuda and HAS_TILELANG:
-         return tilelang_qsa_mqa_decode(
-@@ -708,6 +892,8 @@ def qsa_mqa_decode(
+     if _is_npu:
+         if score_scale is not None:
+@@ -722,6 +906,8 @@ def qsa_mqa_decode(
              max_model_len,
              score_scale,
              min_scored_len=min_scored_len,
@@ -294,10 +296,10 @@ index b6280ac..0099e82 100644
      return torch_qsa_mqa_decode(
          q, k_cache, page_table, context_lens, max_model_len, score_scale
 diff --git a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
-index 4638230..67cb861 100644
+index 79d5087104..ac50099376 100644
 --- a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
 +++ b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
-@@ -546,6 +546,7 @@ class QSAIndexer(MultiPlatformOp):
+@@ -534,6 +534,7 @@ class QSAIndexer(MultiPlatformOp):
          query_positions: torch.Tensor,
          sequence_lengths: torch.Tensor,
          defer_expansion: bool = False,
@@ -305,7 +307,7 @@ index 4638230..67cb861 100644
      ) -> torch.Tensor:
          # fast_topk (k = 512) writes 0..length-1 for rows that fit k without reading
          # their scores, and never reads past a row's length.
-@@ -561,6 +562,8 @@ class QSAIndexer(MultiPlatformOp):
+@@ -550,6 +551,8 @@ class QSAIndexer(MultiPlatformOp):
              compressed_lengths,
              max_model_len,
              min_scored_len=self.block_topk if use_fast_topk else 0,
@@ -314,7 +316,7 @@ index 4638230..67cb861 100644
          )
          if use_fast_topk:
              # Decode rows start at zero, so compressed lengths double as row lengths;
-@@ -787,6 +790,11 @@ class QSAIndexer(MultiPlatformOp):
+@@ -773,6 +776,11 @@ class QSAIndexer(MultiPlatformOp):
                  logical_positions,
                  indexer_metadata.get_seqlens_int32(),
                  defer_expansion=q.is_cuda and indexer_metadata.defer_block_expansion,

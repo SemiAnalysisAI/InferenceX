@@ -1,5 +1,6 @@
 """The published-curve snapshot stays in step with the matrix, binder and API client."""
 
+import fnmatch
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -77,7 +78,10 @@ def test_every_agentx_point_binds_to_one_variant_that_writes_and_loads(agentic_m
         assert written == json.loads(json.dumps(found["recipe"]))
         path, _, selector = point["srt-recipe"].partition(":")
         assert (entry["path"], entry["conc"], entry["image"]) == (path, point["conc"], point["image"])
-        assert not selector or entry["selector"] == selector
+        # A glob selector names several variants; the entry records the one that bound.
+        globbed = any(char in selector for char in "*?")
+        match = fnmatch.fnmatchcase if globbed else str.__eq__
+        assert not selector or match(entry["selector"].partition("[")[0] if globbed else entry["selector"], selector)
         assert (tmp_path / entry["source_file"]).read_text() == (revision.root / path).read_text()
 
 

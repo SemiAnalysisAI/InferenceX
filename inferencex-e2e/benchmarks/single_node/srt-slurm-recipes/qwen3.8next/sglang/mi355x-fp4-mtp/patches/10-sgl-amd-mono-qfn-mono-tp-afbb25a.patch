@@ -1,360 +1,10 @@
 # [Perf] [AMD] qwen38_flash_next monokernel: QSA index chain, stage placement, TP 1 / 2 / 4 launches
 # https://github.com/amd-asalykov/sgl-amd-mono/tree/asalykov/qfn-mono-tp  (branch head afbb25a457009dea20e784632208f3f81dec0b7b)
-# Applies to /sgl-workspace/sgl-amd-mono at the image's commit b10f3b71c45a (the original Qwen3.8-Flash-Next
-# monokernel, sgl-project/sgl-amd-mono#29). It is the source-only diff b10f3b7..afbb25a of
-# sgl_amd_mono/qwen38_flash_next/ (README dropped) and of the two shared modules it needs,
-# sgl_amd_mono/common/ops.py and sgl_amd_mono/common/sync.py; other models, tests and the registration of
-# other specs are left out. The package is an editable install, so the patched sources are the ones imported.
-diff --git a/sgl_amd_mono/common/ops.py b/sgl_amd_mono/common/ops.py
-index 5920f8c..2b59a47 100644
---- a/sgl_amd_mono/common/ops.py
-+++ b/sgl_amd_mono/common/ops.py
-@@ -18,7 +18,7 @@ import flydsl.expr as fx
- from aiter.ops.flydsl.kernels import buffer_ops as bo
- from aiter.ops.flydsl.kernels.dpp_utils import update_dpp_i32
- from flydsl._mlir.dialects import llvm
--from flydsl.expr import const_expr
-+from flydsl.expr import const_expr, gpu
- from flydsl.expr import math as fmath
- from flydsl.expr import range_constexpr, rocdl
- from flydsl.expr.typing import T, as_ir_value
-@@ -71,6 +71,71 @@ def fresh(v):
-     )
- 
- 
-+def sfresh64(v):
-+    """Pass a wave-uniform i64 through an opaque scalar move: LLVM cannot merge it with another use or hoist it."""
-+    return fx.Int64(
-+        llvm.inline_asm(
-+            T.i64,
-+            [fx.Int64(v).ir_value()],
-+            "s_mov_b64 $0, $1",
-+            "=s,s",
-+            has_side_effects=True,
-+        )
-+    )
-+
-+
-+def uniform64(v):
-+    v = fx.Int64(v)
-+    return (fx.Int64(uniform(fx.Int32(v >> 32))) << 32) | fx.Int64(
-+        fx.Uint32(uniform(fx.Int32(v)))
-+    )
-+
-+
-+def sload64(addr):
-+    """The wave-uniform i64 at device address ``addr``, which no thread writes during the launch (scalar load).
-+
-+    ``addr`` goes through readfirstlane: inside a divergent branch FlyDSL's bundled LLVM otherwise takes it
-+    as divergent and emits a vector load and a waterfall loop around the use.
-+    """
-+    from flydsl._mlir import ir
-+
-+    p = llvm.inttoptr(ir.Type.parse("!llvm.ptr<4>"), uniform64(addr).ir_value())
-+    return fx.Int64(llvm.load(T.i64, p, alignment=8, invariant=True))
-+
-+
-+class KernArgs:
-+    """Kernel arguments re-read from the kernarg segment where a stage needs them.
-+
-+    ``params``: (name, bytes) in signature order (natural alignment, as the kernarg ABI lays them out).
-+    ``ka(*names)`` loads those arguments (scalar loads) at the call site and returns them by name. Every call
-+    goes through its own opaque copy of the segment pointer, so the loads are neither merged across calls nor
-+    hoisted to the kernel entry: an argument stays in SGPRs only while the stage that loaded it runs.
-+    """
-+
-+    def __init__(self, params):
-+        self.offs, off = {}, 0
-+        for name, nb in params:
-+            off = -(-off // nb) * nb
-+            self.offs[name] = (off, nb)
-+            off += nb
-+
-+    def __call__(self, *names):
-+        from types import SimpleNamespace
-+
-+        from flydsl._mlir import ir
-+
-+        ptr4 = ir.Type.parse("!llvm.ptr<4>")
-+        seg = llvm.call_intrinsic(ptr4, "llvm.amdgcn.kernarg.segment.ptr", [], [], [])
-+        base = sfresh64(fx.Int64(llvm.ptrtoint(T.i64, seg)))
-+        got = {}
-+        for name in names:
-+            off, nb = self.offs[name]
-+            p = llvm.inttoptr(ptr4, (base + fx.Int64(off)).ir_value())
-+            v = llvm.load(T.i64 if nb == 8 else T.i32, p, alignment=nb, invariant=True)
-+            got[name] = fx.Int64(v) if nb == 8 else fx.Int32(v)
-+        return SimpleNamespace(**got)
-+
-+
- def uniform(v):
-     return fx.Int32(rocdl.readfirstlane(T.i32, fx.Int32(v)))
- 
-@@ -154,6 +219,47 @@ def global_ptr(addr, words=1):
-     )
- 
- 
-+def wave_sum(v):
-+    return butterfly(v, (32, 16, 8, 4, 2, 1))
-+
-+
-+def _xpartner(v, off, lane):
-+    """Lane ``lane ^ off``'s v: DPP within a row, v_permlane*_swap across rows
-+    (``xshfl`` takes ``shuffle_xor`` there)."""
-+    if off < 16:
-+        return xshfl(v, off)
-+    a, b = permlane_swap(off, v, v)
-+    return ((lane & off) != 0).select(a, b)
-+
-+
-+def wave_incl_scan(v, lane):
-+    """Inclusive prefix sum of an Int32 over the wave, in lane order."""
-+    blk = v
-+    for off in (1, 2, 4, 8, 16, 32):
-+        o = _xpartner(blk, off, lane)
-+        v = v + ((lane & off) != 0).select(o, 0)
-+        blk = blk + o
-+    return v
-+
-+
-+@flyc.jit
-+def block_excl_scan(v, lane, wave, buf):
-+    """(exclusive prefix of v over the CTA in thread order, CTA total); ``buf``
-+    needs WAVES words."""
-+    incl = wave_incl_scan(v, lane)
-+    gpu.barrier()
-+    if lane == 63:
-+        fx.ptr_store(incl, buf + wave)
-+    gpu.barrier()
-+    off = fx.Int32(0)
-+    tot = fx.Int32(0)
-+    for w in range_constexpr(WAVES):
-+        cnt = fx.ptr_load(buf + w)
-+        off = off + (w < wave).select(cnt, 0)
-+        tot = tot + cnt
-+    return incl - v + off, tot
-+
-+
- def global_load(addr, words=1, nt=False):
-     """``words`` i32 (1, 2 or 4) at the 64-bit global address ``addr``: a pool past
-     4 GiB is reached only this way (a buffer load's offset is 32 bits). ``nt``:
-diff --git a/sgl_amd_mono/common/sync.py b/sgl_amd_mono/common/sync.py
-index 6b5292f..bbeb57d 100644
---- a/sgl_amd_mono/common/sync.py
-+++ b/sgl_amd_mono/common/sync.py
-@@ -18,6 +18,7 @@ from sgl_amd_mono.common import guard
- from sgl_amd_mono.common.ops import (
-     CM_DEV,
-     CM_SYS,
-+    bf2_f32,
-     bf16_pair,
-     rsrc,
-     uniform,
-@@ -27,9 +28,16 @@ POLL_MAX = 12  # mailbox specs polled per batch (bounds live registers)
- CHECK_POLLS = 64  # a pending wait checks its deadline and the failure flags this often
- 
- 
-+def _first_load(load_all, first):
-+    """``first`` when the first load is in flight already, else ``load_all()`` (plain
-+    Python: the choice is made at trace time)."""
-+    return load_all() if first is None else first
-+
-+
- @flyc.jit
--def _spin(load_all, pending, guarded=True):
--    """Re-issue ``load_all`` until ``pending`` clears.
-+def _spin(load_all, pending, guarded=True, first=None):
-+    """Re-issue ``load_all`` until ``pending`` clears (``first``: the first load's
-+    words, issued already).
- 
-     Under a guard (``guard.scope``) the wait also stops once its deadline passes
-     or once this GPU or a peer failed: a timeout sets the error word and the
-@@ -38,7 +46,7 @@ def _spin(load_all, pending, guarded=True):
-     come. ``guarded=False``: a wait the guard need not bound"""
-     g = guard.current()
-     if const_expr(g is None or not guarded):
--        v = load_all()
-+        v = _first_load(load_all, first)
-         while pending(v):
-             rocdl.s_sleep(1)
-             v = load_all()
-@@ -46,7 +54,7 @@ def _spin(load_all, pending, guarded=True):
-     site = g.next_site()
-     # bound before the traced loops: a local whose method a loop calls becomes loop state
-     deadline_of, stopped, fail, note_peer = g.deadline, g.stopped, g.fail, g.note_peer
--    v = load_all()
-+    v = _first_load(load_all, first)
-     if const_expr(g.stop and g.fault_site != site):
-         # a failed check stops the launch inside the loop, so the loop carries no stop
-         # value: one copies the polled words every poll and spills at large batches
-@@ -121,6 +129,11 @@ def preg(base, offset, region):
-     return Addr(region, Space.PEER, base + fx.Int64(offset))
- 
- 
-+def shift(a, delta):
-+    """``a`` moved by ``delta`` bytes (a traced or Python integer), same region."""
-+    return Addr(a.region, a.space, a.value + delta)
-+
-+
- # the store / load cache policy of a hand-off in each space
- _SCOPE_CM = {Space.SCRATCH: CM_DEV, Space.PEER: CM_SYS}
- 
-@@ -170,6 +183,22 @@ class Mailbox:
-             return []
-         if const_expr(len(specs) > batch):
-             return self.poll(specs[:batch], batch) + self.poll(specs[batch:], batch)
-+        load_all, pending, unpack = self._batch(specs)
-+        return unpack(_spin(load_all, pending))
-+
-+    def poll_issue(self, specs):
-+        """Issue the first loads of ``poll(specs)`` (at most ``POLL_MAX``) now, ahead of
-+        loads that would otherwise hold their results back (loads return in issue
-+        order); ``poll_wait`` checks them."""
-+        assert 0 < len(specs) <= POLL_MAX, len(specs)
-+        return self._batch(specs)[0]()
-+
-+    def poll_wait(self, specs, first):
-+        """``poll(specs)`` from the words ``poll_issue(specs)`` returned."""
-+        load_all, pending, unpack = self._batch(specs)
-+        return unpack(_spin(load_all, pending, first=first))
-+
-+    def _batch(self, specs):
-         spaces = {a.space for a, _, _ in specs}
-         assert len(spaces) == 1, f"one poll batch spans {spaces}"
-         cm = _SCOPE_CM[spaces.pop()]
-@@ -199,12 +228,14 @@ class Mailbox:
-                 bad = bad | (v[e] != tag)
-             return bad
- 
--        v = _spin(load_all, pending)
--        outs, e = [], 0
--        for _, _, n in specs:
--            outs.append([v[e + 2 * q] for q in range(n)])
--            e += 2 * n
--        return outs
-+        def unpack(v):
-+            outs, e = [], 0
-+            for _, _, n in specs:
-+                outs.append([v[e + 2 * q] for q in range(n)])
-+                e += 2 * n
-+            return outs
-+
-+        return load_all, pending, unpack
- 
- 
- @flyc.jit
-@@ -214,3 +245,111 @@ def publish(put, a, i, v, who):
-     gpu.barrier()
-     if who:
-         put(a, i, v)
-+
-+
-+# ---------------------------------------------------------------- sentinel words
-+# A sentinel region holds plain words, not tagged pairs: an unwritten word is
-+# SENT (all ones, a bf16 -NaN pair) and a pushed word never is (``sent_word``).
-+# Its reader polls a word off SENT and re-arms it, so a region needs no tag,
-+# half a tagged pair's bytes, and nothing to zero a step. A word must not be
-+# pushed again before its reader re-armed it: the caller alternates two copies.
-+SENT = -1
-+SENT_NAN = -4128832  # 0xFFC0FFC0: what a pushed SENT word becomes
-+
-+
-+def sent_word(w):
-+    """A bf16-pair word to push to a sentinel region (never SENT)."""
-+    w = w.bitcast(fx.Int32) if isinstance(w, fx.Float32) else fx.Int32(w)
-+    return (w == fx.Int32(SENT)).select(fx.Int32(SENT_NAN), w)
-+
-+
-+def put_sent(a, i, word):
-+    """Word ``i`` of sentinel region ``a`` := ``word`` (from ``sent_word``)."""
-+    bo.buffer_store(fx.Int32(word), rsrc(a.value), i, cache_modifier=_SCOPE_CM[a.space])
-+
-+
-+def poll_sent(a, idxs, lives=None, rearm=True):
-+    """Words ``idxs`` of this rank's sentinel region ``a`` once none is SENT,
-+    re-armed unless ``rearm`` is off (the caller's ``rearm_sent`` then). A dead
-+    index (``lives``) is neither waited for nor re-armed. A read consumes the
-+    word: one thread a word."""
-+    cm = _SCOPE_CM[a.space]
-+    base = a.value
-+
-+    def load_all():
-+        return fx.Vector.from_elements(
-+            [
-+                fx.Int32(
-+                    bo.buffer_load(
-+                        rsrc(base),
-+                        fx.Int32(i),
-+                        vec_width=1,
-+                        dtype=T.i32,
-+                        cache_modifier=cm,
-+                    )
-+                )
-+                for i in idxs
-+            ],
-+            fx.Int32,
-+        )
-+
-+    def pending(v):
-+        bad = None
-+        for e in range_constexpr(len(idxs)):
-+            b = v[e] == fx.Int32(SENT)
-+            if const_expr(lives is not None):
-+                b = b & lives[e]
-+            bad = b if bad is None else bad | b
-+        return bad
-+
-+    v = _spin(load_all, pending)
-+    if const_expr(rearm):
-+        rearm_sent(a, idxs, lives)
-+    return [v[e] for e in range(len(idxs))]
-+
-+
-+def rearm_sent(a, idxs, lives=None):
-+    """Words ``idxs`` of this rank's sentinel region ``a`` := SENT (a dead index
-+    skipped), after this thread read them."""
-+    cm = _SCOPE_CM[a.space]
-+    for e in range_constexpr(len(idxs)):
-+        if const_expr(lives is None):
-+            bo.buffer_store(
-+                fx.Int32(SENT), rsrc(a.value), fx.Int32(idxs[e]), cache_modifier=cm
-+            )
-+        else:
-+            _rearm(a.value, idxs[e], lives[e], cm)
-+
-+
-+@flyc.jit
-+def _rearm(base, i, live, cm):
-+    if live:
-+        bo.buffer_store(fx.Int32(SENT), rsrc(base), fx.Int32(i), cache_modifier=cm)
-+
-+
-+def sent_ix(src, col, t, s, width):
-+    """The word of (source rank, bf16 pair at ``col``, token t) in a [rank][token]
-+    [width] sentinel all-reduce region, blocked [src][16 columns][token][8 pairs]
-+    so ``sent_item``'s consecutive items read consecutive words."""
-+    return ((src * (width // 16) + col // 16) * s + t) * 8 + (col % 16) // 2
-+
-+
-+def sent_item(idx, s):
-+    """Reduce item ``idx``'s (token, column pair) within a 128-column task."""
-+    g = idx // (8 * s)
-+    r = idx % (8 * s)
-+    return r // 8, g * 8 + r % 8
-+
-+
-+def sent_sum(own, col, t, s, width, tp, rearm=True):
-+    """The ``tp`` ranks' words of (col pair, t) in sentinel region ``own``,
-+    summed in fp32 in rank order (as ``ops.sum_partials``)."""
-+    ws = poll_sent(
-+        own, [sent_ix(src, col, t, s, width) for src in range(tp)], rearm=rearm
-+    )
-+    acc0, acc1 = bf2_f32(ws[0])
-+    for src in range_constexpr(1, tp):
-+        lo, hi = bf2_f32(ws[src])
-+        acc0 = acc0 + lo
-+        acc1 = acc1 + hi
-+    return acc0, acc1
+# Applies to /sgl-workspace/sgl-amd-mono at the image's commit a04ceab159d9 (lmsysorg/sglang-rocm 20261117). It is
+# the source-only diff a04ceab..afbb25a of sgl_amd_mono/qwen38_flash_next/ (README dropped) and of the two shared
+# modules it needs, sgl_amd_mono/common/ops.py and sgl_amd_mono/common/sync.py (a04ceab already has afbb25a's
+# versions of both, so they have no hunks); other models, tests and the registration of other specs are left out.
+# The package is an editable install, so the patched sources are the ones imported.
 diff --git a/sgl_amd_mono/qwen38_flash_next/check.py b/sgl_amd_mono/qwen38_flash_next/check.py
 index 425144b..4488265 100644
 --- a/sgl_amd_mono/qwen38_flash_next/check.py
@@ -589,7 +239,7 @@ index 425144b..4488265 100644
                  len(table),
                  len(CHECKED_EXPERTS),
 diff --git a/sgl_amd_mono/qwen38_flash_next/draft.py b/sgl_amd_mono/qwen38_flash_next/draft.py
-index 51d0e81..d5c20b4 100644
+index 06f2783..d5c20b4 100644
 --- a/sgl_amd_mono/qwen38_flash_next/draft.py
 +++ b/sgl_amd_mono/qwen38_flash_next/draft.py
 @@ -33,14 +33,28 @@ weights are SGLang's, read in place, except the copies logged at startup: the
@@ -621,7 +271,7 @@ index 51d0e81..d5c20b4 100644
  try:
      from sglang.kernels.plugin_kernels.amd.spec import (
          DeviceLimits,
-@@ -82,11 +96,26 @@ SGLANG_READS = {
+@@ -82,11 +96,23 @@ SGLANG_READS = {
          "forward(input_embeds)",
      ),
      "srt/models/qwen3_5.py": ("layers", "embed_tokens", "rotary_emb"),
@@ -642,13 +292,10 @@ index 51d0e81..d5c20b4 100644
 +        "_compute_lm_head",
 +        "_copy_logits_to_buffer",
 +        "next_token_logits_buffer",
-+    ),
-+    # ForwardMode and CaptureHiddenMode, in forward_batch_info.py before forward_mode.py
-+    "srt/model_executor/forward_mode.py|srt/model_executor/forward_batch_info.py": (
-         "is_draft_extend_v2",
-         "is_decode",
      ),
-@@ -103,9 +132,21 @@ SGLANG_READS = {
+     # ForwardMode and CaptureHiddenMode, in forward_batch_info.py before forward_mode.py
+     "srt/model_executor/forward_mode.py|srt/model_executor/forward_batch_info.py": (
+@@ -106,9 +132,21 @@ SGLANG_READS = {
      ),
      "srt/speculative/draft_utils.py": ('"qsa"',),
      "srt/speculative/*.py": ("hidden_states",),
@@ -671,7 +318,7 @@ index 51d0e81..d5c20b4 100644
  # The draft runs on its own QSA backends whatever --speculative-draft-attention-backend
  # says (speculative/draft_utils.py stamps them "qsa"); the launch writes their caches.
  DRAFT_ATTENTION_BACKENDS = frozenset({"qsa"})
-@@ -122,9 +163,11 @@ def _model_disable_reasons(model, hf_config, copies: dict) -> list[str]:
+@@ -125,9 +163,11 @@ def _model_disable_reasons(model, hf_config, copies: dict) -> list[str]:
      from sgl_amd_mono.qwen38_flash_next.gfx950 import weights
  
      reasons = []
@@ -686,7 +333,7 @@ index 51d0e81..d5c20b4 100644
  
  
  def _step_backend() -> Optional[str]:
-@@ -161,6 +204,107 @@ def _turn_off_mtp_index_share(hf_config) -> None:
+@@ -164,6 +204,107 @@ def _turn_off_mtp_index_share(hf_config) -> None:
      )
  
  
@@ -794,7 +441,7 @@ index 51d0e81..d5c20b4 100644
  class _Draft:
      """The draft's launch and its forward."""
  
-@@ -168,6 +312,24 @@ class _Draft:
+@@ -171,6 +312,24 @@ class _Draft:
          self.lm, self.runner = lm, runner
          self.seen: set = set()
          self.backend_checked: set = set()
@@ -819,7 +466,7 @@ index 51d0e81..d5c20b4 100644
  
      def takes(self, forward_batch, input_embeds=None) -> bool:
          """Whether the launch runs this step: static properties of the step only
-@@ -183,12 +345,13 @@ class _Draft:
+@@ -186,12 +345,13 @@ class _Draft:
  
          r, fb = self.runner, forward_batch
          hidden = None if fb.spec_info is None else fb.spec_info.hidden_states
@@ -836,7 +483,7 @@ index 51d0e81..d5c20b4 100644
          if input_embeds is not None:
              what = "input embeddings"
          elif hidden is None:
-@@ -236,7 +399,11 @@ class _Draft:
+@@ -239,7 +399,11 @@ class _Draft:
              self.seen.add(key)
              logger.info("monokernel qwen38_flash_next MTP draft runs %s", key)
          x, hc = self.runner.launch(fb, fb.spec_info.hidden_states)
@@ -849,7 +496,7 @@ index 51d0e81..d5c20b4 100644
          lm._set_hc_logits_hidden_states(out, hc, fb)
          return out
  
-@@ -274,6 +441,24 @@ def _route_draft_steps(model, draft: _Draft) -> None:
+@@ -277,6 +441,24 @@ def _route_draft_steps(model, draft: _Draft) -> None:
      model.forward = forward
  
  
@@ -874,7 +521,7 @@ index 51d0e81..d5c20b4 100644
  def _build(model, hf_config, ctx) -> _Draft:
      import torch
  
-@@ -281,8 +466,9 @@ def _build(model, hf_config, ctx) -> _Draft:
+@@ -284,8 +466,9 @@ def _build(model, hf_config, ctx) -> _Draft:
      from sgl_amd_mono.qwen38_flash_next.gfx950.runner import DraftRunner
  
      _turn_off_mtp_index_share(hf_config)
@@ -885,7 +532,7 @@ index 51d0e81..d5c20b4 100644
      layer = model.model.layers[0]
      rope = layer.rotary_emb
      runner = DraftRunner(
-@@ -297,10 +483,15 @@ def _build(model, hf_config, ctx) -> _Draft:
+@@ -300,10 +483,15 @@ def _build(model, hf_config, ctx) -> _Draft:
          # SGLANG_AMD_MONO_FAULT_INJECT stalls the target's launches only, so the
          # fault-injection test knows which launch stopped
          fault=None,
@@ -901,7 +548,7 @@ index 51d0e81..d5c20b4 100644
      logger.info(
          "monokernel qwen38_flash_next MTP draft: draft extend steps of up to %d x %d "
          "rows and draft decode steps of up to %d x 1 are routed by the spec's "
-@@ -318,7 +509,7 @@ SPEC = MonoSpec(
+@@ -321,7 +509,7 @@ SPEC = MonoSpec(
      devices={
          "gfx950": DeviceLimits(
              widths=tuple(range(1, target.MAX_R * target.TOKENS + 1)),
@@ -6279,7 +5926,7 @@ index bc7ce91..284b8b1 100644
      def s_un(s):
          # e8m0_shuffle inverse: [a, d, f, c, e, b] -> [32 a + 16 b + c, 8 d + 4 e + f]
 diff --git a/sgl_amd_mono/qwen38_flash_next/gfx950/runner.py b/sgl_amd_mono/qwen38_flash_next/gfx950/runner.py
-index c1214fb..ca01333 100644
+index ba135cf..ca01333 100644
 --- a/sgl_amd_mono/qwen38_flash_next/gfx950/runner.py
 +++ b/sgl_amd_mono/qwen38_flash_next/gfx950/runner.py
 @@ -35,7 +35,7 @@ from sgl_amd_mono.common import guard
@@ -6291,28 +5938,7 @@ index c1214fb..ca01333 100644
  
  # The SGLang names this module reads, by file under the sglang package (``f(p)``: a
  # parameter, ``"x"``: a string literal); test/unit/test_contract.py pins them.
-@@ -73,8 +73,6 @@ SGLANG_READS = {
-     ),
-     "srt/model_executor/forward_batch_info.py": (
-         "forward_mode",
--        "is_draft_extend_v2",
--        "is_decode",
-         "batch_size",
-         "input_ids",
-         "positions",
-@@ -82,6 +80,11 @@ SGLANG_READS = {
-         "req_pool_indices",
-         "seq_lens",
-     ),
-+    # ForwardMode and CaptureHiddenMode, in forward_batch_info.py before forward_mode.py
-+    "srt/model_executor/forward_mode.py|srt/model_executor/forward_batch_info.py": (
-+        "is_draft_extend_v2",
-+        "is_decode",
-+    ),
- }
- 
- # eager steps' tables kept besides the captured ones (eager steps of new tensors
-@@ -141,9 +144,30 @@ PLE_LAUNCH = 1  # the launch whose first layer (1) carries the PLE
+@@ -144,9 +144,30 @@ PLE_LAUNCH = 1  # the launch whose first layer (1) carries the PLE
  class _Base:
      """The buffers both runners share: scratch mailboxes, the epoch, the tables."""
  
@@ -6344,7 +5970,7 @@ index c1214fb..ca01333 100644
          self.eos_token_id = int(eos_token_id)
          self.fault_site, self.fault_after = fault or (0, 0)
          self.epoch = torch.zeros(guard.GUARD_WORDS, dtype=torch.int32, device=device)
-@@ -154,6 +178,102 @@ class _Base:
+@@ -157,6 +178,102 @@ class _Base:
          # when the table grows, and a graph still reads the old one
          self._held: dict = {}
  
@@ -6447,7 +6073,7 @@ index c1214fb..ca01333 100644
      def set_deadline(self, seconds: float) -> None:
          """Every wait's deadline (below the server's watchdog timeout)."""
          ticks = guard.deadline_ticks(seconds)
-@@ -170,6 +290,12 @@ class _Base:
+@@ -173,6 +290,12 @@ class _Base:
              from .kernel import build_qwen38_flash_next_kernel
  
              launch = self._kernels[key] = build_qwen38_flash_next_kernel(key)
@@ -6460,7 +6086,7 @@ index c1214fb..ca01333 100644
          return launch
  
      def _cached(self, key):
-@@ -199,6 +325,7 @@ class _Base:
+@@ -202,6 +325,7 @@ class _Base:
              eos_token_id=self.eos_token_id,
              fault_site=self.fault_site,
              fault_after=self.fault_after,
@@ -6468,7 +6094,7 @@ index c1214fb..ca01333 100644
              **kw,
          )
  
-@@ -246,8 +373,9 @@ def ring_width(kvp) -> int:
+@@ -249,8 +373,9 @@ def ring_width(kvp) -> int:
      return kvp.qsa_rope_position_buffer.shape[0] // kvp.qsa_num_request_slots
  
  
@@ -6479,7 +6105,7 @@ index c1214fb..ca01333 100644
      reasons = []
      # 4 slots (one group): a verify row past the pending group overwrites one of its
      # members, and a rejected row's key stays there, so the group can later compress
-@@ -256,10 +384,10 @@ def qsa_cache_reasons(kvp, layer_id: int) -> list[str]:
+@@ -259,10 +384,10 @@ def qsa_cache_reasons(kvp, layer_id: int) -> list[str]:
      if ring_width(kvp) not in (4, 8):
          reasons.append(f"an index-key ring of {ring_width(kvp)} slots a request")
      for name, b in (("K", k_buf), ("V", v_buf)):  # 64-bit addressed (any pool size)
@@ -6492,7 +6118,7 @@ index c1214fb..ca01333 100644
              )
      for name, b in (("index-key ring", ring), ("compressed index keys", comp)):
          if not b.is_contiguous() or b.numel() * b.element_size() >= 2**32:
-@@ -288,21 +416,30 @@ class VerifyRunner(_Base):
+@@ -291,21 +416,30 @@ class VerifyRunner(_Base):
          eos_token_id: int,
          device,
          fault=None,
@@ -6526,7 +6152,7 @@ index c1214fb..ca01333 100644
          bf16 = dict(dtype=torch.bfloat16, device=device)
          self.h_bufs = [torch.empty(S, HC_DIM, **bf16) for _ in range(2)]
          self.ssq_bufs = [
-@@ -360,7 +497,9 @@ class VerifyRunner(_Base):
+@@ -363,7 +497,9 @@ class VerifyRunner(_Base):
          if reasons:
              raise ValueError("Qwen3.8-Flash-Next monokernel: " + "; ".join(reasons))
          tables, meta = self._tables_for(fb, pos, rtp, kvp, cos, R)
@@ -6537,7 +6163,7 @@ index c1214fb..ca01333 100644
  
      def cache_reasons(self, rtp, kvp, R: int) -> list[str]:
          """What the kernel assumes of SGLang's caches for a verify of R requests:
-@@ -389,7 +528,7 @@ class VerifyRunner(_Base):
+@@ -392,7 +528,7 @@ class VerifyRunner(_Base):
          ssm_dtypes = set()
          for layer_id, kind in enumerate(self.kinds):
              if kind == "qsa":
@@ -6546,7 +6172,7 @@ index c1214fb..ca01333 100644
                  continue
              cache = gdn_cache(kvp, layer_id)
              conv, ssm = cache.conv[0], cache.temporal
-@@ -397,22 +536,22 @@ class VerifyRunner(_Base):
+@@ -400,22 +536,22 @@ class VerifyRunner(_Base):
              if (
                  conv.dtype != torch.bfloat16
                  or not conv.is_contiguous()
@@ -6573,7 +6199,7 @@ index c1214fb..ca01333 100644
                  )
              issm = cache.intermediate_ssm
              icw = cache.intermediate_conv_window
-@@ -488,6 +627,7 @@ class VerifyRunner(_Base):
+@@ -491,6 +627,7 @@ class VerifyRunner(_Base):
              g[LY.G_NGRAM_CTX] = ngram_ctx.data_ptr()
              g[LY.G_NGRAM_META] = self.ngram["meta"].data_ptr()
              g[LY.G_NGRAM_ICTX] = ngram_ictx[0].data_ptr()
@@ -6581,7 +6207,7 @@ index c1214fb..ca01333 100644
              # launch i's streams: h_bufs[(i - 1) % 2] -> h_bufs[i % 2], with their
              # sum-of-squares partials
              g[LY.G_HIN_SSQ] = self.ssq_bufs[(launch - 1) % 2].data_ptr()
-@@ -501,13 +641,23 @@ class VerifyRunner(_Base):
+@@ -504,13 +641,23 @@ class VerifyRunner(_Base):
          frow[LY.P_HCA_UP] = self.final["up"].data_ptr()
          frow[LY.P_HCA_INJ] = last["hca"]["inj"].data_ptr()  # its combine gate is unused
          iconv = issm_row = ple_ist_row = ssm_bf16 = None
@@ -6606,7 +6232,7 @@ index c1214fb..ca01333 100644
                      continue
                  cache = gdn_cache(kvp, layer_id)
                  conv, ssm = cache.conv[0], cache.temporal
-@@ -556,6 +706,7 @@ class VerifyRunner(_Base):
+@@ -559,6 +706,7 @@ class VerifyRunner(_Base):
          S = int(fb.batch_size) * self.L
          if S > MAX_T:
              raise ValueError(f"Qwen3.8-Flash-Next monokernel: {S} rows past {MAX_T}")
@@ -6614,7 +6240,7 @@ index c1214fb..ca01333 100644
          tables, keys = self.prepare_step(fb, pos)
          stream = torch.cuda.current_stream()
          h = self.h_bufs[1]  # unused by the prelude launch, which embeds the tokens
-@@ -568,6 +719,7 @@ class VerifyRunner(_Base):
+@@ -571,6 +719,7 @@ class VerifyRunner(_Base):
                  self.scratch.data_ptr(),
                  self.epoch.data_ptr(),
                  i,
@@ -6622,7 +6248,7 @@ index c1214fb..ca01333 100644
                  stream=stream,
              )
              h = out
-@@ -592,18 +744,26 @@ class DraftRunner(_Base):
+@@ -595,18 +744,26 @@ class DraftRunner(_Base):
          eos_token_id: int,
          device,
          fault=None,
@@ -6652,7 +6278,7 @@ index c1214fb..ca01333 100644
          bf16 = dict(dtype=torch.bfloat16, device=device)
          self.x_buf = torch.empty(S, HIDDEN, **bf16)
          # draft step i + 1 reads step i's output: a step writes the buffer its
-@@ -645,7 +805,7 @@ class DraftRunner(_Base):
+@@ -648,7 +805,7 @@ class DraftRunner(_Base):
          no_capture("building the pointer tables")
          self._hold(cos)
          reasons = _step_reasons(fb, fb.positions, R, S // R)
@@ -6661,7 +6287,7 @@ index c1214fb..ca01333 100644
          if reasons:
              raise ValueError("Qwen3.8-Flash-Next monokernel: " + "; ".join(reasons))
          g = packing.global_ptr_row(
-@@ -660,10 +820,13 @@ class DraftRunner(_Base):
+@@ -663,10 +820,13 @@ class DraftRunner(_Base):
          )
          g[LY.G_INPUT_IDS] = self.ids_buf.data_ptr()
          g[LY.G_EMBED_W] = self.embed_w.data_ptr()
@@ -6676,7 +6302,7 @@ index c1214fb..ca01333 100644
          pos = fb.positions
          build = self._build_key(
              plan="qsa",
-@@ -675,11 +838,14 @@ class DraftRunner(_Base):
+@@ -678,11 +838,14 @@ class DraftRunner(_Base):
              first_src="mtp",
              ring=ring_width(kvp),
          )
@@ -6691,7 +6317,7 @@ index c1214fb..ca01333 100644
          S = int(fb.input_ids.numel())
          if not any(_overlaps(b, hidden_states) for b in self.hc_bufs):
              self.hin_buf[:S].copy_(hidden_states)
-@@ -694,6 +860,7 @@ class DraftRunner(_Base):
+@@ -697,6 +860,7 @@ class DraftRunner(_Base):
              self.scratch.data_ptr(),
              self.epoch.data_ptr(),
              0,

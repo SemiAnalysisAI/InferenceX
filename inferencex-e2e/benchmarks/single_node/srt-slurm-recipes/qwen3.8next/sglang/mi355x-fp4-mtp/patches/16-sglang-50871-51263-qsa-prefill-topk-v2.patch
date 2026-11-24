@@ -3,17 +3,24 @@
 # on gfx95, no switch)
 # https://github.com/sgl-project/sglang/pull/51263  (PR head 68b2d4fcf3: one pipeline stage for relative prefill
 # scoring on gfx95, no switch)
-# Generated against the image's SGLang checkout (1ced9a9eb0) with patches 01-15 applied; source files only (tests dropped).
+# Generated against the 20261117 image's SGLang checkout (c67db7c762) with patches 01-07, 09, 11 and 13-15 applied;
+# source files only (tests dropped).
 # Differs from the PRs: both behind the opt-in SGLANG_AMD_QSA_PREFILL_TOPK_V2=1 (fast_topk on scaled scores and three
 # stages unless set); in batch-invariant mode the selection keeps fast_topk, where sgl-project/sglang#50871 runs
 # topk_v2 in its deterministic mode.
+# Port from the 20261102 image (SGLang 1ced9a9eb0): is_gfx95_supported is imported from sglang.srt.utils next to
+# sglang#37570's is_npu (sglang.srt.utils.common no longer has it, sglang#48781); the get_is_capture_mode import kept as
+# context is gone (sglang#48271). Batch-invariant mode still keeps fast_topk: the base's topk_v2 now has a
+# deterministic mode (sglang#47960), but it is exact, so it selects other blocks than fast_topk (which that mode runs on
+# ROCm) where fast_topk drops members of an overfull bin. The exact selection relies on the base's default
+# SGLANG_TOPK_V2_MODE=1.
 # Apply in /sgl-workspace/sglang with git apply.
 
 diff --git a/python/sglang/srt/layers/attention/qsa/mqa.py b/python/sglang/srt/layers/attention/qsa/mqa.py
-index 393b3dc..74612f0 100644
+index 7e47e11fe0..3462f04f53 100644
 --- a/python/sglang/srt/layers/attention/qsa/mqa.py
 +++ b/python/sglang/srt/layers/attention/qsa/mqa.py
-@@ -596,6 +596,30 @@ def _prefill_key_splits(row_blocks: int, width: int, block_n: int, device) -> in
+@@ -598,6 +598,30 @@ def _prefill_key_splits(row_blocks: int, width: int, block_n: int, device) -> in
      return _PREFILL_KEY_SPLIT_LEVELS[-1]
  
  
@@ -44,7 +51,7 @@ index 393b3dc..74612f0 100644
  def torch_qsa_mqa_prefill_relative(
      q: torch.Tensor,
      k: torch.Tensor,
-@@ -631,7 +655,9 @@ def tilelang_qsa_mqa_prefill_relative(
+@@ -633,7 +657,9 @@ def tilelang_qsa_mqa_prefill_relative(
      ``[r, row_starts[r]:row_ends[r]]``. Columns past a row's length are left
      undefined: callers must read only each row's own section (the fast top-k
      reads ``[start, start + length)``). ``width`` must cover the longest row
@@ -55,7 +62,7 @@ index 393b3dc..74612f0 100644
  
      if not HAS_TILELANG:
          raise RuntimeError("TileLang is unavailable")
-@@ -663,6 +689,7 @@ def tilelang_qsa_mqa_prefill_relative(
+@@ -665,6 +691,7 @@ def tilelang_qsa_mqa_prefill_relative(
          head_dim=head_dim,
          block_n=block_n,
          block_q=block_q,
@@ -63,7 +70,7 @@ index 393b3dc..74612f0 100644
          key_splits=_prefill_key_splits(
              padded_rows // block_q, width, block_n, q.device
          ),
-@@ -675,7 +702,9 @@ def tilelang_qsa_mqa_prefill_relative(
+@@ -677,7 +704,9 @@ def tilelang_qsa_mqa_prefill_relative(
          ends,
      )
      logits = logits[:rows]
@@ -75,7 +82,7 @@ index 393b3dc..74612f0 100644
  
  
 diff --git a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
-index 67cb861..9115fda 100644
+index ac50099376..1022d03a5a 100644
 --- a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
 +++ b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
 @@ -20,6 +20,7 @@ from sglang.srt.layers.attention.qsa.metadata import (
@@ -86,15 +93,16 @@ index 67cb861..9115fda 100644
      qsa_mqa_decode,
      qsa_mqa_prefill,
      qsa_mqa_prefill_relative,
-@@ -36,6 +37,7 @@ from sglang.srt.layers.linear import ReplicatedLinear
+@@ -35,7 +36,7 @@ from sglang.srt.layers.layernorm import GemmaRMSNorm
+ from sglang.srt.layers.linear import ReplicatedLinear
  from sglang.srt.layers.rotary_embedding.utils import apply_rotary_emb
  from sglang.srt.layers.utils.multi_platform import MultiPlatformOp
- from sglang.srt.model_executor.runner import get_is_capture_mode
-+from sglang.srt.utils.common import is_gfx95_supported
+-from sglang.srt.utils import is_npu
++from sglang.srt.utils import is_gfx95_supported, is_npu
  
- # Cap on the fp32 [query_rows, compressed_keys] prefill logits workspace;
- # top-k is per row, so tiling rows does not change the selection.
-@@ -52,6 +54,27 @@ def _qsa_prefill_row_chunk_size(rows: int, keys: int, heads: int) -> int:
+ _is_npu = is_npu()
+ 
+@@ -54,6 +55,27 @@ def _qsa_prefill_row_chunk_size(rows: int, keys: int, heads: int) -> int:
      return min(rows, max_padded_rows)
  
  
@@ -122,7 +130,7 @@ index 67cb861..9115fda 100644
  class QSAIndexer(MultiPlatformOp):
      """Config-driven fused-QK, weight-free sparse-attention indexer."""
  
-@@ -94,6 +117,9 @@ class QSAIndexer(MultiPlatformOp):
+@@ -96,6 +118,9 @@ class QSAIndexer(MultiPlatformOp):
              self.index_head_dim, eps=getattr(config, "rms_norm_eps", 1e-6)
          )
          self._rope_axis_map_cache = None
@@ -132,16 +140,18 @@ index 67cb861..9115fda 100644
  
      @staticmethod
      def _validate_config(config) -> None:
-@@ -480,9 +506,25 @@ class QSAIndexer(MultiPlatformOp):
-         relative = (
-             max_row_keys is not None and max_row_keys > 0 and q.is_cuda and HAS_TILELANG
+@@ -468,9 +493,27 @@ class QSAIndexer(MultiPlatformOp):
+             and q.is_cuda
+             and HAS_TILELANG
          )
 +        # AMD (SGLANG_AMD_QSA_PREFILL_TOPK_V2, sgl-project/sglang#50871): on gfx95 the
 +        # blocks come from topk_v2, which is exact where fast_topk drops members of an
 +        # overfull threshold bin (as in sgl-project/sglang#36807). It only reads the order
 +        # of the scores, so they stay unscaled, and it needs the logits row stride to be a
-+        # multiple of _TOPK_V2_ROW_ALIGNMENT. This image's topk_v2 has no deterministic
-+        # build, so batch-invariant mode keeps fast_topk.
++        # multiple of _TOPK_V2_ROW_ALIGNMENT. Batch-invariant mode keeps fast_topk: on
++        # ROCm that mode selects with fast_topk too, and topk_v2's deterministic mode
++        # (sgl-project/sglang#47960) is exact, so it would select other blocks where
++        # fast_topk drops members of an overfull bin.
 +        use_topk_v2 = (
 +            relative
 +            and getattr(self, "amd_prefill_topk_v2", False)
@@ -159,7 +169,7 @@ index 67cb861..9115fda 100644
              q.shape[1],
          )
          for row_start in range(0, rows, row_chunk_size):
-@@ -504,14 +546,20 @@ class QSAIndexer(MultiPlatformOp):
+@@ -492,14 +535,20 @@ class QSAIndexer(MultiPlatformOp):
                      compressed_keys,
                      chunk_starts,
                      row_ends[chunk_slice],

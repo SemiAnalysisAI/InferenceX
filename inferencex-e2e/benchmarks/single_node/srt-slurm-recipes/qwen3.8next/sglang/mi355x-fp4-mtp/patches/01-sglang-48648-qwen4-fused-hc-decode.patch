@@ -1,6 +1,6 @@
 # [Perf] [AMD] Qwen4-Exp HC: fuse decode-sized hyper-connection norm and inject into FlyDSL mix
 # https://github.com/sgl-project/sglang/pull/48648  (PR head f6f9c1c41678ec6087a58cf51145b8041460364b)
-# Generated against the SGLang checkout of the image (1ced9a9eb0); source files only (tests, benchmarks, AOT registry and docs dropped).
+# Generated against the SGLang checkout of the image (c67db7c762, 2026-11-17); source files only (tests, benchmarks, AOT registry and docs dropped); rebased from the 1ced9a9eb0 version.
 
 diff --git a/python/sglang/kernels/ops/gemm/hc_fused_flydsl.py b/python/sglang/kernels/ops/gemm/hc_fused_flydsl.py
 new file mode 100644
@@ -558,10 +558,10 @@ index 0000000000..0d47a1d2b8
 +    )
 +    return out, ss
 diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
-index 24eb383d96..f09344c04a 100644
+index 7eba71d046..e5dfe15f8c 100644
 --- a/python/sglang/srt/environ.py
 +++ b/python/sglang/srt/environ.py
-@@ -1018,6 +1018,9 @@ class Envs:
+@@ -1089,6 +1089,9 @@ class Envs:
      SGLANG_AITER_INTREE_GEMM_TUNE = EnvBool(True)
      # TODO(aiter#6030): remove once ROCm/aiter#6030 is in the aiter pin
      SGLANG_AITER_INTREE_MHC_TILE_M16 = EnvBool(True)
@@ -572,10 +572,10 @@ index 24eb383d96..f09344c04a 100644
      # insertion. Requires an AITER build with the fp8_e4m3_unit cache contract.
      # Enabled by default for supported configurations; set to 0 to disable.
 diff --git a/python/sglang/srt/layers/hyperconnection.py b/python/sglang/srt/layers/hyperconnection.py
-index 13100b34e9..c0448ccac9 100644
+index 7be2c1a8fc..cb21322e34 100644
 --- a/python/sglang/srt/layers/hyperconnection.py
 +++ b/python/sglang/srt/layers/hyperconnection.py
-@@ -7,11 +7,17 @@ import torch.nn as nn
+@@ -7,15 +7,21 @@ import torch.nn as nn
  import torch.nn.functional as F
  
  from sglang.kernels.ops.gemm.hc_mix import fused_hc_mix, fused_hc_mix_supported
@@ -585,15 +585,19 @@ index 13100b34e9..c0448ccac9 100644
      flydsl_hc_mix_weights_supported,
      weight_cache_key,
  )
-+from sglang.srt.utils.common import is_gfx95_supported
-+
+ from sglang.srt.utils import is_npu
++from sglang.srt.utils.device import is_gfx95_supported
+ 
+ _is_npu = is_npu()
+ 
 +# (output, partial sums of squares) of the last fused HC combine; a fused mix reuses
 +# them only for that same tensor object, otherwise its down kernel recomputes them.
 +_last_fused_combine: Optional[tuple[torch.Tensor, torch.Tensor]] = None
- 
++
  
  @lru_cache(None)
-@@ -173,6 +179,17 @@ class GatedResidual(HyperConnectionBase):
+ def _hc_gate_stream(device: int) -> torch.cuda.Stream:
+@@ -183,6 +189,17 @@ class GatedResidual(HyperConnectionBase):
              self._mix_flydsl_ok = None
              self._mix_flydsl_weights = None
              self._mix_flydsl_weight_key = None
@@ -611,7 +615,7 @@ index 13100b34e9..c0448ccac9 100644
  
          self._gate_stream = None
          if use_combine:
-@@ -251,6 +268,43 @@ class GatedResidual(HyperConnectionBase):
+@@ -267,6 +284,43 @@ class GatedResidual(HyperConnectionBase):
              )
          return self._mix_flydsl_ok
  
@@ -655,7 +659,7 @@ index 13100b34e9..c0448ccac9 100644
      def mix(
          self,
          hyper_input: torch.Tensor,
-@@ -262,6 +316,10 @@ class GatedResidual(HyperConnectionBase):
+@@ -278,6 +332,10 @@ class GatedResidual(HyperConnectionBase):
                  (*hyper_input.shape[:-1], self.hidden_size), dtype=self.params_dtype
              )
              return mixed_input, (hyper_input, hyper_input, None)
@@ -666,7 +670,7 @@ index 13100b34e9..c0448ccac9 100644
  
          if normalized_input is not None:
              assert self.config.hc_per_branch_norm
-@@ -357,6 +415,8 @@ class GatedResidual(HyperConnectionBase):
+@@ -383,6 +441,8 @@ class GatedResidual(HyperConnectionBase):
          Callers must only pass the norm when no PLE or other update intervenes.
          """
          hyper_input, _, partials = residuals
@@ -675,7 +679,7 @@ index 13100b34e9..c0448ccac9 100644
          if (
              partials is not None
              and next_norm is not None
-@@ -386,6 +446,15 @@ class GatedResidual(HyperConnectionBase):
+@@ -412,6 +472,15 @@ class GatedResidual(HyperConnectionBase):
          residuals: tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
      ) -> torch.Tensor:
          hyper_input, hyper_input_normed, partials = residuals

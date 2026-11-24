@@ -1,12 +1,12 @@
 # [Perf] [AMD] qsa: Faster decode MQA logits on ROCm (padded Q, group-strided launch)
 # https://github.com/sgl-project/sglang/pull/48649  (PR head 182172f6555504ac6894af5c8ab136e22fa13625)
-# Generated against the SGLang checkout of the image (1ced9a9eb0); source files only (tests, benchmarks, AOT registry and docs dropped).
+# Generated against the SGLang checkout of the image (c67db7c762, 2026-11-17); source files only (tests, benchmarks, AOT registry and docs dropped); rebased from the 1ced9a9eb0 version.
 
 diff --git a/python/sglang/srt/layers/attention/qsa/mqa.py b/python/sglang/srt/layers/attention/qsa/mqa.py
-index 101f9ba37f..b6280ac155 100644
+index 7c219fa9ce..2109506010 100644
 --- a/python/sglang/srt/layers/attention/qsa/mqa.py
 +++ b/python/sglang/srt/layers/attention/qsa/mqa.py
-@@ -311,6 +311,7 @@ if HAS_TILELANG:
+@@ -313,6 +313,7 @@ if HAS_TILELANG:
          min_scored_len: int = 0,
          threads: int = 128,
          dtype: str = "bfloat16",
@@ -14,7 +14,7 @@ index 101f9ba37f..b6280ac155 100644
      ):
          # The MMA layout needs 64 GEMM rows; a compressed page has full_page // ratio,
          # so pages are packed as sub-pages of one 64-row tile.
-@@ -333,7 +334,15 @@ if HAS_TILELANG:
+@@ -335,7 +336,15 @@ if HAS_TILELANG:
          ):
              # A fixed number of CTAs per row strides over that row's groups, so the
              # grid no longer scales with the page-table width (the max context).
@@ -31,7 +31,7 @@ index 101f9ba37f..b6280ac155 100644
                  q_shared = T.alloc_shared([heads, head_dim], dtype)
                  k_shared = T.alloc_shared([GROUP, head_dim], dtype)
                  scores = T.alloc_fragment([GROUP, heads], T.float32)
-@@ -344,10 +353,18 @@ if HAS_TILELANG:
+@@ -346,10 +355,18 @@ if HAS_TILELANG:
  
                  # Rows at or below min_scored_len select every block, so their
                  # scores are never read.
@@ -53,7 +53,7 @@ index 101f9ba37f..b6280ac155 100644
                          if group < num_groups:
                              # TileLang's pipeliner rejects dynamic loops around smem
                              # copies; unroll the sub-pages at the Python level.
-@@ -539,6 +556,14 @@ def tilelang_qsa_mqa_prefill_relative(
+@@ -541,6 +558,14 @@ def tilelang_qsa_mqa_prefill_relative(
  # CTAs per decode row: few enough levels to bound the TileLang specializations, and
  # a grid of about four waves (at least one CTA per row).
  _DECODE_CTAS_PER_ROW_LEVELS = (1, 16, 256)
@@ -68,7 +68,7 @@ index 101f9ba37f..b6280ac155 100644
  
  
  @functools.lru_cache(maxsize=None)
-@@ -593,10 +618,9 @@ def tilelang_qsa_mqa_decode(
+@@ -595,10 +620,9 @@ def tilelang_qsa_mqa_decode(
          )
      if not q.shape[0] or not max_model_len:
          return logits
@@ -81,7 +81,7 @@ index 101f9ba37f..b6280ac155 100644
      kernel_heads = max(
          head_alignment,
          ((query_heads + head_alignment - 1) // head_alignment) * head_alignment,
-@@ -615,9 +639,15 @@ def tilelang_qsa_mqa_decode(
+@@ -617,9 +641,15 @@ def tilelang_qsa_mqa_decode(
          heads=kernel_heads,
          head_dim=head_dim,
          page_size=page_size,
@@ -99,7 +99,7 @@ index 101f9ba37f..b6280ac155 100644
          q_kernel.unsqueeze(1).contiguous(),
          k_cache.to(scoring_dtype).contiguous(),
 diff --git a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
-index a550ff7d70..4638230313 100644
+index f9e2d499e0..79d5087104 100644
 --- a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
 +++ b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
 @@ -19,6 +19,7 @@ from sglang.srt.layers.attention.qsa.metadata import (
@@ -110,7 +110,7 @@ index a550ff7d70..4638230313 100644
      qsa_mqa_decode,
      qsa_mqa_prefill,
      qsa_mqa_prefill_relative,
-@@ -758,8 +759,9 @@ class QSAIndexer(MultiPlatformOp):
+@@ -744,8 +745,9 @@ class QSAIndexer(MultiPlatformOp):
              pool=indexer_metadata.token_to_kv_pool,
              cache_loc=state_slots,
              q_heads_padded=(

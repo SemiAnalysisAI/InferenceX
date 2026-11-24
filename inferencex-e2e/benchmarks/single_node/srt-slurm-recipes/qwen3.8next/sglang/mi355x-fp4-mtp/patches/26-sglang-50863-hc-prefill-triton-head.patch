@@ -1,0 +1,1199 @@
+# [Perf] [AMD] hyperconnection: Add a Triton prefill path for gated HC sites
+# https://github.com/sgl-project/sglang/pull/50863  (PR head 11f2ab45fc)
+# Generated against the 20261117 image's SGLang checkout (c67db7c762) with patches 01-07, 09, 11, 13-16, 21, 24 and 23
+# applied; source files only (tests, docs and the benchmark dropped).
+# Replaces patch 15 (an earlier revision of this PR, opt-in SGLANG_AMD_HC_PREFILL) by the PR head: this patch turns
+# patch 15's two files into the head's and adds the head's other source changes. Opt-in
+# SGLANG_USE_HIP_HC_PREFILL_TRITON=1 (gfx950): gated HC sites with a per-branch norm of more than 48 rows run on the raw
+# residual as Triton kernels, the down projection a split-K kernel up to 512 rows and a batched GEMM above. Patch 15's
+# variables (SGLANG_AMD_HC_PREFILL, SGLANG_AMD_HC_FUSED_MAX_M, SGLANG_AMD_HC_PREFILL_MAX_M) are no longer read.
+# Port: the PR targets main, which lacks sglang#48648 (patch 01). Here the Triton path is tried before 01's fused
+# decode-sized mix, and the fused mix leaves the Triton path's rows alone, so with the variable set the fused path
+# serves 1-48 rows and the Triton path the rest; a combine tells the two paths' residuals (neither has a normed
+# residual) apart by the row count. Unset, 01's fused path serves 1-128 rows as before.
+# Apply in /sgl-workspace/sglang with git apply.
+
+diff --git a/python/sglang/kernels/ops/gemm/__init__.py b/python/sglang/kernels/ops/gemm/__init__.py
+index 285075884d..fd6ecd5d75 100644
+--- a/python/sglang/kernels/ops/gemm/__init__.py
++++ b/python/sglang/kernels/ops/gemm/__init__.py
+@@ -510,6 +510,22 @@ register_kernel(
+         capabilities=CUDA_ONLY,
+     )
+ )
++register_kernel(
++    KernelSpec(
++        op="gemm.hc_prefill_mix",
++        backend=KernelBackend.TRITON,
++        target="sglang.kernels.ops.gemm.hc_prefill_triton:hc_prefill_mix",
++        capabilities=frozenset({CapabilityRequirement.HIP}),
++    )
++)
++register_kernel(
++    KernelSpec(
++        op="gemm.hc_prefill_combine",
++        backend=KernelBackend.TRITON,
++        target="sglang.kernels.ops.gemm.hc_prefill_triton:hc_prefill_combine",
++        capabilities=frozenset({CapabilityRequirement.HIP}),
++    )
++)
+ register_kernel(
+     KernelSpec(
+         op="gemm.w8a8_block_fp8_matmul_triton",
+diff --git a/python/sglang/kernels/ops/gemm/hc_prefill_triton.py b/python/sglang/kernels/ops/gemm/hc_prefill_triton.py
+index 808aafc026..f38fceebcf 100644
+--- a/python/sglang/kernels/ops/gemm/hc_prefill_triton.py
++++ b/python/sglang/kernels/ops/gemm/hc_prefill_triton.py
+@@ -1,34 +1,36 @@
+-"""Prefill-sized Qwen gated-residual HC site (hc_per_branch_norm) on gfx950.
+-
+-Rows above the decode fused cap otherwise take GroupedGemmaRMSNorm, the
+-torch.compile'd ``_mix_compute`` (two GEMMs and pointwise kernels) and the JIT
+-``hc_combine``, which reads the normed residual again only for its HC-wide inject
+-projection. Here the normed residual is never materialized:
+-
+-* ``hcp_mix``: the down and inject projections run on hipBLASLt as one batched GEMM
+-  over the HC branches of the raw residual ``h``, against weights with the Gemma
+-  norm's ``(1 + w)`` folded in (``HcpWeights``). A finish kernel scales each branch's
+-  partial by that branch's ``rstd``, applies SiLU(. / HC) and returns the inject
+-  logits. The up kernel rebuilds the gate operand as ``h * rstd_b * (1 + w)`` and
+-  runs the up projection, the sigmoid and the branch mean.
+-* ``hcp_combine``: elementwise ``h + y * 2 sigmoid(g / HC)`` from the inject logits,
+-  the form of ``hc_fused_flydsl.hc_apply_inject``. Like it, it also returns the
+-  per-branch partial sums of squares of its output, which the next site's mix takes
+-  instead of reading ``h`` one more time; without them the mix computes them itself.
+-
+-M is a runtime argument that Triton does not specialize: after the first call per
+-config a new row count compiles nothing, and every launch is CUDA-graph capturable.
+-
+-Numerics differ from the unfused path only by rounding points: ``(1 + w)`` is
+-rounded into the BF16 down / inject weights, each branch's down partial is rounded
+-to BF16 before its rstd scaling, the normed residual is never rounded to BF16, and
+-the up projection stays FP32 up to the sigmoid.
++"""Prefill-sized gated-residual HC mix and combine (per-branch norm) for gfx950.
++
++Coverage, as tested: gfx950 (the launch configs and the 16x16 MFMA were measured there),
++BF16, HC 4, hidden size a multiple of 512, low-rank a multiple of 64 (Qwen3.8-Flash-Next:
++hidden 2560, low-rank 320), any row count. The normed residual is never materialized:
++
++* ``hc_prefill_mix``: the down and inject projections run as one batched GEMM over the
++  HC branches of the raw residual ``h``, against weights with the Gemma norm's
++  ``(1 + w)`` folded in (``fold_hc_prefill_weights``): ``torch.bmm``, or at most
++  ``_SPLIT_K_MAX_ROWS`` rows a split-K Triton kernel that cuts K into
++  ``_SPLITS_PER_BRANCH`` slices per branch. A finish kernel sums a branch's partials,
++  scales them by that branch's ``rstd``, applies SiLU(. / HC) and returns the inject
++  logits. The up kernel rebuilds the gate operand as ``h * rstd_b * (1 + w)`` and runs
++  the up projection, the sigmoid and the branch mean.
++* ``hc_prefill_combine``: ``h + y * 2 sigmoid(g / HC)`` from the inject logits.
++
++The row count is never a compile-time constant (Triton does not specialize ``M``, and
++the combine's grid carries it): a new row count compiles nothing, and every launch can
++be captured in a CUDA graph.
++
++Numerics differ from the unfused path only by rounding points: ``(1 + w)`` is rounded
++into the BF16 down and inject weights, each branch's down partial (each K slice's, on
++the split-K path) is rounded to BF16 before its ``rstd`` scaling, the normed residual
++is never rounded to BF16, and the up projection stays FP32 up to the sigmoid.
+ """
+ 
+ import torch
++import torch.nn.functional as F
+ import triton
+ import triton.language as tl
+-from triton.language.extra.hip import libdevice
++from triton.language.extra import libdevice
++
++from sglang.kernels.arch import current_arch
+ 
+ 
+ @triton.jit
+@@ -38,306 +40,522 @@ def _sigmoid(v):
+     return libdevice.fast_dividef(1.0, 1.0 + libdevice.fast_expf(-v))
+ 
+ 
++@triton.jit
++def _xcd_order(program_id, num_tiles, NUM_GROUPS: tl.constexpr, NUM_XCDS: tl.constexpr):
++    """(group, tile) of ``program_id`` in a 1-D grid of NUM_GROUPS * num_tiles programs.
++    The programs of a group share program_id % NUM_XCDS: workgroups go to the XCDs
++    round-robin, so a group stays on one XCD and its L2."""
++    tl.static_assert(
++        NUM_GROUPS % NUM_XCDS == 0, "a group count that is not a multiple of NUM_XCDS"
++    )
++    quotient = program_id // NUM_XCDS
++    group = program_id % NUM_XCDS + NUM_XCDS * (quotient // num_tiles)
++    return group, quotient % num_tiles
++
++
+ @triton.jit(do_not_specialize=["M"])
+-def _hcp_sumsq_kernel(
++def _hc_prefill_sumsq_kernel(
+     h_ptr,
+-    ss_ptr,
++    sumsq_ptr,
+     M,
+     HS: tl.constexpr,
+     HC: tl.constexpr,
+-    BM: tl.constexpr,
+-    BK: tl.constexpr,
++    BLOCK_M: tl.constexpr,
++    BLOCK_K: tl.constexpr,
+ ):
+-    """ss[M, HC, 1]: per-branch sums of squares of h[M, HC*HS].
++    """sumsq[M, HC]: per-branch sums of squares of h[M, HC * HS].
+ 
+-    Grid (cdiv(M, BM), HC)."""
++    Grid (cdiv(M, BLOCK_M), HC)."""
+     K: tl.constexpr = HC * HS
+-    b = tl.program_id(1)
+-    rows = tl.program_id(0) * BM + tl.arange(0, BM)
+-    rmask = rows < M
++    branch = tl.program_id(1)
++    rows = tl.program_id(0) * BLOCK_M + tl.arange(0, BLOCK_M)
++    row_mask = rows < M
+     rows64 = rows.to(tl.int64)
+-    acc = tl.zeros([BM, BK], tl.float32)
+-    for k0 in range(0, HS, BK):
++    acc = tl.zeros([BLOCK_M, BLOCK_K], tl.float32)
++    for k0 in range(0, HS, BLOCK_K):
+         x = tl.load(
+-            h_ptr + rows64[:, None] * K + b * HS + k0 + tl.arange(0, BK)[None, :],
+-            mask=rmask[:, None],
++            h_ptr
++            + rows64[:, None] * K
++            + branch * HS
++            + k0
++            + tl.arange(0, BLOCK_K)[None, :],
++            mask=row_mask[:, None],
+             other=0.0,
+         ).to(tl.float32)
+         acc += x * x
+-    tl.store(ss_ptr + rows64 * HC + b, tl.sum(acc, axis=1), mask=rmask)
++    tl.store(sumsq_ptr + rows64 * HC + branch, tl.sum(acc, axis=1), mask=row_mask)
++
++
++@triton.jit(do_not_specialize=["M"])
++def _hc_prefill_down_kernel(
++    hidden_ptr,
++    weight_ptr,
++    partial_ptr,
++    M,
++    K: tl.constexpr,
++    PARTIAL_COLS: tl.constexpr,
++    SPLITS: tl.constexpr,
++    NUM_XCDS: tl.constexpr,
++    BLOCK_M: tl.constexpr,
++    BLOCK_N: tl.constexpr,
++    BLOCK_K: tl.constexpr,
++):
++    """partial[s, m, n] = sum over K slice s of hidden[m, k] * weight[n, k], in BF16.
++
++    1-D grid of SPLITS * cdiv(M, BLOCK_M) * cdiv(PARTIAL_COLS, BLOCK_N) programs."""
++    tl.static_assert(K % (SPLITS * BLOCK_K) == 0, "the K slices do not tile K")
++    SLICE_K: tl.constexpr = K // SPLITS
++    NUM_COL_TILES: tl.constexpr = (PARTIAL_COLS + BLOCK_N - 1) // BLOCK_N
++    num_row_tiles = tl.cdiv(M, BLOCK_M)
++    split, tile = _xcd_order(
++        tl.program_id(0), num_row_tiles * NUM_COL_TILES, SPLITS, NUM_XCDS
++    )
++    rows = tile % num_row_tiles * BLOCK_M + tl.arange(0, BLOCK_M)
++    row_mask = rows < M
++    rows64 = rows.to(tl.int64)
++    cols = tile // num_row_tiles * BLOCK_N + tl.arange(0, BLOCK_N)
++    col_mask = cols < PARTIAL_COLS
++    acc = tl.zeros([BLOCK_M, BLOCK_N], tl.float32)
++    for k0 in range(0, SLICE_K, BLOCK_K):
++        k = split * SLICE_K + k0 + tl.arange(0, BLOCK_K)
++        hidden = tl.load(
++            hidden_ptr + rows64[:, None] * K + k[None, :],
++            mask=row_mask[:, None],
++            other=0.0,
++        )
++        weight = tl.load(
++            weight_ptr + cols[:, None] * K + k[None, :],
++            mask=col_mask[:, None],
++            other=0.0,
++        )
++        acc = tl.dot(hidden, tl.trans(weight), acc)
++    tl.store(
++        partial_ptr
++        + (split.to(tl.int64) * M + rows64)[:, None] * PARTIAL_COLS
++        + cols[None, :],
++        acc.to(tl.bfloat16),
++        mask=row_mask[:, None] & col_mask[None, :],
++    )
+ 
+ 
+ @triton.jit(do_not_specialize=["M"])
+-def _hcp_finish_kernel(
+-    p_ptr,
+-    ss_ptr,
++def _hc_prefill_finish_kernel(
++    partial_ptr,
++    sumsq_ptr,
+     t_ptr,
+-    g_ptr,
+-    s_ptr,
++    logits_ptr,
++    rstd_ptr,
+     M,
+     eps,
+     HS: tl.constexpr,
+     HC: tl.constexpr,
+-    R: tl.constexpr,
+-    NI: tl.constexpr,
+-    NP: tl.constexpr,
+-    NSS: tl.constexpr,
+-    BM: tl.constexpr,
+-    BC: tl.constexpr,
++    LOWRANK: tl.constexpr,
++    PARTIAL_COLS: tl.constexpr,
++    SPLITS_PER_BRANCH: tl.constexpr,
++    BLOCK_M: tl.constexpr,
++    BLOCK_C: tl.constexpr,
+ ):
+-    """Per-branch down / inject partials p[HC, M, NP] and partial sums of squares
+-    ss[M, HC, NSS] -> t = SiLU(sum_b rstd_b p_b / HC) [M, R] BF16, inject logits
+-    g = sum_b rstd_b p_b [M, NI] FP32 and s = rstd [M, HC] FP32.
+-    Grid (cdiv(M, BM), cdiv(R + NI, BC))."""
+-    rows = tl.program_id(0) * BM + tl.arange(0, BM)
+-    rmask = rows < M
++    """Down and inject partials partial[HC * SPLITS_PER_BRANCH, M, PARTIAL_COLS] (branch
++    b's slices start at b * SPLITS_PER_BRANCH) and sums of squares sumsq[M, HC]
++    -> t = SiLU(sum_b rstd_b partial_b / HC) [M, LOWRANK] BF16, inject logits
++    sum_b rstd_b partial_b [M, HC] FP32 and rstd [M, HC] FP32.
++
++    Grid (cdiv(M, BLOCK_M), cdiv(LOWRANK + HC, BLOCK_C))."""
++    rows = tl.program_id(0) * BLOCK_M + tl.arange(0, BLOCK_M)
++    row_mask = rows < M
+     rows64 = rows.to(tl.int64)
+-    cols = tl.program_id(1) * BC + tl.arange(0, BC)
+-    acc = tl.zeros([BM, BC], tl.float32)
+-    for b in tl.static_range(HC):
+-        ss = tl.zeros([BM], tl.float32)
+-        for i in tl.static_range(NSS):
+-            ss += tl.load(ss_ptr + (rows64 * HC + b) * NSS + i, mask=rmask, other=0.0)
+-        rstd = tl.math.rsqrt(ss / HS + eps)
+-        if tl.program_id(1) == 0:
+-            tl.store(s_ptr + rows64 * HC + b, rstd, mask=rmask)
+-        pv = tl.load(
+-            p_ptr + b * M.to(tl.int64) * NP + rows64[:, None] * NP + cols[None, :],
+-            mask=rmask[:, None] & (cols < R + NI)[None, :],
+-            other=0.0,
+-        ).to(tl.float32)
+-        acc += pv * rstd[:, None]
++    cols = tl.program_id(1) * BLOCK_C + tl.arange(0, BLOCK_C)
++    col_mask = row_mask[:, None] & (cols < LOWRANK + HC)[None, :]
++    branches = tl.arange(0, HC)
++    rstds = tl.zeros([BLOCK_M, HC], tl.float32)
++    acc = tl.zeros([BLOCK_M, BLOCK_C], tl.float32)
++    for branch in tl.static_range(HC):
++        sumsq = tl.load(sumsq_ptr + rows64 * HC + branch, mask=row_mask, other=0.0)
++        rstd = tl.math.rsqrt(sumsq / HS + eps)
++        rstds = tl.where(branches[None, :] == branch, rstd[:, None], rstds)
++        branch_sum = tl.zeros([BLOCK_M, BLOCK_C], tl.float32)
++        for split in tl.static_range(SPLITS_PER_BRANCH):
++            slice_index = branch * SPLITS_PER_BRANCH + split
++            branch_sum += tl.load(
++                partial_ptr
++                + (slice_index * M.to(tl.int64) + rows64)[:, None] * PARTIAL_COLS
++                + cols[None, :],
++                mask=col_mask,
++                other=0.0,
++            ).to(tl.float32)
++        acc += branch_sum * rstd[:, None]
++    # After the loop: a store inside it makes the compiled kernel wait for each
++    # branch's loads before it issues the next branch's.
++    if tl.program_id(1) == 0:
++        tl.store(
++            rstd_ptr + rows64[:, None] * HC + branches[None, :],
++            rstds,
++            mask=row_mask[:, None],
++        )
+     v = acc / HC
+     tl.store(
+-        t_ptr + rows64[:, None] * R + cols[None, :],
++        t_ptr + rows64[:, None] * LOWRANK + cols[None, :],
+         (v * _sigmoid(v)).to(tl.bfloat16),
+-        mask=rmask[:, None] & (cols < R)[None, :],
++        mask=row_mask[:, None] & (cols < LOWRANK)[None, :],
++    )
++    tl.store(
++        logits_ptr + rows64[:, None] * HC + (cols - LOWRANK)[None, :],
++        acc,
++        mask=row_mask[:, None] & ((cols >= LOWRANK) & (cols < LOWRANK + HC))[None, :],
+     )
+-    if NI > 0:
+-        tl.store(
+-            g_ptr + rows64[:, None] * NI + (cols - R)[None, :],
+-            acc,
+-            mask=rmask[:, None] & ((cols >= R) & (cols < R + NI))[None, :],
+-        )
+ 
+ 
+ @triton.jit(do_not_specialize=["M"])
+-def _hcp_up_kernel(
++def _hc_prefill_up_kernel(
+     t_ptr,
+-    wu_ptr,
++    up_ptr,
+     h_ptr,
+-    s_ptr,
+-    nw_ptr,
+-    o_ptr,
++    rstd_ptr,
++    norm_weight_ptr,
++    out_ptr,
+     M,
+     HS: tl.constexpr,
+     HC: tl.constexpr,
+-    R: tl.constexpr,
+-    BM: tl.constexpr,
+-    BJ: tl.constexpr,
+-    BR: tl.constexpr,
++    LOWRANK: tl.constexpr,
++    NUM_XCDS: tl.constexpr,
++    BLOCK_M: tl.constexpr,
++    BLOCK_J: tl.constexpr,
++    BLOCK_R: tl.constexpr,
+ ):
+-    """o[m, j] = mean_b sigmoid(t[m] . up[n]) * h[m, n] * s[m, b] * (1 + w[n]),
+-    n = b*HS + j.
+-
+-    Grid (cdiv(M, BM), HS // BJ). One [BM, HC*BJ] GEMM tile per CTA whose columns are
+-    the HC branches' copies of hidden units j; the rank R is the K loop in BR chunks,
+-    and the branch mean reduces the tile's HC column groups.
++    """out[m, j] = mean_b sigmoid(t[m] . up[n]) * h[m, n] * rstd[m, b] * (1 + w[n]),
++    n = b * HS + j.
++
++    Grid (cdiv(M, BLOCK_M), HS // BLOCK_J), or with NUM_XCDS > 0 one dimension of
++    cdiv(M, BLOCK_M) * (HS // BLOCK_J) programs, where the row tiles of a column block
++    share program_id % NUM_XCDS. One
++    [BLOCK_M, HC * BLOCK_J] GEMM tile per CTA whose columns are the HC branches' copies
++    of hidden units j; the low-rank dimension is the K loop in BLOCK_R chunks, and the
++    branch mean reduces the tile's HC column groups.
+     """
+     K: tl.constexpr = HC * HS
+-    NB: tl.constexpr = HC * BJ
+-    rows = tl.program_id(0) * BM + tl.arange(0, BM)
+-    rmask = rows < M
++    TILE_N: tl.constexpr = HC * BLOCK_J
++    if NUM_XCDS == 0:
++        pid_m, pid_j = tl.program_id(0), tl.program_id(1)
++    else:
++        pid_j, pid_m = _xcd_order(
++            tl.program_id(0), tl.cdiv(M, BLOCK_M), HS // BLOCK_J, NUM_XCDS
++        )
++    rows = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
++    row_mask = rows < M
+     rows64 = rows.to(tl.int64)
+-    pid_j = tl.program_id(1)
+-    c = tl.arange(0, NB)
+-    branch = c // BJ
+-    n = branch * HS + pid_j * BJ + c % BJ
+-    acc = tl.zeros([BM, NB], tl.float32)
+-    for r0 in range(0, R, BR):
+-        rr = r0 + tl.arange(0, BR)
+-        tt = tl.load(
+-            t_ptr + rows64[:, None] * R + rr[None, :], mask=rmask[:, None], other=0.0
++    c = tl.arange(0, TILE_N)
++    branch = c // BLOCK_J
++    n = branch * HS + pid_j * BLOCK_J + c % BLOCK_J
++    acc = tl.zeros([BLOCK_M, TILE_N], tl.float32)
++    for r0 in range(0, LOWRANK, BLOCK_R):
++        r = r0 + tl.arange(0, BLOCK_R)
++        t = tl.load(
++            t_ptr + rows64[:, None] * LOWRANK + r[None, :],
++            mask=row_mask[:, None],
++            other=0.0,
+         )
+-        w = tl.load(wu_ptr + n[:, None] * R + rr[None, :])
+-        acc = tl.dot(tt, tl.trans(w), acc)
+-    x = tl.load(
+-        h_ptr + rows64[:, None] * K + n[None, :], mask=rmask[:, None], other=0.0
++        w = tl.load(up_ptr + n[:, None] * LOWRANK + r[None, :])
++        acc = tl.dot(t, tl.trans(w), acc)
++    h = tl.load(
++        h_ptr + rows64[:, None] * K + n[None, :], mask=row_mask[:, None], other=0.0
+     ).to(tl.float32)
+-    sc = tl.load(
+-        s_ptr + rows64[:, None] * HC + branch[None, :], mask=rmask[:, None], other=0.0
++    rstd = tl.load(
++        rstd_ptr + rows64[:, None] * HC + branch[None, :],
++        mask=row_mask[:, None],
++        other=0.0,
+     )
+-    gw = 1.0 + tl.load(nw_ptr + n).to(tl.float32)
+-    v = _sigmoid(acc) * x * sc * gw[None, :]
+-    out = tl.sum(tl.reshape(v, [BM, HC, BJ]), axis=1) / HC
+-    j = pid_j * BJ + tl.arange(0, BJ)
++    norm_scale = 1.0 + tl.load(norm_weight_ptr + n).to(tl.float32)
++    gated = _sigmoid(acc) * h * rstd * norm_scale[None, :]
++    mixed = tl.sum(tl.reshape(gated, [BLOCK_M, HC, BLOCK_J]), axis=1) / HC
++    j = pid_j * BLOCK_J + tl.arange(0, BLOCK_J)
+     tl.store(
+-        o_ptr + rows64[:, None] * HS + j[None, :],
+-        out.to(tl.bfloat16),
+-        mask=rmask[:, None],
++        out_ptr + rows64[:, None] * HS + j[None, :],
++        mixed.to(tl.bfloat16),
++        mask=row_mask[:, None],
+     )
+ 
+ 
+-@triton.jit(do_not_specialize=["M"])
+-def _hcp_combine_kernel(
+-    r_ptr,
++@triton.jit
++def _hc_prefill_combine_kernel(
++    h_ptr,
+     y_ptr,
+-    g_ptr,
+-    o_ptr,
+-    ss_ptr,
+-    M,
++    logits_ptr,
++    out_ptr,
+     HS: tl.constexpr,
+     HC: tl.constexpr,
+-    BM: tl.constexpr,
+-    BJ: tl.constexpr,
++    BLOCK_J: tl.constexpr,
+ ):
+-    """o[m, b*HS + j] = r[m, b*HS + j] + 2 sigmoid(g[m, b] / HC) * y[m, j], and the
+-    partial sums of squares ss[M, HC, HS // BJ] of the BF16 o.
+-    Grid (cdiv(M, BM), HS // BJ); each CTA reads its y tile once for all branches."""
+-    K: tl.constexpr = HC * HS
+-    NSS: tl.constexpr = HS // BJ
+-    rows = tl.program_id(0) * BM + tl.arange(0, BM)
+-    rmask = rows < M
+-    rows64 = rows.to(tl.int64)
+-    pj = tl.program_id(1)
+-    j = pj * BJ + tl.arange(0, BJ)
+-    y = tl.load(
+-        y_ptr + rows64[:, None] * HS + j[None, :], mask=rmask[:, None], other=0.0
+-    ).to(tl.float32)
+-    for b in tl.static_range(HC):
+-        gl = tl.load(g_ptr + rows64 * HC + b, mask=rmask, other=0.0)
+-        a = 2.0 * _sigmoid(gl / HC)
+-        off = rows64[:, None] * K + b * HS + j[None, :]
+-        r = tl.load(r_ptr + off, mask=rmask[:, None], other=0.0).to(tl.float32)
+-        o = (r + a[:, None] * y).to(tl.bfloat16)
+-        tl.store(o_ptr + off, o, mask=rmask[:, None])
+-        of = o.to(tl.float32)
+-        tl.store(
+-            ss_ptr + (rows64 * HC + b) * NSS + pj, tl.sum(of * of, axis=1), mask=rmask
+-        )
+-
++    """out[m, b * HS + j] = h[m, b * HS + j] + 2 sigmoid(logits[m, b] / HC) * y[m, j].
+ 
+-# Launch configs from per-kernel sweeps on MI355X (gfx950), Qwen3.8 shapes
+-# (HC 4, HS 2560, R 320).
+-def _up_cfg(m):
+-    if m <= 1024:
+-        return dict(BM=64, BJ=32, BR=64, num_warps=4, num_stages=3)
+-    return dict(BM=128, BJ=32, BR=64, num_warps=8, num_stages=2)
+-
+-
+-_MFMA = dict(matrix_instr_nonkdim=16)
+-_FINISH = dict(BM=32, BC=64, num_warps=4)
+-_SUMSQ = dict(BM=4, BK=512, num_warps=4)
+-_COMBINE = dict(BM=4, BJ=512, num_warps=8)
+-
+-
+-class HcpWeights:
+-    """One HC site's down and inject weights with the Gemma norm's (1 + w) folded in:
+-    dn [NP, HC*HS] BF16, NP = R + NI rounded up to 16 rows.
+-
+-    Build after weight loading."""
+-
+-    def __init__(self, down, inject, norm_weight):
+-        k = down.shape[1]
+-        w1 = 1.0 + norm_weight.float()
+-        rows = [down.float() * w1]
+-        self.ni = 0
+-        if inject is not None:
+-            self.ni = inject.shape[0]
+-            rows.append(inject.float() * w1)
+-        d = torch.cat(rows)
+-        pad = -d.shape[0] % 16
+-        if pad:
+-            d = torch.cat([d, d.new_zeros(pad, k)])
+-        self.r = down.shape[0]
+-        self.np = d.shape[0]
+-        self.dn = d.to(torch.bfloat16)
+-
+-
+-def hcp_supported(h, down, up, norm_weight, inject, hc):
+-    """Whether hcp_mix and hcp_combine accept this site and residual."""
+-    r, k = down.shape
+-    if hc <= 0 or hc & (hc - 1) or k % hc:
+-        return False
++    Grid (M, HS // BLOCK_J): a program takes one row and BLOCK_J hidden units for all
++    HC branches as one [HC, BLOCK_J] tile, reads y once, and loads everything before it
++    stores."""
++    K: tl.constexpr = HC * HS
++    row = tl.program_id(0).to(tl.int64)
++    j = tl.program_id(1) * BLOCK_J + tl.arange(0, BLOCK_J)
++    branches = tl.arange(0, HC)
++    y = tl.load(y_ptr + row * HS + j).to(tl.float32)
++    logits = tl.load(logits_ptr + row * HC + branches)
++    offsets = row * K + branches[:, None] * HS + j[None, :]
++    h = tl.load(h_ptr + offsets).to(tl.float32)
++    gate = 2.0 * _sigmoid(logits / HC)
++    tl.store(out_ptr + offsets, (h + gate[:, None] * y[None, :]).to(tl.bfloat16))
++
++
++# Launch configs from per-kernel sweeps on MI355X (gfx950) at HC 4, hidden 2560 and
++# low-rank 320.
++_SUMSQ_BLOCK_M, _SUMSQ_BLOCK_K = 4, 512
++_UP_BLOCK_J, _UP_BLOCK_R = 32, 64
++_COMBINE_BLOCK_J = 512
++# Split-K path: K splits into _SPLITS_PER_BRANCH slices per branch. The support check
++# (HC 4, hidden a multiple of 512) makes the 16 slices a multiple of _NUM_XCDS, a slice
++# a multiple of _DOWN_BLOCK_K and the up grid's column blocks a multiple of _NUM_XCDS;
++# the kernels static-assert each, so a changed constant fails to compile.
++# _SPLIT_K_MAX_ROWS: the largest row count the path was measured against torch.bmm at.
++_SPLIT_K_MAX_ROWS = 512
++_SPLITS_PER_BRANCH = 4
++_NUM_XCDS = 8  # XCDs of an MI355X
++_DOWN_BLOCK_M, _DOWN_BLOCK_N, _DOWN_BLOCK_K = 64, 32, 128
++
++
++def _finish_config(split_k: bool) -> dict:
++    if split_k:
++        return dict(BLOCK_M=1, BLOCK_C=128, num_warps=2)
++    return dict(BLOCK_M=32, BLOCK_C=64, num_warps=4)
++
++
++def _up_config(rows: int) -> dict:
++    # matrix_instr_nonkdim=16 selects the 16x16 MFMA.
++    if rows <= 1024:
++        return dict(BLOCK_M=64, num_warps=4, num_stages=3, matrix_instr_nonkdim=16)
++    return dict(BLOCK_M=128, num_warps=8, num_stages=2, matrix_instr_nonkdim=16)
++
++
++def fold_hc_prefill_weights(
++    down: torch.Tensor, inject: torch.Tensor, norm_weight: torch.Tensor
++) -> torch.Tensor:
++    """The down [LOWRANK, K] and inject [HC, K] weights times the Gemma norm's
++    ``(1 + w)``, stacked and zero-padded to a multiple of 16 rows, in BF16: the
++    projections then read the raw residual. Build it after weight loading."""
++    scale = 1.0 + norm_weight.float()
++    folded = torch.cat([down.float() * scale, inject.float() * scale])
++    return F.pad(folded, (0, 0, 0, -folded.shape[0] % 16)).to(torch.bfloat16)
++
++
++def hc_prefill_weights_supported(
++    down: torch.Tensor, up: torch.Tensor, norm_weight: torch.Tensor, hc: int
++) -> bool:
++    """Architecture and weight-shape half of the check.
++
++    None of it changes after the weights are loaded, so callers evaluate it once per
++    layer. ``down`` is [LOWRANK, HC * HIDDEN], ``up`` [HC * HIDDEN, LOWRANK] and
++    ``norm_weight`` [HC * HIDDEN]; the kernels read the last two row-major.
++    """
++    hip = current_arch().hip
++    lowrank, k = down.shape
+     return (
+-        h.dtype == torch.bfloat16
+-        and h.is_cuda
+-        and h.dim() == 2
+-        and h.is_contiguous()
+-        and h.shape[1] == k
+-        and down.dtype == up.dtype == norm_weight.dtype == torch.bfloat16
++        hip is not None
++        and hip.gcn_arch == "gfx950"
++        and hc == 4
++        and (k // hc) % _SUMSQ_BLOCK_K == 0
++        and (k // hc) % _COMBINE_BLOCK_J == 0
++        and lowrank % _UP_BLOCK_R == 0
++        and up.dtype == torch.bfloat16
+         and up.is_contiguous()
+         and norm_weight.is_contiguous()
+-        and up.shape == (k, r)
+-        and norm_weight.shape == (k,)
+-        and r % 64 == 0
+-        and (k // hc) % _COMBINE["BJ"] == 0
+-        and (k // hc) % _SUMSQ["BK"] == 0
+-        and (
+-            inject is None
+-            or (inject.dtype == torch.bfloat16 and inject.shape == (hc, k))
++    )
++
++
++def hc_prefill_supported(hidden: torch.Tensor) -> bool:
++    """Per-call half: the residual's dtype and layout."""
++    return (
++        hidden.dtype == torch.bfloat16 and hidden.ndim == 2 and hidden.is_contiguous()
++    )
++
++
++def _split_k_down(
++    hidden: torch.Tensor, folded_weight: torch.Tensor, partial: torch.Tensor
++) -> None:
++    """Write ``partial`` [SPLITS, M, PARTIAL_COLS] BF16: slice s of K is
++    ``hidden[:, s * L : (s + 1) * L] @ folded_weight[:, s * L : (s + 1) * L].T``."""
++    splits, rows, partial_cols = partial.shape
++    _hc_prefill_down_kernel[
++        (
++            splits
++            * triton.cdiv(rows, _DOWN_BLOCK_M)
++            * triton.cdiv(partial_cols, _DOWN_BLOCK_N),
+         )
++    ](
++        hidden,
++        folded_weight,
++        partial,
++        rows,
++        K=hidden.shape[1],
++        PARTIAL_COLS=partial_cols,
++        SPLITS=splits,
++        NUM_XCDS=_NUM_XCDS,
++        BLOCK_M=_DOWN_BLOCK_M,
++        BLOCK_N=_DOWN_BLOCK_N,
++        BLOCK_K=_DOWN_BLOCK_K,
++        num_warps=4,
++        num_stages=2,
++        matrix_instr_nonkdim=16,
+     )
+ 
+ 
+-def hcp_mix(h, weights: HcpWeights, up, norm_weight, eps, hc=4, sumsq=None):
+-    """One HC site's mix on residual h [M, HC*HS] BF16.
++def _launch_up(
++    t: torch.Tensor,
++    up: torch.Tensor,
++    hidden: torch.Tensor,
++    rstd: torch.Tensor,
++    norm_weight: torch.Tensor,
++    mixed: torch.Tensor,
++    hc: int,
++    xcd_order: bool,
++) -> None:
++    rows, k = hidden.shape
++    config = _up_config(rows)
++    row_tiles, column_blocks = (
++        triton.cdiv(rows, config["BLOCK_M"]),
++        k // hc // _UP_BLOCK_J,
++    )
++    _hc_prefill_up_kernel[
++        (row_tiles * column_blocks,) if xcd_order else (row_tiles, column_blocks)
++    ](
++        t,
++        up,
++        hidden,
++        rstd,
++        norm_weight,
++        mixed,
++        rows,
++        HS=k // hc,
++        HC=hc,
++        LOWRANK=up.shape[1],
++        NUM_XCDS=_NUM_XCDS if xcd_order else 0,
++        BLOCK_J=_UP_BLOCK_J,
++        BLOCK_R=_UP_BLOCK_R,
++        **config,
++    )
++
+ 
+-    Returns (mixed [M, HS] BF16, inject logits [M, NI] FP32 or None). ``sumsq`` is the
+-    [M, HC, n] FP32 partial sums of squares ``hcp_combine`` returned with h; None
+-    computes them from h.
++def hc_prefill_mix(
++    hidden: torch.Tensor,
++    folded_weight: torch.Tensor,
++    up: torch.Tensor,
++    norm_weight: torch.Tensor,
++    eps: float,
++    hc: int,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """The mix of one HC site on the residual ``hidden`` [M, HC * HS] BF16.
++
++    ``folded_weight`` is ``fold_hc_prefill_weights`` of the site's down and inject
++    weights and its norm weight; ``up`` [HC * HS, LOWRANK] is the up weight. Both
++    halves of the support check have accepted the weights and ``hidden``. Returns the
++    mixed input [M, HS] BF16 and the inject logits [M, HC] FP32.
+     """
+-    m, k = h.shape
++    rows, k = hidden.shape
+     hs = k // hc
+-    r, ni, np_ = weights.r, weights.ni, weights.np
+-    dev = h.device
+-    if sumsq is None:
+-        sumsq = torch.empty((m, hc, 1), device=dev, dtype=torch.float32)
+-        c = dict(_SUMSQ)
+-        bm = c.pop("BM")
+-        _hcp_sumsq_kernel[(triton.cdiv(m, bm), hc)](
+-            h, sumsq, m, HS=hs, HC=hc, BM=bm, **c
++    lowrank = up.shape[1]
++    device = hidden.device
++    sumsq = torch.empty((rows, hc), device=device, dtype=torch.float32)
++    _hc_prefill_sumsq_kernel[(triton.cdiv(rows, _SUMSQ_BLOCK_M), hc)](
++        hidden,
++        sumsq,
++        rows,
++        HS=hs,
++        HC=hc,
++        BLOCK_M=_SUMSQ_BLOCK_M,
++        BLOCK_K=_SUMSQ_BLOCK_K,
++        num_warps=4,
++    )
++    split_k = rows <= _SPLIT_K_MAX_ROWS
++    splits_per_branch = _SPLITS_PER_BRANCH if split_k else 1
++    if split_k:
++        partial = torch.empty(
++            (hc * splits_per_branch, rows, folded_weight.shape[0]),
++            device=device,
++            dtype=torch.bfloat16,
+         )
+-    # Branch-batched over strided views of h and the weights; no copies.
+-    p = torch.bmm(
+-        h.view(m, hc, hs).transpose(0, 1), weights.dn.view(np_, hc, hs).permute(1, 2, 0)
++        _split_k_down(hidden=hidden, folded_weight=folded_weight, partial=partial)
++    else:
++        # Branch-batched over strided views of the residual and the weights; no copies.
++        partial = torch.bmm(
++            hidden.view(rows, hc, hs).transpose(0, 1),
++            folded_weight.view(-1, hc, hs).permute(1, 2, 0),
++        )
++    t = torch.empty((rows, lowrank), device=device, dtype=torch.bfloat16)
++    logits = torch.empty((rows, hc), device=device, dtype=torch.float32)
++    rstd = torch.empty((rows, hc), device=device, dtype=torch.float32)
++    finish_config = _finish_config(split_k)
++    _hc_prefill_finish_kernel[
++        (
++            triton.cdiv(rows, finish_config["BLOCK_M"]),
++            triton.cdiv(lowrank + hc, finish_config["BLOCK_C"]),
++        )
++    ](
++        partial,
++        sumsq,
++        t,
++        logits,
++        rstd,
++        rows,
++        eps,
++        HS=hs,
++        HC=hc,
++        LOWRANK=lowrank,
++        PARTIAL_COLS=folded_weight.shape[0],
++        SPLITS_PER_BRANCH=splits_per_branch,
++        **finish_config,
+     )
+-    t = torch.empty((m, r), device=dev, dtype=torch.bfloat16)
+-    g = torch.empty((m, max(ni, 1)), device=dev, dtype=torch.float32)
+-    s = torch.empty((m, hc), device=dev, dtype=torch.float32)
+-    c = dict(_FINISH)
+-    bm, bc = c.pop("BM"), c.pop("BC")
+-    _hcp_finish_kernel[(triton.cdiv(m, bm), triton.cdiv(r + ni, bc))](
+-        p, sumsq, t, g, s, m, float(eps),
+-        HS=hs, HC=hc, R=r, NI=ni, NP=np_, NSS=sumsq.shape[2], BM=bm, BC=bc, **c,
+-    )  # fmt: skip
+-    out = torch.empty((m, hs), device=dev, dtype=torch.bfloat16)
+-    c = _up_cfg(m)
+-    _hcp_up_kernel[(triton.cdiv(m, c["BM"]), hs // c["BJ"])](
+-        t, up, h, s, norm_weight, out, m, HS=hs, HC=hc, R=r, **c, **_MFMA
++    mixed = torch.empty((rows, hs), device=device, dtype=torch.bfloat16)
++    _launch_up(
++        t=t,
++        up=up,
++        hidden=hidden,
++        rstd=rstd,
++        norm_weight=norm_weight,
++        mixed=mixed,
++        hc=hc,
++        xcd_order=split_k,
+     )
+-    return out, (g if ni else None)
++    return mixed, logits
+ 
+ 
+-def hcp_combine(h, y, g, hc=4):
+-    """h [M, HC*HS] + y [M, HS] * 2 sigmoid(g [M, HC] / HC) per branch.
++def hc_prefill_combine(
++    hidden: torch.Tensor,
++    block_output: torch.Tensor,
++    inject_logits: torch.Tensor,
++    hc: int,
++) -> torch.Tensor:
++    """``hidden`` [M, HC * HS] BF16 plus ``block_output`` [M, HS] times
++    2 * sigmoid(``inject_logits`` [M, HC] FP32 / HC), per branch, in BF16.
+ 
+-    Returns (combined [M, HC*HS] BF16, its partial sums of squares [M, HC, HS // 512]
+-    FP32 for the next ``hcp_mix``)."""
+-    m, k = h.shape
++    ``inject_logits`` is what ``hc_prefill_mix`` returned for ``hidden``. All three
++    must be contiguous, and HS a multiple of 512.
++    """
++    rows, k = hidden.shape
+     hs = k // hc
+     if (
+-        y.shape != (m, hs)
+-        or y.dtype != h.dtype
+-        or g.shape != (m, hc)
+-        or g.dtype != torch.float32
++        hs % _COMBINE_BLOCK_J != 0
++        or hidden.dtype != torch.bfloat16
++        or not hidden.is_contiguous()
++        or block_output.shape != (rows, hs)
++        or not block_output.is_contiguous()
++        or inject_logits.shape != (rows, hc)
++        or inject_logits.dtype != torch.float32
++        or not inject_logits.is_contiguous()
+     ):
+         raise ValueError("unsupported HC prefill combine operands")
+-    c = dict(_COMBINE)
+-    bm, bj = c.pop("BM"), c.pop("BJ")
+-    out = torch.empty_like(h)
+-    ss = torch.empty((m, hc, hs // bj), device=h.device, dtype=torch.float32)
+-    _hcp_combine_kernel[(triton.cdiv(m, bm), hs // bj)](
+-        h, y.contiguous(), g, out, ss, m, HS=hs, HC=hc, BM=bm, BJ=bj, **c
++    out = torch.empty_like(hidden)
++    _hc_prefill_combine_kernel[(rows, hs // _COMBINE_BLOCK_J)](
++        hidden,
++        block_output,
++        inject_logits,
++        out,
++        HS=hs,
++        HC=hc,
++        BLOCK_J=_COMBINE_BLOCK_J,
++        num_warps=4,
+     )
+-    return out, ss
++    return out
+diff --git a/python/sglang/srt/environ.py b/python/sglang/srt/environ.py
+index 9dbb8e93f7..a0062dfae8 100644
+--- a/python/sglang/srt/environ.py
++++ b/python/sglang/srt/environ.py
+@@ -1239,6 +1239,10 @@ class Envs:
+     # On gfx95x with SGLANG_USE_AITER=1, quantize the BF16 Qwen3.5/3.8 GDN
+     # in_proj_qkvz and out_proj to MXFP4 after loading. 0 keeps them BF16.
+     SGLANG_ROCM_GDN_ONLINE_MXFP4 = EnvBool(True)
++    # gfx950 only: the gated hyper-connection mix and combine of more than 48 rows
++    # run as Triton kernels (the down projection a split-K kernel up to 512 rows, torch.bmm
++    # above) without the normed residual.
++    SGLANG_USE_HIP_HC_PREFILL_TRITON = EnvBool(False)
+     # ROCm decode attention kernel: auto (aiter_sparse on gfx950, tilelang elsewhere) |
+     # aiter_sparse | tilelang | triton | torch | comparison | unified_kv_triton
+     SGLANG_HACK_FLASHMLA_BACKEND = EnvStr("auto")
+diff --git a/python/sglang/srt/layers/hyperconnection.py b/python/sglang/srt/layers/hyperconnection.py
+index eb0a06dc5a..f139b0c5b1 100644
+--- a/python/sglang/srt/layers/hyperconnection.py
++++ b/python/sglang/srt/layers/hyperconnection.py
+@@ -1,4 +1,3 @@
+-import os
+ from functools import lru_cache
+ from typing import Optional
+ 
+@@ -7,7 +6,11 @@ import torch
+ import torch.nn as nn
+ import torch.nn.functional as F
+ 
+-from sglang.kernels.ops.gemm.hc_mix import fused_hc_mix, fused_hc_mix_supported
++from sglang.kernels.ops.gemm.hc_mix import (
++    _deterministic_inference,
++    fused_hc_mix,
++    fused_hc_mix_supported,
++)
+ from sglang.srt.environ import envs
+ from sglang.srt.layers.hc_mix_flydsl import (
+     flydsl_hc_mix_supported,
+@@ -18,34 +21,14 @@ from sglang.srt.utils import is_npu
+ from sglang.srt.utils.device import is_gfx95_supported
+ 
+ _is_npu = is_npu()
++# gfx950: HC sites of more than this many rows take the Triton path.
++_HC_PREFILL_MIN_ROWS = 48
+ 
+ # (output, partial sums of squares) of the last fused HC combine; a fused mix reuses
+ # them only for that same tensor object, otherwise its down kernel recomputes them.
+ _last_fused_combine: Optional[tuple[torch.Tensor, torch.Tensor]] = None
+ 
+ 
+-def _hc_prefill_rows() -> Optional[tuple[int, int]]:
+-    """Rows (min, max] of the AMD hcp path, or None with SGLANG_AMD_HC_PREFILL=0.
+-
+-    HC prefill path: prefill-sized HC sites through hc_prefill_triton (gfx950), opt-in. 0
+-    keeps every path below unchanged; 1 runs the mix from the raw residual (no RMSNorm
+-    output) and the combine from the mix's inject logits, for rows above the decode
+-    fused cap (hc_fused_flydsl.MAX_M's env and default) up to
+-    SGLANG_AMD_HC_PREFILL_MAX_M, in any forward mode. Like the decode fused path, its
+-    residuals carry no normed tensor to slice for attn TP. Read at site construction:
+-    the model registry only logs a module's import errors.
+-    """
+-    mode = os.environ.get("SGLANG_AMD_HC_PREFILL", "0")
+-    if mode not in ("0", "1"):
+-        raise ValueError(f"SGLANG_AMD_HC_PREFILL must be 0 or 1, got {mode!r}")
+-    if mode == "0":
+-        return None
+-    return (
+-        int(os.environ.get("SGLANG_AMD_HC_FUSED_MAX_M", "128")),
+-        int(os.environ.get("SGLANG_AMD_HC_PREFILL_MAX_M", "1048576")),
+-    )
+-
+-
+ @lru_cache(None)
+ def _hc_gate_stream(device: int) -> torch.cuda.Stream:
+     return torch.cuda.Stream(device=device)
+@@ -223,26 +206,6 @@ class GatedResidual(HyperConnectionBase):
+         )
+         self._fused_hc_weights = None
+         self._fused_hc_weight_key = None
+-        hcp_rows = _hc_prefill_rows()
+-        self._hcp_ok = (
+-            hcp_rows is not None
+-            and use_mix
+-            and self.hc_count == 4
+-            and self.config.hc_per_branch_norm
+-            and self.config.params_dtype == torch.bfloat16
+-            and is_gfx95_supported()
+-        )
+-        self._hcp_min_m, self._hcp_max_m = hcp_rows or (0, 0)
+-        self._hcp_weights = None
+-        self._hcp_weight_key = None
+-        if self._hcp_ok:
+-            # Loaders write through param.data, which leaves weight_cache_key unchanged.
+-            self._derived_weight_cache_error = (
+-                "Online weight updates are not supported while "
+-                "SGLANG_AMD_HC_PREFILL=1: its folded HC weights would keep serving "
+-                "the old weights. Restart with SGLANG_AMD_HC_PREFILL=0 to use online "
+-                "weight updates."
+-            )
+ 
+         self._gate_stream = None
+         if use_combine:
+@@ -274,6 +237,35 @@ class GatedResidual(HyperConnectionBase):
+                 # Create before graph capture; all layers on a device share it.
+                 self._gate_stream = _hc_gate_stream(torch.cuda.current_device())
+ 
++        self._hc_prefill_ok = False
++        if (
++            use_mix
++            and use_combine
++            and self.config.hc_per_branch_norm
++            and envs.SGLANG_USE_HIP_HC_PREFILL_TRITON.get()
++        ):
++            from sglang.kernels.ops.gemm.hc_prefill_triton import (
++                hc_prefill_weights_supported,
++            )
++
++            self._hc_prefill_ok = hc_prefill_weights_supported(
++                self.input_mix_weight_down.weight,
++                self.input_mix_weight_up.weight,
++                self.hc_norm.weight,
++                self.hc_count,
++            )
++        self._hc_prefill_folded_weight = None
++        self._hc_prefill_weight_key = None
++        # Loaders write through param.data, which leaves weight_cache_key unchanged.
++        self._derived_weight_cache_error = (
++            "Online weight updates are not supported while "
++            "SGLANG_USE_HIP_HC_PREFILL_TRITON is enabled: its folded HC weights would "
++            "keep serving the old weights. Restart with "
++            "SGLANG_USE_HIP_HC_PREFILL_TRITON=0 to use online weight updates."
++            if self._hc_prefill_ok
++            else None
++        )
++
+         def _mix_compute(
+             hyper_input_normed: torch.Tensor,
+             input_mix_weight_down: torch.Tensor,
+@@ -364,76 +356,79 @@ class GatedResidual(HyperConnectionBase):
+         )
+         return mixed_input, (hyper_input, None, inject_logits)
+ 
+-    def _hcp_rows(self, hyper_input: torch.Tensor) -> bool:
+-        return (
+-            self._hcp_ok and self._hcp_min_m < hyper_input.shape[0] <= self._hcp_max_m
+-        )
++    def _hc_prefill_rows(self, hyper_input: torch.Tensor) -> bool:
++        """Whether the prefill path owns a site of this many rows."""
++        return self._hc_prefill_ok and hyper_input.shape[0] > _HC_PREFILL_MIN_ROWS
+ 
+-    def _hcp_owns(self, residuals) -> bool:
+-        """Whether residuals come from _hcp_mix: inject logits, no normed residual."""
+-        hyper_input, hyper_input_normed, partials = residuals
+-        return (
+-            hyper_input_normed is None
+-            and partials is not None
+-            and self._hcp_rows(hyper_input)
+-        )
+-
+-    def _hcp_mix(self, hyper_input: torch.Tensor):
+-        """Prefill-sized mix, or None when the input does not fit it."""
++    def _mix_prefill(
++        self, hyper_input: torch.Tensor
++    ) -> Optional[tuple[torch.Tensor, tuple[torch.Tensor, None, torch.Tensor]]]:
++        """The mix on the raw residual, or None when the kernels do not take it."""
+         from sglang.kernels.ops.gemm.hc_prefill_triton import (
+-            HcpWeights,
+-            hcp_mix,
+-            hcp_supported,
++            fold_hc_prefill_weights,
++            hc_prefill_mix,
++            hc_prefill_supported,
+         )
+ 
++        if not hc_prefill_supported(hyper_input):
++            return None
+         down = self.input_mix_weight_down.weight
+         up = self.input_mix_weight_up.weight
++        inject = self.block_inject_weight.weight
+         norm_weight = self.hc_norm.weight
+-        inject = getattr(self, "block_inject_weight", None)
+-        inject = inject.weight if inject is not None else None
+-        if not hcp_supported(hyper_input, down, up, norm_weight, inject, self.hc_count):
+-            return None
+-        # The norm and inject weights are folded into the copy as well.
+-        key = (
+-            weight_cache_key(down, up),
+-            weight_cache_key(norm_weight, up if inject is None else inject),
++        # The folded copy derives from the down, inject and norm weights.
++        key = weight_cache_key(down, inject) + weight_cache_key(
++            norm_weight, norm_weight
+         )
+-        if self._hcp_weight_key != key:
+-            # Built by the eager warm-up before graph capture; never inside a capture.
++        if self._hc_prefill_weight_key != key:
++            # The eager warm-up before a graph capture builds it, never the capture.
+             if torch.cuda.is_current_stream_capturing():
+                 return None
+-            self._hcp_weights = HcpWeights(down, inject, norm_weight)
+-            self._hcp_weight_key = key
+-        mixed_input, inject_logits = hcp_mix(
++            self._hc_prefill_folded_weight = fold_hc_prefill_weights(
++                down, inject, norm_weight
++            )
++            self._hc_prefill_weight_key = key
++        mixed_input, inject_logits = hc_prefill_mix(
+             hyper_input,
+-            self._hcp_weights,
+-            up,
+-            norm_weight,
+-            self.config.rms_norm_eps,
+-            self.hc_count,
+-            sumsq=getattr(hyper_input, "_hcp_sumsq", None),
++            folded_weight=self._hc_prefill_folded_weight,
++            up=up,
++            norm_weight=norm_weight,
++            eps=self.config.rms_norm_eps,
++            hc=self.hc_count,
+         )
++        # No normed residual exists; the inject logits take the gate partials' slot.
+         return mixed_input, (hyper_input, None, inject_logits)
+ 
+     def mix(
+         self,
+         hyper_input: torch.Tensor,
+         normalized_input: Optional[torch.Tensor] = None,
+-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]]:
++    ) -> tuple[
++        torch.Tensor,
++        tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]],
++    ]:
+         assert hyper_input.shape[-1] == self.hc_count * self.hidden_size
+         if hyper_input.shape[0] == 0:
+             mixed_input = hyper_input.new_empty(
+                 (*hyper_input.shape[:-1], self.hidden_size), dtype=self.params_dtype
+             )
+             return mixed_input, (hyper_input, hyper_input, None)
+-        if self._fused_hc_ok:
++        prefill_rows = self._hc_prefill_rows(hyper_input)
++        if (
++            prefill_rows
++            and normalized_input is None
++            and not torch.compiler.is_compiling()
++            and not _deterministic_inference()
++        ):
++            prefill = self._mix_prefill(hyper_input)
++            if prefill is not None:
++                return prefill
++        # The prefill path's rows never take the fused mix, so a combine tells the two
++        # paths' residuals (both without a normed residual) apart by the row count.
++        if self._fused_hc_ok and not prefill_rows:
+             fused = self._fused_mix(hyper_input)
+             if fused is not None:
+                 return fused
+-        if normalized_input is None and self._hcp_rows(hyper_input):
+-            prefill = self._hcp_mix(hyper_input)
+-            if prefill is not None:
+-                return prefill
+ 
+         if normalized_input is not None:
+             assert self.config.hc_per_branch_norm
+@@ -530,7 +525,7 @@ class GatedResidual(HyperConnectionBase):
+     def combine_and_normalize(
+         self,
+         block_output: torch.Tensor,
+-        residuals: tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
++        residuals: tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]],
+         next_norm: Optional[GroupedGemmaRMSNorm],
+     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+         """Return the residual and its next HC normalization explicitly.
+@@ -538,8 +533,10 @@ class GatedResidual(HyperConnectionBase):
+         The BF16 combine result is retained before calculating the next norm.
+         Callers must only pass the norm when no PLE or other update intervenes.
+         """
+-        hyper_input, _, partials = residuals
+-        if (self._fused_hc_ok and partials is not None) or self._hcp_owns(residuals):
++        hyper_input, hyper_input_normed, partials = residuals
++        if hyper_input_normed is None or (self._fused_hc_ok and partials is not None):
++            # The fused and the prefill mix's residuals: their partials are inject
++            # logits, and they prepare no next norm.
+             return self.combine(block_output, residuals), None
+         if (
+             partials is not None
+@@ -567,18 +564,15 @@ class GatedResidual(HyperConnectionBase):
+     def combine(
+         self,
+         block_output: torch.Tensor,
+-        residuals: tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
++        residuals: tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]],
+     ) -> torch.Tensor:
+         hyper_input, hyper_input_normed, partials = residuals
+-        if self._hcp_owns(residuals):
+-            from sglang.kernels.ops.gemm.hc_prefill_triton import hcp_combine
+-
+-            out, sumsq = hcp_combine(hyper_input, block_output, partials, self.hc_count)
+-            # Its sums of squares live and die with this tensor object; the next
+-            # site's mix reads them instead of h when it is handed this object, so
+-            # nothing may write to it in place before that mix.
+-            out._hcp_sumsq = sumsq
+-            return out
++        if hyper_input_normed is None and self._hc_prefill_rows(hyper_input):
++            from sglang.kernels.ops.gemm.hc_prefill_triton import hc_prefill_combine
++
++            return hc_prefill_combine(
++                hyper_input, block_output, partials, self.hc_count
++            )
+         if self._fused_hc_ok and partials is not None:
+             from sglang.kernels.ops.gemm.hc_fused_flydsl import hc_apply_inject
+ 
+diff --git a/python/sglang/srt/layers/layer_boundary/residual/gated.py b/python/sglang/srt/layers/layer_boundary/residual/gated.py
+index 7fc314d350..7875a70e35 100644
+--- a/python/sglang/srt/layers/layer_boundary/residual/gated.py
++++ b/python/sglang/srt/layers/layer_boundary/residual/gated.py
+@@ -32,8 +32,10 @@ class GatedResidualState:
+ 
+     The read carries its normalized residual to write-back. Decode may also
+     prepare gate partials during the read; otherwise write-back computes the
+-    coefficient from that normalized residual. Both follow the residual rows
+-    through any slicing and are cleared after the FFN write-back.
++    coefficient from that normalized residual. A read that normalizes inside its
++    kernels carries none; its gate partials are then the inject logits. Both
++    follow the residual rows through any slicing and are cleared after the FFN
++    write-back.
+     Parameters belong to the owning layer's modules.
+ 
+     Args:
+@@ -93,7 +95,9 @@ class GatedResidualState:
+     def slice_residual_attn_tp(self, residual):
+         parallel = get_parallel()
+         rank, size = parallel.attn_tp_rank, parallel.attn_tp_size
+-        self.normed = self.normed.tensor_split(size)[rank]
++        # A read that normalizes inside its kernels carries no normed residual.
++        if self.normed is not None:
++            self.normed = self.normed.tensor_split(size)[rank]
+         if self.gate_partials is not None:
+             self.gate_partials = self.gate_partials.tensor_split(size)[rank]
+         return residual.tensor_split(size)[rank]

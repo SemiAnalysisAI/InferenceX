@@ -1,14 +1,17 @@
 # [Perf] [AMD] hyperconnection: Add a Triton prefill path for gated HC sites
 # https://github.com/sgl-project/sglang/pull/50863  (PR head e8119d699d)
-# Generated against the image's SGLang checkout (1ced9a9eb0) with patches 01-14 applied; source files only (tests dropped).
+# Generated against the 20261117 image's SGLang checkout (c67db7c762) with patches 01-07, 09, 11, 13 and 14 applied;
+# source files only (tests dropped).
 # The benchmarked revision, an earlier form of the PR's kernels: opt-in SGLANG_AMD_HC_PREFILL=1 (the PR's switch is
 # SGLANG_USE_HIP_HC_PREFILL_TRITON). HC sites above the decode fused row cap run as one batched GEMM over the raw
 # residual with the norm folded into the weights, plus Triton finish, up and combine kernels.
+# Port from the 20261102 image (SGLang 1ced9a9eb0): unchanged; it applies with offsets (sglang#37570 added NPU branches
+# to the same methods; this path is gfx950-only).
 # Apply in /sgl-workspace/sglang with git apply.
 
 diff --git a/python/sglang/kernels/ops/gemm/hc_prefill_triton.py b/python/sglang/kernels/ops/gemm/hc_prefill_triton.py
 new file mode 100644
-index 0000000..808aafc
+index 0000000000..808aafc026
 --- /dev/null
 +++ b/python/sglang/kernels/ops/gemm/hc_prefill_triton.py
 @@ -0,0 +1,343 @@
@@ -356,7 +359,7 @@ index 0000000..808aafc
 +    )
 +    return out, ss
 diff --git a/python/sglang/srt/layers/hyperconnection.py b/python/sglang/srt/layers/hyperconnection.py
-index c0448cc..3af30d8 100644
+index cb21322e34..eb0a06dc5a 100644
 --- a/python/sglang/srt/layers/hyperconnection.py
 +++ b/python/sglang/srt/layers/hyperconnection.py
 @@ -1,3 +1,4 @@
@@ -364,7 +367,7 @@ index c0448cc..3af30d8 100644
  from functools import lru_cache
  from typing import Optional
  
-@@ -20,6 +21,28 @@ from sglang.srt.utils.common import is_gfx95_supported
+@@ -23,6 +24,28 @@ _is_npu = is_npu()
  _last_fused_combine: Optional[tuple[torch.Tensor, torch.Tensor]] = None
  
  
@@ -393,7 +396,7 @@ index c0448cc..3af30d8 100644
  @lru_cache(None)
  def _hc_gate_stream(device: int) -> torch.cuda.Stream:
      return torch.cuda.Stream(device=device)
-@@ -190,6 +213,26 @@ class GatedResidual(HyperConnectionBase):
+@@ -200,6 +223,26 @@ class GatedResidual(HyperConnectionBase):
          )
          self._fused_hc_weights = None
          self._fused_hc_weight_key = None
@@ -420,7 +423,7 @@ index c0448cc..3af30d8 100644
  
          self._gate_stream = None
          if use_combine:
-@@ -305,6 +348,57 @@ class GatedResidual(HyperConnectionBase):
+@@ -321,6 +364,57 @@ class GatedResidual(HyperConnectionBase):
          )
          return mixed_input, (hyper_input, None, inject_logits)
  
@@ -478,7 +481,7 @@ index c0448cc..3af30d8 100644
      def mix(
          self,
          hyper_input: torch.Tensor,
-@@ -320,6 +414,10 @@ class GatedResidual(HyperConnectionBase):
+@@ -336,6 +430,10 @@ class GatedResidual(HyperConnectionBase):
              fused = self._fused_mix(hyper_input)
              if fused is not None:
                  return fused
@@ -489,7 +492,7 @@ index c0448cc..3af30d8 100644
  
          if normalized_input is not None:
              assert self.config.hc_per_branch_norm
-@@ -415,7 +513,7 @@ class GatedResidual(HyperConnectionBase):
+@@ -441,7 +539,7 @@ class GatedResidual(HyperConnectionBase):
          Callers must only pass the norm when no PLE or other update intervenes.
          """
          hyper_input, _, partials = residuals
@@ -498,7 +501,7 @@ index c0448cc..3af30d8 100644
              return self.combine(block_output, residuals), None
          if (
              partials is not None
-@@ -446,6 +544,15 @@ class GatedResidual(HyperConnectionBase):
+@@ -472,6 +570,15 @@ class GatedResidual(HyperConnectionBase):
          residuals: tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
      ) -> torch.Tensor:
          hyper_input, hyper_input_normed, partials = residuals

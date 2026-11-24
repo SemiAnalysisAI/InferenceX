@@ -5595,7 +5595,7 @@
     - "Image ghcr.io/tile-ai/tilert:0.1.5 (tilert 0.1.5.post2 installed at container start); commands aligned to TileRT README Topology A -- NIXL KV transfer, --kv-cache-dtype fp8_ds_mla (prefill) <-> fp8 (decode), max-seq-len 202752; MTP speculative-config wired via spec-decoding=mtp"
     - "Topology: 1 prefill node (TP8) + 1 decode node (TP8), each 8xB200 exclusive; TileRT decode is bs=1 only so conc-list is a single point [1], ISL 1k/8k OSL 1k"
     - "Runner: launch_b200-dgxc.sh tilert early-return branch (zero impact on the dynamo path); tilert_utils/submit.sh issues two srun --ntasks=1, one per role, because prefill and decode need different container images; roles are dispatched by the TILERT_ROLE it exports, and torn down across nodes via a sentinel file on the shared /workspace"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
 
 - config-keys:
     - qwen3.5-fp8-b200-sglang-agentic-mtp
@@ -9724,7 +9724,7 @@
     - "Replace the TP4/EP1 and TP2/EP1 C1-C128 sweeps with TP4/EP4 points at concurrency 1, 4, 8 and 16, plus aggregated TP4/EP4 points with DP attention (DP4) at concurrency 32, 64, 128 and 192 behind sglang-router 0.3.2."
     - "Apply the point-specific prefill-decode interval, prefill chunking, admission, memory and SWA prefix-tail settings from the single-node recipe; all points use the default fcfs schedule policy."
     - "No data-type or precision change to the DSpark draft: the bundled draft of deepseek-ai/DeepSeek-V4.1-Flash runs as shipped with block size 5."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
 
 - config-keys:
     - kimik3-fp4-mi355x-vllm-disagg-agentic
@@ -10287,7 +10287,7 @@
   description:
     - "Update the image from lmsysorg/sglang:nightly-dev-cu13-20260923-06008c17 to lmsysorg/sglang:nightly-dev-cu13-20261013-7224fce1."
     - "Set TP4 concurrency 2 max-running-requests to 2 and sweep concurrency 1 to 16 on TP4 and TP8."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
 
 - config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-mtp
@@ -10694,7 +10694,7 @@
   description:
     - "Replace the Muse Spark Open B300 TP8/EP8 search space with per-concurrency AgentX settings: TP8/EP8 with GPU-resident KV at concurrency 1, 4, 8 and 14; TP4/EP4 with GPU-resident KV at concurrency 4; TP4/EP4 with 120-175 GB per-rank DRAM HiCache at concurrency 10, 16, 20, 28, 36 and 40."
     - "Tune request admission, decode graph batch limits, memory fraction, SWA/full ratio, prefill-decode interval and chunked prefill per concurrency; enable layernorm SP and MegaMoE at the HiCache points and shortest-prefill-first from concurrency 16."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
 
 - config-keys:
     - musespark-fp4-b200-sglang-agentic-dflash
@@ -10703,7 +10703,7 @@
   description:
     - "Configure Muse Spark Open B200 SGLang AgentX request admission, scheduling, memory allocation, HiCache, and draft attention per concurrency, adding TP4/EP4 at concurrency 8, 10, 16, and 24 and TP8 at concurrency 6, 10, and 56."
     - "Drop TP8 concurrency 12, 16, 24, 32, 48, and 64."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
 
 - config-keys:
     - qwen3.5-fp8-b300-sglang-mtp
@@ -10789,7 +10789,7 @@
     - "Disagg: replace the DEP8 prefill + Mooncake store ladder with TP1 x PP8 prefill workers that keep a 2x HiCache host tier, and run W4A4 MegaMoE for the target model on prefill and decode while the DSpark draft MoE stays at the image default (W4A8)."
     - "Disagg points: 1P+DEP16 at concurrency 80, 160 and 200 with the KV router and token-balanced decode; 1P+DEP16 c300, 2P+DEP16 c720, 2P+DEP12 c800 and 2P+DEP8 c880 with a round-robin frontend and request-balanced decode. DSpark block size 6, 6, 5, 5 and 4, matched on prefill and decode."
     - "Agg: TP8 over two nodes at concurrency 1; TP4 on one node at concurrency 1 and 4 with the fastokens tokenizer. DSpark block size 6."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
 
 - config-keys:
     - glm5.2-fp4-gb200-dynamo-sglang-agentic-agg
@@ -10810,7 +10810,7 @@
   description:
     - "Update the Muse Spark Open GB300 curve to lmsysorg/sglang:nightly-dev-20261021-c1c287a4 and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 and --stream-interval 20 at every concurrency."
     - "Lower max-running-requests to 3 at concurrency 10, raise prefill-decode-interval to 96 at concurrency 24, switch HiCache to write_back, and replace concurrency 16, 20 and 40 with 28, 30, 44 and 48."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
 
 - config-keys:
     - musespark-fp4-b200-sglang-agentic-dflash
@@ -11250,7 +11250,7 @@
     - minimaxm31flash-fp4-gb300-sglang-agentic-dspark
   description:
     - "Add TP2 points with DRAM KV offload, and adjust the memory settings on the DRAM KV offload points."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
   scenario-type: [agentic-coding]
 
 - config-keys:
@@ -12219,7 +12219,7 @@
   description:
     - "Update the Muse Spark Open B200 curve to lmsysorg/sglang:nightly-dev-cu13-20261030-302b78cc and retune request admission, prefill-decode interval and stream interval per concurrency."
     - "Add TP4/EP4 concurrency 7 and 40; drop TP8 concurrency 2, 6, 8 and 56 and TP4 concurrency 8 and 10."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
 
 - config-keys:
     - musespark-fp4-gb200-sglang-agentic-dflash
@@ -12228,7 +12228,7 @@
   description:
     - "Retune the Muse Spark Open GB200 curve and set SGLANG_FLASHINFER_NVFP4_PER_TOKEN_ACTIVATION=0 at every concurrency; run TP4/EP4 at concurrency 1 without KV offload and at concurrency 4, 7, 10, 14, 16, 28, 36, 40 with HiCache, dropping concurrency 2, 6, 8, 20, 24 and 32."
     - "Use prefill-decode interval 64-256 and stream interval 20 at every HiCache point, shortest-prefill-first except at concurrency 7, request admission 2-6 at concurrency 4-16, 16K chunked prefill at concurrency 28-40, and at concurrency 40 mem-fraction-static 0.93, a 160 GB HiCache pool and CUDA graphs up to 48."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
 
 - config-keys:
     - glm5.3flash-fp8-b200-sglang-agentic-mtp
@@ -12807,7 +12807,7 @@
     - "C1-C16 run DSpark 7 with the KV cache on the GPUs. The c1-c8 mono decode lane (FP8 KV and indexer caches, VLLM_ROCM_MINIMAX_M3_MONO, shuffled KV layout, FULL_DECODE_ONLY graphs, 8192-token prefill steps) is removed: mono decode takes over the MoE and norm paths and turns the image's MoE, norm and sequence-parallel prefill routes off, while the NVFP4 lane keeps every route on."
     - "C32 joins C64 on the SimpleCPUOffloadConnector tier (1349 GB, dram-utilization 0.90) with LRU eviction (cpu_lru_eviction). C32 keeps DSpark 7; C64 keeps DSpark 3 at 0.90 GPU memory utilization."
     - "Removed env switches, which the image's validation runs do not set: VLLM_USE_RUST_FRONTEND, VLLM_ROCM_USE_SKINNY_GEMM, VLLM_ROCM_PARALLEL_INDEX_TOPK, VLLM_ROCM_MINIMAX_M3_MONO_DRAFTER, VLLM_ROCM_MINIMAX_M3_SP_PREFILL. PYTHONHASHSEED is 0 at every point (42 at c64 before)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133
 
 - config-keys:
     - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
@@ -13090,14 +13090,260 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5113
 
 - config-keys:
+    - wan22-bf16-h100-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Add an SGLang v0.5.23 Wan2.2-T2V-A14B baseline on 4 and 8 H100 GPUs, on the H200 SGLang row's workload (wan22.yaml release-v1, C1) and image digest, with a 21-frame server warmup on 8 GPUs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5114
+
+- config-keys:
+    - h3-bf16-h200-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the H200 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4970
+
+- config-keys:
+    - h3-bf16-mi355x-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vllm/vllm-omni-rocm:v0.30.0, the newest stable vLLM-Omni ROCm image, pinned by its linux/amd64 digest, on the MI355X H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 1, 2, 4 and 8 GPUs: Ulysses across all GPUs with text-encoder TP and tiled VAE patch parallelism of the same degree, the AITER FLASH_ATTN diffusion attention backend, vLLM quick all-reduce quantization set to NONE, and the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4971
+
+- config-keys:
+    - h3-bf16-h100-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Add vLLM-Omni v0.32.0, pinned by its linux/amd64 digest, on the H100 H3 workload SGLang runs (h3-v2.yaml release-v1, C1) on 2, 4 and 8 GPUs: DiT TP2 with Ulysses 1, 2 and 4, since H3 does not fit one 80 GB GPU, with text-encoder TP and tiled VAE patch parallelism across all GPUs, and with the prompt-embedding cache and cross-request AdaLN projection reuse disabled."
+    - "The H3 snapshot staged on h100-dsxe lacks Ref2VA/model_index.json, which the vLLM-Omni model view requires, so its launcher downloads the pinned snapshot without the Ref2VA weights into its hub cache before it submits a video job, as on a100-cw; the download keeps its xet cache in a temporary directory, since the runner's HF_HOME is a read-only model store."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4969
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B AgentX on MI355X via ATOM on rocm/atom-dev:nightly_202611131030 (ATOM 0.1.10.dev122+g9fec99786 and AITER 43840aee7, built from ROCm/ATOM main; the atomesh frontend container_image pins its digest sha256:91c7d38b58bff7930d5de864fde7e434364922535f678fefdaf809a5c486b845), serving amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2 (revision 410f915f) as shipped: PTPC FP8 attention projections, MXFP4 routed and shared experts, BF16 routers, shared_expert_gate, lm_head and MTP layer."
+    - "Seventeen points with MTP at 3 draft tokens, at dram-utilization 1.0: TP4 at CONC 1, 4, 8, 16, 24, 32 and 40 on the GPU prefix cache and CONC 48, 56, 64 and 80 with LMCache 0.5.6.dev139+gf22dec28 DRAM offload; TP2 at CONC 12 on the GPU prefix cache and CONC 16, 20, 24, 32 and 40 with the same LMCache DRAM offload."
+    - "Every point runs FP8 KV cache, prefix caching, max-num-seqs 1024, CUDA graphs for every batch size up to max(8, 2 x CONC), GDN state checkpoints every 16384 prompt tokens written mid-step (ATOM_GDN_STATE_MIDSTEP=1, ATOM_STATE_CHECKPOINT_END_MARGIN=5, ATOM_STATE_CHECKPOINT_DEMAND=0), FlyDSL paged decode, the QK-norm/RoPE/cache-quant fusion, and the prefill delayer at interval 4 with a 5000 ms queue cap; CONC 32 and up, at TP4 and TP2, set the delayer stall and TTFT caps to 15 ticks."
+    - "The LMCache points add the lmcache_offload connector with a 253 GiB LMCache CPU pool per rank (chunk 256, loads from 8192 tokens, LMCACHE_NUMA_MODE=auto), of which the GDN state tier may keep up to 110 GiB; the state shares that pool, so a TP4 server holds 1,012 GiB (1,087 GB) of host DRAM against its 1,499 GB share and a TP2 server 506 GiB (543 GB) against its 749 GB share."
+    - "All-reduce is not quantized: AITER_QUICK_REDUCE_QUANTIZATION is left unset, which AITER reads as NONE, and the opt-in FlyDSL all-reduce (AITER_FLY_AR) is off, so tensor-parallel all-reduce runs in BF16. The GDN conv and recurrent state are stored in BF16, the ATOM default for qwen3_5_moe_text, while the checkpoint specifies mamba_ssm_dtype float32. Throughput runs use the qwen3.5-397b-a17b-nvfp4__mtp__native__default-default golden AL (3.39)."
+    - "The recipe follows the MXFP4 submission configuration that ROCm/ATOM PR 3255 proposes for recipes/Agentic-Qwen3.5.md, which also drops the INT4 quick all-reduce that the merged FP8 recipe sets, and needs ROCm/ATOM PRs 2549, 2588, 2589, 2590, 2591, 2599, 2609, 3106 and 3108 and ROCm/aiter PR 6981 (tuned MXFP4 MoE rows for the TP4 expert shape), all in this image."
+    - "The MTP draft runs as shipped: the checkpoint excludes every mtp.* layer from quantization and ATOM re-indexes those excludes to the draft's absolute layer numbers, so its attention, experts, shared expert and fc stay BF16; the draft KV cache is FP8 like the target's."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5092
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.20-rocm720-mi35x-20260927 to lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261109 (amd64 digest sha256:e728a52213cce18493a46ac8ac62d5c9eaee66591941871acd213fe989e55957). The recipe is unchanged, so this sweep changes only the image."
+    - "ROCM_QUICK_REDUCE_QUANTIZATION stays INT4, set explicitly in the recipe, so removing the image's INT8 default (sgl-project/sglang#47163) does not change this arm. mem-fraction-static stays 0.8, which SGLang scales by 0.85 above 8192 context with the aiter backend in both the v0.5.20 and v0.5.23 sources, so the effective 0.68 is the same on both images."
+    - "stream-interval 50, the HiCache write_through policy and the TP2 and TP4 concurrency grid are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5061
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.22-rocm720-mi35x-20261020 to lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261109 (amd64 digest sha256:e728a52213cce18493a46ac8ac62d5c9eaee66591941871acd213fe989e55957). The other MI355X arms stay on their current tags."
+    - "Set ROCM_QUICK_REDUCE_QUANTIZATION=NONE in the shared aggregated-role env of the srt-slurm recipe. The 20261020 image set INT8 by default and the 20261109 image no longer does (sgl-project/sglang#47163), so this pins a full-precision all-reduce instead of relying on the image default."
+    - "Set SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION=1 so the recipe's mem-fraction-static 0.8 is used as-is. With the aiter attention backend and context above 8192, SGLang otherwise multiplies it by 0.85, so 0.8 ran as 0.68 (KV pool 7.83M tokens); with the variable set the KV pool is 11.32M tokens (+45%). This applies to all 19 points (c1 through c80) and also grows the HiCache host pool at c16 through c28, which is sized by ratio. This sweep therefore changes the image, the all-reduce precision setting and the effective memory fraction."
+    - "The HiCache write_through policy, stream-interval 50, the TP4 concurrency grid and every other serving flag are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4975
+
+- config-keys:
+    - qwen3.8next-fp4-b300-tokenspeed-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP1/EP1 B300 TokenSpeed AgentX MTP coverage at concurrency 1, 2, 4, 8, 20, 36, 56, 80 and 108, with running-request caps 104, 104, 104, 2, 6, 12, 35, 72 and 104."
+    - "Pin the CUDA 13 / PyTorch 2.14.0 / FlashInfer 0.7.4 amd64 runner image and the SHA256-verified TokenSpeed, kernel and engine 20261117 wheels; install scheduler 0.1.58 and SMG 1.16.0.post20261115."
+    - "Use FP8 E4M3 target/draft KV, BF16 SSM state, three MTP steps, 256K context, 16K prefill chunks, 236 GB Host L2 and a 4 GB retraction snapshot pool within a 241 GB per-GPU CPU DRAM allocation."
+    - "Enable target prefill graphs through 8192 tokens and the wheel's automatic drafter extend graphs, without the removed enable-drafter-prefill-graph flag."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5116
+
+- config-keys:
+    - dsv41flash-fp4-mi300x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:v0.33.0 to vllm/vllm-openai-rocm:nightly-rocm100-f5d93296c8ec82b7e7dabdb308d24d43cb1907bf (digest sha256:1b1b0c7c62d8ba3503d4f2e448795ed00e261bc73ad681f6811c3690613c7084), the 2026-11-11 ROCm 10.0 nightly."
+    - "No point changes: TP8 and TP4 at concurrency 1, 2, 4, 8, 16 and 32 (12 points), all re-measured on the new image."
+    - "Remove --no-swa-bounded-replay at every point, so vLLM's default SWA bounded replay runs. Decoder bounded replay from vllm-project/vllm#59039: in eager prefill steps layer 20 writes its KV for every token, and the rest of layer 20 and layers 21-39 run on each request's last 128 tokens only. Prefix-cache SWA replay: the sliding-window cache no longer takes part in prefix caching."
+    - "The image bump and the flag removal go together. v0.33.0 forces prefix-cache SWA replay off on every ROCm arch, so removing the flag there turns on only the decoder path, and a prefix hit followed by an untrimmed tail of 128 tokens or fewer can read sliding-window KV of layers 21-39 that an earlier trimmed step never wrote (vllm-project/vllm#64094 review)."
+    - "Upstream changes in the new image on this config's gfx942 path: vllm-project/vllm#65249 enables prefix-cache SWA replay on gfx942 (vllm-project/vllm#64094 does the same on gfx950), vllm-project/vllm#66397 builds the DeepSeek-V4.1 replay metadata builders at warmup on ROCm, vllm-project/vllm#63367 shards the Engram gate across TP ranks, vllm-project/vllm#66400 drops the sparse MLA metadata host sync, and vllm-project/vllm#66596 bumps AITER to v0.1.29."
+    - "No data-type or precision change to the DSpark draft: vLLM builds it with the checkpoint's own quantization config (FP8 32x32 UE8M0 projections, MXFP4 routed experts, BF16 norms and heads) and the target's fp8_ds_mla KV cache, it shares the target's BF16 embedding and LM head (draft_lm_head_quantization from vllm-project/vllm#64368 is unset), and the recipe sets no draft dtype or quantization."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5058
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Image vllm/vllm-openai:cu134-nightly-aarch64-01fba62-1111d (vLLM main 01fba62 with the merged vllm#66552)."
+    - "Agg: TP4 with the latency_specialized decode and prefill every 24 decode steps at concurrency 1, 4 and 8 (replacing 1 and 16)."
+    - "Disagg: prefill Engram tables split over the prefill GPUs in HBM, KV offload up to 170 GiB per prefill rank."
+    - "Disagg: 5P1D DEP32 at concurrency 3200, 7P1D DEP16 at 6600, 12P1D DEP32 at 10288 (replacing 6P1D, 9P1D and 16P1D)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5015
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append TP4 at concurrency 16 with the latency_specialized decode to the existing curve: 32 running requests, prefill every 128 decode steps, decode-replay graphs to 4096 tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5135
+  append-only: true
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append TP4 at concurrency 32 with the latency_specialized decode to the existing curve: 64 running requests, prefill every 128 decode steps, decode-replay graphs to 4096 tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5142
+  append-only: true
+
+- config-keys:
+    - dsv41flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append TP4 at concurrency 24 with the latency_specialized decode to the existing curve: 48 running requests, prefill every 128 decode steps, decode-replay graphs to 4096 tokens."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5146
+  append-only: true
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi K3.1 Pro MXFP4 MI355X AgentX on TokenSpeed at concurrency 1, 4, 8, 16, 24, 32 and 48: attention and MoE TP8 with EP1, the released Inferact/Kimi-K3.1-Pro-DSpark draft on the MHA drafter backend (7 drafts at concurrency 1 to 8, 5 at 16 to 48), FP8 KV cache with the MXFP4 DSA indexer key cache, 1,048,560-token context. From concurrency 8, `kvstore-size: 128` provisions a 128 GB per GPU Host L2 KV store pinned from the GTT pool (HSA_USERPTR_FOR_PAGED_MEM=0), KV parallel 8 with DCP8 and prefill graphs up to 3072 tokens (concurrency 1 and 4 run without host KV offload); every point has its own running-request cap and prefill/decode intervals, with short-prefill-first at 24 and 32 and mixed batches at 32 and 48."
+    - "Pin the runner image by digest, tokenspeed-smg 1.16.0.post20261118, the checkpoint and DSpark draft revisions, and the November 19 TokenSpeed 0.1.1.post20261119, kernel 0.1.5.post20261119, kernel-amd 0.1.4.post20261119 and engine 0.1.1.post20261119 wheels by release URL and SHA256, and tokenspeed-scheduler 0.1.58 from PyPI. tokenspeed-nightly-rocm.sh keeps the image's ROCm torch. Bind TokenSpeed's decode-context-parallel-size to the matrix dcp-size."
+    - "Select golden DSpark acceptance (probabilistic draft, block verification) and the greedy sampler for TokenSpeed DSPARK throughput, removing speculative sampling and block verification; evals verify for real with the triton sampler, speculative sampling and block verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5144
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update SGLang image from v0.5.23-rocm10-mi35x-20261031 to v0.5.23-rocm10-mi35x-20261110."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5000
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  description:
+    - "Update the vLLM ROCm nightly image from edad8b03 to f5d93296, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5014
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang image from v0.5.22-rocm10-mi30x to v0.5.23-rocm10-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5074
+
+- config-keys:
+    - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the SGLang image from v0.5.22-rocm10-mi30x to v0.5.23-rocm10-mi30x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5107
+
+- config-keys:
+    - musespark-fp4-b300-sglang-agentic-dflash
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang image from nightly-dev-cu13-20261030-302b78cc to nightly-dev-cu13-20261118-ecd3d75a."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5134
+
+- config-keys:
+    - dsv41flash-fp4-gb200-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the vLLM image from cu134-nightly-cf5cea2d to cu134-nightly-f5d93296."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5141
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp
+  scenario-type: [agentic-coding]
+  description:
+    - "Move every key of the DeepSeek-V4.1-Flash MI355X vLLM AgentX curve to vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47 (2026-11-19, digest sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32) and rerun all 13 points, so the whole curve is on one image: TP4 c1-c2, TP2 c1-c64 and TP8 c1 (previously nightly-4fab5a07), DP2 c128 without KV offloading and DP2 c256/c384 with UMBP KV offloading (previously nightly-60bd6dd)."
+    - "Recipes, topology, concurrencies, speculative decoding and KV offloading are unchanged. Relative to nightly-60bd6dd, the image keeps the same ROCm 10.0, PyTorch 2.13.0, Triton, AITER v0.1.29 and MORI v1.2.3.post1 layers; only vLLM moves forward on main."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5151
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-linker-d1115
+  scenario-type: [agentic-coding]
+  description:
+    - "Add SGLang behind Dynamo for MiniMax-M3.1-Flash AgentX on GB200, aggregated and disaggregated, with DSpark block 7 and the minimax-msa kernels."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4695
+
+- config-keys:
+    - kimik3.1-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update the image from vllm/vllm-openai-rocm:kimi-k31-5c14fe8 (sha256:a61996b4) to vllm/vllm-openai-rocm:kimi-k31-712d9eb (sha256:7c167350), vLLM 712d9eb37 (the head of vllm-project/vllm k31-amd-tracking), which is 5c14fe8de plus seungrokj/mum#30, seungrokj/mum#33, seungrokj/mum#35, seungrokj/mum#36 and seungrokj/mum#38."
+    - "Points are unchanged: TP8 at concurrency 1 (DCP1) and 4 (DCP8) with the KV cache on the GPUs, and TP8 DCP8 at concurrency 16, 24, 32 and 48 with vllm-simple DRAM KV offload."
+    - "Switch the draft from Inferact/Kimi-K3.1-Pro-DSpark-preview (unpinned) to the released Inferact/Kimi-K3.1-Pro-DSpark at revision e4e6e626, the revision its golden acceptance curve was measured with. The released draft uses GQA sliding-window (2048-token) attention instead of MLA, which ROCM_AITER_MLA rejects, so concurrency 16-48 move the draft attention backend from ROCM_AITER_MLA to TRITON_ATTN and keep the fp8 draft KV cache."
+    - "Concurrency 1 and 4 (latency_specialized) drop the draft attention_backend and kv_cache_dtype, so vLLM selects KIMI_K3_FLYDSL_SWA_GQA with a model-dtype (BF16) draft KV cache, which also enables VLLM_K31_BEAT_CTXKV (one-launch draft context K/V store; it requires a non-fp8 draft cache)."
+    - "prefix-match-unit 64 -> 1152 (1280 at concurrency 1), the KV block span under DCP8 (1152 tokens) and DCP1 (1280), which the unit must divide. On kimi-k31-5c14fe8, the draft's sliding-window KV group only matched whole blocks, so a 64-token unit disabled fine-grained prefix-cache hits for the whole model and rounded every hit down to the scheduler block."
+    - "Concurrency 32 and 48: num_speculative_tokens 3 -> 4, with the capture sizes regenerated as multiples of 5. No other server argument or environment variable changes."
+    - "Framework changes that matter here: mum#38 serves the released GQA sliding-window draft under latency_specialized (FlyDSL sliding-window GQA draft attention, TP-split draft fc and Markov head, AITER logits gather, one-launch draft context K/V store); mum#35 adds fine-grained prefix-cache lookups for sliding-window groups (VLLM_SWA_FINE_GRAINED_PREFIX_HITS, default on) and stores the sliding-window prompt-tail block in the vllm-simple CPU offload; mum#36 stops KV-connector chunks at scheduler-block boundaries under DCP; mum#33 adds FlyDSL sparse MLA for the 96 gathered heads of the DCP branch; mum#30 speeds up the K3 mono decode kernels, extends SP prefill token sharding to DCP1 (concurrency 1 inherits VLLM_K3_SP_PREFILL=1) and fuses the indexer prefill query quantization (bitwise identical)."
+    - "Draft data types: unchanged. Both drafts ship all-BF16 with no quantization_config, and the draft runs with BF16 weights and activations at every point, sharing the target's BF16 embedding and lm_head. The draft KV cache stays fp8, the same as the target's, at concurrency 16-48, and moves from fp8 to the image's BF16 default at concurrency 1 and 4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
+
+- config-keys:
+    - dsv41flash-fp4-gb300-tilert-agentic-dspark-dep
+    - dsv41flash-fp4-gb300-tilert-agentic-dspark-tp
+  scenario-type: [agentic-coding]
+  description:
+    - "Add TileRT wide-EP decode on GB300 NVL72 for DeepSeek-V4.1-Flash FP4 AgentX: vLLM prefill workers (DP2 + expert parallel, two per tray; the official vllm/vllm-openai:cu134-nightly-a2bcb565 image by digest, unmodified) send the prompt KV over NVLink to one TileRT DEP32 decode (eight trays), at 4, 8 and 16 sequences per decode GPU (concurrency 1200, 2000 and 3200) with four, six and six prefill workers (40, 44 and 44 GPUs). Decode, prefill KV connector and router run tilert 0.2.1 from PyPI, sha256-checked; the decode is on the CUDA 13.2 runtime image by digest."
+    - "The prefill keeps a lazy CPU DRAM KV tier with vLLM's SimpleCPUOffloadConnector, 64 GiB per DP rank. The router has its own tray, tokenizes with the release's Rust port of vLLM's DeepSeek-V4.1 encoder, splits reasoning with vLLM's parser (no tool-call parsing), serves the client port with the release's Rust front, and sends each prefill straight to a worker and one of its DP ranks, keeping a conversation on one for its prefix cache."
+    - "DSpark with five drafts; acceptance is simulated at the golden AL 3.51 (TILERT_SIMULATE_ACC_LEN). 30-minute warm-up grace."
+    - "The prefill ships the FlashInfer autotune results vLLM itself saved for this exact prefill (configs/gb300-tilert-autotune/: a cold start of these prefill flags in the same image on GB300, files as written under vLLM's config hash); the setup script copies them into VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR, so each cold start loads them instead of re-tuning, as a warm deployment does. A cold tune's temporary buffers otherwise leave the prefill a KV cache of about 60 GiB per GPU instead of about 88 GiB. vLLM reads them only under the same config hash and FlashInfer only with the same library versions and GPU; anywhere else the prefill tunes as before."
+    - "Also rerun the existing concurrency-1 TP8 and TP24 points of dsv41flash-fp4-gb300-tilert-agentic-dspark-tp (tilert 0.1.8) with their recipes unchanged, so all five GB300 TileRT points publish together as one curve; an AgentX curve takes its points from a single run."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5094
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-disagg
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-agg
+  description:
+    - "Add MiniMax-M3.1-Flash B300 Dynamo + vLLM AgentX recipes with minimax-m31-flash-arm64-cu135-f7d7346, including TP8 c1/c4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4826
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark
+    - minimaxm31flash-fp4-mi355x-vllm-agentic-dspark-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Rerun the single-node key minimaxm31flash-fp4-mi355x-vllm-agentic-dspark from #5035 unchanged, so both topologies are measured in one sweep."
+    - "Add MiniMax-M3.1-Flash PD-disaggregated AgentX on MI355X as minimaxm31flash-fp4-mi355x-vllm-agentic-dspark-disagg (framework vllm, disagg true), on the single-node key's image vllm/vllm-openai-rocm:minimax-m31-flash-75bc8cf1: one TP4 prefill and two TP4 decode vLLM engines move KV over MooncakeConnector (RDMA) behind vllm-router 0.1.16 with consistent-hash routing, at concurrency 40, 48, 56, 64, 72 and 80 (DRAM utilization 0.9 at c40-c64, 1.0 at c72-c80)."
+    - "Both roles keep the single-node serving args: NVFP4 KV and indexer caches, DSpark with 7 speculative tokens, AITER MoE, block size 128 and 1M context."
+    - "Prefill admits 2x CONC with DBO at 32768 batched tokens and holds a SimpleCPUOffloadConnector host KV tier of 1349 GB (1499 GB at c72 and c80); at c80 it schedules at most 4096 tokens of a prompt per step at 0.75 GPU memory utilization."
+    - "Each decode engine runs without DBO at 8192 batched tokens, with max-num-seqs 5, 6, 7, 8, 10 and 10 from c40 to c80 and CUDA graphs captured in multiples of 8 up to 8x that batch."
+    - "Both roles set NCCL_DMABUF_ENABLE=0, VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200, a 3600 s HTTP keep-alive (900 s on single node) and the Mooncake RDMA env (GID index, traffic class, one concurrent MR registration, 600 s connector timeout; 1 GiB max MR size on prefill, 256 MiB on decode)."
+    - "Bump utils/srt-slurm from 2d9079c to cc9db05 (21 commits), which adds NVIDIA/srt-slurm#669: one bootstrap port per prefill engine and Router start after every worker's health check. The shared vllm-router.sh setup script now raises the worker parent shell's soft RLIMIT_MEMLOCK to its hard limit."
+    - "Draft data type unchanged: the DSpark draft from the checkpoint's dspark/ subfolder runs as shipped, with MXFP8 attention and MLP projections, BF16 fc, norms and the shared target embedding and LM head, and an FP8 E4M3 draft KV cache."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
+
+- config-keys:
     - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
   description:
     - "Best-performance Qwen3.8-Flash-Next Quark MXFP4 (FP8 attention, FP8 PLE) AgentX recipe on MI355X: SGLang native NEXTN MTP (3 steps, eagle-topk 1, 4 draft tokens), TP1/EP1, concurrency 1/2/12/24 with GPU-resident KV and 48/80 with HiCache DRAM KV offload. TP1 because the ~116 GiB checkpoint fits on one MI355X."
-    - "Serve amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8 from lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261102@sha256:acf1fee05096c6eb757d4642e3b87c36766bce1334277e49b917afc2f06c7b5a (SGLang 1ced9a9eb0; its AITER 285579b6 is replaced at start-up, see below) with quark quantization, the aiter attention backend, page-size 64, chunked-prefill-size 16384 and mamba-ssm-dtype bfloat16. The PLE n-gram table is offloaded to CPU pinned memory (--ple-offload-embedding, ple_embedding_dtype float8_e4m3fn), which cuts GPU weight memory from ~130 GB to ~82 GB and grows the KV pool from ~2.1M to ~3.7M tokens."
-    - "Install the AITER v0.1.29 release wheel (the ROCm 7.14 cp312 build, pinned by URL and sha256 in the recipe environment as AITER_WHEEL_URL) with flydsl==0.4.2 (AITER_FLYDSL_VERSION) over the image's AITER 285579b6 and apply 8 SGLang patches, each a source-only conversion of an open upstream PR onto the image's SGLang checkout, with an idempotent setup_script (qwen3.8next-rocm10-patches.sh) that fails the job if the wheel does not install, if Python does not import it, or if a patch stops applying. v0.1.29 already contains the FlyDSL causal conv1d prefill and GDN decode/verify kernels (aiter #5992), the fused QSA sparse decode (aiter #6670, required by sglang #45196), the FlyDSL fused GDN chunked prefill (aiter #6496) and the FlyDSL hc_mix kernels (aiter #5993), which the previous revision of this recipe patched into the image's AITER; the image's AITER predates all of them. The ROCm 7.14 build is the one whose prebuilt kernels work with the image's torch (2.11.0+rocm10.0.0, built for HIP 7.15): the ROCm 10.0 and 10.1 wheels of the same release fail on any tensor call. SGLang: fused decode-sized hyper-connection norm and inject (sglang #48648), FlyDSL QSA sparse decode (sglang #45196), faster QSA decode MQA logits (sglang #48649), fused QK norm + RoPE + gate on HIP (sglang #45529), strided GDN prefill projection views (sglang #41683), AITER FlyDSL GDN causal conv1d prefill (sglang #41879) and AITER GDN chunked prefill (sglang #44103) and MTP verify target probabilities built on each row's top-k support instead of a vocabulary-wide sort (sglang #48090, backported: the image lacks sglang #41916, so the top-p rescale helper is copied in). The image already has the monokernel, the AITER topk gating router (sglang #40708), ratio-3 GDN packing (sglang #44302) and the 128-row hc_mix (sglang #41880), so those are not patched."
-    - "Env: SGLANG_USE_AITER, SGLANG_AITER_GDN_CONV, SGLANG_AITER_GDN_PREFILL and SGLANG_AITER_GDN_PREFILL_H=fused (the single fused FlyDSL chunked-prefill kernel of aiter #6496, in v0.1.29; the sglang #44103 default is the triton stages) at every concurrency; SGLANG_OPT_QWEN4_FUSED_HC, SGLANG_USE_AITER_UNIFIED_ATTN and SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION at 12/24/48/80. The FlyDSL QSA decode needs no flag: sglang #45196 turns it on whenever SGLANG_USE_AITER is set on gfx950. Likewise sglang #48090 turns on by default when SGLANG_USE_AITER is set and the MTP verify uses rejection sampling (every request carries top_k 20 from the model's generation_config.json); it falls back to the dense path for requests without a top-k of 2 to 128. ROCM_QUICK_REDUCE_QUANTIZATION=NONE (the image defaults to INT8) at every concurrency. This replaces the earlier 17-patch and 7-patch stacks of this recipe."
+    - "Serve amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8 from lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261117@sha256:09b8237296024285e6286ffb54d75c3af6d59342bbbb3558dea56bed86798814 (SGLang c67db7c762, AITER 581579ab 0.1.29.dev156 with FlyDSL 0.4.2) with quark quantization, the aiter attention backend, page-size 64, chunked-prefill-size 16384 and mamba-ssm-dtype bfloat16. The PLE n-gram table is offloaded to CPU pinned memory (--ple-offload-embedding, ple_embedding_dtype float8_e4m3fn), which cuts GPU weight memory from ~130 GB to ~82 GB and grows the KV pool from ~2.1M to ~3.7M tokens."
+    - "Apply 7 SGLang patches, each a source-only conversion of an open upstream PR onto the image's SGLang checkout, with an idempotent setup_script (qwen3.8next-rocm10-patches.sh) that fails the job if the image's AITER lacks one of the FlyDSL modules or if a patch stops applying. The image's AITER is not touched: it already contains the FlyDSL causal conv1d prefill and GDN decode/verify kernels (aiter #5992), the fused QSA sparse decode (aiter #6670, required by sglang #45196), the FlyDSL fused GDN chunked prefill (aiter #6496) and the FlyDSL hc_mix kernels (aiter #5993), which earlier revisions of this recipe patched into the image's AITER or installed from the v0.1.29 release wheel. SGLang: fused decode-sized hyper-connection norm and inject (sglang #48648), FlyDSL QSA sparse decode (sglang #45196), faster QSA decode MQA logits (sglang #48649), fused QK norm + RoPE + gate on HIP (sglang #45529), AITER FlyDSL GDN causal conv1d prefill (sglang #41879), AITER GDN chunked prefill (sglang #44103) and MTP verify target probabilities built on each row's top-k support instead of a vocabulary-wide sort (sglang #48090, backported: the image lacks sglang #41916, so the top-p rescale helper is copied in). The image already has the strided GDN prefill projection views (sglang #41683, merged), the monokernel, the AITER topk gating router (sglang #40708), ratio-3 GDN packing (sglang #44302) and the 128-row hc_mix (sglang #41880), so those are not patched."
+
+    - "Env: SGLANG_USE_AITER, SGLANG_AITER_GDN_CONV, SGLANG_AITER_GDN_PREFILL and SGLANG_AITER_GDN_PREFILL_H=fused (the single fused FlyDSL chunked-prefill kernel of aiter #6496, in the image's AITER; the sglang #44103 default is the triton stages) at every concurrency; SGLANG_OPT_QWEN4_FUSED_HC, SGLANG_USE_AITER_UNIFIED_ATTN and SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION at 12/24/48/80. The FlyDSL QSA decode needs no flag: sglang #45196 turns it on whenever SGLANG_USE_AITER is set on gfx950. Likewise sglang #48090 turns on by default when SGLANG_USE_AITER is set and the MTP verify uses rejection sampling (every request carries top_k 20 from the model's generation_config.json); it falls back to the dense path for requests without a top-k of 2 to 128. ROCM_QUICK_REDUCE_QUANTIZATION=NONE (the image defaults to INT8) at every concurrency. This replaces the earlier 17-patch and 7-patch stacks of this recipe."
     - "c1 and c2 run the FlyDSL monokernel for MTP target verify and draft that the image ships (--enable-amd-monokernel, 3 steps / 4 draft tokens). Its verify writes the per-draft SSM states and its prelude reads the PLE table on the GPU, so these points drop ReplaySSM and the PLE offload, admit CONC requests (max-running-requests = cuda-graph-max-bs-decode) and use mem-fraction-static 0.9 as given."
     - "c12 and c24 join c1 and c2 in the GPU-KV search-space entry (kv-offloading: none, no HiCache); c48 and c80 are a second entry with HiCache DRAM KV offload (kv-offloading: dram, backend hicache) that takes the 299 GB DRAM share of dram-utilization 0.80 (hicache-size 298). c12, c24, c48 and c80 store the target and draft KV caches in FP8 E4M3, use mem-fraction-static 0.88 as given, keep ReplaySSM and the PLE offload, and set the Mamba checkpoint interval to 262144 tokens (extra_buffer_lazy, max-mamba-cache-size 960, 720 and 640). Admission is 24 requests at c12 and 48 at c24 (2x CONC) and 128 at c48 and c80, with decode CUDA graphs up to the same size; at c48 and c80 HiCache uses the kernel IO backend, page_first layout and write_back policy. c80 also sets strip-thinking-cache and mamba-max-states-per-path 2. Prefill CUDA graphs use the breakable backend (--cuda-graph-backend-prefill breakable)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4832
@@ -13107,11 +13353,16 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add eight opt-in kernel patches (11-16, 21, 24) to the Qwen3.8-Flash-Next FP4 MI355X SGLang AgentX recipe, on the same lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261102 image (digest-pinned), the same AITER v0.1.29 wheel and FlyDSL 0.4.2, and patches 01-10 unchanged. Each patch is off unless its SGLANG_AMD_* variable is set; the header of each file names its upstream PR and head commit and how the patch differs from it."
-    - "Patches 11-16: 11 QSA verify scores the four draft rows of a request with one read of each selected compressed-key block (sglang#48625 with sglang#46631; SGLANG_AMD_QSA_GROUPED_VERIFY). 12 writes the FlyDSL QSA sparse prefill kernels of ROCm/aiter#7556 into the installed wheel and 13 wires them into the QSA backend (sglang#51179; SGLANG_AMD_QSA_FLYDSL_PREFILL). 14 keeps the TP1 MXFP4 MoE intermediate at 128-column alignment instead of AITER's generic 256, so AITER's tuned FlyDSL rows apply (sglang#49852; SGLANG_AMD_MXFP4_PAD128). 15 runs prefill-sized hyper-connection sites as one GEMM over the raw residual with the norm folded into the weights, plus Triton kernels (sglang#50863; SGLANG_AMD_HC_PREFILL). 16 selects the QSA indexer's request-relative prefill blocks with the exact topk_v2 on unscaled scores, where fast_topk can drop members of an overfull threshold bin, and scores those rows with one pipeline stage on gfx95 (sglang#50871 and sglang#51263; SGLANG_AMD_QSA_PREFILL_TOPK_V2)."
+    - "Add patches 09 and 10 and fifteen patches (11-16, 21-24, 26-30) to the Qwen3.8-Flash-Next FP4 MI355X SGLang AgentX recipe, on the same lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261117 image (digest-pinned) with its own AITER 581579ab and FlyDSL 0.4.2; patches 01-07 are unchanged. Each patch of 11-26, 28 and 29 changes nothing unless its variable is set (12 and 22 add AITER code that only 13 and 23 call); 27 has no variable. The header of each file names its upstream PR and head commit and how the patch differs from it."
+    - "Patches 09 and 10: 09 packs the GDN in_proj_qkvz and in_proj_ba of up to 64 rows into one FP8 quant and one GEMM (sglang#50024, on by default). 10 updates the image's Qwen3.8-Flash-Next monokernel (sgl-amd-mono a04ceab159d9, an editable install) to amd-asalykov/sgl-amd-mono branch asalykov/qfn-mono-tp (afbb25a457009d: QSA index chain, stage placement, TP 1/2/4 launches), as the source-only diff a04ceab..afbb25a of its qwen38_flash_next package. The setup script applies both after 07 and fails the job if the patched monokernel is not the one Python imports."
+    - "Patches 11-16: 11 QSA verify scores the four draft rows of a request with one read of each selected compressed-key block (sglang#48625 with sglang#46631; SGLANG_AMD_QSA_GROUPED_VERIFY). 12 writes the FlyDSL QSA sparse prefill kernels of ROCm/aiter#7556 into the image's editable AITER checkout, which the setup script requires to be the AITER Python imports, and 13 wires them into the QSA backend (sglang#51179; SGLANG_AMD_QSA_FLYDSL_PREFILL). 14 keeps the TP1 MXFP4 MoE intermediate at 128-column alignment instead of AITER's generic 256, so AITER's tuned FlyDSL rows apply (sglang#49852; SGLANG_AMD_MXFP4_PAD128). 15 is an earlier revision of sglang#50863 that patch 26 brings to the PR head. 16 selects the QSA indexer's request-relative prefill blocks with the exact topk_v2 on unscaled scores, where fast_topk can drop members of an overfull threshold bin, and scores those rows with one pipeline stage on gfx95 (sglang#50871 and sglang#51263; SGLANG_AMD_QSA_PREFILL_TOPK_V2)."
     - "Patches 21 and 24: 21 selects QSA decode, verify and draft-extend blocks with the exact topk_v2 (sglang#50871; SGLANG_AMD_QSA_DECODE_TOPK_V2) and scores the draft-extend rows of a request with one read of each selected compressed-key block, as patch 11 does for verify (sglang#51242; SGLANG_AMD_QSA_GROUPED_DRAFT_EXTEND). 24 runs GDN ReplaySSM target verify and commit on new kernels (sglang#51180; SGLANG_AMD_GDN_VERIFY)."
-    - "c12, c24, c48 and c80 set all eight variables; c1 at TP1, TP2 and TP4 and c2 set none of them."
-    - "Every monokernel point (c1 at TP1, TP2 and TP4, c2) sets SGLANG_AMD_MONO_QWEN38_DRAFT_HEAD_FP8=0: patch 10 otherwise runs the MTP draft's lm_head on an FP8 copy, and the draft runs at its shipped precision. No patch lowers the dtype of a weight or an activation."
+    - "Patches 22, 23, 26 and 27: 22 adds fused_moe(stage2_fp8=True) to the image's AITER (ROCm/aiter#8174): that call's FlyDSL reduce stage 2 writes its route rows in FP8 and sums them in FP32, and an MXFP4 scatter stage 2 after an MXMOE stage 1 runs as the reduce of the same tile; 23 passes it from every Quark MXFP4 MoE layer of the target, not the draft's (sglang#51198; SGLANG_AITER_MOE_STAGE2_FP8). On this image the only stage 2 the c12-c80 points change is the tuned scatter of the 640-column TP1 MoE at 16,384 tokens; the atomic stage 2s at 1-8,192 tokens stay as they are. 26 brings patch 15's two files to the head of sglang#50863 and adds its other source changes, so 15 and 26 apply in turn (SGLANG_USE_HIP_HC_PREFILL_TRITON; 15's SGLANG_AMD_HC_PREFILL is no longer read): gated hyper-connection sites above 48 rows run as Triton kernels over the raw residual, the down projection split-K up to 512 rows and a batched GEMM above, and patch 01's fused mix keeps 1-48 rows. 27 gives a Quark per-channel FP8 out_proj or o_proj at 1-256 BF16 tokens its (FP8, scale) pair from the launch before it, the GDN gated RMSNorm or the attention output gate, with codes and scales equal to the linear's own quant bit for bit (sglang#51023)."
+    - "Patches 28 and 29, the forms the validation windows ran, with their kernels in SGLang's tree: 28 runs the fused FlyDSL GDN chunked prefill (SGLANG_AITER_GDN_PREFILL_H fused) for a batch of 1,024 tokens or more as prep kernels in parallel over the chunks plus a serial kernel that carries the state, with the fused kernel's outputs and tracked states bit for bit (SGLANG_AMD_GDN_PREFILL; ROCm/aiter#8329 ports the kernels into AITER). 29 runs the GDN prefill's causal conv, one FP8 quant for in_proj_qkvz and in_proj_ba, the gated norm with the out_proj quant, and the gating on new kernels (SGLANG_AMD_GDN_PREFILL_FUSED; upstream as ROCm/aiter#8328, the conv, and sglang#51658, the quant and gating fusions)."
+    - "Patch 30 (sgl-project/sglang#51663) adds Qwen4ExpForConditionalGeneration to the architectures --language-model-only accepts and sends text (1-D) positions to the MRoPE Triton kernel through a stride-0 view instead of forward_native; every point sets language-model-only, so the server skips the vision tower's weights."
+    - "c12, c24, c48 and c80 set SGLANG_AMD_QSA_GROUPED_VERIFY, SGLANG_AMD_QSA_FLYDSL_PREFILL, SGLANG_AMD_MXFP4_PAD128, SGLANG_AMD_QSA_PREFILL_TOPK_V2, SGLANG_AMD_QSA_DECODE_TOPK_V2, SGLANG_AMD_QSA_GROUPED_DRAFT_EXTEND, SGLANG_AMD_GDN_VERIFY, SGLANG_USE_HIP_HC_PREFILL_TRITON and SGLANG_AITER_MOE_STAGE2_FP8, and keep patch 09 on. Every point sets SGLANG_AMD_GDN_PREFILL and SGLANG_AMD_GDN_PREFILL_FUSED (patches 28 and 29). c1 and c2, the monokernel points, set none of the nine; they set SGLANG_QWEN35_PACKED_IN_PROJ=0, because the monokernel runs the decode-sized steps patch 09 packs and builds a second copy of the projections, and SGLANG_AMD_MONO_QWEN38_DRAFT_HEAD_FP8=0, because patch 10 otherwise runs the MTP draft's lm_head on an FP8 copy: the draft runs at its shipped precision. Apart from patch 23's FP8 stage-2 route rows in the target's MoE, no patch lowers the dtype of a weight or an activation."
+    - "Decode CUDA graphs cover every batch size up to the admission at c24 (1-48), and at c48 and c80 every size to 64, then every 8 from 72 to 128 (cuda-graph-bs-decode); c12 keeps the image's sizes. c48 also sets strip-thinking-cache and mamba-max-states-per-path 2, as c80 does."
+    - "c1 and c2 set hybrid-cache-checkpoints-level 3: the prefix cache checkpoints the Mamba state at every prefill chunk and decode tracking boundary instead of the image's default level 2 (branch points and request ends, one state per path), so fewer prompt tokens are recomputed. c12, c24, c48 and c80 keep the default level."
     - "Remove default-chat-template-kwargs (enable_thinking false): the server applies the chat template's default, the thinking mode of the acceptance length the harness injects."
-    - "Search space and every other flag are unchanged: TP1 concurrency 1, 2, 12 and 24 from GPU KV, c1 at TP2 and TP4, TP1 48 and 80 with HiCache DRAM KV offload (299 GB share, hicache-size 298)."
+    - "The search space is unchanged: TP1 concurrency 1, 2, 12 and 24 from GPU KV, 48 and 80 with HiCache DRAM KV offload (299 GB share, hicache-size 298)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5133

@@ -1,0 +1,38 @@
+# [Feat] qwen4_exp: Support --language-model-only
+# https://github.com/sgl-project/sglang/pull/51663  (PR head e3ccb7faad)
+# Generated against the 20261117 image's SGLang checkout (c67db7c762) with patches 01-07, 09, 11, 13-16, 21, 24, 23 and
+# 26-29 applied; source files only (tests dropped).
+# Both commits: Qwen4ExpForConditionalGeneration joins the architectures --language-model-only accepts, and MRoPE sends
+# text (1-D) positions to its Triton kernel through a stride-0 view instead of forward_native.
+# Port: unchanged; the changed lines equal the PR's.
+# Apply in /sgl-workspace/sglang with git apply.
+
+diff --git a/python/sglang/srt/layers/rotary_embedding/mrope.py b/python/sglang/srt/layers/rotary_embedding/mrope.py
+index b483e7c..ffaa139 100644
+--- a/python/sglang/srt/layers/rotary_embedding/mrope.py
++++ b/python/sglang/srt/layers/rotary_embedding/mrope.py
+@@ -263,7 +263,11 @@ class MRotaryEmbedding(RotaryEmbedding):
+         if query.shape[0] == 0:
+             return query, key
+         self._match_cos_sin_cache_dtype(query)
+-        if positions.ndim == 2 and self.mrope_section:
++        if self.mrope_section:
++            if positions.ndim == 1:
++                # Text positions (e.g. --language-model-only) are the same on
++                # every axis; the kernel reads them through a stride-0 view.
++                positions = positions.unsqueeze(0).expand(3, -1)
+             return self.forward_triton(positions, query, key)
+         return self.forward_native(positions, query, key, fused_set_kv_buffer_arg)
+ 
+diff --git a/python/sglang/srt/server_args.py b/python/sglang/srt/server_args.py
+index 26db600..1c6f085 100644
+--- a/python/sglang/srt/server_args.py
++++ b/python/sglang/srt/server_args.py
+@@ -347,6 +347,7 @@ class ServerArgs:
+         "Cosmos3ForConditionalGeneration",
+         "Cosmos3EdgeForConditionalGeneration",
+         "Gemma4ForConditionalGeneration",
++        "Qwen4ExpForConditionalGeneration",
+     )
+ 
+     # The attention-backend allow-list is enforced via

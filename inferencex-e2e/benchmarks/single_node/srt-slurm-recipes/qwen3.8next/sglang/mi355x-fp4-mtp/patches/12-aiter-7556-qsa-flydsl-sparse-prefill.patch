@@ -1,8 +1,14 @@
 # [FlyDSL] [QSA] Sparse prefill attention on gfx950: union and packed-direct ports, strided K/V rows
-# https://github.com/ROCm/aiter/pull/7556  (files at e6a31510c9, the PR's last own commit; its later commits only merge main)
-# Replaces aiter/ops/flydsl/qsa_sparse_prefill.py and aiter/ops/flydsl/kernels/qsa/ of the AITER v0.1.29 wheel that the
-# setup script installs. Nothing calls these kernels unless patch 13 is applied and SGLANG_AMD_QSA_FLYDSL_PREFILL is set.
-# Apply in /opt/venv/lib/python3.12/site-packages (site-packages; not a git checkout).
+# https://github.com/ROCm/aiter/pull/7556  (files at e6a31510c9; the PR head 1c8725c7f3 has the same kernels/qsa/ files
+# and differs only in qsa_sparse_prefill.py's argument checks: main's ROCm/aiter#8083 selection-width query, which patch
+# 13 does not use; a softmax_scale that float() cannot convert is rejected instead of raising; out is checked for overlap
+# against the K/V rows instead of their strided span, so an out in the padding between rows is accepted)
+# Replaces aiter/ops/flydsl/qsa_sparse_prefill.py and aiter/ops/flydsl/kernels/qsa/ of the 20261117 image's editable
+# AITER checkout (/sgl-workspace/aiter, 581579ab, 0.1.29.dev156). Nothing calls these kernels unless patch 13 is applied
+# and SGLANG_AMD_QSA_FLYDSL_PREFILL is set.
+# Port from the 20261102 recipe, which applied it to the AITER v0.1.29 wheel's site-packages: the body is unchanged
+# (these files are identical in v0.1.29 and 581579ab); only the target directory changed.
+# Apply in /sgl-workspace/aiter with git apply.
 
 diff --git a/aiter/ops/flydsl/kernels/qsa/__init__.py b/aiter/ops/flydsl/kernels/qsa/__init__.py
 index 7d72898..ce57cf5 100644

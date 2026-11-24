@@ -3,14 +3,19 @@
 # and verify topk_v2 selection, reworked; no switch on gfx95)
 # https://github.com/sgl-project/sglang/pull/51242  (PR head 96ae27c95f: draft-extend rows scored with the grouped
 # verify kernel of sgl-project/sglang#48625, no switch)
-# Generated against the image's SGLang checkout (1ced9a9eb0) with patches 01-16 applied; source files only (tests dropped).
+# Generated against the 20261117 image's SGLang checkout (c67db7c762) with patches 01-07, 09, 11 and 13-16 applied;
+# source files only (tests dropped).
 # Differs from the PRs: opt-in through SGLANG_AMD_QSA_DECODE_TOPK_V2=1 (fast_topk unless set) and
 # SGLANG_AMD_QSA_GROUPED_DRAFT_EXTEND=1 (per-row draft-extend scoring unless set; it takes effect with patch 11's
 # SGLANG_AMD_QSA_GROUPED_VERIFY=1).
+# Port from the 20261102 image (SGLang 1ced9a9eb0): unchanged; it applies with offsets. sglang#51242's conflict with
+# the base (qsa/mqa.py's import line, sglang#48781 and #37570) is in the sglang#48625 commits it carries, which patch 11
+# ports; its own commit 96ae27c95f changes qsa_indexer.py only. The base's topk_v2 builds in the exactness mode of
+# SGLANG_TOPK_V2_MODE (sglang#47960); its default 1 is the exact selection this patch relies on.
 # Apply in /sgl-workspace/sglang with git apply.
 
 diff --git a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
-index 9115fda..98ac764 100644
+index 1022d03a5a..1d79db7dc8 100644
 --- a/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
 +++ b/python/sglang/srt/layers/attention/qsa/qsa_indexer.py
 @@ -2,6 +2,7 @@
@@ -21,7 +26,7 @@ index 9115fda..98ac764 100644
  from typing import Optional, Tuple
  
  import torch
-@@ -75,6 +76,66 @@ def _exact_block_topk(
+@@ -76,6 +77,66 @@ def _exact_block_topk(
      return block_indices
  
  
@@ -88,7 +93,7 @@ index 9115fda..98ac764 100644
  class QSAIndexer(MultiPlatformOp):
      """Config-driven fused-QK, weight-free sparse-attention indexer."""
  
-@@ -120,6 +181,13 @@ class QSAIndexer(MultiPlatformOp):
+@@ -121,6 +182,13 @@ class QSAIndexer(MultiPlatformOp):
          self.amd_prefill_topk_v2 = (
              amd_prefill_topk_v2_enabled() and is_gfx95_supported()
          )
@@ -102,7 +107,7 @@ index 9115fda..98ac764 100644
  
      @staticmethod
      def _validate_config(config) -> None:
-@@ -613,7 +681,11 @@ class QSAIndexer(MultiPlatformOp):
+@@ -603,7 +671,11 @@ class QSAIndexer(MultiPlatformOp):
              rows_per_request=rows_per_request,
              num_query_heads=self.index_n_heads,
          )
@@ -115,7 +120,7 @@ index 9115fda..98ac764 100644
              # Decode rows start at zero, so compressed lengths double as row lengths;
              # skip the generic zero-fill + subtract.
              from sglang.kernels.ops.attention.fast_topk import fast_topk
-@@ -838,10 +910,13 @@ class QSAIndexer(MultiPlatformOp):
+@@ -825,10 +897,13 @@ class QSAIndexer(MultiPlatformOp):
                  logical_positions,
                  indexer_metadata.get_seqlens_int32(),
                  defer_expansion=q.is_cuda and indexer_metadata.defer_block_expansion,
