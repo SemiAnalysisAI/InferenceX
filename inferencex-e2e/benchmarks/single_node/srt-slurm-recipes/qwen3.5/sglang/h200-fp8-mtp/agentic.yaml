@@ -46,7 +46,7 @@ override_gpu_kv:
     env:
       KV_OFFLOADING: none
 # HiCache extends RadixAttention. Hybrid GDN/Mamba allocates one KV and one
-# Mamba host pool per rank: 1234 GB / TP8 / 2 pools = 77 GB each.
+# Mamba host pool per rank, 77 GB each (1232 GB across TP8).
 override_hicache:
   roles:
     agg:
@@ -75,7 +75,7 @@ override_hicache_ep1:
   benchmark:
     env:
       KV_OFFLOADING: dram
-# TP4/EP4 HiCache on half the node: 617 GB / TP4 / 2 pools = 77 GB each.
+# TP4/EP4 HiCache on half the node: 77 GB per pool, 616 GB across TP4.
 override_hicache_tp4_c8:
   roles:
     agg:

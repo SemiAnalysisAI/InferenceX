@@ -78,8 +78,7 @@ base:
         kv-cache-dtype: bfloat16
         speculative-draft-kv-cache-dtype: bfloat16
         enable-hierarchical-cache: true
-        # One combined packed target/draft KV + Mamba host-pool budget: 298 of the
-        # 299 GB generated allowance, keeping 1 GB of page-alignment headroom.
+        # One combined packed target/draft KV + Mamba host-pool budget of 298 GB per rank.
         hicache-size: 298
         hicache-io-backend: kernel
         hicache-mem-layout: page_first

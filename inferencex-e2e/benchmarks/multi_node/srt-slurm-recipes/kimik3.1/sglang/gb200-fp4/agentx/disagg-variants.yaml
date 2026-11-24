@@ -231,7 +231,7 @@ override_1p2d_tp16_c32:
         IN_BATCH_PREFIX_CACHING_CHECK_THRESHOLD: '-1'
       args:
         expert-parallel-size: 4
-        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 fits a tray's 487 GB offload share.
+        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 is ~475 GB per 4-GPU tray.
         hicache-size: 108
         load-format: runai_streamer
         model-loader-extra-config: '{"concurrency":16,"distributed":true}'
@@ -279,7 +279,7 @@ override_1p1d_pp2_c200:
         load-format: auto
         weight-loader-drop-cache-after-load: false
         dist-timeout: 3600
-        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 fits a tray's 487 GB offload share.
+        # Host KV, Mamba and DSA indexer pools total ~1.1 x hicache-size per rank; 108 is ~475 GB per 4-GPU tray.
         hicache-size: 108
         speculative-num-draft-tokens: 6
     decode:

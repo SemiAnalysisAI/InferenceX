@@ -4068,7 +4068,7 @@ glm5.3flash-fp8-h200-sglang-agentic-mtp:
   srt-recipe-dir: glm5.3flash/sglang/h200-fp8-mtp
   scenarios:
     agentic-coding:
-    # 0.6612 x 1,542.8 GB = 1,020 GB covers the measured 8 x 127.47 GB = 1,019.8 GB HiCache host pools.
+    # The measured HiCache host pools are 8 x 127.47 GB = 1,019.8 GB.
     - search-space:
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 8, 10, 12, 14, 16], srt-recipe: 'agentic.yaml:base' }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [20, 24, 28, 32], srt-recipe: 'agentic.yaml:override_hicache' }
@@ -5500,7 +5500,7 @@ kimik3.1-fp4-gb200-dynamo-sglang-agentic-dflash-agg:
   srt-recipe-dir: kimik3.1/sglang/gb200-fp4/agentx
   scenarios:
     agentic-coding:
-    # 0.54 of each 4-GPU tray's host DRAM is a 487 GB offload share; 108 GB of HiCache per rank fits it.
+    # 108 GB of HiCache per rank; with the Mamba and DSA indexer pools that is ~475 GB per 4-GPU tray.
     - search-space:
       - spec-decoding: draft_model
         conc-list: [1]
@@ -6195,14 +6195,14 @@ kimik3.1-fp4-b300-vllm-agentic-dspark:
   srt-recipe-dir: kimik3.1/vllm/b300-fp4-mtp
   scenarios:
     agentic-coding:
-    # 0.75 resolves to 2249 GB of host DRAM, which the recipe's Simple CPU offload splits across the 8 TP ranks.
+    # The recipe's Simple CPU offload splits 2249 GB of host DRAM across the 8 TP ranks.
     - search-space:
       # The ~1.56 TB MXFP4 checkpoint needs all 8 GPUs. Fused Kimi-K3 decode on TP8 x DCP8; DSpark drafts 4 tokens.
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 6], srt-recipe: agentic.yaml }
       # CUDA graphs also cover prefill and mixed steps up to 4096 tokens: TP8 x DCP8 with DSpark drafting 3 tokens at
       # c12 and c24. Prefill is admitted once every 8 engine steps.
       - { tp: 8, ep: 1, dcp-size: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [12, 24], srt-recipe: agentic-mixed-graphs.yaml }
-    # 1.0 resolves to 2999 GB of host DRAM.
+    # The EP recipe's Simple CPU offload splits 2999 GB of host DRAM across the 8 TP ranks.
     - search-space:
       # Routed experts EP8 on MegaMoE keep the fused decode at every batch size; DSpark drafts 4 tokens and prefill is
       # admitted once every 8 engine steps.
@@ -6222,7 +6222,7 @@ kimik3.1-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
   srt-recipe-dir: kimik3.1/vllm/b300-fp4/agentx
   scenarios:
     agentic-coding:
-    # 0.5441 resolves to 1632 GB of host DRAM per node, the Mooncake store segments of its eight TP ranks.
+    # The Mooncake store segments of each node's eight TP ranks total 1632 GB of host DRAM.
     - search-space:
       # Each worker is one B300 node: TP8 x DCP8, prefill with routed experts EP8 on MegaMoE, decode on the
       # low-latency decode backend. Concurrency 1: DSpark drafts 7 tokens.
@@ -8146,7 +8146,7 @@ glm5.3flash-fp8-b200-sglang-agentic-mtp:
     agentic-coding:
     - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 24, 32], srt-recipe: agentic.yaml }
-    # Covers the auto-sized HiCache host pools: 8 ranks x 184.96 GB.
+    # Auto-sized HiCache host pools: 8 ranks x 184.96 GB.
     - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48], srt-recipe: agentic.yaml }
 
@@ -8163,7 +8163,7 @@ glm5.3flash-fp4-b200-sglang-agentic-mtp:
     agentic-coding:
     - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16, 24, 32], srt-recipe: agentic.yaml }
-    # Covers the auto-sized HiCache host pools: 8 ranks x 186.56 GB.
+    # Auto-sized HiCache host pools: 8 ranks x 186.56 GB.
     - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48], srt-recipe: agentic.yaml }
 

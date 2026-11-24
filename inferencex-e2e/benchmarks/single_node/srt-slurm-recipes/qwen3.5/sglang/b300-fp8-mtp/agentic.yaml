@@ -57,7 +57,7 @@ base:
 # client timeout; TP2 keeps SGLang's single tokenizer, which avoids a startup
 # race with HiCache shared-memory initialization. HiCache sizes the target KV
 # and Mamba host pools independently, and the NEXTN draft adds 1/15 of the
-# target: (599 GB - 1 GB/rank) * 15 / TP2 / 31 = 144 GB per pool.
+# target: 144 GB per pool is 144 * 31 / 15 = ~298 GB per TP2 rank.
 override_tp4_c1:
   roles:
     agg:

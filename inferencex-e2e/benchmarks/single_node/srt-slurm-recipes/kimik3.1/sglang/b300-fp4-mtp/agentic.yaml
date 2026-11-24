@@ -43,7 +43,7 @@ base:
         # Without ReplaySSM DFLASH keeps one KDA state per draft token and the KV pool collapses.
         enable-linear-replayssm-spec: true
         # 8 x 230 GB leaves room for the DSA indexer and KDA host pools beside hicache-size
-        # inside 2249 GB of host memory.
+        # inside the 3 TB per-server DRAM policy.
         enable-hierarchical-cache: true
         hicache-size: 230
         hicache-io-backend: direct

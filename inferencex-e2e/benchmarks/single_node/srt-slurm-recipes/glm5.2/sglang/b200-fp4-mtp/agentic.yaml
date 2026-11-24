@@ -60,7 +60,7 @@ base:
 # One variant per point. Admission is 2x CONC and the graph batch matches it,
 # capped at 64. MLA ranks hold complete per-token KV, so ratio 0.75 gives too
 # few host slots past C8; C12/C16 pin a 169 GB/rank pool (~1,662 GB across TP8
-# with the DSA indexer, within the 1,717 GB budget).
+# with the DSA indexer).
 override_c1:
   roles:
     agg:
