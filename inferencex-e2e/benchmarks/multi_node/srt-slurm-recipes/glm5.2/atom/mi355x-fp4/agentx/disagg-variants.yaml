@@ -21,8 +21,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         <<: &environment
           PYTHONUNBUFFERED: "1"
@@ -65,8 +63,6 @@ base:
         max-num-batched-tokens: 8192
     decode:
       nodes: 1
-      workers: 1
-      gpus: 4
       env: *environment
       args: *server
   sbatch_directives:
@@ -233,7 +229,6 @@ override_1p2d_mcstore_c56:
                 rdma3: {master: "127.0.0.1:26351", metadata: "http://127.0.0.1:26380/metadata"}
     decode:
       nodes: 2
-      workers: 2
       env:
         AITER_REUSE_IDENTICAL_COMM_GROUPS: "1"
         MC_NUM_QP_PER_EP: "1"
@@ -254,7 +249,6 @@ override_1p3d_mcstore_c24:
         extra-kv-connectors: *per_nic_store_connector
     decode:
       nodes: 3
-      workers: 3
       env:
         PYTHONNOUSERSITE: "1"
         MC_NUM_QP_PER_EP: "1"

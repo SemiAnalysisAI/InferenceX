@@ -179,12 +179,8 @@ override_3p4d_tp8_tp8_c672:
   roles:
     prefill:
       nodes: 6
-      workers: 3
-      gpus: 8
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 56
         max-running-requests: 56
@@ -198,12 +194,8 @@ override_2p3d_tp8_tp8_c352:
   roles:
     prefill:
       nodes: 4
-      workers: 2
-      gpus: 8
     decode:
       nodes: 6
-      workers: 3
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 40
         max-running-requests: 40
@@ -217,12 +209,8 @@ override_1p2d_tp8_tp8_c224:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
     decode:
       nodes: 4
-      workers: 2
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 36
         max-running-requests: 36
@@ -232,12 +220,8 @@ override_1p2d_tp8_tp8_c160:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
     decode:
       nodes: 4
-      workers: 2
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 24
         max-running-requests: 24
@@ -247,12 +231,8 @@ override_1p3d_tp8_tp8_c224:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
     decode:
       nodes: 6
-      workers: 3
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 20
         max-running-requests: 20
@@ -262,12 +242,8 @@ override_1p4d_tp8_tp8_c112:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 6
         max-running-requests: 6
@@ -277,12 +253,8 @@ override_1p5d_tp8_tp8_c120:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
     decode:
       nodes: 10
-      workers: 5
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 5
         max-running-requests: 5
@@ -292,12 +264,8 @@ override_1p4d_tp8_tp8_c56:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 3
         max-running-requests: 3
@@ -307,12 +275,8 @@ override_1p4d_tp8_tp8_c32:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 3
         max-running-requests: 3
