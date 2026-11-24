@@ -13319,6 +13319,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4826
   scenario-type: [agentic-coding]
 
+- config-keys:
     - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
