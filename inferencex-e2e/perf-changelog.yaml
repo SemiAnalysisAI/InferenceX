@@ -13354,10 +13354,13 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update both entries to rocm/atom-dev:nightly_202611171508 (ATOM 5f3ae2b5b, Mooncake 206d634), pinned by digest, and the AToMesh router to the same ATOM commit."
-    - "Add single-node TP8 points at concurrency 1 and 2 to the GLM-5.2 MI355X ATOM curve. Both entries now use framework atom, so the single-node and disaggregated ATOM points form one curve. The TP8 server runs ATOM's GLM-5.2 mono decode (ATOM_MONO_ENABLE=1) on the checkpoint's BF16 attention (ROCm/ATOM#3266) and the DSA indexer mono decode on an FP8 index cache, with MTP at three draft tokens and the golden acceptance 2.99; it admits 2 requests and captures graphs at 1 and 2."
-    - "Drop 1P1D concurrency 128 and 1P3D concurrency 12 and 16. The remaining disaggregated points keep their recipes and set ATOM_MONO_ENABLE=0, so their decode stays on the path the previous image ran."
+    - "Update both entries from rocm/atom-dev:nightly_202611110332 (ATOM 920a200a3) to rocm/atom-dev:nightly_202611171508 (ATOM 5f3ae2b5b, Mooncake 206d634), pinned by digest, and move the AToMesh router from 920a200a3 to the same ATOM commit."
+    - "Add single-node TP8 points at concurrency 1 and 2 (new key glm5.2-fp4-mi355x-atom-disagg-agentic-mtp-agg). Both entries now use framework atom instead of atom-disagg, so the single-node and disaggregated ATOM points form one curve."
+    - "Drop 1P1D concurrency 128 and 1P3D concurrency 12 and 16. 1P1D 56, 72, 96 and 112, 1P2D 56 and 1P3D 24 remain."
+    - "The TP8 server runs ATOM's GLM-5.2 mono decode (ATOM_MONO_ENABLE=1) and the DSA indexer mono decode on FP8 KV and index caches, with MTP at three draft tokens and the golden acceptance 2.99. It admits 2 requests, captures graphs at 1 and 2, and uses max-num-batched-tokens 16384 and gpu-memory-utilization 0.95."
+    - "The disaggregated points keep their recipes and set ATOM_MONO_ENABLE=0 on prefill and decode, so their decode stays on the path the previous image ran."
     - "The disaggregated workers raise RLIMIT_MEMLOCK's soft limit to the hard limit before they start (setup script raise-memlock-soft-limit.sh). Slurm sets the soft limit to 8 MiB, and the ionic driver charges every GPU KV registration against it before falling back to peer memory, so without the raise each Mooncake KV registration fails with ENOMEM."
     - "Weights run as shipped in amd/GLM-5.2-MXFP4 with no online quantization, AITER quick reduce is unset, and the mono decode's all-reduce sums BF16 partials in FP32."
-    - "The MTP draft (model.layers.78) ships in BF16 and is excluded from the checkpoint's MXFP4 quantization, so ATOM loads it in BF16 at both the old and new commit; its KV cache keeps the target's FP8, as before."
+    - "Relevant ATOM changes in the image: ROCm/ATOM#3266 (GLM-5.2 mono decode on the checkpoint's BF16 attention), #3350 (mono mailbox polling stalls during concurrent transfers), #3043 (FP8 indexer prefill logits and key gathers in bounded passes), #3097 and #3324 (shared Mooncake Store loads and restores) and #3147 (P/D decode admission bounded by pending receive KV bytes)."
+    - "Draft data types: no change. The MTP draft (model.layers.78) ships in BF16 and is excluded from the checkpoint's MXFP4 quantization, so ATOM loads it in BF16 at both the old and new commit; it shares the target's FP8 KV cache, as before."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5120
