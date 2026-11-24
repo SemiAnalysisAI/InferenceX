@@ -165,9 +165,6 @@ jobs:
                   github-token: ${{ secrets.FRONTEND_PAT }} # zizmor: ignore[secrets-outside-env]
                   script: |
                     const [owner, repo] = process.env.APP_REPO.split("/");
-                    if (!/^[1-9]\d*$/.test(process.env.SELECTION_ARTIFACT_ID) || !/^[0-9a-f]{64}$/.test(process.env.SELECTION_SHA256)) {
-                      throw new Error("Missing validated video publication selection");
-                    }
                     await github.rest.repos.createDispatchEvent({
                       owner,
                       repo,
