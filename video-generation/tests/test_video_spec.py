@@ -170,32 +170,34 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _history(repo: Path, spec: dict[str, Any], commits: list[dict[str, Any]]) -> list[str]:
-    """Commit one specs tree per entry and return the commit ids, oldest first.
+def _commit(repo: Path, spec: dict[str, Any], commit: dict[str, Any]) -> str:
+    """Commit a specs tree and return the commit id.
 
-    An entry maps each set id in ``sets`` to its repetitions; ``steps``, ``file`` and ``loader``
+    ``commit`` maps each set id in ``sets`` to its repetitions; ``steps``, ``file`` and ``loader``
     override the denoising steps, the spec file written and the loader's source.
     """
     specs = repo / released_sets.SPECS
-    specs.mkdir(parents=True)
+    loader = (SPECS / "video_spec.py").read_text() + commit.get("loader", "")
+    (specs / "video_spec.py").write_text(loader)
+    document = {
+        **spec,
+        "generation": {"num_inference_steps": commit.get("steps", 40)},
+        "sets": {
+            set_id: {**spec["sets"]["s"], "repetitions": repetitions}
+            for set_id, repetitions in commit["sets"].items()
+        },
+    }
+    (specs / commit.get("file", "clip.yaml")).write_text(yaml.safe_dump(document))
+    _git(repo, "add", "--all")
+    _git(repo, "commit", "--quiet", "--message", "specs")
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _history(repo: Path, spec: dict[str, Any], commits: list[dict[str, Any]]) -> list[str]:
+    """Start a repository with one commit per entry and return the commit ids, oldest first."""
+    (repo / released_sets.SPECS).mkdir(parents=True)
     _git(repo, "init", "--quiet")
-    ids = []
-    for commit in commits:
-        loader = (SPECS / "video_spec.py").read_text() + commit.get("loader", "")
-        (specs / "video_spec.py").write_text(loader)
-        document = {
-            **spec,
-            "generation": {"num_inference_steps": commit.get("steps", 40)},
-            "sets": {
-                set_id: {**spec["sets"]["s"], "repetitions": repetitions}
-                for set_id, repetitions in commit["sets"].items()
-            },
-        }
-        (specs / commit.get("file", "clip.yaml")).write_text(yaml.safe_dump(document))
-        _git(repo, "add", "--all")
-        _git(repo, "commit", "--quiet", "--message", "specs")
-        ids.append(_git(repo, "rev-parse", "HEAD"))
-    return ids
+    return [_commit(repo, spec, commit) for commit in commits]
 
 
 V1 = {"release-v1": 2}
@@ -236,11 +238,13 @@ def test_a_released_set_cannot_change_or_disappear(
 @pytest.mark.parametrize(
     "commits",
     [
-        [{"sets": V1 | {"draft": 2}}, V2_ADDED],
+        [{"sets": V1 | {"draft": 2}}, V2_ADDED, {"sets": V2_ADDED["sets"] | {"release-v3": 2}}],
         # New generation parameters go in a new spec file.
         [{"sets": V1}, {"sets": V1, "file": "longer-clip.yaml", "steps": 30}],
         # Undoing an edit restores the released plan.
         [{"sets": V1}, V2_ADDED, V2_EDITED, V2_ADDED],
+        # A commit that cannot load its specs is skipped once a later commit loads again.
+        [{"sets": V1}, {"sets": V1, "loader": "\n\nraise RuntimeError\n"}, {"sets": V1}],
     ],
 )
 def test_history_that_keeps_every_released_plan_passes(
@@ -257,7 +261,22 @@ def test_history_that_keeps_every_released_plan_passes(
 def test_a_later_commit_does_not_change_an_older_commits_verdict(
     spec: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    start, older, _newer = _history(tmp_path, spec, [{"sets": V1}, V2_ADDED, V2_EDITED])
+    start, older, newer = _history(tmp_path, spec, [{"sets": V1}, V2_ADDED, V2_EDITED])
     _git(tmp_path, "checkout", "--quiet", "--detach", older)
     monkeypatch.chdir(tmp_path)
     released_sets.main(["released_sets", start])
+    with pytest.raises(SystemExit, match="does not descend"):
+        released_sets.main(["released_sets", newer])
+
+
+def test_a_pull_request_may_edit_a_set_before_it_merges(
+    spec: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (base,) = _history(tmp_path, spec, [{"sets": V1}])
+    _git(tmp_path, "checkout", "--quiet", "-b", "feat/release-v2")
+    _commit(tmp_path, spec, V2_ADDED)
+    _commit(tmp_path, spec, V2_EDITED)
+    _git(tmp_path, "checkout", "--quiet", "--detach", base)
+    _git(tmp_path, "merge", "--quiet", "--no-ff", "--message", "merge", "feat/release-v2")
+    monkeypatch.chdir(tmp_path)
+    released_sets.main(["released_sets", base])

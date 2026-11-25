@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 SPECS = "video-generation/specs"
-# The rule's first commit on main: sets may have changed before it, never after.
+# The check starts at this commit on main, the last to touch the specs before the rule.
 RULE_START = "283fb864d08613b04c51ab581816089b0d3954c3"
 
 
@@ -31,11 +31,18 @@ def _git(*args: str) -> bytes:
     return subprocess.run(["git", *args], check=True, stdout=subprocess.PIPE).stdout
 
 
-def _released_plans_at(commit: str) -> dict[tuple[str, str], str]:
+def _released_plans_at(commit: str, *, must_load: bool) -> dict[tuple[str, str], str]:
+    """``commit``'s released plans, or none when its specs do not load and it may be skipped."""
     with tempfile.TemporaryDirectory() as tree:
         with tarfile.open(fileobj=io.BytesIO(_git("archive", commit, SPECS))) as archive:
             archive.extractall(tree, filter="data")
-        return released_plans(tree)
+        try:
+            return released_plans(tree)
+        except Exception as error:
+            if must_load:
+                raise
+            print(f"skipped {commit[:9]}, whose specs do not load: {error!r}", file=sys.stderr)
+            return {}
 
 
 def main(argv: list[str]) -> None:
@@ -43,11 +50,17 @@ def main(argv: list[str]) -> None:
 
     Reads ``argv[1]`` (default ``RULE_START``) and each later first-parent commit of HEAD that
     touches the specs, so a set that was added and then edited fails until the edit is undone.
+    An earlier commit whose specs do not load is skipped: this check fails there, so it
+    published nothing.
     """
     start = argv[1] if len(argv) > 1 else RULE_START
+    if subprocess.run(["git", "merge-base", "--is-ancestor", start, "HEAD"]).returncode:
+        sys.exit(f"HEAD does not descend from {start}; the check needs main's full history")
     log = _git("rev-list", "--first-parent", "--reverse", f"{start}..HEAD", "--", SPECS)
     commits = [start, *log.decode().split()]
-    plans = {commit: _released_plans_at(commit) for commit in commits}
+    plans = {
+        commit: _released_plans_at(commit, must_load=commit == commits[-1]) for commit in commits
+    }
     head = plans[commits[-1]]  # No later commit touches the specs, so these are HEAD's plans.
     first: dict[tuple[str, str], tuple[str, str]] = {}
     for commit in commits:

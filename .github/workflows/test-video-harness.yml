@@ -31,7 +31,8 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Require released sets unchanged
-        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        # A pull request into another branch would be judged by that branch's own commits.
+        if: github.base_ref == 'main' || github.ref == 'refs/heads/main'
         run: >-
           uv run --no-project --python 3.12 --with 'pyyaml>=6,<7'
           python video-generation/specs/released_sets.py
