@@ -289,6 +289,13 @@ def _checksums(output):
 
 def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     logs, workspace = _native_job(tmp_path)
+    for sidecar in workspace.glob("power_validation_*.json"):
+        validation = json.loads(sidecar.read_text())
+        validation["producer"].update(
+            source_metric="gpu_power_usage",
+            power_scope="gpu_device_power_as_reported_by_amd_device_metrics_exporter",
+        )
+        sidecar.write_text(json.dumps(validation))
     output = tmp_path / "h3-results"
     environ = {
         "GITHUB_RUN_ID": "123",
@@ -358,6 +365,12 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
         )
         power = json.loads((output / cell["power"]["path"]).read_text())
         assert power["valid"] and power["phases"] == cell["power"]["phases"]
+        assert power["source"] == "srt-slurm"
+        assert power["semantics"]["sensor"] == "gpu_power_usage"
+        assert (
+            power["semantics"]["scope"]
+            == "gpu_device_power_as_reported_by_amd_device_metrics_exporter"
+        )
         assert power["phases"]["measurement"]["aggregate"]["joules_per_valid_clip"] == 18000.25
         assert power["phases"]["measurement"]["aggregate"]["observed_peak_power_w"] == 1201.0
         assert len(power["sample_series"]) == 70 and set(power["per_gpu"]) == set(
@@ -386,6 +399,7 @@ def test_bundle_counts_malformed_power_samples_instead_of_hiding_them(tmp_path):
     )
     power = json.loads((output / "gpu/c1/power.json").read_text())
     assert power["malformed_sample_rows"] == 2
+    assert power["semantics"]["sensor"] is None and power["semantics"]["scope"] is None
     assert len(power["sample_series"]) == 70
 
 
@@ -465,11 +479,13 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     assert any("c4: run.json missing" in f for f in result["failures"])
 
 
-def _bundle(tmp_path, artifacts, fingerprint, attempt):
+def _bundle(tmp_path, artifacts, fingerprint, attempt, framework="sglang"):
     name = f"h3-results-123-{attempt}-{fingerprint}"
     fixture = tmp_path / name
     fixture.mkdir()
     logs, workspace = _native_job(fixture)
+    for path in fixture.rglob("*.json"):
+        path.write_text(path.read_text().replace('"sglang"', f'"{framework}"'))
     env = {
         "GITHUB_RUN_ID": "123",
         "GITHUB_RUN_ATTEMPT": attempt,
@@ -491,20 +507,20 @@ def _bundle(tmp_path, artifacts, fingerprint, attempt):
     )
 
 
-def _sweep(tmp_path, attempts=("2", "2")):
+def _sweep(tmp_path, attempts=("2", "2"), framework="sglang"):
     artifacts = tmp_path / "artifacts"
-    artifacts.mkdir()
+    artifacts.mkdir(parents=True)
     rows = []
     for index, (runner, attempt) in enumerate(
         zip(("cluster:h200", "cluster:b200"), attempts, strict=True), start=1
     ):
         fingerprint = str(index) * 64
-        _bundle(tmp_path, artifacts, fingerprint, attempt)
+        _bundle(tmp_path, artifacts, fingerprint, attempt, framework)
         rows.append(
             {
                 "recipe-fingerprint": fingerprint,
                 "runner": runner,
-                "framework": "sglang",
+                "framework": framework,
                 "gpus": 2,
                 "conc-list": [1, 2],
                 "model": PLAN["model_id"],
@@ -547,10 +563,30 @@ def _reseal(bundle):
 def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout_identity(tmp_path):
     from infx.results.video_artifacts import validate_video_artifacts
 
-    artifacts = _sweep(tmp_path)
-    assert (
-        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
+    artifacts = _sweep(tmp_path, attempts=("1", "2"))
+    _bundle(tmp_path, artifacts, "2" * 64, "1")
+    selection = validate_video_artifacts(
+        artifacts, run_id="123", run_attempt="2", head_sha="c" * 40
     )
+    expected = ["h3-results-123-1-" + "1" * 64, "h3-results-123-2-" + "2" * 64]
+    assert selection == {
+        "version": 1,
+        "source_run_id": "123",
+        "source_run_attempt": "2",
+        "source_head_sha": "c" * 40,
+        "artifacts": [
+            {
+                "name": name,
+                "manifest_sha256": hashlib.sha256(
+                    (artifacts / name / "manifest.json").read_bytes()
+                ).hexdigest(),
+                "sha256sums_sha256": hashlib.sha256(
+                    (artifacts / name / "SHA256SUMS").read_bytes()
+                ).hexdigest(),
+            }
+            for name in expected
+        ],
+    }
     with pytest.raises(ValueError, match="trusted run/head"):
         validate_video_artifacts(artifacts, run_id="124", run_attempt="2", head_sha="c" * 40)
     with pytest.raises(ValueError, match="trusted run/head/attempt"):
@@ -598,6 +634,9 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
         ("missing_media", "reference mismatch"),
         ("power", "unverified native"),
         ("attestation", "work attestation failed"),
+        ("runtime", "work attestation failed"),
+        ("bundle_type", "work attestation failed"),
+        ("receipt", "missing engine work attestation"),
         ("head", "CI identity mismatch"),
     ],
 )
@@ -610,7 +649,11 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
     matrix = json.loads(matrix_path.read_text())
     cell = matrix["cells"][0]
     reference = (
-        None if fault == "head" else cell[fault if fault in ("power", "attestation") else "run"]
+        None
+        if fault == "head"
+        else cell["attestation" if fault in ("runtime", "bundle_type") else fault]
+        if fault in ("power", "attestation", "receipt", "runtime", "bundle_type")
+        else cell["run"]
     )
     path = bundle / ("manifest.json" if reference is None else reference["path"])
     doc = json.loads(path.read_text())
@@ -621,6 +664,10 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
         doc["records"][0]["artifact_path"] = "artifacts/missing.mp4"
     elif fault in ("power", "attestation"):
         doc["valid"] = False
+    elif fault in ("runtime", "bundle_type"):
+        doc[fault] = "other"
+    elif fault == "receipt":
+        del doc["attestation"], cell["attestation"]
     else:
         doc["ci"]["head_sha"] = "d" * 40
     path.write_text(json.dumps(doc))
@@ -630,6 +677,15 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
     _reseal(bundle)
     with pytest.raises(ValueError, match=match):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
+
+
+def test_reuse_requires_an_attestation_unless_the_framework_is_exempt(tmp_path):
+    from infx.results.video_artifacts import validate_video_artifacts
+
+    exempt = _sweep(tmp_path / "exempt", framework="vllm-omni")
+    assert len(validate_video_artifacts(exempt)["artifacts"]) == 2
+    with pytest.raises(ValueError, match="missing engine work attestation"):
+        validate_video_artifacts(_sweep(tmp_path / "unknown", framework="unlisted"))
 
 
 @pytest.mark.parametrize(
@@ -646,9 +702,10 @@ def test_reuse_counts_only_the_newest_attempt_of_each_selected_deployment(tmp_pa
     # Deployment 1 ran only in attempt 1; deployment 2 ran in attempts 1 and 2.
     artifacts = _sweep(tmp_path, attempts=("1", "2"))
     _bundle(tmp_path, artifacts, "2" * 64, "1")
-    assert (
-        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40) == 2
+    selection = validate_video_artifacts(
+        artifacts, run_id="123", run_attempt="2", head_sha="c" * 40
     )
+    assert len(selection["artifacts"]) == 2
     if fault == "newest_corrupted":
         newest = artifacts / ("h3-results-123-2-" + "2" * 64)
         next(newest.rglob("*.mp4")).write_bytes(b"corrupted")
@@ -658,3 +715,45 @@ def test_reuse_counts_only_the_newest_attempt_of_each_selected_deployment(tmp_pa
         _bundle(tmp_path, artifacts, "3" * 64, "2")
     with pytest.raises(ValueError, match=match):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
+
+
+@pytest.mark.parametrize(
+    "fault,match",
+    [
+        ("recipe", r"not swept=\[.*\(3{12}\)'\], swept but not merged=\[.*\(2{12}\)'\]"),
+        ("extra", r"not swept=\[.*\(3{12}\)'\], swept but not merged=\[\]"),
+        ("missing", r"not swept=\[\], swept but not merged=\[.*\(2{12}\)'\]"),
+        ("unplanned", r"not swept=\[\], swept but not merged=\[.*\(2{12}\)', .*\(1{12}\)'\]"),
+        ("unfingerprinted", "merged video deployment is missing its recipe fingerprint"),
+    ],
+)
+def test_reuse_requires_the_merged_video_rows_to_be_the_swept_rows(tmp_path, fault, match):
+    from infx.results.video_artifacts import validate_video_artifacts
+
+    artifacts = _sweep(tmp_path, attempts=("1", "2"))
+    sweep = json.loads((artifacts / "video-sweep-manifest/sweep_manifest.json").read_text())
+    first, second = sweep["matrix"]["single_node"]["video"]
+    plan = tmp_path / "plan.json"
+
+    def validate(single_node):
+        plan.write_text(json.dumps({"single_node": single_node}))
+        return validate_video_artifacts(
+            artifacts,
+            run_id="123",
+            run_attempt="2",
+            head_sha="c" * 40,
+            merged_plan=plan,
+        )
+
+    planned = {"video": [second, first], "8k1k": [{"exp-name": "llm"}]}
+    assert len(validate(planned)["artifacts"]) == 2
+    changed = {**second, "recipe-fingerprint": "3" * 64}
+    merged = {
+        "recipe": {"video": [first, changed]},
+        "extra": {"video": [first, second, changed]},
+        "missing": {"video": [first]},
+        "unplanned": {"8k1k": [{"exp-name": "llm"}]},
+        "unfingerprinted": {"video": [first, {"runner": second["runner"]}]},
+    }[fault]
+    with pytest.raises(ValueError, match=match):
+        validate(merged)
