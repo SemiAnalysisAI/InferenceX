@@ -599,14 +599,16 @@ def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
 
 
-def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
+# An identity file staged before the size existed has no workload_size key.
+@pytest.mark.parametrize("staged_size", [{"workload_size": {"latent_tokens": 37710}}, {}])
+def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path, staged_size):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     identity = {
         "plan_sha256": PLAN_SHA,
         "workload_plan": PLAN,
-        "workload_size": {"latent_tokens": 37710},
         "engine": {"name": "vllm-omni", "revision": "a" * 40},
+        **staged_size,
     }
     (workspace / "video-identity.json").write_text(json.dumps(identity))
     output = tmp_path / "bundle"
@@ -624,6 +626,7 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     matrix = json.loads((output / "serving-smoke.json").read_text())
     assert result["status"] == "failed" and result["power_verified"] is False
     assert {key: manifest[key] for key in identity} == identity
+    assert manifest["workload_size"] == staged_size.get("workload_size")
     assert matrix["engine"] == identity["engine"] and matrix["plan"] == identity["workload_plan"]
     assert "video-identity.json" in manifest["evidence"]
 

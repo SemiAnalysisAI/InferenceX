@@ -549,7 +549,7 @@ def build_bundle(
         "launcher": "srt-slurm",
         "evidence_kind": EVIDENCE_KIND,
         "workload_plan": plan,
-        "workload_size": declared["workload_size"] if declared else None,
+        "workload_size": declared.get("workload_size") if declared else None,
         "gpu_uuids": gpu_uuids,
         "runtime": {"image": environ.get("IMAGE")},
         "exit_code": 0 if status == "complete" else 1,
