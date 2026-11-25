@@ -63,8 +63,6 @@ base:
   roles:
     agg:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: "32768"
