@@ -376,7 +376,10 @@ override_1p2d_k4_eval:
 # indexer top-k, the Mooncake master evicts 10% of the store per round, and the frontend sends each request
 # to the least-loaded decode worker with no session affinity. Prefill turns on expert-parallel load balancing
 # (EPLB, no redundant experts): it moves experts between ranks every 1500 steps from the last 1000 steps' load,
-# so the busiest rank waits less; the computation is the same.
+# so the busiest rank waits less; the computation is the same. Prefill and decode use 704-token prefix-match
+# units with sub-block sliding-window KV hits and the DSpark draft's tail hit rule, as at 4P5D c640. Decode
+# runs the MoE of steps above 128 rows on the image's TRT-LLM MoE engine (VLLM_K31_WIDE_ENGINES); steps of up
+# to 128 rows keep the default engine, and both engines use the checkpoint's MXFP4 weights.
 override_2p3d_k5:
   roles:
     prefill: &override_2p3d_k5_prefill
@@ -384,16 +387,24 @@ override_2p3d_k5:
       workers: 2
       env:
         K31_CPU1: "1"
+        VLLM_SWA_FINE_GRAINED_HITS: "1"
+        VLLM_DFLASH_SWA_TAIL_HITS: "1"
       args: &override_2p3d_k5_prefill_args
         attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         kernel-config: null
         speculative-config: *spec_k5
+        prefix-match-unit: 704
         enable-eplb: true
         eplb-config: '{"window_size":1000,"step_interval":1500,"num_redundant_experts":0,"log_balancedness":true,"log_balancedness_interval":50}'
     decode: &override_2p3d_k5_decode
       nodes: 3
       workers: 3
+      env:
+        VLLM_SWA_FINE_GRAINED_HITS: "1"
+        VLLM_DFLASH_SWA_TAIL_HITS: "1"
+        VLLM_K31_WIDE_ENGINES: "65-1024:trtllm"
       args: &override_2p3d_k5_decode_args
+        prefix-match-unit: 704
         gpu-memory-utilization: 0.98
         max-num-seqs: 128
         no-enable-flashinfer-autotune: null
