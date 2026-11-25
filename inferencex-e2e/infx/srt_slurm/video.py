@@ -5,7 +5,6 @@ import importlib.util
 import json
 import os
 import re
-import shlex
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, replace
@@ -37,7 +36,6 @@ VIDEO_PACKAGE = "video-generation"
 SPEC_DIR = "specs"
 PACKAGE_MOUNT = "/video-package"
 RESULT_DIR = "/logs/video"
-READINESS_PATH = "/health"
 VIDEO_ENV = (
     "MODEL",
     "CONC_LIST",
@@ -115,8 +113,31 @@ def video_package(root: Path) -> Path:
     return root.parent / VIDEO_PACKAGE
 
 
-def check_video_fragment(raw: Mapping[str, Any], source: Path) -> None:
-    """Reject a fragment that sets a launcher-owned key or carries engine roles."""
+def _restated(shared: Mapping[str, Any], fragment: Mapping[str, Any], depth: int) -> list[str]:
+    """The keys of ``fragment``, down to ``depth`` nested mappings, that ``shared`` sets."""
+    found = []
+    for key, value in fragment.items():
+        if key == "name" or key not in shared:
+            continue
+        if depth and isinstance(shared[key], Mapping) and isinstance(value, Mapping):
+            found.extend(f"{key}.{inner}" for inner in _restated(shared[key], value, depth - 1))
+        else:
+            found.append(key)
+    return found
+
+
+def check_video_fragment(
+    raw: Mapping[str, Any],
+    source: Path,
+    shared: Mapping[str, Any],
+    services: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Reject a fragment that sets a launcher-owned or shared key, or carries engine roles.
+
+    ``shared`` is the shared block and ``services`` its services by name. The fragment may
+    add to a shared block, and each of its services to the one of its name, but neither may
+    set a key the shared one already sets.
+    """
     found = [
         f"{'.'.join(key)} (= {value!r})"
         for key in _BOUND_KEYS
@@ -131,16 +152,41 @@ def check_video_fragment(raw: Mapping[str, Any], source: Path) -> None:
         raise ValueError(
             f"{source}: remove {', '.join(found)} from the fragment; the launcher sets them"
         )
+    blocks = {key: value for key, value in shared.items() if key != "services"}
+    scopes = [("the fragment", blocks, raw, 2)]
+    if isinstance(raw.get("services"), list):
+        scopes += [
+            (f"service {service['name']!r}", services.get(service["name"], {}), service, 1)
+            for service in raw["services"]
+        ]
+    for where, fixed, declared, depth in scopes:
+        restated = _restated(fixed, declared, depth)
+        if restated:
+            raise ValueError(
+                f"{source}: remove {', '.join(restated)} from {where}; "
+                f"{VIDEO_BLOCK} sets them for every recipe"
+            )
 
 
 def compose_video_recipe(path: Path, *, root: Path) -> dict[str, Any]:
-    """The fragment at ``path`` over the shared video and native telemetry blocks."""
+    """The fragment at ``path`` over the shared video and native telemetry blocks.
+
+    Each fragment service also merges over the shared service of the same name. The fragment
+    may extend what the shared blocks set but not restate it.
+    """
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
-    check_video_fragment(raw, path)
     shared = merge_blocks(_block(root / VIDEO_BLOCK), _block(root / NATIVE_TELEMETRY_BLOCK))
-    return merge_blocks(shared, raw)
+    # infx.matrix.changed binds a base revision's recipes with this code; its block may hold none.
+    by_name = {service["name"]: service for service in shared.get("services", [])}
+    check_video_fragment(raw, path, shared, by_name)
+    recipe = merge_blocks(shared, raw)
+    if isinstance(raw.get("services"), list):
+        recipe["services"] = [
+            merge_blocks(by_name.get(service["name"], {}), service) for service in raw["services"]
+        ]
+    return recipe
 
 
 def spec_model_path(hf_hub_cache: str, model: str, revision: str) -> str:
@@ -184,13 +230,7 @@ def _pool_service(recipe: Mapping[str, Any]) -> dict[str, Any]:
     owners = [s for s in services or [] if isinstance(s, Mapping) and s.get("nodes")]
     if len(owners) != 1:
         raise ValueError("video recipes declare exactly one service that owns nodes (the server)")
-    [service] = owners
-    if service.get("type") != "generic" or not service.get("critical", False):
-        raise ValueError("the video server service must be a critical generic service")
-    command = service.get("command")
-    if not (isinstance(command, list) and command[1:] == ["-m", "infx.bench", "video", "serve"]):
-        raise ValueError("the video server service must run python -m infx.bench video serve")
-    return service
+    return owners[0]
 
 
 def _argument(command: list[str], flag: str) -> str:
@@ -481,8 +521,6 @@ def bind_video(
     model_path = spec_model_path(
         _required(environment, "HF_HUB_CACHE"), model, spec["plan"]["model_revision"]
     )
-    if recipe.get("frontend", {}).get("type") != "none":
-        raise ValueError("video recipes are services-only: frontend.type must be none")
     bound = {key: deepcopy(value) for key, value in recipe.items() if key in ("schema", "name")}
     bound["model"] = {
         "path": f"hf:{model}",
@@ -494,35 +532,7 @@ def bind_video(
     service = _pool_service(bound)
     recipe_env_keys = _declared_server_env_keys(bound, service)
     benchmark = bound.setdefault("benchmark", {})
-    client_command = shlex.split(str(benchmark.get("command", "")))
-    if benchmark.get("type") != "custom" or client_command[1:5] != [
-        "-m",
-        "infx.bench",
-        "video",
-        "client",
-    ]:
-        raise ValueError(
-            "video recipes run python -m infx.bench video client as benchmark.type custom"
-        )
-    try:
-        parse_args(client_command[4:])
-    except (SystemExit, ValueError, BenchError) as error:
-        raise ValueError("invalid video client arguments") from error
     workload = benchmark.setdefault("env", {})
-    readiness = (service.get("readiness") or {}).get("http") or {}
-    port = readiness.get("port")
-    if type(port) is not int or not 0 < port <= 65535:
-        raise ValueError(f"the server service must probe a TCP port, not {port!r}")
-    port = str(port)
-    if (
-        str(workload.get("VIDEO_SERVER_PORT")) != port
-        or str((service.get("env") or {}).get("VIDEO_SERVER_PORT")) != port
-        or readiness.get("path") != READINESS_PATH
-    ):
-        raise ValueError(
-            f"the server service must probe {READINESS_PATH} on its port and the client "
-            "must address that port (VIDEO_SERVER_PORT)"
-        )
     if workload.get("VIDEO_SERVER_SERVICE") != service["name"]:
         raise ValueError("benchmark.env.VIDEO_SERVER_SERVICE must name the server service")
     runtime = _required(environment, "FRAMEWORK")
@@ -532,7 +542,7 @@ def bind_video(
         model=model,
         model_path=model_path,
         revision=spec["plan"]["model_revision"],
-        port=port,
+        port=workload["VIDEO_SERVER_PORT"],
         gpus=gpus,
     )
     if runtime == "sglang":

@@ -10,6 +10,7 @@ import yaml
 
 from infx.config import repository_root
 from infx.srt_slurm import video
+from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, VIDEO_BLOCK
 from infx.tests.srt_recipes import (
     VIDEO_MODEL,
     VIDEO_SET,
@@ -62,17 +63,6 @@ def test_fairness_requires_disabled_cross_request_caches(native_fragment, spec):
     assert recipe["services"][0]["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] == "0"
 
 
-def test_server_port_must_be_a_tcp_port_before_submission(native_fragment):
-    raw, write = native_fragment
-    port = 65536
-    [server] = raw["services"]
-    server["args"][server["args"].index("--port") + 1] = str(port)
-    server["env"]["VIDEO_SERVER_PORT"] = raw["benchmark"]["env"]["VIDEO_SERVER_PORT"] = str(port)
-    server["readiness"]["http"]["port"] = port
-    with pytest.raises(ValueError, match="TCP port"):
-        video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
-
-
 @pytest.fixture
 def native_fragment(tmp_path):
     """A small recipe whose engine settings remain owned by the recipe."""
@@ -80,10 +70,8 @@ def native_fragment(tmp_path):
         "schema": 2,
         "name": "video-fixture",
         "resources": {"gpu_type": "test-gpu"},
-        "frontend": {"type": "none"},
         "services": [{
-            "name": "video-server", "type": "generic", "nodes": 1, "critical": True,
-            "command": ["/usr/bin/python3", "-m", "infx.bench", "video", "serve"],
+            "name": "video-server",
             "args": [
                 "--model-view", "snapshot", "--", "/usr/bin/python3", "-m",
                 "evaluator.srt_selected", "serve", "--model-type", "diffusion",
@@ -93,14 +81,8 @@ def native_fragment(tmp_path):
                 "--tp-size", "{gpus_per_node}", "--ulysses-degree", "{gpus_per_node}",
                 "--attention-backend", "fa", "--performance-mode", "speed",
             ],
-            "env": {"VIDEO_SERVER_PORT": "30283", "VIDEO_RUNTIME_REVISION": "b" * 40},
-            "readiness": {"http": {"port": 30283, "path": "/health"}},
+            "env": {"VIDEO_RUNTIME_REVISION": "b" * 40},
         }],
-        "benchmark": {
-            "type": "custom",
-            "command": "python3 -m infx.bench video client --request-seconds 73",
-            "env": {"VIDEO_SERVER_SERVICE": "video-server", "VIDEO_SERVER_PORT": "30283"},
-        },
     }
     path = tmp_path / "agg-ulysses.yaml"
 
@@ -127,7 +109,7 @@ def _as_vllm(raw):
         "--num-gpus", "{gpus_per_node}", "--host", "0.0.0.0", "--omni",
         "--cache-config", '{"minimax_h3_adaln_cache": false}',
     ]
-    server["env"] = {"VIDEO_SERVER_PORT": "30283", "VIDEO_RUNTIME_REVISION": "b" * 40}
+    server["env"] = {"VIDEO_RUNTIME_REVISION": "b" * 40}
 
 
 @pytest.mark.parametrize(("fault", "refusal"), [
@@ -219,23 +201,19 @@ def test_vllm_omni_recipe_must_turn_off_a_cache_its_engine_defaults_on(native_fr
 def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(native_fragment, tmp_path):
     raw, write = native_fragment
     # Reviewed SGLang names stand in for any recipe setting.
-    raw["environment"] = {"SGLANG_USE_AITER": "literal-$DOLLAR", "TRANSFORMERS_OFFLINE": "global-override"}
+    raw["environment"] = {"ROCM_QUICK_REDUCE_QUANTIZATION": "NONE", "SGLANG_USE_AITER": "global-override"}
     engine = tmp_path / "engine.py"
     engine.write_text(
         "import json, os, sys\n"
         "from pathlib import Path\n"
         "Path(os.environ['CHILD_RECEIPT']).write_text(json.dumps({"
-        "'argv': sys.argv, 'tunable': os.environ['TRANSFORMERS_OFFLINE'], "
-        "'global_tunable': os.environ['SGLANG_USE_AITER'], "
+        "'argv': sys.argv, 'tunable': os.environ['SGLANG_USE_AITER'], "
+        "'global_tunable': os.environ['ROCM_QUICK_REDUCE_QUANTIZATION'], "
         "'metadata_present': 'VIDEO_RECIPE_ENV_KEYS' in os.environ, "
         "'gpu_uuids': os.environ['VGBENCH_GPU_UUIDS']}))\n"
     )
     raw["services"][0]["args"].append("--disable-conditioning-cache")
-    raw["services"][0]["env"] |= {
-        "PYTHONPATH": os.pathsep.join((str(video.video_package(ROOT)), str(ROOT))),
-        "TRANSFORMERS_OFFLINE": "keep-this-value",
-        "HF_HUB_OFFLINE": "{model_revision}",
-    }
+    raw["services"][0]["env"]["SGLANG_USE_AITER"] = "{model_revision}"
     environment = {**ENV, "FRAMEWORK": "sglang", "HF_HUB_CACHE": str(tmp_path / "cache")}
     bound = video.prepare(write(raw), environment, root=ROOT)
     [server] = bound["services"]
@@ -250,6 +228,7 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
         **os.environ,
         **bound.get("environment", {}),
         **server["env"],
+        "PYTHONPATH": os.pathsep.join((str(video.video_package(ROOT)), str(ROOT))),
         "VIDEO_SPEC_PATH": str(video.video_package(ROOT) / "specs/h3.yaml"),
         "VIDEO_RESULT_DIR": str(output),
         "CHILD_RECEIPT": str(tmp_path / "child.json"),
@@ -273,13 +252,70 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     assert child["argv"] == expected_command[1:]
     flags = dict(zip(child["argv"][1:-1:2], child["argv"][2:-1:2], strict=True))
     assert flags["--tp-size"] == flags["--ulysses-degree"] == "2"
-    assert launch["environment"]["HF_HUB_OFFLINE"] == launch["model_revision"]
+    assert launch["environment"]["SGLANG_USE_AITER"] == launch["model_revision"]
     assert launch["argv"] == expected_command == spec["baseline"]["argv"]
-    assert child["tunable"] == raw["services"][0]["env"]["TRANSFORMERS_OFFLINE"]
-    assert child["global_tunable"] == raw["environment"]["SGLANG_USE_AITER"]
+    assert child["tunable"] == launch["model_revision"]
+    assert child["global_tunable"] == raw["environment"]["ROCM_QUICK_REDUCE_QUANTIZATION"]
     assert child["metadata_present"] is False
-    assert launch["environment"]["TRANSFORMERS_OFFLINE"] == child["tunable"]
-    assert launch["environment"]["SGLANG_USE_AITER"] == child["global_tunable"]
+    assert launch["environment"]["ROCM_QUICK_REDUCE_QUANTIZATION"] == child["global_tunable"]
     assert "VIDEO_RECIPE_ENV_KEYS" not in launch["environment"]
     assert child["gpu_uuids"].split(",") == launch["gpu_uuids"] == spec["gpu_uuids"]
     assert launch["model_revision"] == spec["baseline"]["model_revision"]
+
+
+def test_fragment_extends_the_shared_blocks_and_may_not_restate_their_keys(tmp_path):
+    shared = {
+        "name": "video-server", "type": "generic", "nodes": 1,
+        "env": {"VIDEO_SERVER_PORT": "30283", "HF_HUB_OFFLINE": "1"},
+        "readiness": {"http": {"port": 30283, "path": "/health"}, "interval_seconds": 5},
+    }
+    client = {"type": "custom", "env": {"VIDEO_SERVER_PORT": "30283"}}
+    video_block = {"frontend": {"type": "none"}, "benchmark": client, "services": [shared]}
+    blocks = {VIDEO_BLOCK: video_block, NATIVE_TELEMETRY_BLOCK: {}}
+    for block, content in blocks.items():
+        (tmp_path / block).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / block).write_text(yaml.safe_dump(content))
+    fragment = tmp_path / "agg-tp1.yaml"
+
+    def compose(*declared, **blocks):
+        fragment.write_text(yaml.safe_dump({"schema": 2, "services": list(declared), **blocks}))
+        return video.compose_video_recipe(fragment, root=tmp_path)
+
+    lean = {
+        "name": "video-server", "args": ["--tp-size", "1"],
+        "env": {"VIDEO_RUNTIME_REVISION": "b" * 40}, "readiness": {"timeout_seconds": 60},
+    }
+    complete = {
+        "name": "video-server", "type": "generic", "nodes": 1, "args": ["--tp-size", "1"],
+        "env": {
+            "VIDEO_SERVER_PORT": "30283", "HF_HUB_OFFLINE": "1",
+            "VIDEO_RUNTIME_REVISION": "b" * 40,
+        },
+        "readiness": {
+            "http": {"port": 30283, "path": "/health"}, "interval_seconds": 5,
+            "timeout_seconds": 60,
+        },
+    }
+    sidecar = {"name": "sidecar", "command": ["true"]}
+    extended = compose(lean, sidecar, benchmark={"env": {"CLIENT_ENV": "kept"}})
+    assert extended["services"] == [complete, sidecar]
+    assert extended["benchmark"] == {**client, "env": {**client["env"], "CLIENT_ENV": "kept"}}
+
+    for declared, blocks, refusal in (
+        (
+            {**lean, "nodes": 2, "env": {"HF_HUB_OFFLINE": "0"}}, {},
+            "env.HF_HUB_OFFLINE, nodes from service 'video-server'",
+        ),
+        (
+            complete, {},
+            "env.HF_HUB_OFFLINE, env.VIDEO_SERVER_PORT, nodes, readiness.http, "
+            "readiness.interval_seconds, type from service 'video-server'",
+        ),
+        (
+            lean, {"benchmark": {"type": "custom", "env": {"VIDEO_SERVER_PORT": "1"}}},
+            "benchmark.env.VIDEO_SERVER_PORT, benchmark.type from the fragment",
+        ),
+        (lean, {"frontend": {"type": "none"}}, "frontend.type from the fragment"),
+    ):
+        with pytest.raises(ValueError, match=f"agg-tp1.yaml: remove {refusal}"):
+            compose(declared, **blocks)

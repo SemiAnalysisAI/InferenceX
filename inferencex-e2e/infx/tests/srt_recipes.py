@@ -35,6 +35,12 @@ def shared_blocks() -> dict[str, str]:
             "type": "custom", "command": "python3 -m infx.bench video client --request-seconds 60",
             "env": {"VIDEO_SERVER_SERVICE": "video-server", "VIDEO_SERVER_PORT": VIDEO_PORT},
         },
+        "services": [{
+            "name": "video-server", "type": "generic", "nodes": 1, "critical": True,
+            "command": ["python3", "-m", "infx.bench", "video", "serve"],
+            "env": {"VIDEO_SERVER_PORT": VIDEO_PORT},
+            "readiness": {"http": {"port": int(VIDEO_PORT), "path": "/health"}},
+        }],
     })  # fmt: skip
     return blocks
 
@@ -100,8 +106,7 @@ def single_node_fragment(tp: int, **args) -> dict:
 def video_fragment(**args: str) -> dict:
     """A native sglang video fragment the binder accepts, with extra engine ``args`` appended."""
     return {"schema": 2, "name": "video-fixture", "resources": {"gpu_type": "fixture"}, "services": [{
-        "name": "video-server", "type": "generic", "nodes": 1, "critical": True,
-        "command": ["python3", "-m", "infx.bench", "video", "serve"],
+        "name": "video-server",
         "args": [
             "--model-view", "snapshot", "--", "python3", "-m", "evaluator.srt_selected", "serve",
             "--model-path", "{model_path}", "--model-id", "{model_id}",
@@ -110,6 +115,5 @@ def video_fragment(**args: str) -> dict:
             "--performance-mode", "speed",
             *(token for flag, value in args.items() for token in (f"--{flag}", value)),
         ],
-        "env": {"VIDEO_SERVER_PORT": VIDEO_PORT, "VIDEO_RUNTIME_REVISION": "b" * 40},
-        "readiness": {"http": {"port": int(VIDEO_PORT), "path": "/health"}},
+        "env": {"VIDEO_RUNTIME_REVISION": "b" * 40},
     }]}  # fmt: skip

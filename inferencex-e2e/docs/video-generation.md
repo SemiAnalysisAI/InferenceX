@@ -38,8 +38,8 @@ Each video service uses `command: [python3, -m, infx.bench, video, serve]`.
 Its `args` select `--model-view snapshot` or `--model-view h3-fl2va`, followed
 by `--` and the complete engine executable and flags. TP, Ulysses, offload,
 compilation, host, and port are explicit recipe settings. `services[].env`
-owns engine environment values, including offline mode and vLLM storage and
-worker settings. The binder substitutes `{model_path}`, `{model_id}`,
+owns engine environment values, such as vLLM storage and worker settings.
+The binder substitutes `{model_path}`, `{model_id}`,
 `{model_revision}`, and `{gpus_per_node}` in service args/env, and rejects
 model, revision, port, or GPU-count mismatches before submission. Other native
 srt-slurm service placeholders retain their existing meaning. For every video
@@ -80,7 +80,12 @@ The shared [`configs/srt-recipes/video.yaml`](../configs/srt-recipes/video.yaml)
 block runs `python3 -m infx.bench video client` as the custom benchmark for every
 recipe. It resolves the native service IP and measurement-window directory at
 runtime, preserving per-concurrency outputs and native power windows. Its request
-timeout and environment are supplied by that block.
+timeout and environment are supplied by that block. The block also holds the
+`video-server` service every recipe starts: its command, node pool, readiness probe,
+port, and offline-mode environment. A recipe's `video-server` entry merges over it,
+so a recipe lists only its `args`, its own `env`, and `readiness.timeout_seconds`. A recipe
+may not restate a key the block sets, in `frontend`, `benchmark` or the service, even with
+the same value: the binder refuses the recipe and names the key.
 
 `perf-changelog.yaml` → `infx.matrix.plan` → `run-sweep.yml` →
 `benchmark-tmpl.yml` → `infx.launch` → native srt-slurm service/client → result bundle.
