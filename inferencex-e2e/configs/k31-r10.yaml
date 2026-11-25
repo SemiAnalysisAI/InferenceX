@@ -53,7 +53,7 @@ kimik31-r10-1p2d:
   framework: vllm
   router:
     name: vllm-router
-    version: 0.1.17  # Provides PD request-load routing and idle affinity TTL.
+    version: 0.1.17  # Supports PD request-load routing with generic session affinity.
   kv-p2p-transfer: moriio
   multinode: true
   disagg: true
