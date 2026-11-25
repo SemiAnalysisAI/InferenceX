@@ -62,7 +62,6 @@ base:
   roles:
     prefill:
       nodes: 5
-      gpus: 2
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE: "1"
@@ -133,8 +132,6 @@ base:
       kv_events: true
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_OPT_DSV41_ENGRAM_PEER_SHARDS: "1"
@@ -219,7 +216,6 @@ override_7p1d_dep2_dep16_b96_c5540:
   roles:
     prefill:
       nodes: 4
-      workers: 7
     decode:
       args:
         max-running-requests: 1536
@@ -228,8 +224,7 @@ override_7p1d_dep2_dep16_b96_c5540:
 override_9p1d_dep2_dep16_b192_c7480:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep16-hicache-9p1d-dep2-dep16-b192-c7480
   roles:
-    prefill:
-      workers: 9
+    prefill: {}
     decode:
       args:
         max-running-requests: 3072
@@ -241,10 +236,8 @@ override_6p1d_dep2_dep32_c3018:
   roles:
     prefill:
       nodes: 3
-      workers: 6
     decode:
       nodes: 8
-      gpus: 32
       env:
         SGLANG_OPT_DSV41_BLOCKWISE_REJECTION: "1"
       args:

@@ -43,10 +43,10 @@ let prefill and decode share an iteration. The caps keep decode batches small
 and the intervals keep prefill from interrupting decode; both lower TPOT at the
 cost of time to first token.
 
-The recipe installs the November 19 TokenSpeed, kernel, kernel-amd and engine
+The recipe installs the November 24 TokenSpeed, kernel, kernel-amd and engine
 wheels by release URL and SHA256, `tokenspeed-scheduler` `0.1.58` from PyPI,
-and `tokenspeed-smg` `1.16.0.post20261118`, the gateway that TokenSpeed
-revision pins. On gfx950 the November 19 kernels run each MoE layer's
+and `tokenspeed-smg` `1.16.0.post20261121`, the gateway that TokenSpeed
+revision pins. On gfx950 the November 24 kernels run each MoE layer's
 post-attention work as one launch in decode steps that hold one request. The
 runner image, pinned by digest in the master config,
 provides ROCm torch; `tokenspeed-nightly-rocm.sh` installs the pinned packages
