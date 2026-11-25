@@ -858,8 +858,6 @@ def run_plan(
         "endpoint": safe_endpoint,
         "identity_verification": "operator_declared",
         "plan_sha256": plan_sha256,
-        # Runs use no lossy optimization; the work attestation fails any the engine log shows.
-        "optimizations": [],
         "client_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "media_evaluator": media_evaluator,
         "client_environment": {

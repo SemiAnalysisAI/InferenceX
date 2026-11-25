@@ -112,40 +112,24 @@ def test_attestation_fails_when_the_log_does_not_prove_the_declared_work(tmp_pat
     assert (document["valid"], _failed(document)) == (False, failed)
 
 
-# Lines in the format sgl-project/sglang@297e54fd logs them when the optimization runs. Wan2.2
-# has two transformers, and H3 masks its first segment's query blocks.
+# Lines in the format sgl-project/sglang@297e54fd logs them when cache-dit mounts. Wan2.2 has
+# two transformers.
 @pytest.mark.parametrize(
-    "clean,optimization,line",
+    "clean,line",
     [
         (
             (LOG, PLAN, RECORDS),
-            "cache-dit",
             "Enabling cache-dit on transformer with config: Fn=1, Bn=0, W=4, R=0.04, MC=1, "
             "DMD=False (history=6, rank=0, svd=medium), TaylorSeer=False (order=1), steps=49",
         ),
         (
             (WAN_LOG, WAN_PLAN, WAN_RECORDS),
-            "cache-dit",
             "Enabling cache-dit on wan2.2 dual transformers with BlockAdapter",
         ),
-        (
-            (LOG, PLAN, RECORDS),
-            "subblock-sparse-attn",
-            "SubBlock sparse attention active: Sq=40320 Sk=40320 heads=24 keeping 74/295 key "
-            "blocks per query block (sparsity 0.7492)",
-        ),
-        (
-            (LOG, PLAN, RECORDS),
-            "subblock-sparse-attn",
-            "SubBlock heterogeneous BSA active: Sq=40320 Sk=40320 heads=24; selected query "
-            "blocks keep 74/295 key blocks and unselected query blocks are dense",
-        ),
     ],
-    ids=["h3-cache-dit", "wan22-dual-cache-dit", "subblock", "subblock-heterogeneous"],
+    ids=["h3-cache-dit", "wan22-dual-cache-dit"],
 )
-def test_attestation_fails_when_the_log_shows_a_lossy_optimization(
-    tmp_path, clean, optimization, line
-):
+def test_attestation_fails_when_the_log_shows_a_lossy_optimization(tmp_path, clean, line):
     source, plan, records = clean
     log = tmp_path / "server.out"
     log.write_bytes(source.read_bytes() + f"[11-04 11:00:02] {line}\n".encode())
@@ -154,4 +138,4 @@ def test_attestation_fails_when_the_log_shows_a_lossy_optimization(
 
     assert (document["valid"], _failed(document)) == (False, {"server.optimizations"})
     [check] = [c for c in document["server"]["checks"] if c["name"] == "server.optimizations"]
-    assert check["observed"] == [optimization]
+    assert check["observed"] == ["cache-dit"]

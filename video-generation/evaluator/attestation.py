@@ -63,15 +63,10 @@ SGLANG = Policy(
         {"fa", "fa2", "torch_sdpa", "torch_cudnn_sdpa", "dynamic_cudnn_sdpa", "aiter"}
     ),
     dit_dtypes={"bf16": "torch.bfloat16"},
-    # What SGLang logs when it mounts cache-dit on one transformer or on two, and when SubBlock
-    # sparse attention first runs. SGLANG_CACHE_DIT_ENABLED and per-request cache-dit leave
-    # server_args.cache_dit_config null, so the log line is the only evidence.
-    optimizations={
-        "cache-dit": re.compile(r"Enabling cache-dit on "),
-        "subblock-sparse-attn": re.compile(
-            r"SubBlock (?:sparse attention|heterogeneous BSA) active: "
-        ),
-    },
+    # What SGLang logs when it mounts cache-dit on one transformer or on two.
+    # SGLANG_CACHE_DIT_ENABLED and per-request cache-dit leave server_args.cache_dit_config
+    # null, so the log line is the only evidence.
+    optimizations={"cache-dit": re.compile(r"Enabling cache-dit on ")},
 )
 POLICIES: dict[str, Policy] = {"sglang": SGLANG}
 

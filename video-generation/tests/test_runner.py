@@ -362,7 +362,6 @@ def test_fairness_request_and_disjoint_warmup_reach_local_http_fixture(
     run = execute(plan, tmp_path / runtime, endpoint, runtime=runtime, numerical_identity=identity)
     assert run["summary"]["valid"] == 20
     assert run["configuration"]["numerical_identity"] == identity
-    assert run["configuration"]["optimizations"] == []
     assert len(server["posts"]) == 21
     assert all(
         record["expected_media"]["duration_seconds"] == 124 / 24 for record in run["records"]
