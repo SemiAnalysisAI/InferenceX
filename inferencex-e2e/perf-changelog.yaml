@@ -12733,3 +12733,9 @@
   description:
     - Restore stock LM head fallback when the original logits row count exceeds the AKR exchange capacity. Use the validated b910252b7 image; retain the original 1P2D c64 K4 topology, precision, distributed pools, graph settings and full 3600-second workload.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p2d
+  description:
+    - Use PD request-load decode selection with one-second idle session affinity to align the router behavior with the B300 Dynamo baseline. Keep the original b910252b7 image, all P/D engine arguments, K4 golden acceptance, c64 topology, pools, warmup and 3600-second profiling unchanged.
+  pr-link: XXX

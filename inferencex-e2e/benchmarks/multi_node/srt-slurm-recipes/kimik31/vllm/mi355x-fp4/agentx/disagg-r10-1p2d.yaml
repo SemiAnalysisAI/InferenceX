@@ -26,9 +26,10 @@ frontend:
     node: head
   container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:92b663747ca8104cb7f5d0e908e38238865ae571f02dcbb21ead2228fe12b877
   args:
-    policy: consistent_hash
-    prefill-policy: consistent_hash
-    decode-policy: consistent_hash
+    policy: kv_aware
+    prefill-policy: kv_aware
+    decode-policy: kv_aware
+    kv-aware-session-affinity-ttl-secs: 1
     log-level: info
   env:
     K31_ROUTER_ONLY: '1'
