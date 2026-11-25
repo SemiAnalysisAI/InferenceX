@@ -106,6 +106,12 @@ def _validate_workload_size(size: Any, generation: dict[str, Any]) -> None:
     _integer(size["latent_frames"], f"{where}.latent_frames", minimum=1)
     _integer(size["latent_tokens_audio"], f"{where}.latent_tokens_audio", minimum=0)
     _integer(size["guidance_branches"], f"{where}.guidance_branches", minimum=1)
+    # Classifier-free guidance adds the unconditional pass only when its scale exceeds 1.
+    for key in ("guidance_scale", "guidance_scale_2"):
+        if key in generation and (generation[key] > 1) != (size["guidance_branches"] == 2):
+            raise ValueError(
+                f"{where}.guidance_branches must be 2 when generation.{key} exceeds 1, else 1"
+            )
     for key, value in model.items():
         _integer(value, f"{where}.model.{key}", minimum=1)
     _integer(generation.get("num_inference_steps"), "generation.num_inference_steps", minimum=1)

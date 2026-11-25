@@ -95,7 +95,7 @@ def test_v01_plan_declares_schema_2_with_its_fairness_and_warmup() -> None:
 def sized(spec: dict[str, Any]) -> dict[str, Any]:
     return {
         **spec,
-        "generation": {"width": 64, "height": 32, "num_inference_steps": 5},
+        "generation": {"width": 64, "height": 32, "num_inference_steps": 5, "guidance_scale": 4.0},
         "workload_size": {
             "latent_frames": 3,
             "latent_tokens_audio": 4,
@@ -153,6 +153,10 @@ def test_workload_size_stays_outside_the_plan_and_both_hashes(sized: dict[str, A
         (
             lambda doc: doc["workload_size"]["model"].update(latent_patch_pixels=24),
             "generation.width must divide by workload_size.model.latent_patch_pixels",
+        ),
+        (
+            lambda doc: doc["generation"].update(guidance_scale=1.0),
+            "workload_size.guidance_branches must be 2 when generation.guidance_scale exceeds 1",
         ),
     ],
 )
