@@ -374,7 +374,9 @@ override_1p2d_k4_eval:
 # Two prefill and three decode workers; DSpark drafts 5 tokens. Decode admits up to 128 requests at 0.98 of
 # GPU memory with graphs every 24 rows. Prefill computes the indexer logits in FP32 and uses the default
 # indexer top-k, the Mooncake master evicts 10% of the store per round, and the frontend sends each request
-# to the least-loaded decode worker with no session affinity.
+# to the least-loaded decode worker with no session affinity. Prefill turns on expert-parallel load balancing
+# (EPLB, no redundant experts): it moves experts between ranks every 1500 steps from the last 1000 steps' load,
+# so the busiest rank waits less; the computation is the same.
 override_2p3d_k5:
   roles:
     prefill: &override_2p3d_k5_prefill
@@ -386,6 +388,8 @@ override_2p3d_k5:
         attention-config: '{"indexer_kv_dtype":"mxfp4"}'
         kernel-config: null
         speculative-config: *spec_k5
+        enable-eplb: true
+        eplb-config: '{"window_size":1000,"step_interval":1500,"num_redundant_experts":0,"log_balancedness":true,"log_balancedness_interval":50}'
     decode: &override_2p3d_k5_decode
       nodes: 3
       workers: 3
