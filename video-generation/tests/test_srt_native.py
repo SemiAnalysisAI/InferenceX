@@ -289,6 +289,13 @@ def _checksums(output):
 
 def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     logs, workspace = _native_job(tmp_path)
+    for sidecar in workspace.glob("power_validation_*.json"):
+        validation = json.loads(sidecar.read_text())
+        validation["producer"].update(
+            source_metric="gpu_power_usage",
+            power_scope="gpu_device_power_as_reported_by_amd_device_metrics_exporter",
+        )
+        sidecar.write_text(json.dumps(validation))
     output = tmp_path / "h3-results"
     environ = {
         "GITHUB_RUN_ID": "123",
@@ -358,6 +365,12 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
         )
         power = json.loads((output / cell["power"]["path"]).read_text())
         assert power["valid"] and power["phases"] == cell["power"]["phases"]
+        assert power["source"] == "srt-slurm"
+        assert power["semantics"]["sensor"] == "gpu_power_usage"
+        assert (
+            power["semantics"]["scope"]
+            == "gpu_device_power_as_reported_by_amd_device_metrics_exporter"
+        )
         assert power["phases"]["measurement"]["aggregate"]["joules_per_valid_clip"] == 18000.25
         assert power["phases"]["measurement"]["aggregate"]["observed_peak_power_w"] == 1201.0
         assert len(power["sample_series"]) == 70 and set(power["per_gpu"]) == set(
@@ -386,6 +399,7 @@ def test_bundle_counts_malformed_power_samples_instead_of_hiding_them(tmp_path):
     )
     power = json.loads((output / "gpu/c1/power.json").read_text())
     assert power["malformed_sample_rows"] == 2
+    assert power["semantics"]["sensor"] is None and power["semantics"]["scope"] is None
     assert len(power["sample_series"]) == 70
 
 
@@ -465,11 +479,13 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     assert any("c4: run.json missing" in f for f in result["failures"])
 
 
-def _bundle(tmp_path, artifacts, fingerprint, attempt):
+def _bundle(tmp_path, artifacts, fingerprint, attempt, framework="sglang"):
     name = f"h3-results-123-{attempt}-{fingerprint}"
     fixture = tmp_path / name
     fixture.mkdir()
     logs, workspace = _native_job(fixture)
+    for path in fixture.rglob("*.json"):
+        path.write_text(path.read_text().replace('"sglang"', f'"{framework}"'))
     env = {
         "GITHUB_RUN_ID": "123",
         "GITHUB_RUN_ATTEMPT": attempt,
@@ -491,20 +507,20 @@ def _bundle(tmp_path, artifacts, fingerprint, attempt):
     )
 
 
-def _sweep(tmp_path, attempts=("2", "2")):
+def _sweep(tmp_path, attempts=("2", "2"), framework="sglang"):
     artifacts = tmp_path / "artifacts"
-    artifacts.mkdir()
+    artifacts.mkdir(parents=True)
     rows = []
     for index, (runner, attempt) in enumerate(
         zip(("cluster:h200", "cluster:b200"), attempts, strict=True), start=1
     ):
         fingerprint = str(index) * 64
-        _bundle(tmp_path, artifacts, fingerprint, attempt)
+        _bundle(tmp_path, artifacts, fingerprint, attempt, framework)
         rows.append(
             {
                 "recipe-fingerprint": fingerprint,
                 "runner": runner,
-                "framework": "sglang",
+                "framework": framework,
                 "gpus": 2,
                 "conc-list": [1, 2],
                 "model": PLAN["model_id"],
@@ -618,6 +634,9 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
         ("missing_media", "reference mismatch"),
         ("power", "unverified native"),
         ("attestation", "work attestation failed"),
+        ("runtime", "work attestation failed"),
+        ("bundle_type", "work attestation failed"),
+        ("receipt", "missing engine work attestation"),
         ("head", "CI identity mismatch"),
     ],
 )
@@ -630,7 +649,11 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
     matrix = json.loads(matrix_path.read_text())
     cell = matrix["cells"][0]
     reference = (
-        None if fault == "head" else cell[fault if fault in ("power", "attestation") else "run"]
+        None
+        if fault == "head"
+        else cell["attestation" if fault in ("runtime", "bundle_type") else fault]
+        if fault in ("power", "attestation", "receipt", "runtime", "bundle_type")
+        else cell["run"]
     )
     path = bundle / ("manifest.json" if reference is None else reference["path"])
     doc = json.loads(path.read_text())
@@ -641,6 +664,10 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
         doc["records"][0]["artifact_path"] = "artifacts/missing.mp4"
     elif fault in ("power", "attestation"):
         doc["valid"] = False
+    elif fault in ("runtime", "bundle_type"):
+        doc[fault] = "other"
+    elif fault == "receipt":
+        del doc["attestation"], cell["attestation"]
     else:
         doc["ci"]["head_sha"] = "d" * 40
     path.write_text(json.dumps(doc))
@@ -650,6 +677,15 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
     _reseal(bundle)
     with pytest.raises(ValueError, match=match):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
+
+
+def test_reuse_requires_an_attestation_unless_the_framework_is_exempt(tmp_path):
+    from infx.results.video_artifacts import validate_video_artifacts
+
+    exempt = _sweep(tmp_path / "exempt", framework="vllm-omni")
+    assert len(validate_video_artifacts(exempt)["artifacts"]) == 2
+    with pytest.raises(ValueError, match="missing engine work attestation"):
+        validate_video_artifacts(_sweep(tmp_path / "unknown", framework="unlisted"))
 
 
 @pytest.mark.parametrize(
