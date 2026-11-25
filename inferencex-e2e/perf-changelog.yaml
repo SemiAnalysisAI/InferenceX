@@ -12737,5 +12737,5 @@
 - config-keys:
     - kimik31-r10-1p2d
   description:
-    - Use PD request-load decode selection with one-second idle session affinity to align router behavior with the B300 Dynamo baseline. Keep the original b910252b7 image, P/D engine arguments, K4 golden acceptance, c64 topology, pools, warmup and 3600-second profiling. Declare the existing eight-GPU worker geometry for the current CI schema and retain the existing 1799 GB recipe environment instead of removed duplicate matrix fields.
+    - Use PD request-load decode selection with one-second idle session affinity to align the router behavior with the B300 Dynamo baseline. Keep the original b910252b7 image, all P/D engine arguments, K4 golden acceptance, c64 topology, pools, warmup and 3600-second profiling unchanged.
   pr-link: XXX
