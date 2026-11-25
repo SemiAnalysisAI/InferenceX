@@ -51,12 +51,44 @@ def _reference(inventory: dict[str, str], reference: dict, *, prefix: str = "") 
     return relative
 
 
+def _by_fingerprint(rows: list[dict], kind: str) -> dict[str, dict]:
+    indexed = {}
+    for row in rows:
+        fingerprint = row.get("recipe-fingerprint", "")
+        if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+            raise ValueError(f"{kind} video deployment is missing its recipe fingerprint")
+        if fingerprint in indexed:
+            raise ValueError(f"duplicate {kind} video deployment")
+        indexed[fingerprint] = row
+    return indexed
+
+
+def require_merged_rows(swept: dict[str, dict], merged: dict[str, dict]) -> None:
+    # A fingerprint digests the row and its bound recipe, so equal sets mean the merge commit
+    # runs what the sweep ran.
+    if merged.keys() == swept.keys():
+        return
+
+    def only(rows: dict[str, dict], others: dict[str, dict]) -> list[str]:
+        return sorted(
+            f"{row.get('exp-name')} {row.get('framework')} on {row.get('runner')} ({key[:12]})"
+            for key, row in rows.items()
+            if key not in others
+        )
+
+    raise ValueError(
+        "merged video matrix differs from the reused sweep: "
+        f"merged but not swept={only(merged, swept)}, swept but not merged={only(swept, merged)}"
+    )
+
+
 def validate_video_artifacts(
     root: Path,
     *,
     run_id: str | None = None,
     run_attempt: str | None = None,
     head_sha: str | None = None,
+    merged_plan: Path | None = None,
 ) -> dict:
     """Return the publication selection; reject missing rows, cells, provenance or sealed files.
 
@@ -78,14 +110,10 @@ def validate_video_artifacts(
     rows = sweep["matrix"].get("single_node", {}).get("video", [])
     if not rows:
         raise ValueError("video sweep manifest has no selected video deployments")
-    expected = {}
-    for row in rows:
-        fingerprint = row.get("recipe-fingerprint", "")
-        if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
-            raise ValueError("selected video deployment is missing its recipe fingerprint")
-        if fingerprint in expected:
-            raise ValueError("duplicate selected video deployment")
-        expected[fingerprint] = row
+    expected = _by_fingerprint(rows, "selected")
+    if merged_plan is not None:
+        merged = read_object(merged_plan).get("single_node", {}).get("video", [])
+        require_merged_rows(expected, _by_fingerprint(merged, "merged"))
     newest = {}
     for path in root.glob(f"h3-results-{source_run}-*"):
         match = VIDEO_ARTIFACT.fullmatch(path.name)
@@ -250,6 +278,11 @@ def main() -> None:
     parser.add_argument("--run-attempt", required=True)
     parser.add_argument("--head-sha", required=True)
     parser.add_argument(
+        "--merged-plan",
+        type=Path,
+        help="Merge commit's plan; its video rows must be the swept rows",
+    )
+    parser.add_argument(
         "--selection-output", type=Path, help="Write the validated publication selection"
     )
     args = parser.parse_args()
@@ -259,6 +292,7 @@ def main() -> None:
             run_id=args.run_id,
             run_attempt=args.run_attempt,
             head_sha=args.head_sha,
+            merged_plan=args.merged_plan,
         )
         if args.selection_output is not None:
             write_json(args.selection_output, selection)

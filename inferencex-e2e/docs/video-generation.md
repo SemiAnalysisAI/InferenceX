@@ -100,6 +100,12 @@ or production acceptance. Old unsuffixed bundles remain readable by the App but
 do not qualify this new native reuse path. Video append-only sweeps are unsupported;
 use the regular sweep so one server's complete workload stays together.
 
+Merge Ingest also requires the merge commit's planned video rows to be the manifest's
+rows: the two sets of `recipe-fingerprint` values must be equal. A row added, dropped,
+or changed after the sweep, through its recipe, its config row or a shared block, fails
+the run before anything is published, as does a planned row without a fingerprint.
+Sweep the final commit and `/use` that run before merging.
+
 After authorized reuse and merge, Merge Ingest uploads `video-publication-selection.json`
 as the `video-publication-selection` artifact. Its version 1 payload records
 `source_run_id`, `source_run_attempt`, `source_head_sha`, and for each deployment the
