@@ -13436,5 +13436,5 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Update SGLang image from v0.5.23-rocm10-mi30x-20261109 to v0.5.23-rocm10-mi30x-20261125."
+    - "Update SGLang image to v0.5.23-rocm10-mi30x-20261125 and set hybrid-cache-checkpoints-level 3."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5244

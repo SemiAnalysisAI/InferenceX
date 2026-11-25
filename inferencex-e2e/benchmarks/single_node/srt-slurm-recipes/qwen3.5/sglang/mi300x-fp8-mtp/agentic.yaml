@@ -31,6 +31,9 @@ base:
         page-size: 16
         kv-cache-dtype: fp8_e4m3
         mamba-ssm-dtype: bfloat16
+        # Restore the per-chunk, uncapped Mamba checkpoints of earlier SGLang;
+        # the default level 2 cut the AgentX prefix-cache hit rate.
+        hybrid-cache-checkpoints-level: 3
         tokenizer-worker-num: 6
         max-prefill-tokens: 32768
         scheduler-recv-interval: 30
