@@ -2,23 +2,23 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-from infx.results.evals import result_error, result_order
-from infx.results.eval_artifacts import inspect_eval_artifacts
-from infx.workflows.validate_reusable_sweep_artifacts import (
+from infx.results.artifacts import (
     agentic_key,
     benchmark_key,
+    validate_agentic_artifacts,
+    validate_fixed_artifacts,
+)
+from infx.results.evals import result_error, result_order
+from infx.results.eval_artifacts import (
     dedupe_reran_evals,
     eval_key,
     eval_result_key,
-    validate_agentic_artifacts,
+    inspect_eval_artifacts,
     validate_eval_artifacts,
-    validate_fixed_artifacts,
 )
 
 
@@ -891,7 +891,7 @@ def test_eval_validation_rejects_malformed_batch_metadata(
 
 
 def test_reuse_reports_unexpected_results_before_missing_concurrency(tmp_path: Path) -> None:
-    from infx.workflows.validate_reusable_sweep_artifacts import raw_eval_key_rows
+    from infx.results.eval_artifacts import raw_eval_key_rows
 
     write_raw_batched_eval_artifact(tmp_path, [16, 4])
     artifact = tmp_path / "eval_gptoss_8k1k_batch"
@@ -1007,32 +1007,6 @@ def test_agentic_validation_handles_mapping_kv_offload_backend(
     errors = validate_agentic_artifacts(tmp_path)
 
     assert "agentic point artifacts contain 1 duplicate row(s)" in errors
-
-
-def test_eval_only_cli_runs_outside_checkout_without_benchmark_artifacts(tmp_path: Path) -> None:
-    write_eval_aggregate(tmp_path, [single_eval_result(32)])
-    write_raw_eval_artifact(tmp_path, 32)
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[3])
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "infx.workflows.validate_reusable_sweep_artifacts",
-            "--artifacts-dir",
-            str(tmp_path),
-        ],
-        cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    assert completed.stderr == ""
-    assert completed.stdout == (
-        "Reusable sweep artifacts validated: "
-        "0 fixed-sequence row(s), 0 agentic row(s), 1 eval row(s).\n"
-    )
-
-
 
 
 def _dd_meta(conc: int) -> dict:
