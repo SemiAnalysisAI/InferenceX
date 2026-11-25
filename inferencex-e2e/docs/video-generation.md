@@ -106,6 +106,13 @@ or changed after the sweep, through its recipe, its config row or a shared block
 the run before anything is published, as does a planned row without a fingerprint.
 Sweep the final commit and `/use` that run before merging.
 
+Run Sweep's `video-reuse-check` job runs the same validation before merge. On each push
+to a same-repository PR with an accepted `/use`, it plans the PR merge ref and validates
+the pinned run against it, so a video row changed after the sweep fails on the PR.
+`merge_with_reuse` waits for it. A merge with no push after `/use`, and a fork PR, are
+checked only by Merge Ingest. To clear a failure, remove and re-add the primary sweep
+label to sweep the current head, then `/use` the new run.
+
 After authorized reuse and merge, Merge Ingest uploads `video-publication-selection.json`
 as the `video-publication-selection` artifact. Its version 1 payload records
 `source_run_id`, `source_run_attempt`, `source_head_sha`, and for each deployment the
