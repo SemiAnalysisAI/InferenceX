@@ -13433,7 +13433,7 @@
     - "glm5.3-fp4-gb300-dynamo-sglang-agentic-disagg-megakernel: NIXL transfer, TP1 PP4 prefill with decode and prefill CUDA graphs off, and TP4 decode (5 draft steps) with the megakernel: 1P x 5D at concurrency 30 and 1P x 3D at 40."
     - "glm5.3-fp4-gb300-dynamo-sglang-agentic-disagg: the GLM-5.2 GB300 Dynamo SGLang disaggregated recipes on GLM-5.3 and this image, without the megakernel: 1P x 3D TP4 at concurrency 40, 1P x 1D DEP8 at 56, 3P x 1D DEP8 at 216 and 264, and 4P x 1D DEP16 at 256. For SGLang 1.0, prefill passes --disable-decode-cuda-graph --disable-prefill-cuda-graph instead of --disable-cuda-graph, and DEP decode passes --attn-dp-size N instead of --dp-size N --enable-dp-attention and --moe-a2a-backend flashinfer_nvlink_one_sided instead of flashinfer."
     - "Add the GLM-5.3-NVFP4 checkpoint to the gb300-nv model list."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5242
 
 - config-keys:
     - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
@@ -13441,4 +13441,4 @@
   retired: true
   description:
     - "Retire the GLM-5.2 GB300 Dynamo SGLang AgentX configs and delete their recipes; the GLM-5.3 keys above replace them. The agg TP4/TP8 concurrency-1 and disagg 1P x 5D concurrency-30 points are replaced by the megakernel points."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5242
