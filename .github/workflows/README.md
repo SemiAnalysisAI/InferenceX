@@ -318,7 +318,9 @@ one was applied. A PR without a primary label can instead stage only the run
 pinned by its latest authorized `/use <run_id>`, after the same validation that
 acknowledges the request. It posts a staging comment, or a rejection comment
 when neither applies. Comments do not trigger or cancel GPU sweeps. Later commits
-skip a new sweep after changelog/matrix and source-run validation. Merge-time
+skip a new sweep after changelog/matrix and source-run validation. When the PR
+plans video rows, `video-reuse-check` also runs Merge Ingest's video validation of
+the pinned run against the PR merge ref. Merge-time
 validation remains authoritative; an acknowledgment cannot override expired or
 invalid artifacts. Reuse is rejected while the PR currently carries
 `evals-only` or `agentx-fast`, checked when `/use` is acknowledged and at merge
