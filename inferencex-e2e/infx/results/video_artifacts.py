@@ -17,6 +17,8 @@ RELEASED_PLANS = {
     ("h3-v2.yaml", "release-v1"): "a5c800f14c801c74ff6902bdefcfa008d95fbcf98abe3b4920c7e525a4dba457",
     ("wan22.yaml", "release-v1"): "d1f6d1d429e123c0b717f347510d4b72bb00b2d8fc839104ad6bef5033a52016",
 }  # fmt: skip
+# vLLM-Omni logs cannot tie requests to parameters, so it has no attestation policy.
+UNATTESTED = frozenset({"vllm-omni"})
 
 
 def _inventory(root: Path) -> tuple[dict[str, str], str]:
@@ -179,10 +181,17 @@ def validate_video_artifacts(
                 or receipt.get("status") != "complete"
             ):
                 raise ValueError(f"{name}: unverified native measurement or power receipt")
-            # Presence-gated so older and policy-less bundles stay reusable; dropping it is not caught.
+            # The sweep manifest row, not the bundle, names the framework, so a dropped or
+            # foreign attestation is caught.
+            if row["framework"] not in UNATTESTED and "attestation" not in cell:
+                raise ValueError(f"{name}: missing engine work attestation")
             if "attestation" in cell or "attestation" in receipt:
                 attestation = read_object(bundle / _reference(inventory, cell.get("attestation")))
-                if attestation.get("valid") is not True:
+                if (
+                    attestation.get("valid") is not True
+                    or attestation.get("runtime") != row["framework"]
+                    or attestation.get("bundle_type") != "h3_work_attestation"
+                ):
                     raise ValueError(f"{name}: engine work attestation failed")
             plan = run.get("plan")
             plan_sha = hashlib.sha256(
