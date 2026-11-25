@@ -25,6 +25,7 @@ from infx.golden_al_distribution.identity import (
     Fact,
     compare,
     load_identities,
+    normalize_kv_dtype,
     normalize_method,
 )
 from infx.srt_slurm.synthetic_acceptance import ENGINES, spec_parameters, verifier
@@ -34,8 +35,6 @@ SPEC_ARGUMENTS = (
     "speculative", "with-mtp", "num-mtp", "method", "num-speculative-tokens", "draft-model",
     "kv-cache-dtype", "kv_cache_dtype", "kv_cache_config", "enable-speculative-sampling",
 )  # fmt: skip
-# Spellings of one KV cache dtype; "auto" leaves the engine default.
-DTYPE_ALIASES = {"fp8_e4m3": "fp8", "bfloat16": "bf16", "auto": None}
 DEFAULT = Fact(None, "default")
 UNKNOWN = Fact(None, "unknown")
 CHAIN = Fact("chain", "documented")
@@ -106,9 +105,7 @@ def _tokenspeed(args: Mapping[str, Any]) -> dict[str, Fact]:
 
 
 def _dtype(value: Any) -> Fact:
-    if isinstance(value, str):
-        value = DTYPE_ALIASES.get(value.lower(), value.lower())
-    return _set(value)
+    return _set(normalize_kv_dtype(value))
 
 
 def _precision(args: Mapping[str, Any], spec: Mapping[str, Any], engine: str) -> dict[str, Fact]:

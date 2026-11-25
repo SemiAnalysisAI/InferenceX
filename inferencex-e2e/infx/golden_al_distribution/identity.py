@@ -27,6 +27,8 @@ METHODS = ("mtp", "eagle3", "dspark", "dflash")
 DRAFT_FAMILIES = ("default", "gqa")
 SAMPLERS = ("greedy", "probabilistic")
 VERIFIERS = ("standard", "block", "relaxed")
+# Spellings of one KV cache dtype; "auto" leaves the engine default.
+DTYPE_ALIASES = {"fp8_e4m3": "fp8", "bfloat16": "bf16", "auto": None}
 
 
 @dataclass(frozen=True)
@@ -76,10 +78,14 @@ class Selector:
     draft_family: str | None = None
     draft_sample: str | None = None
     verify: str | None = None
+    draft_kv_cache_dtype: str | None = None
 
     @property
     def specificity(self) -> int:
-        return sum(key is not None for key in (self.draft_family, self.draft_sample, self.verify))
+        return sum(
+            key is not None
+            for key in (self.draft_family, self.draft_sample, self.verify, self.draft_kv_cache_dtype)
+        )
 
 
 @dataclass(frozen=True)
@@ -124,12 +130,20 @@ def draft_family(draft_model: str) -> str:
     return "gqa" if "gqa" in draft_model.lower() else "default"
 
 
+def normalize_kv_dtype(dtype: Any) -> str | None:
+    """A KV cache dtype in the identity vocabulary; None for the engine default."""
+    if not isinstance(dtype, str):
+        return dtype
+    return DTYPE_ALIASES.get(dtype.lower(), dtype.lower())
+
+
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9.]+", "-", text.rsplit("/", 1)[-1].lower()).strip("-")
 
 
 def canonical_name(model: str, identity: CurveIdentity) -> str:
-    """``<model>__<method>__<draft>__<draft_sample>-<verify>``, "default" for unset settings."""
+    """``<model>__<method>__<draft>__<draft_sample>-<verify>``, "default" for unset settings,
+    with ``__draft-kv-<dtype>`` when the curve selects on the draft KV cache dtype."""
     collection = identity.collection
     parts = [
         _slug(model),
@@ -140,6 +154,8 @@ def canonical_name(model: str, identity: CurveIdentity) -> str:
             for fact in (collection.draft_sample, collection.verify)
         ),
     ]
+    if identity.select.draft_kv_cache_dtype:
+        parts.append(f"draft-kv-{identity.select.draft_kv_cache_dtype}")
     return "__".join(parts)
 
 
@@ -162,6 +178,7 @@ def parse_identity(name: str, data: Any) -> CurveIdentity:
             draft_family=select.get("draft_family"),
             draft_sample=select.get("draft_sample"),
             verify=select.get("verify"),
+            draft_kv_cache_dtype=select.get("draft_kv_cache_dtype"),
         )
         if not prefixes or selector.method not in METHODS:
             raise ValueError("select needs model_prefixes and a known method")
@@ -171,6 +188,9 @@ def parse_identity(name: str, data: Any) -> CurveIdentity:
             raise ValueError(f"select draft_sample must be one of {', '.join(SAMPLERS)}")
         if selector.verify not in (None, *VERIFIERS):
             raise ValueError(f"select verify must be one of {', '.join(VERIFIERS)}")
+        dtype = selector.draft_kv_cache_dtype
+        if dtype is not None and normalize_kv_dtype(dtype) != dtype:
+            raise ValueError("select draft_kv_cache_dtype must be a normalized dtype such as fp8")
         identity = CurveIdentity(
             name=name,
             select=selector,
@@ -210,6 +230,11 @@ def _selects(
         return False
     if selector.verify and verify != selector.verify:
         return False
+    if (
+        selector.draft_kv_cache_dtype
+        and normalize_kv_dtype(spec.get("kv_cache_dtype")) != selector.draft_kv_cache_dtype
+    ):
+        return False
     return not selector.draft_sample or spec.get("draft_sample_method") == selector.draft_sample
 
 
@@ -247,6 +272,7 @@ def select_curve(
                     ("draft_family", s.draft_family),
                     ("draft_sample", s.draft_sample),
                     ("verify", s.verify),
+                    ("draft_kv_cache_dtype", s.draft_kv_cache_dtype),
                 )
                 if value
             )
