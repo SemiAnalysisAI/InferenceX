@@ -60,6 +60,7 @@ python ubenchX/l2_distance/amd/bench.py                # AMD：CU 间，链表�
 python ubenchX/l2_distance/amd/bench.py --chain-mb 64  # AMD：链表驻留在 Infinity Cache
 python ubenchX/l2_distance/amd/plot_distance.py ubenchX/l2_distance/amd/results/distance.csv
 python ubenchX/l2_distance/amd/plot_distance.py --iods 4 results/distance.csv   # MI300X：四个 IOD
+python ubenchX/l2_distance/amd/plot_latency_bars.py                            # 各型号各层级的延迟对比
 ```
 
 `l2_distance/nvidia` 是 CUDA 的 SM 间基准测试；`l2_distance/amd` 是其面向 CDNA3/CDNA4 的
@@ -83,4 +84,5 @@ XCD 配对 {0,1}、{2,3}、{4,5}、{6,7}，同一 IOD 上的两个 XCD 无法区
 `--num-passes` 以打乱的起点偏移进行多轮平均，`--num-hops` 限制每个 CU 的计时跳数，
 `--warm-hops` 设置计时前填充缓存的非计时遍历。成对 CSV（`cu_a, cu_b, mean_abs_diff,
 xcd_a, xcd_b`）输出到 stdout；`results/cu_info.csv` 保存每个 CU 的 XCD、SE、CU id 和平均延迟，
-`results/latency_profile.csv` 保存第一个 CU 的排序延迟曲线。
+`results/latency_profile.csv` 保存第一个 CU 的排序延迟曲线。`plot_latency_bars.py` 读取所有
+`results/*_cu_info_*.csv`，按型号绘制各缓存层级的平均每跳延迟，分别以着色器时钟周期和纳秒表示。
