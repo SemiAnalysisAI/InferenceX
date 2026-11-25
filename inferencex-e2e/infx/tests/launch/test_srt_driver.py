@@ -687,6 +687,31 @@ def test_nvl72_point_with_dedicated_discovery_skips_default_power(harness):
     assert "CPU_POWER_EXPORTER_RELEASE" not in setup
 
 
+def test_a_frontend_image_of_its_own_is_staged_like_the_main_image(harness):
+    frontend = (
+        "frontend:\n"
+        "  type: llm-d\n"
+        "  enable_multiple_frontends: false\n"
+        '  container_image: "registry.example/router:1"\n'
+    )
+    # The llm-d sidecar needs the decode worker's KV transfer backend.
+    lane = LANE_FRAGMENT.replace(
+        "  decode:\n    nodes: 1\n    workers: 1\n    gpus: 8\n    args:\n",
+        "  decode:\n    nodes: 1\n    workers: 1\n    gpus: 8\n    args:\n"
+        "      disaggregation-transfer-backend: nixl\n",
+    )
+    env = lane_env(
+        harness, "gb300-nv", lane + frontend, MODEL_PREFIX="qwen3.5", PRECISION="fp8",
+        FRAMEWORK="dynamo-sglang", MODEL="Qwen/Qwen3.5-397B-A17B-FP8",
+    )  # fmt: skip
+    assert_ok(launch(env, harness.config, harness.workspace))
+
+    [checkout] = harness.workspace.glob("srt-slurm-9001-*")
+    containers = srtslurm(checkout)["containers"]
+    assert containers["registry.example/router:1"].endswith(".sqsh")
+    assert containers["registry.example/router:1"] != containers["test:tag"]
+
+
 @pytest.mark.parametrize("shape", ["single", "multi"])
 def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
     active = harness.tmp / "active"
