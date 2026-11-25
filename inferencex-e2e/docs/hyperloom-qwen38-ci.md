@@ -51,7 +51,7 @@ I remove all hard-coded `SGLANG_SIMULATE_ACC_*` values from the active recipe. T
 
 I do not fix `default-chat-template-kwargs` to the original package's `enable_thinking: false`: the current replay/eval client supplies the mode used by the golden collection. Consequently, I distinguish this CI integration from an exact rerun of the separately pinned original client.
 
-I keep natural evals enabled. Eval-only launches remove synthetic acceptance and use real verification. Before trusting results I check the candidate image's effective draft precision, target/draft KV dtype, and the selected golden identity against current [contribution rules](../../CONTRIBUTING.md#draft-model-precision). The existing Qwen golden identity records default draft KV, whereas C24/C48/C80 explicitly request `fp8_e4m3`; I have not changed the recorded collection facts or claimed a new matching golden collection. That identity requirement must be resolved with measured evidence or a compliant recipe adjustment before this candidate is approved for a final sweep/reuse.
+I keep natural evals enabled. Eval-only launches remove synthetic acceptance and use real verification. Before trusting results I check the candidate image's effective draft precision, target/draft KV dtype, and the selected golden identity against current [contribution rules](../../CONTRIBUTING.md#draft-model-precision). The existing Qwen golden identity records default draft KV, whereas C24/C48/C80 explicitly request `fp8_e4m3`; I have not changed the recorded collection facts or claimed a new matching golden collection. I resolve that identity requirement with measured evidence or a compliant recipe adjustment before sign-off and reuse; I distinguish this approval requirement from launching a diagnostic sweep.
 
 ## Inspect the generated configuration on Linux
 
@@ -74,31 +74,30 @@ uv run --locked --extra recipes python -m infx.srt_slurm.spec_identity snapshot 
 
 I use a new output directory for `infx generate`. I expect the matrix to contain exactly concurrency 1/2/4/8/12/16/24/48/80, duration 3600, the November 18 image, the intended KV modes, and enabled eval selection. I inspect the bound files for the setup script, resolved variant, one GPU per worker, model revision and automatically selected acceptance variables. I treat successful generation as configuration validation, not GPU or numerical validation.
 
-## Start the sweep through the approved fork path
+## Start the same-repository sweep
 
-I use the existing End-to-End Tests workflow; I add no new benchmark workflow or standalone launcher. PR #5239 is from a public fork, so its ordinary PR workflow does not receive GPU secrets and does not start `run-sweep.yml` jobs directly.
+I use [PR #5240](https://github.com/SemiAnalysisAI/InferenceX/pull/5240), whose `hyperloom/qwen3.8-final-mainline-ci` branch lives in `SemiAnalysisAI/InferenceX`. I use the normal [Run Sweep workflow](../../.github/workflows/run-sweep.yml); I add no new benchmark workflow or standalone launcher.
 
-I keep one appended `perf-changelog.yaml` block for the affected config key. After the integration is reviewed, mergeable and the golden-identity requirement is resolved, I have an authorized maintainer apply exactly one primary sweep label to the current head:
+I keep one appended `perf-changelog.yaml` block for the affected config key. After checking that the PR is mergeable and recording the candidate head, I use repository write access to apply exactly one primary sweep label. I can keep the PR Draft or mark it Ready for review: the same-repository workflow permits either state, and `gh pr ready` is not a launch prerequisite or a dispatch trigger.
 
 ```bash
-gh pr view 5239 --repo SemiAnalysisAI/InferenceX \
+gh pr view 5240 --repo SemiAnalysisAI/InferenceX \
   --json headRefOid,mergeable,isDraft,labels
-gh pr ready 5239 --repo SemiAnalysisAI/InferenceX
-gh pr edit 5239 --repo SemiAnalysisAI/InferenceX \
+gh pr edit 5240 --repo SemiAnalysisAI/InferenceX \
   --add-label full-sweep-fail-fast
 ```
 
-I follow [trusted external-fork dispatch](../../.github/workflows/README.md#trusted-external-fork-sweep-dispatch-poc): the trusted workflow on `main` validates the approved head and test-merge SHA, plans the appended changelog, and dispatches `e2e-tests.yml` with the repository's secrets. I record both SHAs. After any push, an authorized maintainer must remove and re-add the primary label to approve the new head. I do not use `agentx-fast`, `trim-conc`, `evals-only` or an eval smoke limit for the complete sweep. I verify the runner's physical-node priority label is `nodes:1` and let the cluster scheduler allocate GPUs.
+I follow [PR sweep labels](../../.github/workflows/README.md#pr-sweep-labels): `run-sweep.yml` validates and plans the appended changelog, runs the selected canary, then fans out the benchmark and eval jobs through the existing reusable workflows. `full-sweep-fail-fast` enables the canary and per-matrix fail-fast. I record the candidate and checkout SHAs used by the run. I finish branch updates before applying the label; a later push with the label retained can start a new sweep and cancel the active one. To retrigger a settled labeled PR deliberately, I remove and reapply its primary label. I do not use `agentx-fast`, `trim-conc`, `evals-only` or an eval smoke limit for the complete sweep. I verify the runner's physical-node priority label is `nodes:1` and let the cluster scheduler allocate GPUs.
 
 I observe the runs with:
 
 ```bash
-gh run list --repo SemiAnalysisAI/InferenceX --workflow e2e-tests.yml --limit 10
+gh run list --repo SemiAnalysisAI/InferenceX --workflow run-sweep.yml --limit 10
 ```
 
 I open the matching run and record all nine point outcomes and the eval/acceptance gates. I preserve failed jobs as failures, collect server/client/configuration/image fingerprints and raw score artifacts, and verify the workflow returns failure for real startup, replay or eval errors. I do not treat my local package scoring script's acceptance/window checks as a substitute for the current CI's result and eval validators.
 
-I use one complete sweep to validate CI operation. If I compare a two-replay mean against the supplied reference, I run the complete sweep a second time at the same approved source/image/model identity and record both run URLs. I request `/use <run_id>` only after the applicable full sweep and eval requirements pass, following the current fork result staging/reuse procedure.
+I use one complete sweep to validate CI operation. If I compare a two-replay mean against the supplied reference, I run the complete sweep a second time at the same source/image/model identity and record both run URLs. I request `/use <run_id>` only after the applicable full sweep and eval requirements pass, following the [same-repository sweep reuse procedure](../../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
 
 ## Verification status
 
