@@ -482,7 +482,8 @@ override_4p5d_k5_eval:
 # hash units (VLLM_SWA_FINE_GRAINED_HITS) and the DSpark draft's tail hit rule (VLLM_DFLASH_SWA_TAIL_HITS),
 # so the draft's sliding-window group keeps prefix-cache hits at 704-token granularity. Prefill turns on
 # expert-parallel load balancing (EPLB, no redundant experts): it moves experts between ranks every 1500 steps
-# from the last 1000 steps' load, so the busiest rank waits less; the computation is the same.
+# from the last 1000 steps' load, so the busiest rank waits less; the computation is the same. Prefill raises
+# the indexer logits budget to 4096 MB (VLLM_SPARSE_INDEXER_MAX_LOGITS_MB), as at 2P3D c264.
 override_4p5d_k5_pmu704:
   roles:
     prefill: &override_4p5d_k5_pmu704_prefill
@@ -491,6 +492,7 @@ override_4p5d_k5_pmu704:
         K31_CPU1: "1"
         VLLM_SWA_FINE_GRAINED_HITS: "1"
         VLLM_DFLASH_SWA_TAIL_HITS: "1"
+        VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "4096"
       args: &override_4p5d_k5_pmu704_prefill_args
         <<: *override_4p5d_k5_prefill_args
         prefix-match-unit: 704
