@@ -704,8 +704,9 @@ def _merge_pr_inner(
         return die(f"PR head changed to {current_head[:8]}; expected {post_merge[:8]}")
 
     # wait_for_checks sees only existing check runs, and video-reuse-check starts only after
-    # the reuse gate finishes, so wait for it by name before the rest.
-    for check_name in ("check-changelog", "video-reuse-check"):
+    # the reuse gate finishes, so wait for both by name; a failed gate is then reported as itself
+    # rather than as a skipped video-reuse-check.
+    for check_name in ("check-changelog", "reuse-sweep-gate", "video-reuse-check"):
         rc = wait_for_check(post_merge, check_name, gh_repo, check_timeout)
         if rc != 0:
             return rc

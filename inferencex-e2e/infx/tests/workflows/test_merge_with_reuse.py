@@ -1607,6 +1607,7 @@ def test_merge_from_nested_directory_survives_historical_checkout(
     gh = make_mock_gh(pull)
     gh.get_repo.return_value.get_commit.return_value.get_check_runs.return_value = [
         make_check_run(name="check-changelog"),
+        make_check_run(name="reuse-sweep-gate"),
         make_check_run(name="video-reuse-check"),
     ]
     gh.get_repo.return_value.get_commit.return_value.get_combined_status.return_value.statuses = []
