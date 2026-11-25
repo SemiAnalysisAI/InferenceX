@@ -657,6 +657,7 @@ jobs:
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
+            require-power: ${{ matrix.config['require-power'] == true }}
             scenario-type: video-generation
 
     sweep-multi-node-agentic:

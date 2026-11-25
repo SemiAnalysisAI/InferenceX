@@ -1042,6 +1042,7 @@ def _video_entries(
             Fields.DISAGG.value: False,
             Fields.DP_ATTN.value: False,
             Fields.RUN_EVAL.value: False,
+            Fields.REQUIRE_POWER.value: True,
         }
         entries.append(validate_video_matrix_entry(entry))
     return entries

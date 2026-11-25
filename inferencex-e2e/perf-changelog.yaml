@@ -13430,3 +13430,25 @@
     - "Update SGLang image from lmsysorg/sglang:dev-kimi-k31-pro to lmsysorg/sglang:nightly-dev-cu13-20261120-03fde9cc (SGLang 0.0.0.dev1+g03fde9cc3, Dynamo 1.8.0.dev20261119 from the image)."
     - "Aggregated megakernel points (c2, c4): set hybrid-cache-checkpoints-level 3, restoring the published per-chunk, uncapped KDA state checkpoints that the new SGLang default (level 2) drops."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5186
+
+- config-keys:
+    - h3-bf16-mi355x-sglang-video
+    - h3-bf16-mi355x-vllm-omni-video
+    - h3-bf16-a100-sglang-video
+    - h3-bf16-a100-vllm-omni-video
+    - h3-bf16-h100-sglang-video
+    - h3-bf16-h100-vllm-omni-video
+    - h3-bf16-h200-sglang-video
+    - h3-bf16-h200-vllm-omni-video
+    - h3-bf16-b200-sglang-video
+    - h3-bf16-b200-vllm-omni-video
+    - wan22-bf16-h200-vllm-omni-video
+    - wan22-bf16-b200-vllm-omni-video
+    - wan22-bf16-b300-vllm-omni-video
+    - wan22-bf16-h100-vllm-omni-video
+    - wan22-bf16-h200-sglang-video
+    - wan22-bf16-h100-sglang-video
+  scenario-type: [video-generation]
+  description:
+    - "Require valid GPU power on every video row: each row now carries require-power: true, so its job runs with REQUIRE_POWER=1 and fails when a cell's power measurement is invalid; images, engine flags, workloads and the search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -65,7 +65,7 @@ def point_environment(point: Mapping[str, Any]) -> dict[str, str]:
             "OSL": "0",
             "RUN_EVAL": "false",
             "EVAL_ONLY": "false",
-            "REQUIRE_POWER": "0",
+            "REQUIRE_POWER": "1" if point.get("require-power") else "0",
             "VIDEO_SPEC": point["spec"],
             "VIDEO_SET": point["set"],
             "GPU_COUNT": str(point["gpus"]),

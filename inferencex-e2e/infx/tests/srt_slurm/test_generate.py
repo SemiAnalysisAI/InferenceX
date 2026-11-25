@@ -339,6 +339,7 @@ def test_a_video_point_renders_its_bound_server_recipe(project, tmp_path):
     [(record, recipe)] = written(output)
     assert (record["variant"], record["cluster"]) == (None, "fixture")
     assert (record["matrix"]["scenario-type"], record["matrix"]["conc-list"]) == ("video-generation", [1])
+    assert (record["matrix"]["require-power"], recipe["telemetry"]["required"]) == (True, True)
     assert recipe["model"] == {"path": f"hf:{VIDEO_MODEL}", "container": "example/video:1", "precision": "bf16"}
     assert recipe["resources"]["gpus_per_node"] == 2
     [server] = recipe["services"]

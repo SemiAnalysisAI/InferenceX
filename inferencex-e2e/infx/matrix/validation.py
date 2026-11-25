@@ -514,6 +514,7 @@ class VideoMatrixEntry(BaseModel):
         alias=Fields.RECIPE_FINGERPRINT.value,
         pattern=r"^[0-9a-f]{64}$",
     )
+    require_power: Literal[True] = Field(alias=Fields.REQUIRE_POWER.value)
 
 
 def validate_video_matrix_entry(entry: dict) -> dict:
