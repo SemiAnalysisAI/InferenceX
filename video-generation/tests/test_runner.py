@@ -430,8 +430,7 @@ def test_request_encoding_comes_from_the_plan(tmp_path):
     assert not output.exists()
     plan["fairness"]["encoding"].update(preset="veryfast", crf=18)
     with pytest.raises(ValueError, match="veryfast has no verifiable x264 options"):
-        execute(plan, output, "http://127.0.0.1:1")
-    assert not output.exists()
+        runner.validate_plan(plan)
 
 
 def test_http_failure_is_durable_never_retried_and_aborts_unknown_jobs(
@@ -610,10 +609,24 @@ def test_missing_controls_fail_before_output(plan, tmp_path, mocked_media):
     del plan["generation"]["num_inference_steps"]
     with pytest.raises(ValueError, match="num_inference_steps"):
         runner.preview_plan(plan)
-    output = tmp_path / "not-created"
-    with pytest.raises(ValueError, match="num_inference_steps"):
-        execute(plan, output, "http://127.0.0.1:1")
-    assert not output.exists()
+    plan_path, output = tmp_path / "plan.json", tmp_path / "not-created"
+    plan_path.write_text(json.dumps(plan))
+    code = cli.main(
+        [
+            "run",
+            str(plan_path),
+            "--execute",
+            "--endpoint",
+            "http://127.0.0.1:1",
+            "--runtime-revision",
+            RUNTIME_REVISION,
+            "--hardware-label",
+            "LOCAL HTTP FIXTURE",
+            "--output",
+            str(output),
+        ]
+    )
+    assert code == 2 and not output.exists()
 
 
 def test_unsupported_or_inconsistent_generation_contracts_are_rejected(plan):

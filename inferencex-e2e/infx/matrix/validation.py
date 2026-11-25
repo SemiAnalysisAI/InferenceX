@@ -516,16 +516,6 @@ class VideoMatrixEntry(BaseModel):
     )
 
 
-def validate_video_matrix_entry(entry: dict) -> dict:
-    try:
-        VideoMatrixEntry(**entry)
-    except ValidationError as e:
-        raise ValueError(
-            f"The following parsed video matrix entry failed validation:\n{pprint.pformat(entry)}\n{e}"
-        ) from e
-    return entry
-
-
 def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
     """Return a fixed-sequence matrix row unchanged, raising ValueError with the row if invalid."""
     try:

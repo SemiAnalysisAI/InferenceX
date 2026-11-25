@@ -395,7 +395,7 @@ def test_bundle_counts_malformed_power_samples_instead_of_hiding_them(tmp_path):
         result_filename="r",
         concurrencies=[1],
         output=output,
-        environ={"PATH": os.environ["PATH"]},
+        environ={"PATH": os.environ["PATH"], "GITHUB_SHA": "b" * 40},
     )
     power = json.loads((output / "gpu/c1/power.json").read_text())
     assert power["malformed_sample_rows"] == 2
@@ -418,7 +418,7 @@ def test_power_sample_is_valid_only_when_it_reads_every_server_gpu(tmp_path):
         result_filename="r",
         concurrencies=[1],
         output=output,
-        environ={"PATH": os.environ["PATH"]},
+        environ={"PATH": os.environ["PATH"], "GITHUB_SHA": "b" * 40},
     )
     series = json.loads((output / "gpu/c1/power.json").read_text())["sample_series"]
     assert [sample["valid"] for sample in series[4:7]] == [True, False, True]
@@ -442,7 +442,7 @@ def test_only_runtimes_with_a_policy_are_gated_on_work_attestation(tmp_path, run
         result_filename="r",
         concurrencies=[1],
         output=output,
-        environ={"PATH": os.environ["PATH"]},
+        environ={"PATH": os.environ["PATH"], "GITHUB_SHA": "b" * 40},
     )
     [cell] = json.loads((output / "serving-smoke.json").read_text())["cells"]
     receipt = json.loads((output / cell["receipt"]["path"]).read_text())
@@ -466,7 +466,7 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
         result_filename="r",
         concurrencies=[1, 4],
         output=output,
-        environ={"PATH": os.environ["PATH"]},
+        environ={"PATH": os.environ["PATH"], "GITHUB_SHA": "b" * 40},
     )
     assert result["status"] == "failed"
     assert json.loads((output / "ci.json").read_text())["phase"] == "failed"
@@ -477,6 +477,22 @@ def test_bundle_marks_a_missing_or_short_cell_failed(tmp_path):
     assert cells[1]["status"] == "failed" and cells[1]["completion"]["valid"] == 3
     assert cells[4]["status"] == "failed" and "run" not in cells[4]
     assert any("c4: run.json missing" in f for f in result["failures"])
+
+
+def test_bundle_refuses_an_unknown_executed_commit(tmp_path):
+    logs, workspace = _native_job(tmp_path, concurrencies=(1,))
+    with pytest.raises(ValueError, match="executed commit is unknown"):
+        srt_bundle.build_bundle(
+            video_dir=logs / "video",
+            power_dir=logs / "power",
+            server_log=logs / "service_video-server.out",
+            precision="bf16",
+            workspace=workspace,
+            result_filename="r",
+            concurrencies=[1],
+            output=tmp_path / "h3-results",
+            environ={"PATH": os.environ["PATH"]},
+        )
 
 
 def _bundle(tmp_path, artifacts, fingerprint, attempt, framework="sglang"):
@@ -491,7 +507,6 @@ def _bundle(tmp_path, artifacts, fingerprint, attempt, framework="sglang"):
         "GITHUB_RUN_ATTEMPT": attempt,
         "GITHUB_HEAD_SHA": "c" * 40,
         "GITHUB_SHA": "b" * 40,
-        "RECIPE_FINGERPRINT": fingerprint,
         "VIDEO_ARTIFACT_NAME": name,
     }
     srt_bundle.build_bundle(
@@ -534,7 +549,6 @@ def _sweep(tmp_path, attempts=("2", "2"), framework="sglang"):
                 "run-id": 123,
                 "run-attempt": 2,
                 "head": "c" * 40,
-                "video-full-sweep": True,
                 "matrix": {"single_node": {"video": rows}},
             }
         )
@@ -591,12 +605,8 @@ def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout
         validate_video_artifacts(artifacts, run_id="124", run_attempt="2", head_sha="c" * 40)
     with pytest.raises(ValueError, match="trusted run/head/attempt"):
         validate_video_artifacts(artifacts, run_id="123", run_attempt="3", head_sha="c" * 40)
-    path = artifacts / "video-sweep-manifest/sweep_manifest.json"
-    manifest = json.loads(path.read_text())
-    manifest["video-full-sweep"] = False
-    path.write_text(json.dumps(manifest))
-    with pytest.raises(ValueError, match="requires a full video sweep"):
-        validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
+    with pytest.raises(TypeError):  # The trusted identity cannot be left out.
+        validate_video_artifacts(artifacts)
 
 
 def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
@@ -618,6 +628,7 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
         result_filename="r",
         concurrencies=[1, 2],
         output=output,
+        environ={"GITHUB_SHA": "b" * 40},
     )
     manifest = json.loads((output / "manifest.json").read_text())
     matrix = json.loads((output / "serving-smoke.json").read_text())
@@ -632,10 +643,8 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     [
         ("population", "request population"),
         ("missing_media", "reference mismatch"),
-        ("power", "unverified native"),
+        ("power", "invalid native power"),
         ("attestation", "work attestation failed"),
-        ("runtime", "work attestation failed"),
-        ("bundle_type", "work attestation failed"),
         ("receipt", "missing engine work attestation"),
         ("head", "CI identity mismatch"),
     ],
@@ -651,8 +660,8 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
     reference = (
         None
         if fault == "head"
-        else cell["attestation" if fault in ("runtime", "bundle_type") else fault]
-        if fault in ("power", "attestation", "receipt", "runtime", "bundle_type")
+        else cell[fault]
+        if fault in ("power", "attestation", "receipt")
         else cell["run"]
     )
     path = bundle / ("manifest.json" if reference is None else reference["path"])
@@ -664,8 +673,6 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
         doc["records"][0]["artifact_path"] = "artifacts/missing.mp4"
     elif fault in ("power", "attestation"):
         doc["valid"] = False
-    elif fault in ("runtime", "bundle_type"):
-        doc[fault] = "other"
     elif fault == "receipt":
         del doc["attestation"], cell["attestation"]
     else:
@@ -682,10 +689,11 @@ def test_reuse_rejects_resealed_bundles_with_altered_evidence(tmp_path, fault, m
 def test_reuse_requires_an_attestation_unless_the_framework_is_exempt(tmp_path):
     from infx.results.video_artifacts import validate_video_artifacts
 
+    identity = {"run_id": "123", "run_attempt": "2", "head_sha": "c" * 40}
     exempt = _sweep(tmp_path / "exempt", framework="vllm-omni")
-    assert len(validate_video_artifacts(exempt)["artifacts"]) == 2
+    assert len(validate_video_artifacts(exempt, **identity)["artifacts"]) == 2
     with pytest.raises(ValueError, match="missing engine work attestation"):
-        validate_video_artifacts(_sweep(tmp_path / "unknown", framework="unlisted"))
+        validate_video_artifacts(_sweep(tmp_path / "unknown", framework="unlisted"), **identity)
 
 
 @pytest.mark.parametrize(

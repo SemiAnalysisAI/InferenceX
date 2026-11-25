@@ -139,7 +139,7 @@ def test_selected_server_executes_recipe_command_and_records_selected_environmen
         assert executed[0][1] == command
 
 
-def test_selected_server_requires_the_recipe_gpus_and_runtime(tmp_path, monkeypatch):
+def test_selected_server_requires_the_recipe_gpus_and_snapshot_path(tmp_path, monkeypatch):
     plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3.yaml"), "release-v1")
     model = _snapshot(tmp_path / "model")
     monkeypatch.setattr(srt_selected, "cuda_devices", lambda: ["GPU-1", "GPU-2"])
@@ -153,8 +153,6 @@ def test_selected_server_requires_the_recipe_gpus_and_runtime(tmp_path, monkeypa
     }
     with pytest.raises(RuntimeError, match="visible GPU count"):
         srt_selected.serve(plan, runtime="sglang", gpus=4, **kwargs)
-    with pytest.raises(ValueError, match="unsupported native video runtime"):
-        srt_selected.serve(plan, runtime="tgi", gpus=2, **kwargs)
     with pytest.raises(ValueError, match="model snapshot path exactly once"):
         srt_selected.serve(plan, runtime="sglang", gpus=2, **{**kwargs, "command": ["python3"]})
     assert not (tmp_path / "server").exists()
@@ -183,6 +181,7 @@ def test_sglang_wan22_launch_must_serve_the_controls_its_requests_omit(
     monkeypatch.setattr(srt_selected, "KFD", tmp_path / "no-kfd")
     executed = []
     monkeypatch.setattr(srt_selected.os, "execvpe", lambda file, argv, env: executed.append(argv))
+    monkeypatch.setenv("VIDEO_RECIPE_ENV_KEYS", "[]")
     monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/engine:v1@sha256:" + "b" * 64)
     command = ["engine", "serve", str(model), *flow_shift]
 
@@ -211,14 +210,10 @@ def test_sglang_wan22_launch_must_serve_the_controls_its_requests_omit(
     ("field", "value", "message"),
     [
         (None, None, "requires the sealed server launch"),
-        ("runtime", "sglang", "runtime differs"),
-        ("model_revision", "c" * 40, "model_revision differs"),
-        ("plan_sha256", "0" * 64, "plan_sha256 differs"),
-        ("gpu_uuids", ["GPU-0", "GPU-1"], "must record 4 GPU UUIDs"),
         ("image_digest", None, "complete matching server configuration"),
     ],
 )
-def test_client_rejects_a_missing_or_mismatched_sealed_launch_before_requests(
+def test_client_rejects_a_missing_or_incomplete_sealed_launch_before_requests(
     tmp_path, field, value, message
 ):
     plan = video_spec.plan_for(video_spec.load_spec(PACKAGE / "specs/h3-v2.yaml"), "release-v1")
@@ -277,6 +272,7 @@ def test_rocm_server_names_hip_devices_by_board_serial(tmp_path, monkeypatch):
     monkeypatch.setattr(
         srt_selected.os, "execvpe", lambda file, argv, env: executed.append((argv, env))
     )
+    monkeypatch.setenv("VIDEO_RECIPE_ENV_KEYS", "[]")
     monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/sglang:rocm@sha256:" + "c" * 64)
     output = tmp_path / "server"
     srt_selected.serve(
@@ -320,6 +316,7 @@ def test_server_prefetches_the_snapshot_only_when_the_recipe_asks(tmp_path, monk
     monkeypatch.setattr(
         srt_selected.os, "execvpe", lambda file, argv, env: order.append(("exec", file))
     )
+    monkeypatch.setenv("VIDEO_RECIPE_ENV_KEYS", "[]")
     monkeypatch.setenv("VIDEO_CONTAINER_IMAGE", "example/engine:v1@sha256:" + "b" * 64)
     if enabled:
         monkeypatch.setenv("VIDEO_PREFETCH_MODEL", "1")

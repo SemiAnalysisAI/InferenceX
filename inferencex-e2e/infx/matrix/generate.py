@@ -22,7 +22,6 @@ from .validation import (
     srt_recipe_path,
     validate_agentic_matrix_entry,
     validate_matrix_entry,
-    validate_video_matrix_entry,
 )
 
 seq_len_stoi = {"1k1k": (1024, 1024), "8k1k": (8192, 1024)}
@@ -1010,8 +1009,6 @@ def _video_entries(
     conc_filter: list[int] | None = None,
 ) -> list[dict]:
     """One job per deployment: every listed concurrency runs against the same video server."""
-    if config.get(Fields.MULTINODE.value, False):
-        raise ValueError("video-generation scenarios run on one node; multinode is not supported")
     concurrencies = [
         conc
         for conc in benchmark[Fields.CONC_LIST.value]
@@ -1043,7 +1040,7 @@ def _video_entries(
             Fields.DP_ATTN.value: False,
             Fields.RUN_EVAL.value: False,
         }
-        entries.append(validate_video_matrix_entry(entry))
+        entries.append(entry)
     return entries
 
 

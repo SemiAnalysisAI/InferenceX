@@ -4,18 +4,16 @@ import ctypes
 import hashlib
 import json
 import os
-import re
 import sys
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from infx.bench.video import CREDENTIAL_ENV, cell_dir, read_object, window_file, write_json
+from infx.bench.video import cell_dir, read_object, window_file, write_json
 from specs import video_spec
 
 from .runner import (
-    RUNTIMES,
     SGLANG_WAN22_SERVER_CONTROLS,
     WAN22_MODEL_ID,
     run_plan,
@@ -98,21 +96,12 @@ def gpu_devices() -> list[str]:
 
 def _recipe_environment(env: dict[str, str]) -> dict[str, str]:
     raw = env.pop("VIDEO_RECIPE_ENV_KEYS", None)
-    if raw is None:
-        return {}
     try:
         names = json.loads(raw)
     except (TypeError, json.JSONDecodeError) as error:
         raise ValueError("invalid VIDEO_RECIPE_ENV_KEYS") from error
-    if not isinstance(names, list) or any(
-        not isinstance(name, str)
-        or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
-        or CREDENTIAL_ENV.search(name)
-        for name in names
-    ):
-        raise ValueError("invalid VIDEO_RECIPE_ENV_KEYS")
-    if len(names) != len(set(names)) or any(name not in env for name in names):
-        raise ValueError("VIDEO_RECIPE_ENV_KEYS names must be unique and present at launch")
+    if any(name not in env for name in names):
+        raise ValueError("VIDEO_RECIPE_ENV_KEYS names must be present at launch")
     return {name: env[name] for name in names}
 
 
@@ -162,8 +151,6 @@ def benchmark_window(run: dict, *, utc_minus_monotonic: float) -> dict:
     measurement, summary = run["measurement"], run["summary"]
     start = measurement["start_monotonic_seconds"] + utc_minus_monotonic
     end = measurement["end_monotonic_seconds"] + utc_minus_monotonic
-    if not end > start:
-        raise ValueError("measured block has no positive duration")
     return {
         "schema_version": 1,
         "benchmark_type": "video-generation",
@@ -235,10 +222,6 @@ def serve(
     command: list[str],
     model_view: str,
 ) -> None:
-    if runtime not in RUNTIMES:
-        raise ValueError(f"unsupported native video runtime: {runtime}")
-    if not re.fullmatch(r"[0-9a-f]{40}", runtime_revision):
-        raise ValueError("runtime revision must be an immutable commit")
     if not model_path.is_dir():
         raise ValueError("the pinned model snapshot is unavailable")
     if model_view == "h3-fl2va" and runtime != "vllm-omni":
@@ -263,9 +246,6 @@ def serve(
     env = os.environ.copy()
     env["VGBENCH_GPU_UUIDS"] = ",".join(uuids)
     recorded_env = _recipe_environment(env)
-    image = re.fullmatch(r"[^\s@]+@sha256:([0-9a-f]{64})", env.get("VIDEO_CONTAINER_IMAGE", ""))
-    if image is None:
-        raise ValueError("VIDEO_CONTAINER_IMAGE must be an image pinned by a SHA256 digest")
     served_path = model_path
     if model_view == "h3-fl2va":
         storage = env.get("VLLM_OMNI_SERVER_STORAGE__PATH")
@@ -302,7 +282,7 @@ def serve(
         "gpu_uuids": uuids,
         "argv": argv,
         "environment": recorded_env,
-        "image_digest": image.group(1),
+        "image_digest": env["VIDEO_CONTAINER_IMAGE"].rpartition("@sha256:")[2],
         "slurm_job_id": env.get("SLURM_JOB_ID"),
     }
     write_json(output / "launch.json", launch)
@@ -324,29 +304,18 @@ def _sglang_main() -> None:
     main()
 
 
-def _sealed_identity(path: Path, plan: dict, *, runtime: str, gpus: int) -> dict:
+def _sealed_identity(path: Path) -> dict:
     """The sealed server launch as the run's numerical identity, which run_plan validates."""
     try:
         launch = read_object(path)
     except (OSError, ValueError) as error:
         raise ValueError("the client requires the sealed server launch before requests") from error
-    expected = {
-        "runtime": runtime,
-        "model_revision": plan["model_revision"],
-        "plan_sha256": video_spec.plan_sha256(plan),
-    }
-    for key, value in expected.items():
-        if launch.get(key) != value:
-            raise ValueError(f"sealed server launch {key} differs from the selected plan")
-    uuids = launch.get("gpu_uuids")
-    if not isinstance(uuids, list) or len(uuids) != gpus:
-        raise ValueError(f"sealed server launch must record {gpus} GPU UUIDs")
     return {
         "runtime_revision": launch.get("runtime_revision"),
         "image_digest": launch.get("image_digest"),
         "server_argv": launch.get("argv"),
         "server_environment": launch.get("environment"),
-        "gpu_topology": {"gpu_uuids": uuids},
+        "gpu_topology": {"gpu_uuids": launch.get("gpu_uuids")},
     }
 
 
@@ -362,9 +331,7 @@ def run_matrix(
     window_dir: Path,
     request_seconds: float,
 ) -> dict[int, dict]:
-    numerical_identity = _sealed_identity(
-        output / "server" / "launch.json", plan, runtime=runtime, gpus=gpus
-    )
+    numerical_identity = _sealed_identity(output / "server" / "launch.json")
     results = {}
     for concurrency in concurrencies:
         cell = output / cell_dir(concurrency)

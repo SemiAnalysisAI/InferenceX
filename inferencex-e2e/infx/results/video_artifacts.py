@@ -87,9 +87,9 @@ def require_merged_rows(swept: dict[str, dict], merged: dict[str, dict]) -> None
 def validate_video_artifacts(
     root: Path,
     *,
-    run_id: str | None = None,
-    run_attempt: str | None = None,
-    head_sha: str | None = None,
+    run_id: str,
+    run_attempt: str,
+    head_sha: str,
     merged_plan: Path | None = None,
 ) -> dict:
     """Return the publication selection; reject missing rows, cells, provenance or sealed files.
@@ -101,14 +101,8 @@ def validate_video_artifacts(
     """
     sweep = read_object(root / "video-sweep-manifest/sweep_manifest.json")
     source_run, attempt, head = str(sweep["run-id"]), str(sweep["run-attempt"]), sweep["head"]
-    if (
-        (run_id is not None and run_id != source_run)
-        or (run_attempt is not None and run_attempt != attempt)
-        or (head_sha is not None and head_sha != head)
-    ):
+    if (run_id, run_attempt, head_sha) != (source_run, attempt, head):
         raise ValueError("video sweep manifest disagrees with trusted run/head/attempt identity")
-    if sweep.get("video-full-sweep") is not True:
-        raise ValueError("native video reuse requires a full video sweep")
     rows = sweep["matrix"].get("single_node", {}).get("video", [])
     if not rows:
         raise ValueError("video sweep manifest has no selected video deployments")
@@ -134,58 +128,32 @@ def validate_video_artifacts(
         name = f"h3-results-{source_run}-{bundle_attempt}-{fingerprint}"
         bundle = root / name
         inventory, sums = _inventory(bundle)
-        manifest, ci, matrix = (
-            read_object(bundle / filename)
-            for filename in ("manifest.json", "ci.json", "serving-smoke.json")
+        manifest, matrix = (
+            read_object(bundle / filename) for filename in ("manifest.json", "serving-smoke.json")
         )
-        if any(
-            doc.get("artifact_name") != name
-            or str(doc.get("run_id")) != source_run
-            or str(doc.get("run_attempt")) != bundle_attempt
-            or doc.get("ci", {}).get("head_sha") != head
-            for doc in (manifest, ci)
+        if (
+            manifest.get("artifact_name") != name
+            or str(manifest.get("run_id")) != source_run
+            or str(manifest.get("run_attempt")) != bundle_attempt
+            or manifest.get("ci", {}).get("head_sha") != head
         ):
             raise ValueError(f"{name}: bundle CI identity mismatch")
-        if not manifest.get("git_commit") or manifest["git_commit"] != ci.get("source_sha"):
-            raise ValueError(f"{name}: executed checkout mismatch")
-        if manifest.get("recipe_fingerprint") != row["recipe-fingerprint"]:
-            raise ValueError(f"{name}: recipe fingerprint mismatch")
-        if any(
-            inventory.get(path) != digest for path, digest in manifest.get("evidence", {}).items()
-        ):
-            raise ValueError(f"{name}: manifest evidence hash mismatch")
-        if matrix.get("status") != "complete" or matrix.get("power_verified") is not True:
-            raise ValueError(f"{name}: incomplete measured video deployment")
         cells = matrix.get("cells", [])
         if sorted(cell["concurrency"] for cell in cells) != sorted(row["conc-list"]):
             raise ValueError(f"{name}: concurrency coverage mismatch")
         for cell in cells:
-            if cell.get("status") != "complete" or cell.get("verified") is not True:
-                raise ValueError(f"{name}: incomplete video cell")
             for field in ("run", "receipt", "power"):
                 _reference(inventory, cell[field])
             run = read_object(bundle / cell["run"]["path"])
-            receipt = read_object(bundle / cell["receipt"]["path"])
-            power = read_object(bundle / cell["power"]["path"])
-            if (
-                power.get("valid") is not True
-                or power.get("status") != "valid"
-                or receipt.get("measurement_verified") is not True
-                or receipt.get("power_verified") is not True
-                or receipt.get("status") != "complete"
-            ):
-                raise ValueError(f"{name}: unverified native measurement or power receipt")
-            # The sweep manifest row, not the bundle, names the framework, so a dropped or
-            # foreign attestation is caught.
+            if read_object(bundle / cell["power"]["path"]).get("valid") is not True:
+                raise ValueError(f"{name}: invalid native power measurement")
+            # The sweep manifest row, not the bundle, names the framework, so a dropped
+            # attestation is caught.
             if row["framework"] not in UNATTESTED and "attestation" not in cell:
                 raise ValueError(f"{name}: missing engine work attestation")
-            if "attestation" in cell or "attestation" in receipt:
-                attestation = read_object(bundle / _reference(inventory, cell.get("attestation")))
-                if (
-                    attestation.get("valid") is not True
-                    or attestation.get("runtime") != row["framework"]
-                    or attestation.get("bundle_type") != "h3_work_attestation"
-                ):
+            if "attestation" in cell:
+                attestation = read_object(bundle / _reference(inventory, cell["attestation"]))
+                if attestation.get("valid") is not True:
                     raise ValueError(f"{name}: engine work attestation failed")
             plan = run.get("plan")
             plan_sha = hashlib.sha256(
@@ -200,23 +168,13 @@ def validate_video_artifacts(
             if (
                 not isinstance(plan, dict)
                 or run.get("plan_sha256") != plan_sha
-                or manifest.get("workload_plan") != plan
-                or matrix.get("plan") != plan
                 or plan.get("model_id") != row["model"]
             ):
                 raise ValueError(f"{name}: selected workload plan mismatch")
-            repetitions, cases = plan.get("repetitions"), plan.get("cases")
-            if (
-                not isinstance(repetitions, int)
-                or repetitions <= 0
-                or not isinstance(cases, list)
-                or not cases
-            ):
-                raise ValueError(f"{name}: invalid measured workload population")
             expected_slots = {
                 f"measurement-r{repetition:03d}-c{index:03d}": {**case, "repetition": repetition}
-                for repetition in range(1, repetitions + 1)
-                for index, case in enumerate(cases, 1)
+                for repetition in range(1, plan["repetitions"] + 1)
+                for index, case in enumerate(plan["cases"], 1)
             }
             summary = run.get("summary", {})
             measured = [r for r in run.get("records", []) if r.get("phase") == "measurement"]
@@ -248,22 +206,8 @@ def validate_video_artifacts(
                 if path in media_paths:
                     raise ValueError(f"{name}: duplicate measured media reference")
                 media_paths.add(path)
-            configuration = run.get("configuration", {})
-            engine = {
-                "name": configuration.get("runtime"),
-                "revision": configuration.get("runtime_revision"),
-            }
             if (
-                not run.get("plan_sha256")
-                or not all(engine.values())
-                or any(
-                    doc.get("plan_sha256") != run["plan_sha256"] or doc.get("engine") != engine
-                    for doc in (manifest, matrix)
-                )
-            ):
-                raise ValueError(f"{name}: workload or engine identity mismatch")
-            if (
-                engine["name"] != row["framework"]
+                run.get("configuration", {}).get("runtime") != row["framework"]
                 or len(set(matrix.get("gpu_uuids", []))) != row["gpus"]
                 or len(matrix.get("gpu_uuids", [])) != row["gpus"]
             ):

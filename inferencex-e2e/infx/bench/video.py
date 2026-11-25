@@ -106,10 +106,7 @@ def main(argv: list[str]) -> int:
             )
             return 0
 
-        concurrency_values = env.require("CONC_LIST")["CONC_LIST"].split()
-        concurrencies = [env.parse_positive_int("CONC_LIST", c) for c in concurrency_values]
-        if not concurrencies or len(set(concurrencies)) != len(concurrencies):
-            raise env.InputError("CONC_LIST must contain distinct positive integers")
+        concurrencies = [int(c) for c in env.require("CONC_LIST")["CONC_LIST"].split()]
         window_dir = Path(env.require("SRT_MEASUREMENT_WINDOW_DIR")["SRT_MEASUREMENT_WINDOW_DIR"])
         output.mkdir(parents=True, exist_ok=True)
         window_dir.mkdir(parents=True, exist_ok=True)

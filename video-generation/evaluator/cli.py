@@ -66,7 +66,7 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             return 0 if result["status"] == "complete" else 1
 
         if arguments.command == "run":
-            from .runner import preview_plan, run_plan
+            from .runner import preview_plan, run_plan, validate_plan
 
             plan = _load_mvp_object(arguments.plan)
             from .serving import settings
@@ -96,7 +96,7 @@ def _mvp_command(arguments: argparse.Namespace) -> int:
             previous_sigterm = signal.signal(signal.SIGTERM, interrupt_run)
             try:
                 result = run_plan(
-                    plan,
+                    validate_plan(plan),
                     arguments.output,
                     endpoint=arguments.endpoint,
                     runtime=arguments.runtime,

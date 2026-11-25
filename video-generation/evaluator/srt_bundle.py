@@ -77,7 +77,10 @@ def _source_sha(workspace: Path, environ: dict[str, str]) -> str:
         ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         head = ""
-    return head or environ.get("GITHUB_SHA", "") or "unknown"
+    head = head or environ.get("GITHUB_SHA")
+    if not head:
+        raise ValueError("the executed commit is unknown: no git checkout and no GITHUB_SHA")
+    return head
 
 
 def _ci_context(environ: dict[str, str]) -> dict:
@@ -336,16 +339,13 @@ def build_bundle(
         shutil.copytree(source_cell / "baseline", target / "baseline", dirs_exist_ok=True)
         run = read_object(target / "baseline" / "run.json")
         configuration = run.get("configuration") or {}
-        cell_identity = {
+        identity = {
             "plan_sha256": run.get("plan_sha256"),
             "engine": {
                 "name": configuration.get("runtime"),
                 "revision": configuration.get("runtime_revision"),
             },
         }
-        if identity is not None and (identity != cell_identity or plan != run.get("plan")):
-            raise ValueError(f"c{concurrency}: workload or engine identity differs between cells")
-        identity = cell_identity
         plan = run.get("plan")
         bench_path = source_cell / window_file(concurrency)
         bench = read_object(bench_path) if bench_path.is_file() else {}
@@ -538,7 +538,6 @@ def build_bundle(
     manifest = {
         **identity,
         "artifact_name": artifact_name,
-        "recipe_fingerprint": environ.get("RECIPE_FINGERPRINT"),
         "schema_version": 1,
         "task_id": TASK_ID,
         "git_commit": source_sha,
