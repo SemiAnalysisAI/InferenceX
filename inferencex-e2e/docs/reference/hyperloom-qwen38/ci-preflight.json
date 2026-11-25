@@ -1,0 +1,194 @@
+{
+  "schema": 1,
+  "verification_scope": "Configuration generation and CPU-only serving-container patch setup; no GPU benchmark or natural eval claimed",
+  "matrix_concurrency": [
+    1,
+    2,
+    4,
+    8,
+    12,
+    16,
+    24,
+    48,
+    80
+  ],
+  "duration_seconds": [
+    3600,
+    3600,
+    3600,
+    3600,
+    3600,
+    3600,
+    3600,
+    3600,
+    3600
+  ],
+  "base_image": "lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261118@sha256:723fbc92690378341609b5395055df1187cdac06f299554ac75e57cfde89c9f1",
+  "bound_recipes": 9,
+  "focused_existing_tests_passed": 396,
+  "setup_first_and_repeat_exit_code": 0,
+  "setup_repeat_verified": true,
+  "GPU_devices_requested": false,
+  "invalid_asset_expected_failure": true,
+  "invalid_asset_exit_code": 1,
+  "golden_identity_findings": [
+    {
+      "model_prefix": "qwen3.8next",
+      "framework": "sglang",
+      "args": {
+        "speculative-algorithm": "NEXTN",
+        "speculative-eagle-topk": 1,
+        "kv-cache-dtype": "auto",
+        "speculative-num-steps": 1,
+        "speculative-num-draft-tokens": 2
+      },
+      "recipes": [
+        "benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/mi355x-fp4-mtp/agentic.yaml"
+      ],
+      "rows": 1,
+      "expected": {
+        "curve": "qwen3.8-flash-next-fp8__mtp__native__default-default",
+        "draft_tokens": 1,
+        "golden": 1.65,
+        "findings": [
+          [
+            "unverified",
+            "draft_sample",
+            "default",
+            "default"
+          ],
+          [
+            "unverified",
+            "draft_precision",
+            "default",
+            "default"
+          ],
+          [
+            "unverified",
+            "draft_kv_cache_dtype",
+            "default",
+            "default"
+          ],
+          [
+            "unverified",
+            "kv_cache_dtype",
+            "default",
+            "default"
+          ],
+          [
+            "engine",
+            "engine",
+            "sglang",
+            "vllm"
+          ]
+        ]
+      }
+    },
+    {
+      "model_prefix": "qwen3.8next",
+      "framework": "sglang",
+      "args": {
+        "speculative-algorithm": "NEXTN",
+        "speculative-eagle-topk": 1,
+        "kv-cache-dtype": "auto",
+        "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4
+      },
+      "recipes": [
+        "benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/mi355x-fp4-mtp/agentic.yaml"
+      ],
+      "rows": 5,
+      "expected": {
+        "curve": "qwen3.8-flash-next-fp8__mtp__native__default-default",
+        "draft_tokens": 3,
+        "golden": 2.32,
+        "findings": [
+          [
+            "unverified",
+            "draft_sample",
+            "default",
+            "default"
+          ],
+          [
+            "unverified",
+            "draft_precision",
+            "default",
+            "default"
+          ],
+          [
+            "unverified",
+            "draft_kv_cache_dtype",
+            "default",
+            "default"
+          ],
+          [
+            "unverified",
+            "kv_cache_dtype",
+            "default",
+            "default"
+          ],
+          [
+            "engine",
+            "engine",
+            "sglang",
+            "vllm"
+          ]
+        ]
+      }
+    },
+    {
+      "model_prefix": "qwen3.8next",
+      "framework": "sglang",
+      "args": {
+        "speculative-algorithm": "NEXTN",
+        "speculative-eagle-topk": 1,
+        "kv-cache-dtype": "fp8_e4m3",
+        "speculative-num-steps": 3,
+        "speculative-num-draft-tokens": 4,
+        "speculative-draft-kv-cache-dtype": "fp8_e4m3"
+      },
+      "recipes": [
+        "benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/mi355x-fp4-mtp/agentic.yaml"
+      ],
+      "rows": 3,
+      "expected": {
+        "curve": "qwen3.8-flash-next-fp8__mtp__native__default-default",
+        "draft_tokens": 3,
+        "golden": 2.32,
+        "findings": [
+          [
+            "unverified",
+            "draft_sample",
+            "default",
+            "default"
+          ],
+          [
+            "unverified",
+            "draft_precision",
+            "default",
+            "default"
+          ],
+          [
+            "unverified",
+            "draft_kv_cache_dtype",
+            "fp8 (explicit)",
+            "default"
+          ],
+          [
+            "unverified",
+            "kv_cache_dtype",
+            "fp8 (explicit)",
+            "default"
+          ],
+          [
+            "engine",
+            "engine",
+            "sglang",
+            "vllm"
+          ]
+        ]
+      }
+    }
+  ],
+  "local_preflight_environment": "Ubuntu 24.04 / Python 3.12; isolated dependency directory, not a complete uv --locked CI environment"
+}

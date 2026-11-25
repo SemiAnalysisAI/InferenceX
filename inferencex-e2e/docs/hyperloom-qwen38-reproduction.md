@@ -1,6 +1,6 @@
 # Hyperloom Qwen3.8-Flash-Next reproduction draft
 
-I document the pinned inputs, the nine-point replay contract and the available reproduction evidence for Ravi's final-mainline package. I use this draft to prepare an InferenceX integration that can be reviewed before a complete GPU sweep. The reference JSON in this directory is not consumed by the benchmark launcher.
+I document the pinned inputs, the nine-point replay contract and the available reproduction evidence for Ravi's final-mainline package. I provide the active image/patch/recipe integration in [the CI instructions](hyperloom-qwen38-ci.md). The reference JSON in this directory remains provenance data and is not consumed by the benchmark launcher.
 
 I have five scored full replays on MI350X. I have not completed C8/C24/C48/C80, natural model accuracy or an InferenceX CI sweep of this candidate. I keep this work in draft until those gaps and the image/recipe integration are resolved.
 
@@ -40,14 +40,14 @@ I also observed a valid parallel C1 control at P90 144.91 tokens/s/user and tota
 
 I could not validate C8 because server graph preparation exceeded the one-hour readiness budget. C24/C48/C80 encountered GPU availability failures; later retries found the local model cache missing. I restored the same model revision successfully, but the next attempts again found occupied GPUs. I am waiting for the shared workload to finish; I report no measurements for those points. I retain the failed attempts separately from successful scores.
 
-## InferenceX integration to complete
+## InferenceX integration and remaining validation
 
-I checked the existing `qwen3.8next-fp4-mi355x-sglang-agentic-mtp` entry and its `qwen3.8next/sglang/mi355x-fp4-mtp/agentic.yaml` recipe on this branch. They already cover the nine concurrency values, using an unpatched November 10 image. They are not the November 18 patched package used in the reproduction above.
+I update `qwen3.8next-fp4-mi355x-sglang-agentic-mtp` and its `qwen3.8next/sglang/mi355x-fp4-mtp/agentic.yaml` recipe to the November 18 base image plus the included package diffs. I cover all nine concurrency values and document the current InferenceX golden/client adaptations separately from exact original-package reproduction.
 
 1. I complete the remaining local replay evidence and natural accuracy checks, and investigate the C1 control regression before assigning any final performance claim.
-2. I produce a pullable, digest-pinned candidate image containing the reviewed package changes, or identify an upstream image that contains those changes. I verify draft precision and both target/draft KV storage against current contribution rules and the golden identity.
-3. I reconcile the candidate with the existing recipe and master config, remove duplicated or superseded upstream changes, and use the existing launcher `python -m infx.launch` rather than add an independent benchmark launcher or patching host-setup hook.
-4. I append one performance changelog block when I change active benchmark behavior. This documentation draft changes no registered recipe, so I add no changelog block or benchmark-sweep label at this stage.
+2. I use the published digest-pinned base image with the included diffs applied through the container setup script. I still verify draft precision and target/draft KV storage against current contribution rules and the golden identity; I do not invent a new measured identity.
+3. I connect the converted package configurations to the existing recipe and master config, and use the existing launcher `python -m infx.launch`. I apply the supplied aggregate diffs once to their pinned image, without adding #4832 patches on top or patching a cluster host-setup hook.
+4. I append one performance changelog block for the active recipe/image change, preserving all historical entries. I document the maintainer-approved fork sweep path; I have not applied a sweep label or dispatched GPU jobs during preparation.
 5. I run the current recipe through the existing `cluster:mi355x-amds` integration, with explicit GPU allocation, bounded readiness, artifact collection on failure, the full point set and natural eval/acceptance gates. For a fork PR, I follow maintainer approval of the current head SHA and exactly one primary sweep label.
 6. I record the resulting workflow URL, hardware, candidate head SHA, image digest, all point outcomes and eval evidence. I obtain the accepted `/use <run_id>` only after a green complete sweep when the active benchmark change is ready for merge.
 

@@ -1,6 +1,3 @@
-# Qwen3.8-Flash-Next Quark MXFP4 MoE (MTP experts included), FP8 attention and
-# FP8 PLE, AgentX on MI355X via SGLang with native NEXTN MTP. The ~116 GiB
-# checkpoint fits on one MI355X, so TP1. The upstream image is used unpatched.
 base:
   schema: 2
   name: qwen3.8next-fp4-mi355x-sglang-agentic
@@ -15,12 +12,12 @@ base:
     tachometer:
       enabled: false
   engine: sglang
+  setup_script: qwen3.8next-hyperloom-patches.sh
   roles:
     agg:
       nodes: 1
       args:
         served-model-name: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
-        tokenizer-path: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
         trust-remote-code: true
         tensor-parallel-size: 1
         data-parallel-size: 1
@@ -28,14 +25,9 @@ base:
         quantization: quark
         attention-backend: aiter
         page-size: 64
-        kv-cache-dtype: auto
-        mem-fraction-static: 0.9
         model-loader-extra-config: '{"enable_multithread_load": true}'
         watchdog-timeout: 1200
-        chunked-prefill-size: 16384
         mamba-ssm-dtype: bfloat16
-        # PLE n-gram table in CPU pinned memory; offload needs the fp8 storage
-        # declared up front instead of switched to at load.
         ple-offload-embedding: true
         json-model-override-args: '{"text_config": {"ple_embedding_dtype": "float8_e4m3fn"}}'
         scheduler-recv-interval: 10
@@ -43,142 +35,219 @@ base:
         reasoning-parser: qwen3
         tool-call-parser: qwen3_coder
         speculative-algorithm: NEXTN
-        speculative-num-steps: 3
         speculative-eagle-topk: 1
-        speculative-num-draft-tokens: 4
-        # GDN target verify folds each commit through a raw-input window instead
-        # of per-draft state snapshots; needs the linear draft chain (topk 1).
-        enable-linear-replayssm-spec: true
         tokenizer-worker-num: 6
         enable-metrics: true
         enable-cache-report: true
+        cuda-graph-backend-prefill: breakable
+        hybrid-cache-checkpoints-level: 3
+        tokenizer-path: amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8
+        revision: bd6e49d9abfe0ce1da53a45593daaee83580035b
       env:
         PYTHONNOUSERSITE: '1'
-        ROCM_QUICK_REDUCE_QUANTIZATION: NONE
-        # Outlast AIPerf's 300 s client connection pool.
+        SGLANG_USE_AITER: '1'
+        SGLANG_USE_AITER_UNIFIED_ATTN: '1'
+        AITER_FLYDSL_FORCE: '1'
+        ROCM_QUICK_REDUCE_QUANTIZATION: INT8
         SGLANG_TIMEOUT_KEEP_ALIVE: '1800'
         SGLANG_ENABLE_SPEC_V2: '1'
+        SGLANG_AITER_GDN_CONV: '1'
+        SGLANG_AITER_GDN_DECODE: '1'
+        SGLANG_AITER_QSA_PA_DECODE: '1'
+        SGLANG_AITER_GDN_PREFILL: '1'
+        SGLANG_AITER_GDN_PREFILL_H: fused
         AITER_GDR_FLYDSL: '1'
+        SGLANG_OPT_QWEN4_FUSED_GDN_NORM_QUANT: '1'
+        SGLANG_OPT_QWEN_MOE_FUSED_SHARED_TOPK: '1'
+        SGLANG_OPT_AITER_LM_HEAD_GEMM: '1'
+        SGLANG_OPT_QWEN4_FUSED_HC: '1'
+        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_INFX_SAMPLE_TAIL: '1'
   benchmark:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
       AIPERF_APPLY_CHAT_TEMPLATE: 'true'
-
-# c1, c2, c4 and c8 run the FlyDSL monokernel (--enable-amd-monokernel) for MTP
-# target verify and draft. Its verify writes the per-draft intermediate SSM
-# states, so ReplaySSM is off, and its prelude reads the PLE table on the GPU,
-# so the table is not offloaded. Admission equals the concurrency. These points
-# also set SGLANG_USE_AITER, which the monokernel requires (the image sets it
-# too), so they form their own GSM8K eval group. c12 and c16 keep ReplaySSM,
-# the PLE offload and 2x CONC admission. Every point uses mem-fraction-static
-# as given instead of the aiter backend's 0.85 scaling.
 override_c1:
   roles:
     agg:
       args:
-        enable-linear-replayssm-spec: null
-        ple-offload-embedding: null
-        enable-amd-monokernel: true
+        kv-cache-dtype: auto
+        mem-fraction-static: 0.9
+        chunked-prefill-size: 16384
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
         max-running-requests: 1
         cuda-graph-max-bs-decode: 1
+        cuda-graph-max-bs-prefill: 2048
       env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-        SGLANG_USE_AITER: '1'
+        SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: '1'
+        SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
+        SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
+        SGLANG_INFX_CHAIN_FOLD: '1'
+        SGLANG_INFX_MONO_ATTN_TASKS: '1'
+        SGLANG_INFX_MONO_GLUE: '1'
+        SGLANG_INFX_MONO_HOIST: '1'
+        SGLANG_INFX_MONO_MOE_SPREAD: '1'
+        SGLANG_INFX_ROUTER_TAIL: '1'
+        SGLANG_INFX_STATE_INPLACE: '1'
   benchmark:
     env:
       CONC: '1'
       KV_OFFLOADING: none
-
 override_c2:
   roles:
     agg:
       args:
-        enable-linear-replayssm-spec: null
-        ple-offload-embedding: null
-        enable-amd-monokernel: true
+        kv-cache-dtype: auto
+        mem-fraction-static: 0.9
+        chunked-prefill-size: 16384
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
+        cuda-graph-max-bs-prefill: 2048
       env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-        SGLANG_USE_AITER: '1'
+        SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: '1'
+        SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
+        SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
+        SGLANG_INFX_CHAIN_FOLD: '1'
+        SGLANG_INFX_MONO_ATTN_TASKS: '1'
+        SGLANG_INFX_MONO_GLUE: '1'
+        SGLANG_INFX_MONO_HC_RED: '1'
+        SGLANG_INFX_MONO_HOIST: '1'
+        SGLANG_INFX_MONO_MOE_SPREAD: '1'
+        SGLANG_INFX_MONO_PREWAIT: '1'
+        SGLANG_INFX_PREFILL_SPLITK: '1'
+        SGLANG_INFX_ROUTER_TAIL: '1'
   benchmark:
     env:
       CONC: '2'
       KV_OFFLOADING: none
-
 override_c4:
   roles:
     agg:
       args:
-        enable-linear-replayssm-spec: null
-        ple-offload-embedding: null
-        enable-amd-monokernel: true
+        kv-cache-dtype: auto
+        mem-fraction-static: 0.9
+        chunked-prefill-size: 16384
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
         max-running-requests: 4
         cuda-graph-max-bs-decode: 4
+        cuda-graph-max-bs-prefill: 2048
       env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-        SGLANG_USE_AITER: '1'
+        SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: '1'
+        SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
+        SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
+        SGLANG_INFX_CHAIN_FOLD: '1'
+        SGLANG_INFX_MONO_ATTN_TASKS: '1'
+        SGLANG_INFX_MONO_GLUE: '1'
+        SGLANG_INFX_MONO_HOIST: '1'
+        SGLANG_INFX_MONO_MOE_SPREAD: '1'
+        SGLANG_INFX_MONO_OP_MERGE: '1'
+        SGLANG_INFX_MONO_PREWAIT: '1'
+        SGLANG_INFX_PREFILL_SPLITK: '1'
+        SGLANG_INFX_ROUTER_TAIL: '1'
+        SGLANG_INFX_STATE_INPLACE: '1'
+        SGLANG_INFX_TOPK_ILP: '1'
   benchmark:
     env:
       CONC: '4'
       KV_OFFLOADING: none
-
 override_c8:
   roles:
     agg:
       args:
-        enable-linear-replayssm-spec: null
-        ple-offload-embedding: null
-        enable-amd-monokernel: true
+        kv-cache-dtype: auto
+        mem-fraction-static: 0.9
+        chunked-prefill-size: 16384
+        speculative-num-steps: 1
+        speculative-num-draft-tokens: 2
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
+        cuda-graph-max-bs-prefill: 2048
       env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-        SGLANG_USE_AITER: '1'
+        SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: '1'
+        SGLANG_ENABLE_QWEN4_MONOKERNEL: '1'
+        SGLANG_ENABLE_QWEN4_MTP_MONOKERNEL: '1'
+        SGLANG_INFX_MONO_ATTN_TASKS: '1'
+        SGLANG_INFX_MONO_GLUE: '1'
+        SGLANG_INFX_MONO_HOIST: '1'
+        SGLANG_INFX_MONO_MOE_SPREAD: '1'
+        SGLANG_INFX_MONO_PREWAIT: '1'
+        SGLANG_INFX_PREFILL_SPLITK: '1'
+        SGLANG_INFX_ROUTER_TAIL: '1'
+        SGLANG_INFX_STATE_INPLACE: '1'
   benchmark:
     env:
       CONC: '8'
       KV_OFFLOADING: none
-
 override_c12:
   roles:
     agg:
       args:
+        kv-cache-dtype: auto
+        mem-fraction-static: 0.9
+        chunked-prefill-size: 8192
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
+        enable-linear-replayssm-spec: true
         max-running-requests: 24
         cuda-graph-max-bs-decode: 24
+        prefill-decode-interval: 24
       env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: '0'
+        AITER_CONFIG_FMOE: /sgl-workspace/aiter/aiter/configs/tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_ds_v3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_1.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_gfx950.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_shared_gfx942.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_shared_gfx950.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_minimax-m2_5.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_235b.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_5_397b.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_8_flash_next_gfx942.csv:/sgl-workspace/aiter/aiter/configs/model_configs/beam_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv3_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv4_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm47_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm53_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm53flash_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_mxfp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/hunyuan3_fp8_per_tensor_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/k2_horizon_375b_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_i4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a4w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a8w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_i4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mimo_v2_5_pro_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m25_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_mxfp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_mxfp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mistral_large4_a4w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mistral_large4_a8w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/muse-spark-open-mxfp4_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_235b_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_35b_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_397b_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_397b_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_6_35b_a3b_bf16_tuned_fmoe_gfx1201.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_6_35b_a3b_fp8_tuned_fmoe_gfx1201.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_2400b_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_flash_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_vl_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3next_80b_fp8_tuned_fmoe.csv:/opt/stack/configs/tables/qwen3_8_flash_next_mxfp4_tuned_fmoe.csv
+        SGLANG_INFX_DECODE_GLUE: '1'
+        SGLANG_INFX_DECODE_GROUPED: '1'
+        SGLANG_INFX_GDN_VERIFY_VIEWS: '1'
+        SGLANG_INFX_HC_PREFETCH: '1'
+        SGLANG_INFX_PREFILL_SPLITK: '1'
+        SGLANG_INFX_TOPK_EXACT: '1'
+        SGLANG_INFX_TOPK_ILP: '1'
+        SGLANG_GDN_PACKED_QWEN4: '1'
   benchmark:
     env:
       CONC: '12'
       KV_OFFLOADING: none
-
 override_c16:
   roles:
     agg:
       args:
+        kv-cache-dtype: auto
+        mem-fraction-static: 0.9
+        chunked-prefill-size: 16384
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
+        enable-linear-replayssm-spec: true
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
       env:
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
+        SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: '0'
+        AITER_CONFIG_FMOE: /sgl-workspace/aiter/aiter/configs/tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_ds_v3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_1.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_gfx950.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_shared_gfx942.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_shared_gfx950.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_minimax-m2_5.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_235b.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_5_397b.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_8_flash_next_gfx942.csv:/sgl-workspace/aiter/aiter/configs/model_configs/beam_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv3_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv4_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm47_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm53_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm53flash_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_mxfp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/hunyuan3_fp8_per_tensor_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/k2_horizon_375b_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_i4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a4w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a8w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_i4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mimo_v2_5_pro_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m25_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_mxfp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_mxfp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mistral_large4_a4w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mistral_large4_a8w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/muse-spark-open-mxfp4_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_235b_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_35b_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_397b_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_397b_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_6_35b_a3b_bf16_tuned_fmoe_gfx1201.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_6_35b_a3b_fp8_tuned_fmoe_gfx1201.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_2400b_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_flash_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_vl_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3next_80b_fp8_tuned_fmoe.csv:/opt/stack/configs/tables/qwen3_8_flash_next_mxfp4_tuned_fmoe.r2c16.csv
+        SGLANG_INFX_DECODE_GLUE: '1'
+        SGLANG_INFX_DECODE_GROUPED: '1'
+        SGLANG_INFX_GDN_VERIFY_VIEWS: '1'
+        SGLANG_INFX_HC_PREFETCH: '1'
+        SGLANG_INFX_PREFILL_SPLITK: '1'
+        SGLANG_INFX_TOPK_EXACT: '1'
+        SGLANG_INFX_TOPK_ILP: '1'
+        SGLANG_GDN_PACKED_QWEN4: '1'
   benchmark:
     env:
       CONC: '16'
       KV_OFFLOADING: none
-
-# c24, c48 and c80 keep ReplaySSM and the PLE offload, store the target and draft KV
-# caches in FP8 (E4M3), and add HiCache host-DRAM offload with a Mamba state pool
-# that tracks a checkpoint every 256 tokens (extra_buffer_lazy). HiCache sets
-# hicache-size 200 at c24 and 298 at c48 and c80.
-# mem-fraction-static is 0.88, used as given. c24 admits 2x CONC; c48 and c80 admit 128 requests.
-# c80 caches only the prompt on finish and keeps at most two Mamba states per path.
 override_c24:
   roles:
     agg:
-      args: &hicache_args
+      args:
         kv-cache-dtype: fp8_e4m3
-        speculative-draft-kv-cache-dtype: fp8_e4m3
         mem-fraction-static: 0.88
+        chunked-prefill-size: 8192
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
+        enable-linear-replayssm-spec: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
         max-running-requests: 48
         cuda-graph-max-bs-decode: 48
         max-mamba-cache-size: 960
@@ -188,45 +257,370 @@ override_c24:
         hicache-size: 200
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
-        hicache-write-policy: write_back
-      env: &hicache_env
-        SGLANG_AITER_HONOR_EXPLICIT_MEM_FRACTION: '1'
-        SGLANG_USE_AITER_UNIFIED_ATTN: '1'
+        hicache-write-policy: write_through_selective
+        prefill-decode-interval: 20
+      env:
+        SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: '0'
+        AITER_CONFIG_FMOE: /sgl-workspace/aiter/aiter/configs/tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_ds_v3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_1.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_gfx950.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_shared_gfx942.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_shared_gfx950.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_minimax-m2_5.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_235b.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_5_397b.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_8_flash_next_gfx942.csv:/sgl-workspace/aiter/aiter/configs/model_configs/beam_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv3_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv4_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm47_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm53_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm53flash_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_mxfp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/hunyuan3_fp8_per_tensor_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/k2_horizon_375b_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_i4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a4w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a8w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_i4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mimo_v2_5_pro_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m25_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_mxfp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_mxfp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mistral_large4_a4w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mistral_large4_a8w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/muse-spark-open-mxfp4_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_235b_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_35b_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_397b_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_397b_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_6_35b_a3b_bf16_tuned_fmoe_gfx1201.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_6_35b_a3b_fp8_tuned_fmoe_gfx1201.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_2400b_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_flash_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_vl_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3next_80b_fp8_tuned_fmoe.csv:/opt/stack/configs/tables/qwen3_8_flash_next_mxfp4_tuned_fmoe.r2c16.csv
+        SGLANG_INFX_DECODE_GLUE: '1'
+        SGLANG_INFX_DECODE_GROUPED: '1'
+        SGLANG_INFX_GDN_VERIFY_VIEWS: '1'
+        SGLANG_INFX_HC_PREFETCH: '1'
+        SGLANG_INFX_PREFILL_SPLITK: '1'
+        SGLANG_INFX_TOPK_EXACT: '1'
+        SGLANG_INFX_TOPK_ILP: '1'
+        SGLANG_GDN_PACKED_QWEN4: '1'
+        INFX_MEMPOLICY: interleave
+        SGLANG_INFX_QSA_PREFILL_POOL: '1'
   benchmark:
-    env: &hicache_client
-      KV_OFFLOADING: dram
+    env:
       CONC: '24'
-
+      KV_OFFLOADING: dram
 override_c48:
   roles:
     agg:
       args:
-        <<: *hicache_args
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.88
+        chunked-prefill-size: 16384
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
+        enable-linear-replayssm-spec: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
         max-mamba-cache-size: 720
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        mamba-track-interval: 256
+        enable-hierarchical-cache: true
         hicache-size: 298
-      env: *hicache_env
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_back
+        cuda-graph-max-bs-prefill: 4096
+        cuda-graph-bs-decode:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+        - 15
+        - 16
+        - 17
+        - 18
+        - 19
+        - 20
+        - 21
+        - 22
+        - 23
+        - 24
+        - 25
+        - 26
+        - 27
+        - 28
+        - 29
+        - 30
+        - 31
+        - 32
+        - 33
+        - 34
+        - 35
+        - 36
+        - 37
+        - 38
+        - 39
+        - 40
+        - 41
+        - 42
+        - 43
+        - 44
+        - 45
+        - 46
+        - 47
+        - 48
+        - 49
+        - 50
+        - 51
+        - 52
+        - 53
+        - 54
+        - 55
+        - 56
+        - 57
+        - 58
+        - 59
+        - 60
+        - 61
+        - 62
+        - 63
+        - 64
+        - 65
+        - 66
+        - 67
+        - 68
+        - 69
+        - 70
+        - 71
+        - 72
+        - 73
+        - 74
+        - 75
+        - 76
+        - 77
+        - 78
+        - 79
+        - 80
+        - 81
+        - 82
+        - 83
+        - 84
+        - 85
+        - 86
+        - 87
+        - 88
+        - 89
+        - 90
+        - 91
+        - 92
+        - 93
+        - 94
+        - 95
+        - 96
+        - 97
+        - 98
+        - 99
+        - 100
+        - 101
+        - 102
+        - 103
+        - 104
+        - 105
+        - 106
+        - 107
+        - 108
+        - 109
+        - 110
+        - 111
+        - 112
+        - 113
+        - 114
+        - 115
+        - 116
+        - 117
+        - 118
+        - 119
+        - 120
+        - 121
+        - 122
+        - 123
+        - 124
+        - 125
+        - 126
+        - 127
+        - 128
+      env:
+        SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: '0'
+        AITER_CONFIG_FMOE: /sgl-workspace/aiter/aiter/configs/tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_ds_v3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_1.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_gfx950.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_shared_gfx942.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_shared_gfx950.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_minimax-m2_5.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_235b.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_5_397b.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_8_flash_next_gfx942.csv:/sgl-workspace/aiter/aiter/configs/model_configs/beam_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv3_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv4_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm47_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm53_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm53flash_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_mxfp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/hunyuan3_fp8_per_tensor_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/k2_horizon_375b_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_i4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a4w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a8w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_i4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mimo_v2_5_pro_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m25_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_mxfp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_mxfp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mistral_large4_a4w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mistral_large4_a8w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/muse-spark-open-mxfp4_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_235b_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_35b_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_397b_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_397b_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_6_35b_a3b_bf16_tuned_fmoe_gfx1201.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_6_35b_a3b_fp8_tuned_fmoe_gfx1201.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_2400b_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_flash_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_vl_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3next_80b_fp8_tuned_fmoe.csv:/opt/stack/configs/tables/qwen3_8_flash_next_mxfp4_tuned_fmoe.r2c16.csv
+        SGLANG_INFX_DECODE_GLUE: '1'
+        SGLANG_INFX_DECODE_GROUPED: '1'
+        SGLANG_INFX_GDN_VERIFY_VIEWS: '1'
+        SGLANG_INFX_HC_PREFETCH: '1'
+        SGLANG_INFX_PREFILL_SPLITK: '1'
+        SGLANG_INFX_TOPK_EXACT: '1'
+        SGLANG_INFX_TOPK_ILP: '1'
+        SGLANG_GDN_PACKED_QWEN4: '1'
+        INFX_MEMPOLICY: interleave
+        SGLANG_INFX_QSA_PREFILL_POOL: '1'
+        SGLANG_INFX_INDEXER_PIPE: '1'
+        SGLANG_INFX_INDEXER_VWIDE: '1'
+        SGLANG_INFX_INDEXER_DRAFT_GROUP: '1'
   benchmark:
     env:
-      <<: *hicache_client
       CONC: '48'
-
+      KV_OFFLOADING: dram
 override_c80:
   roles:
     agg:
       args:
-        <<: *hicache_args
+        kv-cache-dtype: fp8_e4m3
+        mem-fraction-static: 0.88
+        chunked-prefill-size: 16384
+        speculative-num-steps: 3
+        speculative-num-draft-tokens: 4
+        enable-linear-replayssm-spec: true
+        speculative-draft-kv-cache-dtype: fp8_e4m3
         max-running-requests: 128
         cuda-graph-max-bs-decode: 128
-        max-mamba-cache-size: 640
+        max-mamba-cache-size: 760
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        mamba-track-interval: 256
+        enable-hierarchical-cache: true
         hicache-size: 298
-        # Cache only the prompt on finish; the AgentX replay never re-sends model output.
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_back
         strip-thinking-cache: true
-        # At most two Mamba states per conversation path; stale interior states skip host write-back.
         mamba-max-states-per-path: 2
-      env: *hicache_env
+        cuda-graph-max-bs-prefill: 4096
+        cuda-graph-bs-decode:
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+        - 15
+        - 16
+        - 17
+        - 18
+        - 19
+        - 20
+        - 21
+        - 22
+        - 23
+        - 24
+        - 25
+        - 26
+        - 27
+        - 28
+        - 29
+        - 30
+        - 31
+        - 32
+        - 33
+        - 34
+        - 35
+        - 36
+        - 37
+        - 38
+        - 39
+        - 40
+        - 41
+        - 42
+        - 43
+        - 44
+        - 45
+        - 46
+        - 47
+        - 48
+        - 49
+        - 50
+        - 51
+        - 52
+        - 53
+        - 54
+        - 55
+        - 56
+        - 57
+        - 58
+        - 59
+        - 60
+        - 61
+        - 62
+        - 63
+        - 64
+        - 65
+        - 66
+        - 67
+        - 68
+        - 69
+        - 70
+        - 71
+        - 72
+        - 73
+        - 74
+        - 75
+        - 76
+        - 77
+        - 78
+        - 79
+        - 80
+        - 81
+        - 82
+        - 83
+        - 84
+        - 85
+        - 86
+        - 87
+        - 88
+        - 89
+        - 90
+        - 91
+        - 92
+        - 93
+        - 94
+        - 95
+        - 96
+        - 97
+        - 98
+        - 99
+        - 100
+        - 101
+        - 102
+        - 103
+        - 104
+        - 105
+        - 106
+        - 107
+        - 108
+        - 109
+        - 110
+        - 111
+        - 112
+        - 113
+        - 114
+        - 115
+        - 116
+        - 117
+        - 118
+        - 119
+        - 120
+        - 121
+        - 122
+        - 123
+        - 124
+        - 125
+        - 126
+        - 127
+        - 128
+        prefill-decode-interval: 2
+      env:
+        SGLANG_OPT_QWEN4_SHARED_ATTN_QUANT: '0'
+        AITER_CONFIG_FMOE: /sgl-workspace/aiter/aiter/configs/tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_ds_v3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_1.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_gfx950.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_shared_gfx942.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5_3_flash_shared_gfx950.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_minimax-m2_5.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_235b.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_5_397b.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_8_flash_next_gfx942.csv:/sgl-workspace/aiter/aiter/configs/model_configs/beam_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv3_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv41_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv4_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm47_fp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm53_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm53flash_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_mxfp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/gptoss_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/hunyuan3_fp8_per_tensor_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/k2_horizon_375b_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_fp8fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik2_i4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a4w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_a8w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/kimik3_i4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mimo_v2_5_pro_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m25_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_a16w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_mxfp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/minimax_m3_mxfp8_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mistral_large4_a4w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/mistral_large4_a8w4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/muse-spark-open-mxfp4_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_235b_bf16_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_35b_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_397b_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_5_397b_fp8_ptpc_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_6_35b_a3b_bf16_tuned_fmoe_gfx1201.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_6_35b_a3b_fp8_tuned_fmoe_gfx1201.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_2400b_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_flash_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_8_flash_next_mxfp4_c80_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3_vl_fp4_tuned_fmoe.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen3next_80b_fp8_tuned_fmoe.csv
+        SGLANG_INFX_DECODE_GLUE: '1'
+        SGLANG_INFX_DECODE_GROUPED: '1'
+        SGLANG_INFX_GDN_VERIFY_VIEWS: '1'
+        SGLANG_INFX_HC_PREFETCH: '1'
+        SGLANG_INFX_PREFILL_SPLITK: '1'
+        SGLANG_INFX_TOPK_EXACT: '1'
+        SGLANG_INFX_TOPK_ILP: '1'
+        SGLANG_GDN_PACKED_QWEN4: '1'
+        INFX_MEMPOLICY: interleave
+        SGLANG_INFX_INDEXER_CTAS: '1'
+        AITER_CONFIG_GEMM_A8W8_BPRESHUFFLE: /sgl-workspace/aiter/aiter/configs/a8w8_bpreshuffle_tuned_gemm.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_bpreshuffle_tuned_gemm_glm47.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_bpreshuffle_tuned_gemm_glm5.2.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_bpreshuffle_tuned_gemm_glm5_3_flash.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_bpreshuffle_tuned_gemm_kimik3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_bpreshuffle_tuned_gemm_kimik3tp8.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_bpreshuffle_tuned_gemm_minimax_m3.csv:/sgl-workspace/aiter/aiter/configs/model_configs/a8w8_bpreshuffle_tuned_gemm_qwen3_5_397b_a17b_mxfp4_attnfp8.csv:/sgl-workspace/aiter/aiter/configs/model_configs/dsv3_a8w8_bpreshuffle_tuned_gemm.csv:/sgl-workspace/aiter/aiter/configs/model_configs/glm5_a8w8_bpreshuffle_tuned_gemm.csv:/sgl-workspace/aiter/aiter/configs/model_configs/qwen38_flash_next_a8w8_bpreshuffle_tuned_gemm.csv:/sgl-workspace/aiter/aiter/configs/infx/qwen38_c80_a8w8_bpreshuffle_rows.csv
+        SGLANG_INFX_INDEXER_VWIDE: '1'
+        SGLANG_INFX_INDEXER_PIPE: '1'
+        SGLANG_INFX_QSA_PREFILL_POOL: '1'
+        SGLANG_INFX_EVICT_UNFENCE: '1'
+        SGLANG_INFX_EVICT_ASYNC_ACK: '1'
   benchmark:
     env:
-      <<: *hicache_client
       CONC: '80'
+      KV_OFFLOADING: dram

@@ -13420,3 +13420,12 @@
     - "Pin the TokenSpeed 0.1.1.post20261125, ROCm 7.2 kernel 0.1.5.post20261125, kernel-amd 0.1.4.post20261125 and engine 0.1.1.post20261125 wheels by release URL and SHA256, scheduler 0.1.58, tokenspeed-smg 1.16.0.post20261121, the runner image by digest, and the checkpoint and DFlash2 draft revisions. The recipe uses tokenspeed-nightly-rocm.sh, which keeps the image's ROCm torch."
     - "Select golden DFlash2 acceptance and the greedy sampler for TokenSpeed DFLASH throughput; evals verify for real with the triton sampler and speculative sampling."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5211
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Run the Hyperloom final-mainline Qwen3.8-Flash-Next package on the digest-pinned ROCm 10 MI35x 20261118 image, applying the supplied SGLang and AITER diffs inside each serving container and installing both supplied MoE tuning tables."
+    - "Use TP1/EP1, concurrency 1/2/4/8/12/16 without KV offload and 24/48/80 with HiCache DRAM offload. Preserve per-point Hyperloom flags, admission, prefill chunks, decode graph shapes and cache settings. C8 uses one MTP step and two draft tokens; other points use three steps and four draft tokens."
+    - "Select synthetic acceptance through the committed InferenceX golden curve, without hard-coded acceptance variables in the recipe; natural evals keep real verification. Pin the served model revision to bd6e49d9abfe0ce1da53a45593daaee83580035b."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5239

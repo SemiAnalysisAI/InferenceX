@@ -1,0 +1,21 @@
+{
+  "base_image": "lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261118@sha256:723fbc92690378341609b5395055df1187cdac06f299554ac75e57cfde89c9f1",
+  "files": [
+    {
+      "file": "sglang.diff",
+      "sha256": "7336dc7b8f7b463b647d787db5b95ed0247545a2edf952826a4707b99268d607"
+    },
+    {
+      "file": "aiter.diff",
+      "sha256": "4c0af2d025ad0fbeb000ce7ce4694a1baa49442e45920219db292650f4b70da4"
+    },
+    {
+      "file": "qwen3_8_flash_next_mxfp4_tuned_fmoe.csv",
+      "sha256": "c81b29449945c5bb16b46b7dd96731d9d8784174ab8d567096a9e8366f077d67"
+    },
+    {
+      "file": "qwen3_8_flash_next_mxfp4_tuned_fmoe.r2c16.csv",
+      "sha256": "c7b304a2aa258ab60582221628f0601cafe4708d409a08e00845e3e732214e44"
+    }
+  ]
+}
