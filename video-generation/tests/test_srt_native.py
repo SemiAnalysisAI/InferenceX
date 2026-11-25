@@ -669,7 +669,7 @@ def test_reuse_requires_an_attestation_unless_the_framework_is_exempt(tmp_path):
     from infx.results.video_artifacts import validate_video_artifacts
 
     exempt = _sweep(tmp_path / "exempt", framework="vllm-omni")
-    assert validate_video_artifacts(exempt) == 2
+    assert len(validate_video_artifacts(exempt)["artifacts"]) == 2
     with pytest.raises(ValueError, match="missing engine work attestation"):
         validate_video_artifacts(_sweep(tmp_path / "unknown", framework="unlisted"))
 
