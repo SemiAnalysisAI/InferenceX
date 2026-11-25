@@ -100,6 +100,13 @@ or production acceptance. Old unsuffixed bundles remain readable by the App but
 do not qualify this new native reuse path. Video append-only sweeps are unsupported;
 use the regular sweep so one server's complete workload stays together.
 
+Publication also requires each cell's plan hash to be the released plan of its row's
+`spec` and `set`, as listed in `RELEASED_PLANS` in
+[`video_artifacts.py`](../infx/results/video_artifacts.py). A same-repository PR that
+edits a spec or adds a model adds the new hash there in the same PR, and review of that
+line is the check. A trusted fork sweep is validated by `main`'s code, so the spec and
+set it runs must already have a released plan on `main`.
+
 Merge Ingest also requires the merge commit's planned video rows to be the manifest's
 rows: the two sets of `recipe-fingerprint` values must be equal. A row added, dropped,
 or changed after the sweep, through its recipe, its config row or a shared block, fails
