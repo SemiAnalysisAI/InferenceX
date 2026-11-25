@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import tarfile
+import time
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,61 @@ VECTORS = json.loads((Path(__file__).parent / "redaction_vectors.json").read_tex
 @pytest.mark.parametrize("case", VECTORS["cases"], ids=lambda case: case["name"])
 def test_redact_text_matches_shared_vectors(case):
     assert redact.redact_text(case["input"]) == case["output"]
+
+
+@pytest.mark.parametrize("case", VECTORS["cases"], ids=lambda case: case["name"])
+def test_redact_text_leaves_its_own_output_unchanged(case):
+    assert redact.redact_text(case["output"]) == case["output"]
+
+
+def test_redact_text_stays_linear_on_long_runs_and_huge_lines():
+    # An unbounded URL scheme and per-match line scans grew with the square of these.
+    dotted = "a." * 20_000
+    pip_line = "x (198.51.100.7) " * 20_000
+    started = time.perf_counter()
+    assert redact.redact_text(dotted) == dotted
+    assert redact.redact_text(pip_line) == "x (***REDACTED***) " * 20_000
+    assert time.perf_counter() - started < 1
+
+
+REQUIREMENT = "Requirement already satisfied: x ("
+# Files are redacted in blocks of lines and must come out as the whole text would.
+STREAMED = {
+    "json key on the line before its value": (
+        '{\n  "MASTER_ADDR":\n    "203.0.113.7",\n  "version":\n    "1.2.3.4"\n}\n',
+        '{\n  "MASTER_ADDR":\n    "***REDACTED***",\n  "version":\n    "1.2.3.4"\n}\n',
+    ),
+    "json key spanning lines": (
+        '"ab\ncd": "203.0.113.7"\n"ur\nl": "203.0.113.8"\n"url\n": "203.0.113.9"\n',
+        '"ab\ncd": "203.0.113.7"\n"ur\nl": "203.0.113.8"\n"url\n": "***REDACTED***"\n',
+    ),
+    "long json keys and blank lines before the value": (
+        f'"{"x" * 40}node":\n\n   \n"203.0.113.7"\n"{"y" * 60}":  \n "203.0.113.8"\n',
+        f'"{"x" * 40}node":\n\n   \n"***REDACTED***"\n"{"y" * 60}":  \n "203.0.113.8"\n',
+    ),
+    "json key with a folded letter": ('{"ho\u017ft":\n"8.8.8.8"}\n', '{"ho\u017ft":\n"***REDACTED***"}\n'),
+    "email without the app's email hint kept": ("first a@b.1c.com\n", "first a@b.1c.com\n"),
+    "email hint on a later line": (
+        "first a@b.1c.com\nthen ops@example.org\n",
+        "first ***REDACTED***\nthen ***REDACTED***\n",
+    ),
+    "pip line exactly at the window": (
+        f"x\n{'a' * 989}{REQUIREMENT}198.51.100.7)\n{'a' * 990}{REQUIREMENT}198.51.100.7)\n",
+        f"x\n{'a' * 989}{REQUIREMENT}198.51.100.7)\n{'a' * 990}{REQUIREMENT}***REDACTED***)\n",
+    ),
+}
+
+
+@pytest.mark.parametrize(("block_bytes", "context_limit"), [(1, 8), (7, 16), (1 << 20, 4096)])
+@pytest.mark.parametrize("name", STREAMED)
+def test_streamed_files_match_the_whole_text(monkeypatch, name, block_bytes, context_limit):
+    text, expected = STREAMED[name]
+    monkeypatch.setattr(redact, "_BLOCK_BYTES", block_bytes)
+    monkeypatch.setattr(redact, "_CONTEXT_LIMIT", context_limit)
+    sink = io.BytesIO()
+    redact._redact_stream(io.BytesIO(text.encode()), sink)
+    assert redact.redact_text(text) == expected
+    assert sink.getvalue().decode() == expected
 
 
 def _tar_gz(path, members):

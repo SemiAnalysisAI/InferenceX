@@ -376,8 +376,12 @@ the Merge Ingest run fails and nothing is benchmarked or ingested.
 
 ## Stored Artifact Sanitization
 
-Benchmark, multi-node, SpeedBench AL, and profile jobs run `Redact stored artifacts`
-(`python -m infx.results.redact`) on the files they upload, right before the first upload.
+Benchmark, multi-node, SpeedBench AL, profile, CollectiveX and OperatorX jobs run
+`Redact stored artifacts` (`python -m infx.results.redact`) on the files they upload, right
+before the first upload. Profile traces are redacted before they are uploaded or pushed to the
+trace storage repository. The rules are the app's `log-redaction.ts`, and both repositories test
+them against the same vectors. The `h3-results` video bundle is not redacted, because its
+`SHA256SUMS` and evidence digests seal every file.
 
 ## Repository Scope
 

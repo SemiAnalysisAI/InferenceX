@@ -377,6 +377,22 @@ jobs:
           check_env_vars INFERENCEX_RESULTS_PYTHON
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
 
+      - name: Redact stored artifacts
+        if: ${{ always() && env.INFERENCEX_RESULTS_PYTHON != '' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+          TRACE: ${{ steps.run.outputs.trace }}
+          TP0_DECODE: ${{ steps.run.outputs.tp0_decode }}
+          TP0_EXTEND: ${{ steps.run.outputs.tp0_extend }}
+        run: |
+          source "$PYTHONPATH/benchmarks/check_env.sh"
+          check_env_vars INFERENCEX_RESULTS_PYTHON INFERENCEX_E2E_ROOT
+          paths=("$INFERENCEX_E2E_ROOT/moe_debug.tp0.log")
+          for trace in "$TRACE" "$TP0_DECODE" "$TP0_EXTEND"; do
+            if [[ -n "$trace" ]]; then paths+=("$trace"); fi
+          done
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.redact "${paths[@]}"
+
       - name: Upload profile as artifact
         if: ${{ steps.run.outputs.trace != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -400,15 +416,6 @@ jobs:
           name: profile_${{ env.RESULT_FILENAME }}_TP0_EXTEND
           path: ${{ steps.run.outputs.tp0_extend }}
           if-no-files-found: ignore
-
-      - name: Redact stored artifacts
-        if: ${{ always() && env.MOE_DEBUG == '1' }}
-        env:
-          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
-        run: |
-          source "$PYTHONPATH/benchmarks/check_env.sh"
-          check_env_vars INFERENCEX_RESULTS_PYTHON INFERENCEX_E2E_ROOT
-          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.redact "$INFERENCEX_E2E_ROOT/moe_debug.tp0.log"
 
       - name: Upload MoE debug log as artifact
         if: ${{ env.MOE_DEBUG == '1' }}
