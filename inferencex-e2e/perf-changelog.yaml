@@ -13432,6 +13432,19 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5186
 
 - config-keys:
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep32-disagg
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-agg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add Kimi-K3.1-Pro FP4/FP8-KV AgentX recipes on GB300 behind llm-d-router v1.0.0 (llmd-vllm) on vllm/vllm-openai:kimi-k31-mc-f4c9618 (vLLM 0.1.dev25380+gf4c96184b) with embedded Mooncake RDMA prefix-cache sharing (4 GB local buffer, 160 GB segment) and released DSpark draft Inferact/Kimi-K3.1-Pro-DSpark (revision e4e6e626; golden AL curve: 4 draft tokens 3.46, 5 draft tokens 3.81, 7 draft tokens 4.16)."
+    - "Expert-parallel load balancing (enable-eplb, symm_mem copy, no redundant experts, re-placement every 3000 steps from a 1000-step window) on the DEP32 prefill and decode engines, the hybrid 3P1D prefill and decode engines, and the hybrid 2P1D prefill engines."
+    - "DEP32 1P1D disaggregated at concurrency 960: one external-LB DEP32 prefill engine with 80 GiB KV cache per rank and one external-LB DEP32 decode engine (16 nodes total, head-node client), 5 draft tokens with decode graphs in multiples of 6 up to 192, prefix-match-unit 512, DSpark sliding-window tail store and hits (VLLM_DFLASH_SWA_TAIL_STORE=1, VLLM_DFLASH_SWA_TAIL_HITS=1, VLLM_SWA_FINE_GRAINED_HITS=1), 2048 MB sparse-indexer logits budget on prefill, Mooncake master eviction 0.98/0.05, NIXL P/D transfer, and session-affinity prefill routing (1s TTL)."
+    - "DCP8 disaggregated with NIXL P/D transfer and session-affinity prefill routing: 1P5D at concurrency 44 (5 draft tokens) and concurrency 104 (4 draft tokens, adaptive 4096-token long-prefill threshold) with opt-in TP8 x DCP8 decode paths (K31_* env); hybrid DP4xTP8xDCP8 3P1D at concurrency 448 and 2P1D at concurrency 256 with 5 draft tokens and decode graphs in multiples of 6 up to 1536; prefix-match-unit 1408."
+    - "Aggregated TP16/DCP16 at concurrency 1: 7 draft tokens with opt-in c=1 decode paths (K31_* env) and prefix-match-unit 768."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5149
+
+- config-keys:
     - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
   scenario-type:
     - agentic-coding
