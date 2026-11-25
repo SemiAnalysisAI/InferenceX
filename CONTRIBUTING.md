@@ -35,6 +35,28 @@ For full config retirement, list the deleted config keys with `retired: true`. T
 
 A PR whose new entries are all retirements has no result artifacts to reuse. After review and required checks, merge it directly rather than through `merge_with_reuse`; no `/use` is required. Merge Ingest validates the retirement plan and uploads its changelog metadata, but skips reuse lookup and database dispatch. Mixed retirement and active entries still require normal sweep reuse. Do not re-append retirement entries for ingest recovery; they have no results to recover.
 
+## Accuracy-sensitive optimizations
+
+On upstream official InferenceX, reduced-precision all-reduce or reduce-scatter,
+online linear-layer quantization, shared-expert quantization, reduced-precision Engram weights,
+non-native cross-indexer sharing, non-native FP4
+KV cache, and SSM/KDA/Mamba state-cache dtypes below FP32 require the
+[qualification in MODELS.md](inferencex-e2e/docs/MODELS.md#accuracy-sensitive-optimization-policy).
+Provide raw logs and full manual reproduction scripts for both baselines and the
+optimized run, covering the entire KVV suite for Kimi or all of Terminal-Bench 4.0,
+HLE, and MMMU Pro Vision for other models (or a recorded core-maintainer-agreed
+substitute set). The same requirement applies to existing and new models.
+For state-cache precision reductions, both baselines must use FP32 state caches.
+The separate draft-model precision restrictions below still apply.
+
+The organization that trained the model (for example, DeepSeek or Moonshot) may
+also veto any optimization for its own model if it considers the optimization
+unsuitable for production use because it reduces evaluation accuracy, even when
+the required evals pass. Record the attributable objection, rationale, and scope
+in the PR; a submission within that scope cannot qualify until the trainer
+withdraws or narrows the veto. This does not require affirmative trainer approval
+for every submission. See [Model-trainer veto](inferencex-e2e/docs/MODELS.md#model-trainer-veto).
+
 ## Draft-model precision
 
 The rule is simple: **serve the draft as it ships.** A speculative-decoding
