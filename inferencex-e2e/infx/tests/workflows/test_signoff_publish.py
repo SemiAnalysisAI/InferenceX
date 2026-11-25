@@ -301,12 +301,12 @@ def test_update_errors_other_than_missing_comment_propagate(publish):
         (verdict().replace("PASS — curve-a: 5/5.", "PASS — "), True),
     ],
 )
-def test_invalid_or_failed_verification_publishes_rejection(
+def test_invalid_or_failed_verification_publishes_verifier_failure(
     publish, content, succeeded
 ):
     result = publish(content, succeeded=succeeded)
     assert result["comments"][0]["body"] == (
-        marker() + "\n## ❌❌❌ **REJECTED** ❌❌❌\n\n"
+        marker() + "\n## **VERIFICATION FAILED**\n\n"
         "The verifier did not produce a valid verdict. Retry the sign-off verification.\n\n"
         f"Assessed commit: `{SHA}`.\n"
     )
