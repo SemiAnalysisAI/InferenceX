@@ -372,9 +372,10 @@ override_1p2d_k4_eval:
         dyn-enable-structural-tag: true
 
 # Two prefill and three decode workers; DSpark drafts 5 tokens. Decode admits up to 128 requests at 0.98 of
-# GPU memory with graphs every 24 rows. Prefill computes the indexer logits in FP32 and uses the default
-# indexer top-k, the Mooncake master evicts 10% of the store per round, and the frontend sends each request
-# to the least-loaded decode worker with no session affinity. Prefill turns on expert-parallel load balancing
+# GPU memory with graphs every 24 rows. Prefill keeps the base BF16 indexer logits and deep_select top-k and
+# raises the indexer logits budget to 4096 MB (VLLM_SPARSE_INDEXER_MAX_LOGITS_MB), so long-context prefill
+# chunks compute the logits in fewer calls; the frontend sends each request to the least-loaded decode
+# worker with no session affinity. Prefill turns on expert-parallel load balancing
 # (EPLB, no redundant experts): it moves experts between ranks every 1500 steps from the last 1000 steps' load,
 # so the busiest rank waits less; the computation is the same. Prefill and decode use 704-token prefix-match
 # units with sub-block sliding-window KV hits and the DSpark draft's tail hit rule, as at 4P5D c640. Decode
@@ -389,9 +390,8 @@ override_2p3d_k5:
         K31_CPU1: "1"
         VLLM_SWA_FINE_GRAINED_HITS: "1"
         VLLM_DFLASH_SWA_TAIL_HITS: "1"
+        VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "4096"
       args: &override_2p3d_k5_prefill_args
-        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
-        kernel-config: null
         speculative-config: *spec_k5
         prefix-match-unit: 704
         enable-eplb: true
@@ -415,31 +415,6 @@ override_2p3d_k5:
   frontend: &frontend_no_affinity
     args:
       router-session-affinity-ttl-secs: null
-  services: &services_evict_10pct
-  - name: etcd
-    type: etcd
-    placement:
-      node: infra
-  - name: nats
-    type: nats
-    placement:
-      node: infra
-    options:
-      max_payload_mb: 32
-  - name: mooncake-master
-    type: mooncake-master
-    args:
-    - "--default_kv_lease_ttl=60000"
-    - "--eviction_high_watermark_ratio=0.95"
-    - "--eviction_ratio=0.10"
-    options:
-      store_config:
-        metadata_server: "P2PHANDSHAKE"
-        global_segment_size: "190GB"
-        local_buffer_size: "4GB"
-        protocol: "efa"
-        mode: "embedded"
-        enable_offload: false
 
 override_2p3d_k5_eval:
   roles:
@@ -460,7 +435,6 @@ override_2p3d_k5_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
   frontend: *frontend_no_affinity
-  services: *services_evict_10pct
 
 override_4p5d_k5:
   roles:
