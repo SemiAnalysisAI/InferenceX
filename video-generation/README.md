@@ -34,9 +34,9 @@ check its `plan_sha256` against the bound value.
 
 - `serve` records the sealed server spec and launch, then execs the engine
   (`sglang` or `vllm-omni`) on the job's GPUs.
-- `client` runs the same plan at every `CONC_LIST` concurrency against the
-  service endpoint, one cell per concurrency under `gpu/c<N>/`, and publishes
-  each cell's measured window.
+- `client` runs the same plan against the service endpoint at concurrency 1,
+  the only `CONC_LIST` a validated row carries, writes the cell under
+  `gpu/c1/` and publishes its measured window.
 
 After the job, the launcher runs `python -m evaluator.cli srt-finalize`. It joins
 the cells, their power validation sidecars and the server record into the
