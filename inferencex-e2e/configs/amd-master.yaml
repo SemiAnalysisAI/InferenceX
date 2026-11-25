@@ -1449,7 +1449,7 @@ h3-bf16-mi355x-sglang-video:
             conc-list: [1]
 
 h3-bf16-mi355x-vllm-omni-video:
-  image: vllm/vllm-omni-rocm:v0.30.0@sha256:265843be84c74b19eb8ccac669ae8fd7a5281df7ea310f6588851fd1a374d3ac
+  image: rocm/vllm-omni:5917730a4b02aedb44d374173cdc1b10484ccd52@sha256:a294df8a129517ec51eeee64583cee5f7969136deafc6736aa6207dcaa6e483e
   model: MiniMaxAI/MiniMax-H3
   model-prefix: h3
   runner: cluster:mi355x-amds
