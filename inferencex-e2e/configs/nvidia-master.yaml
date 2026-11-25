@@ -4529,7 +4529,6 @@ qwen3.5-fp8-h200-sglang-agentic-hicache-mtp:
       - { gpus-per-worker: 8, tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48], srt-recipe: agentic.yaml:override_hicache_ep1_fa3_k4_c48 }
       - { gpus-per-worker: 8, tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [56], srt-recipe: agentic.yaml:override_hicache_ep1_fa3_k4_c56 }
       - { gpus-per-worker: 8, tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64], srt-recipe: agentic.yaml:override_hicache_ep1_fa3_k4_c64 }
-      - { gpus-per-worker: 4, tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8], srt-recipe: agentic.yaml }
       - { gpus-per-worker: 4, tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12], srt-recipe: agentic.yaml }
 
 qwen3.5-fp8-h100-sglang-agentic-mtp:

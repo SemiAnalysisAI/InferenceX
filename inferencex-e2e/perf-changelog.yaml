@@ -13409,4 +13409,5 @@
   description:
     - "Update Qwen3.5-397B-A17B FP8 H200 SGLang AgentX HiCache points."
     - "Update the SGLang image from lmsysorg/sglang:nightly-dev-20261021-c1c287a4 to lmsysorg/sglang:nightly-dev-20261103-797af717."
+    - "Drop the TP4/EP4 concurrency-8 point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5236
