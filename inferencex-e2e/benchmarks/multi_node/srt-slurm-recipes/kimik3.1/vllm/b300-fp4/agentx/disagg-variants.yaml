@@ -336,7 +336,8 @@ override_1p3d_k5_eval:
         dyn-enable-structural-tag: true
 
 # One prefill and two decode workers; DSpark drafts 4 tokens. Decode turns on the image's small-batch
-# decode kernels.
+# decode kernels. Prefill turns on expert-parallel load balancing (EPLB, no redundant experts) and raises the
+# indexer logits budget to 4096 MB (VLLM_SPARSE_INDEXER_MAX_LOGITS_MB), as at 2P3D c264 and 4P5D c640.
 override_1p2d_k4:
   roles:
     prefill: &override_1p2d_k4_prefill
@@ -345,7 +346,10 @@ override_1p2d_k4:
       env:
         # Lighter host-side work per eager prefill step; same outputs.
         K31_CPU1: "1"
-      args: &override_1p2d_k4_prefill_args {}
+        VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "4096"
+      args: &override_1p2d_k4_prefill_args
+        enable-eplb: true
+        eplb-config: '{"window_size":1000,"step_interval":1500,"num_redundant_experts":0,"log_balancedness":true,"log_balancedness_interval":50}'
     decode: &override_1p2d_k4_decode
       nodes: 2
       workers: 2
