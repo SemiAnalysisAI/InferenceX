@@ -13403,6 +13403,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5153
 
 - config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-linker-d1115
+  scenario-type: [agentic-coding]
+  description:
+    - "Remove the four 150 GB Mooncake stores from the infra node and rerun all five points (1P at concurrency 288, 320 and 352, 2P at 448 and 480). The infra node hosts no inference worker, so MODELS.md gives it no KV offload DRAM. The linker pool is now the 190 GB prefill segments and the decode-node stores only."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5226
+
+- config-keys:
     - qwen3.5-fp8-h100-sglang-agentic
     - qwen3.5-fp8-h100-sglang-agentic-mtp
   description:
