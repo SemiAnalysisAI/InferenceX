@@ -22,8 +22,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: moonshotai/Kimi-K3.1-Pro
         tensor-parallel-size: 8
@@ -47,7 +45,7 @@ base:
         gpu-memory-utilization: 0.95
         stream-interval: 10
         disable-uvicorn-access-log: true
-        # TOTAL_CPU_DRAM_GB split across the 8 TP ranks.
+        # 2249 GB split across the 8 TP ranks.
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":281125000000,"lazy_offload":false}}'
       env:
         VLLM_ENGINE_READY_TIMEOUT_S: '7200'
@@ -60,7 +58,6 @@ base:
     env:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '2249'
 
 # CUDA graphs cover prefill and mixed steps up to 4096 tokens as well as decode. c12 and c24 run TP8 x DCP8
 # with DSpark drafting 3 tokens.

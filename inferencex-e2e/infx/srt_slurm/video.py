@@ -399,14 +399,13 @@ def bind_video(
         port=port,
         gpus=gpus,
     )
-    if spec["schema_version"] == 2:
-        if runtime == "sglang":
-            if service["args"].count("--disable-conditioning-cache") != 1:
-                raise ValueError("fairness workload requires --disable-conditioning-cache")
-        elif {**(bound.get("environment") or {}), **service["env"]}.get(
-            "OMNI_DIFFUSION_PROMPT_EMBED_CACHE"
-        ) != "0":
-            raise ValueError("fairness workload requires OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0")
+    if runtime == "sglang":
+        if service["args"].count("--disable-conditioning-cache") != 1:
+            raise ValueError("fairness workload requires --disable-conditioning-cache")
+    elif {**(bound.get("environment") or {}), **service["env"]}.get(
+        "OMNI_DIFFUSION_PROMPT_EMBED_CACHE"
+    ) != "0":
+        raise ValueError("fairness workload requires OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0")
     revision = str((service.get("env") or {}).get("VIDEO_RUNTIME_REVISION", ""))
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("video service requires a pinned VIDEO_RUNTIME_REVISION")
