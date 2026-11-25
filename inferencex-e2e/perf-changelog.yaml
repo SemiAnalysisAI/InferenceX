@@ -13437,4 +13437,4 @@
   scenario-type: [agentic-coding]
   description:
     - "Rerun the aggregated and disaggregated points together, with recipes unchanged, so the latest GB200 Dynamo SGLang curve holds both lines in one run."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5246
