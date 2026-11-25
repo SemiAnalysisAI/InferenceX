@@ -33,14 +33,21 @@ SGLang MTP synthetic throughput, the connector rejects a generation role whose
 `speculative-num-steps + 1`. Manual acceptance-length settings are not needed.
 Eval-only runs remove synthetic settings and use real verification.
 
-TokenSpeed MTP recipes use the same automatic selection from
+TokenSpeed MTP, DFLASH and DSPARK recipes use the same automatic selection from
 `speculative-num-steps`, with `speculative-num-draft-tokens` equal to the step
-count plus one and `speculative-eagle-topk: 1`. The connector sets
-`synthetic-acceptance-length` and the required `sampling-backend: greedy` for
-AgentX throughput. Eval-only and fixed-sequence runs remove that length and
-select `sampling-backend: flashinfer` for real verification. TokenSpeed's
-connector accepts explicit MTP flags; other speculative algorithms and the
-JSON `speculative-config` shorthand are rejected.
+count plus one and `speculative-eagle-topk: 1`. A DSPARK recipe drafts
+`probabilistic` with `enable-speculative-sampling: true` and `greedy` without
+it, and its verifier is `speculative-rejection-sample-method` when set. The
+connector sets `synthetic-acceptance-length` and the required
+`sampling-backend: greedy` for AgentX throughput and removes
+`enable-speculative-sampling` and `speculative-rejection-sample-method`: the
+greedy sampler rejects sampled verification, and the synthetic length conflicts
+with block verification. Eval-only and fixed-sequence runs remove that length
+and verify for real: MTP with `sampling-backend: flashinfer`, DFLASH with
+`sampling-backend: triton` and `enable-speculative-sampling: true`, DSPARK with
+the recipe's own, platform-specific verification settings. TokenSpeed's
+connector accepts explicit MTP, DFLASH and DSPARK flags; other speculative
+algorithms and the JSON `speculative-config` shorthand are rejected.
 
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
 
@@ -169,7 +176,7 @@ Before accepting an updated curve, reviewers should verify:
 | Kimi K3 | DSpark | [`kimi-k3__dspark__kimi-k3-dspark__default-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__default-default.yaml) |
 | Kimi K3 | DSpark (probabilistic draft, block verify) | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml) |
 | Kimi K3 | DSpark (probabilistic draft) | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml) |
-| Kimi K3.1 Pro | DSpark (probabilistic draft, block verify) | [`kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml`](kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark-preview__probabilistic-block.yaml) |
+| Kimi K3.1 Pro | DSpark (probabilistic draft, block verify) | [`kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block.yaml`](kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block.yaml) |
 | Kimi K3.1 Pro | DFLASH (RadixArk draft, block verify) | [`kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block.yaml`](kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block.yaml) |
 | MiniMax-M3 | EAGLE3 | [`minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml) |
 | MiniMax-M3 | EAGLE3 (GQA) | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml) |

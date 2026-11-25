@@ -28,9 +28,9 @@ check its `plan_sha256` against the bound value.
 
 - `serve` records the sealed server spec and launch, then execs the engine
   (`sglang` or `vllm-omni`) on the job's GPUs.
-- `client` runs the same plan at every `CONC_LIST` concurrency against the
-  service endpoint, one cell per concurrency under `gpu/c<N>/`, and publishes
-  each cell's measured window.
+- `client` runs the same plan against the service endpoint at concurrency 1,
+  the only `CONC_LIST` a validated row carries, writes the cell under
+  `gpu/c1/` and publishes its measured window.
 
 After the job, the launcher runs `python -m evaluator.cli srt-finalize`. It joins
 the cells, their power validation sidecars and the server record into the
@@ -81,13 +81,17 @@ the descriptor and `SHA256SUMS`. PSNR measures technical fidelity to one referen
 implementation, so `quality_status` stays `unjudged`. To score an earlier run,
 dispatch the workflow with its `run_id` and `run_attempt`.
 
+The dashboard's [quality guide](https://inferencex.semianalysis.com/vgx/quality)
+explains how these scores judge a lossy speedup and plots one published run's
+per-clip PSNR for each GPU.
+
 ## Local checks
 
 ```bash
 cd video-generation
 PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
+  --with 'pyyaml>=6,<7' --with 'pytest==9.2.0' python -m pytest -q
 ```
 
 [Test Video Harness](../.github/workflows/test-video-harness.yml) runs these

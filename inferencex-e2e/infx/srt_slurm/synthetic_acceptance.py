@@ -57,16 +57,28 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     if engine == "tokenspeed":
         if "speculative-config" in args:
             raise ValueError(
-                "TokenSpeed AgentX requires explicit MTP flags, not speculative-config"
+                "TokenSpeed AgentX requires explicit MTP, DFLASH or DSPARK flags, not speculative-config"
             )
         algorithm = str(args.get("speculative-algorithm", "")).lower()
         if not algorithm:
             return {}
-        if algorithm != "mtp":
-            raise ValueError("TokenSpeed AgentX currently supports only MTP speculation")
+        if algorithm == "mtp":
+            return {"method": "mtp", "num_speculative_tokens": args.get("speculative-num-steps")}
+        if algorithm == "dflash":
+            return {
+                "method": "dflash",
+                "num_speculative_tokens": args.get("speculative-num-steps"),
+                "model": args.get("speculative-draft-model-path", ""),
+            }
+        if algorithm != "dspark":
+            raise ValueError("TokenSpeed AgentX supports MTP, DFLASH and DSPARK speculation")
         return {
-            "method": "mtp",
+            "method": "dspark",
             "num_speculative_tokens": args.get("speculative-num-steps"),
+            "model": args.get("speculative-draft-model-path", ""),
+            "draft_sample_method": "probabilistic"
+            if args.get("enable-speculative-sampling") is True
+            else "greedy",
         }
     if engine == "tilert":
         if args.get("with-mtp") is not True:
@@ -135,8 +147,10 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
 def verifier(role: Mapping[str, Any], engine: str) -> Fact:
     """How a role verifies drafts. Block, relaxed and adaptive verification are opt-in, so an
     unset flag means standard; a synthetic sampler becomes block on real runs. ATOM and TileRT
-    do not expose their verifier."""
+    do not expose their verifier, and TokenSpeed's is known only when the role sets it."""
     args = role.get("args") or {}
+    if engine == "tokenspeed" and (method := args.get("speculative-rejection-sample-method")):
+        return Fact(method, "explicit")
     if engine == "vllm":
         method = spec_parameters(role, engine).get("rejection_sample_method")
         if method == "synthetic":
@@ -320,13 +334,24 @@ def build_overrides(
             ]
         elif worker_engine == "tokenspeed":
             key = "synthetic-acceptance-length"
+            args = role.get("args") or {}
             if worker_al is not None and worker_spec:
                 overrides += ["--set", f"{prefix}.args.{key}={worker_al:g}"]
                 overrides += ["--set", f'{prefix}.args.sampling-backend="greedy"']
+                # Greedy verifies by exact match and rejects sampled verification; a synthetic
+                # length is itself the rejection method, so it conflicts with block.
+                for flag in ("enable-speculative-sampling", "speculative-rejection-sample-method"):
+                    if flag in args:
+                        overrides += ["--unset", f"{prefix}.args.{flag}"]
             else:
-                if key in (role.get("args") or {}):
+                if key in args:
                     overrides += ["--unset", f"{prefix}.args.{key}"]
-                if worker_spec:
+                if worker_spec.get("method") == "dflash":
+                    # Only the triton sampler reads the DFlash2 draft distribution.
+                    overrides += ["--set", f'{prefix}.args.sampling-backend="triton"']
+                    overrides += ["--set", f"{prefix}.args.enable-speculative-sampling=true"]
+                # DSPARK keeps the recipe's verification, which depends on the platform.
+                elif worker_spec.get("method") == "mtp":
                     overrides += ["--set", f'{prefix}.args.sampling-backend="flashinfer"']
         elif worker_engine == "atom":
             key = "spec-decode-acceptance-length"

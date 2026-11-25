@@ -11,6 +11,7 @@ from infx.launch.drivers.srt import lanes
 from infx.launch.policy import LaunchPath
 from infx.tests.srt_recipes import (
     VIDEO_MODEL,
+    VIDEO_RECIPE,
     VIDEO_SPEC,
     video_entry,
     video_fragment,
@@ -34,20 +35,20 @@ RECIPE = {
     "schema": 2, "name": "agentic", "engine": "sglang",
     "resources": {"gpu_type": "h200", "gpus_per_node": 8},
 }  # fmt: skip
-ROLE = {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False}
+ROLE = {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False}
 MASTER = {
     "fixture-sglang": {
         "image": "org/image:1", "model": "org/model", "model-prefix": "dsr1", "precision": "fp8",
         "framework": "sglang", "runner": "fixture", "multinode": False, "srt-recipe-dir": "fixture",
         "scenarios": {"fixed-seq-len": [{"isl": 1024, "osl": 128, "search-space": [
-            {"tp": 4, "conc-start": 2, "conc-end": 4, "spec-decoding": "mtp", "srt-recipe": "recipe.yaml"},
+            {"gpus-per-worker": 4, "tp": 4, "conc-start": 2, "conc-end": 4, "spec-decoding": "mtp", "srt-recipe": "recipe.yaml"},
         ]}]},
     },
     "agentx-single": {
         "image": "org/image:1", "model": "org/model", "model-prefix": "dsr1", "precision": "fp8",
         "framework": "sglang", "runner": "cluster:fixture", "multinode": False,
         "srt-recipe-dir": "fixture", "scenarios": {"agentic-coding": [{"search-space": [
-            {"tp": 4, "conc-list": [2], "kv-offloading": "none", "srt-recipe": "agentic.yaml"},
+            {"gpus-per-worker": 4, "tp": 4, "conc-list": [2], "kv-offloading": "none", "srt-recipe": "agentic.yaml"},
         ]}]},
     },
     "agentx-multi": {
@@ -82,7 +83,7 @@ def project(tmp_path):
     (project / "configs/master.yaml").write_text(yaml.safe_dump(MASTER))
     (project / "configs/runners.yaml").write_text(yaml.safe_dump({
         "labels": {"fixture": ["fixture_0"], "cluster:fixture": ["fixture_0"]},
-        "clusters": {"fixture": {"gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm", "slurm": {
+        "clusters": {"fixture": {"available-cpu-dram-mib": 8000, "gpus-per-node": 8, "arch": "x86_64", "scheduler": "slurm", "slurm": {
             "partition": "p", "exclusive": True,
             "volumes": {"hf-hub-cache": {"path": "/srv/hf"}, "aiperf-cache": {"path": "/srv/aiperf"}},
             "srt-slurm": {
@@ -100,7 +101,7 @@ def project(tmp_path):
             **RECIPE, "frontend": {"type": "sglang", "enable_multiple_frontends": False},
             "roles": {"agg": {"nodes": 1, "workers": 1, "gpus": 4, "args": {"tensor-parallel-size": 4}}},
         },
-        "single_node/srt-slurm-recipes/fixture/video.yaml": video_fragment(),
+        f"single_node/srt-slurm-recipes/fixture/{VIDEO_RECIPE}": video_fragment(),
         "multi_node/srt-slurm-recipes/fixture/agentic.yaml": {
             **RECIPE, "frontend": {"type": "sglang-router"}, "roles": {
                 role: {"nodes": 1, "workers": 1, "gpus": 8, "args": {"tensor-parallel-size": 8}}
@@ -155,6 +156,7 @@ def test_each_point_gets_its_bound_variant_and_a_manifest_entry(project, tmp_pat
         "CONC": "4", "ISL": "1024", "OSL": "128", "MODEL": "org/model",
         "RANDOM_RANGE_RATIO": "0.8", "USE_CHAT_TEMPLATE": "true", "REQUIRE_POWER": "0",
         "SPEC_ALGORITHM": "mtp", "SPEC_DRAFT_MODEL": "native",
+        "INFERENCEX_WORKER_MEMORY_MIB": "4000", "GPU_COUNT": "4",
     }, "concurrencies": [4]}  # fmt: skip
     assert recipe["roles"]["agg"]["env"] == {"NCCL_SOCKET_IFNAME": "eth7"}
 
@@ -185,7 +187,7 @@ def test_a_single_node_agentx_point_gets_the_agentic_client_and_no_sequence_leng
     assert (record["variant"], record["cluster"]) == (None, "fixture")
     assert recipe["model"] == {"path": "hf:org/model", "container": "org/image:1", "precision": "fp8"}
     assert recipe["benchmark"] == {
-        "type": "custom", "command": "bash srt_agentic.sh", "env": {"MODEL": "org/model", "CONC": "2", "REQUIRE_POWER": "0", "ENABLE_AGENTX_POWER": "1"},
+        "type": "custom", "command": "bash srt_agentic.sh", "env": {"MODEL": "org/model", "CONC": "2", "REQUIRE_POWER": "0", "ENABLE_AGENTX_POWER": "1", "INFERENCEX_WORKER_MEMORY_MIB": "4000", "GPU_COUNT": "4"},
         "concurrencies": [2],
     }  # fmt: skip
 
@@ -204,6 +206,9 @@ def test_a_multinode_agentx_power_point_gets_its_clusters_exporter_port_and_clie
     assert recipe["benchmark"]["env"] == {
         "RESULT_DIR": "/results", "AIPERF_DATASET_MMAP_CACHE_DIR": "/aiperf", "HF_HUB_CACHE": "/hf",
         "IS_MULTINODE": "true", "ENABLE_AGENTX_POWER": "1", "REQUIRE_POWER": "0",
+        "INFERENCEX_WORKER_MEMORY_MIB": "16000", "INFERENCEX_DECODE_MEMORY_MIB": "8000",
+        "PREFILL_NUM_WORKERS": "1", "DECODE_NUM_WORKERS": "1",
+        "PREFILL_GPUS_PER_WORKER": "8", "DECODE_GPUS_PER_WORKER": "8",
     }  # fmt: skip
     assert recipe["benchmark"]["concurrencies"] == [8]
 

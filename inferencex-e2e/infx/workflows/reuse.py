@@ -18,6 +18,7 @@ import os
 import re
 import sys
 from typing import Any
+from urllib.parse import quote
 
 from infx import github
 
@@ -33,7 +34,7 @@ from .sweep_runs import (
     trusted_external_pr,
 )
 
-DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
+REUSE_PERMISSIONS = frozenset({"admin", "maintain", "write"})
 REUSE_INCOMPATIBLE_LABELS = {"evals-only", "agentx-fast"}
 
 
@@ -90,14 +91,24 @@ def parse_reuse_command(body: str, command: str = "/reuse-sweep-run") -> tuple[b
     return True, int(run_id) if run_id else None
 
 
+def can_authorize_reuse(repo: str, login: str, token: str) -> bool:
+    """Return whether ``login`` has write access to ``repo``; an unknown login has none."""
+    try:
+        access = github.api(repo, f"/collaborators/{quote(login, safe='')}/permission", token)
+    except github.APIError as exc:
+        if exc.status == 404:
+            return False
+        raise
+    return all(access.get(key) in REUSE_PERMISSIONS for key in ("permission", "role_name"))
+
+
 def find_reuse_request(
     repo: str,
     pr_number: int,
     token: str,
     command: str,
-    allowed_author_associations: set[str],
 ) -> tuple[dict[str, Any] | None, int | None]:
-    """Find the most recent maintainer-authorized reuse comment on a PR."""
+    """Find the most recent reuse comment on a PR whose author has write access."""
     comments = github.paginate(
         repo,
         f"/issues/{pr_number}/comments",
@@ -105,14 +116,16 @@ def find_reuse_request(
         "",
     )
     comments.sort(key=lambda comment: str(comment.get("created_at") or ""))
+    authorized: dict[str, bool] = {}
     for comment in reversed(comments):
-        association = str(comment.get("author_association") or "")
-        if association not in allowed_author_associations:
-            continue
         matches, pinned_run_id = parse_reuse_command(str(comment.get("body") or ""), command)
         if not matches:
             continue
-        return comment, pinned_run_id
+        login = str((comment.get("user") or {}).get("login") or "")
+        if login not in authorized:
+            authorized[login] = bool(login) and can_authorize_reuse(repo, login, token)
+        if authorized[login]:
+            return comment, pinned_run_id
     return None, None
 
 
@@ -121,16 +134,9 @@ def find_reuse_authorization(
     pr_number: int,
     token: str,
     command: str,
-    allowed_author_associations: set[str],
 ) -> tuple[bool, int | None]:
     """Return whether an allowed reuse command exists on the PR, and the run ID it pins if any."""
-    comment, pinned_run_id = find_reuse_request(
-        repo,
-        pr_number,
-        token,
-        command,
-        allowed_author_associations,
-    )
+    comment, pinned_run_id = find_reuse_request(repo, pr_number, token, command)
     return comment is not None, pinned_run_id
 
 
@@ -290,21 +296,12 @@ def main() -> int:
         help="Comma-separated PR labels that make sweep artifacts ineligible for reuse.",
     )
     parser.add_argument("--pinned-run-command", default="/reuse-sweep-run")
-    parser.add_argument(
-        "--allowed-author-associations",
-        default=",".join(DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS),
-        help="Comma-separated GitHub author_association values allowed to pin a source run.",
-    )
     parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
     args = parser.parse_args()
 
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if not token:
         raise RuntimeError("GH_TOKEN or GITHUB_TOKEN is required")
-    allowed_author_associations = {
-        value.strip() for value in args.allowed_author_associations.split(",") if value.strip()
-    }
-
     incompatible_labels = {
         value.strip() for value in args.reuse_incompatible_label.split(",") if value.strip()
     }
@@ -323,11 +320,12 @@ def main() -> int:
                 args.pr_number,
                 token,
                 args.pinned_run_command,
-                allowed_author_associations,
             )
+            # The selected run lets video-reuse-check validate it against this head's plan.
+            source: dict[str, str] = {}
             if authorized:
                 pr = github.api(args.repo, f"/pulls/{args.pr_number}", token)
-                resolve_reusable_run(
+                run = resolve_reusable_run(
                     args.repo,
                     args.workflow_id,
                     args.pr_number,
@@ -337,6 +335,11 @@ def main() -> int:
                     incompatible_labels=incompatible_labels,
                     command=args.pinned_run_command,
                 )
+                source = {
+                    "source_run_id": str(run["id"]),
+                    "source_run_attempt": str(run.get("run_attempt") or "1"),
+                    "source_head_sha": source_head_sha(args.repo, run, token),
+                }
             outputs = result(
                 enabled=False,
                 skip_pr_sweep=authorized,
@@ -346,6 +349,7 @@ def main() -> int:
                     else f"PR #{args.pr_number} has no {args.pinned_run_command} authorization"
                 ),
                 source_pr_number=str(args.pr_number),
+                **source,
             )
         write_outputs(args.github_output, outputs)
         print(json.dumps(outputs, indent=2))
@@ -375,7 +379,6 @@ def main() -> int:
                 pr_number,
                 token,
                 args.pinned_run_command,
-                allowed_author_associations,
             )
             if authorized:
                 authorized_prs.append(pr_number)
@@ -397,7 +400,6 @@ def main() -> int:
         pr_number,
         token,
         args.pinned_run_command,
-        allowed_author_associations,
     )
     if not authorized:
         outputs = result(

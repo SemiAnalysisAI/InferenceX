@@ -1,10 +1,9 @@
 """Merge a PR while reusing its completed full sweep on push to main.
 
-Post ``/reuse-sweep-run``, merge ``origin/main`` into the PR branch (a
-``perf-changelog.yaml`` conflict is resolved by keeping main's entries and
-re-appending the PR's with the canonical PR URL), push a sync commit so the
-reuse gate sees the authorization on the new head, then squash-merge with
-admin bypass.
+Merge ``origin/main`` into the PR branch (a ``perf-changelog.yaml`` conflict is
+resolved by keeping main's entries and re-appending the PR's with the canonical
+PR URL), post ``/use <run_id>``, push a sync commit so the reuse gate sees
+the authorization on the new head, then squash-merge with admin bypass.
 
 From the repository root::
 
@@ -39,6 +38,7 @@ from .prepare_perf_changelog_merge import (
     resolve_conflict_bytes,
 )
 from .sweep_runs import (
+    FULL_SWEEP_LABELS,
     artifact_names,
     completed_pr_runs,
     has_reusable_result_artifacts,
@@ -94,14 +94,6 @@ def changelog_path() -> str:
     checkout = git_repository_root()
     return (project_root(checkout) / "perf-changelog.yaml").relative_to(checkout).as_posix()
 
-
-SWEEP_LABEL_NAMES = frozenset(
-    {
-        "full-sweep-enabled",
-        "non-canary-full-sweep-enabled",
-        "full-sweep-fail-fast",
-    }
-)
 
 REUSE_INCOMPATIBLE_LABELS = frozenset({"evals-only", "agentx-fast"})
 
@@ -640,7 +632,7 @@ def _merge_pr_inner(
     head_branch: str = pull.head.ref
     labels = [label.name for label in pull.labels]
 
-    sweep_labels = [name for name in labels if name in SWEEP_LABEL_NAMES]
+    sweep_labels = [name for name in labels if name in FULL_SWEEP_LABELS]
     if len(sweep_labels) > 1:
         return die(f"PR #{pr} has multiple conflicting sweep labels")
 
@@ -653,10 +645,6 @@ def _merge_pr_inner(
     eligible_run = find_eligible_run(repo, pr, head_branch, token)
     if eligible_run is None:
         return die(f"PR #{pr} has no successful reusable run-sweep.yml run on a current commit")
-
-    log(f"Posting /reuse-sweep-run {eligible_run} on PR #{pr}")
-    pull.create_issue_comment(f"/reuse-sweep-run {eligible_run}")
-    ok("Comment posted")
 
     state.local_branch = f"pr-{pr}-reuse-{os.getpid()}"
     log(f"Fetching PR branch {head_branch}")
@@ -703,6 +691,10 @@ def _merge_pr_inner(
 
     post_merge = git_ops.rev_parse()
 
+    log(f"Posting /use {eligible_run} on PR #{pr}")
+    pull.create_issue_comment(f"/use {eligible_run}")
+    ok("Comment posted")
+
     log(f"Pushing prepared commit {post_merge[:8]}")
     git_ops.push("origin", f"{state.local_branch}:{head_branch}")
     ok("Push complete; reuse authorization will be evaluated on the new head")
@@ -711,9 +703,13 @@ def _merge_pr_inner(
     if current_head != post_merge:
         return die(f"PR head changed to {current_head[:8]}; expected {post_merge[:8]}")
 
-    rc = wait_for_check(post_merge, "check-changelog", gh_repo, check_timeout)
-    if rc != 0:
-        return rc
+    # wait_for_checks sees only existing check runs, and video-reuse-check starts only after
+    # the reuse gate finishes, so wait for both by name; a failed gate is then reported as itself
+    # rather than as a skipped video-reuse-check.
+    for check_name in ("check-changelog", "reuse-sweep-gate", "video-reuse-check"):
+        rc = wait_for_check(post_merge, check_name, gh_repo, check_timeout)
+        if rc != 0:
+            return rc
 
     log("Waiting for all PR checks")
     rc = wait_for_checks(pull, post_merge, gh_repo, check_timeout)

@@ -26,8 +26,8 @@ diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载�
 
 - `serve` 记录封存的服务端 spec 与启动信息，然后在任务的 GPU 上 exec
   引擎（`sglang` 或 `vllm-omni`）。
-- `client` 对服务端点按 `CONC_LIST` 的每个并发度运行同一计划，每个并发度一个
-  `gpu/c<N>/` 单元，并发布各单元的测量窗口。
+- `client` 对服务端点以并发度 1 运行同一计划（校验后的行只携带这一个
+  `CONC_LIST`），写入 `gpu/c1/` 单元并发布其测量窗口。
 
 任务结束后，launcher 运行 `python -m evaluator.cli srt-finalize`，把各单元、
 其功耗校验边车与服务端记录合并为仪表盘摄入的
@@ -71,13 +71,16 @@ python -m evaluator.cli score-quality <artifact-id>=<bundle.zip|dir> ... \
 `quality_status` 仍为 `unjudged`。如需为较早的运行补算，按其 `run_id` 与
 `run_attempt` 手动触发该 workflow。
 
+仪表板上的[质量指南](https://inferencex.semianalysis.com/zh/vgx/quality)说明如何用这些分数
+评估有损加速，并按 GPU 展示一次已发布运行中每段视频的 PSNR。
+
 ## 本地检查
 
 ```bash
 cd video-generation
 PYTHONPATH=../inferencex-e2e uv run --no-project --python 3.12 \
   --with 'av==16.1.0' --with 'numpy==2.3.5' \
-  --with 'pyyaml>=6,<7' --with 'pytest>=8,<9' python -m pytest -q
+  --with 'pyyaml>=6,<7' --with 'pytest==9.2.0' python -m pytest -q
 ```
 
 [Test Video Harness](../.github/workflows/test-video-harness.yml) 会在相关

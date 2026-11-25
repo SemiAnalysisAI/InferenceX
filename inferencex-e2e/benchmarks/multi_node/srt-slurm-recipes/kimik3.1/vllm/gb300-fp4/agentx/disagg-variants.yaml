@@ -6,14 +6,14 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: "0.1.dev24218+g78e9a0c28"
-      dynamo: "3dd0744eb72c707d76d4c520ae4dea9e286a4ab6"
+      vllm: "0.1.dev25380+gf4c96184b"
+      dynamo: "ec06c09e7232e24f6faeec4069acdc61e4379916"
 
-  # ai-dynamo/dynamo#18124 head: the first Dynamo that registers the kimi_k31 model type.
+  # Dynamo main ec06c09e72, the source of the 1.8.0.dev20261119 nightly (dynamo-tokenizers 4.3.0).
   dynamo:
     install: true
     source:
-      rev: "3dd0744eb72c707d76d4c520ae4dea9e286a4ab6"
+      rev: "ec06c09e7232e24f6faeec4069acdc61e4379916"
 
   # The DSpark draft is read from the shared Hub cache.
   environment:
@@ -62,7 +62,6 @@ base:
     enable_multiple_frontends: false
     args:
       router-mode: "least-loaded"
-      router-session-affinity-ttl-secs: 1
     env:
       DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
       DYN_TOKENIZER_CACHE_BYTES: "8589934592"
@@ -77,8 +76,6 @@ base:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         <<: &kimi_env
           DYN_TCP_REQUEST_TIMEOUT: "120"
@@ -118,12 +115,14 @@ base:
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "1024"
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "1024"
       args:
-        kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+        kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"lookup_timeout_s":60,"lookup_prefetch_limit":16,"lookup_prefetch_ttl_s":30,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
         served-model-name: "moonshotai/Kimi-K3.1-Pro"
         prefix-match-unit: 128
         load-format: "fastsafetensors"
         kv-cache-dtype: "fp8"
-        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        attention-config: &attn_cfg '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
+        # The image's sparse indexer top-k default needs deep_select on the prefill engines.
+        kernel-config: '{"sparse_indexer_topk_backend":"deep_select"}'
         mamba-ssm-cache-dtype: "float32"
         mamba-cache-dtype: "float32"
         gpu-memory-utilization: 0.95
@@ -143,11 +142,9 @@ base:
         enable-expert-parallel: true
         moe-backend: deep_gemm_mega_moe
         max-num-seqs: 32
-        speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: &spec '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
     decode:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         <<: *kimi_env
         VLLM_ENABLE_GEMM_RS: "0"
@@ -157,7 +154,7 @@ base:
         prefix-match-unit: 128
         load-format: "fastsafetensors"
         kv-cache-dtype: "fp8"
-        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        attention-config: *attn_cfg
         mamba-ssm-cache-dtype: "float32"
         mamba-cache-dtype: "float32"
         gpu-memory-utilization: 0.95
@@ -205,11 +202,9 @@ override_1p1d:
   roles:
     prefill: &override_1p1d_prefill
       nodes: 2
-      workers: 1
       args: &override_1p1d_prefill_args {}
     decode: &override_1p1d_decode
       nodes: 2
-      workers: 1
       args: &override_1p1d_decode_args {}
 
 override_1p1d_eval:
@@ -235,13 +230,11 @@ override_1p2d:
   roles:
     prefill: &override_1p2d_prefill
       nodes: 2
-      workers: 1
       args: &override_1p2d_prefill_args
         numa-bind: true
         numa-bind-nodes: [0, 0, 1, 1]
     decode: &override_1p2d_decode
       nodes: 4
-      workers: 2
       args: &override_1p2d_decode_args
         numa-bind: true
         numa-bind-nodes: [0, 0, 1, 1]
@@ -266,21 +259,24 @@ override_1p2d_eval:
         dyn-enable-structural-tag: true
 
 override_1p3d:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
   roles:
     prefill: &override_1p3d_prefill
       nodes: 2
-      workers: 1
-      args: &override_1p3d_prefill_args
-        numa-bind: true
-        numa-bind-nodes: [0, 0, 1, 1]
+      env: &override_spawn_env
+        VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+      args: &override_1p3d_prefill_args {}
     decode: &override_1p3d_decode
       nodes: 6
-      workers: 3
-      args: &override_1p3d_decode_args
-        numa-bind: true
-        numa-bind-nodes: [0, 0, 1, 1]
+      env: *override_spawn_env
+      args: &override_1p3d_decode_args {}
 
 override_1p3d_eval:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
   roles:
     prefill:
       <<: *override_1p3d_prefill
@@ -299,6 +295,40 @@ override_1p3d_eval:
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
+override_1p5d:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill: &override_1p5d_prefill
+      <<: *override_1p3d_prefill
+    decode: &override_1p5d_decode
+      <<: *override_1p3d_decode
+      # One TP8 x DCP8 prefill keeps up with five decode engines at c44-c56.
+      nodes: 10
+
+override_1p5d_eval:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill:
+      <<: *override_1p5d_prefill
+      args:
+        <<: *override_1p3d_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p5d_decode
+      args:
+        <<: *override_1p3d_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
 # 256 decode slots per TP8 engine for the higher-concurrency points.
 override_1p2d_mns256:
   engine:
@@ -307,13 +337,11 @@ override_1p2d_mns256:
   roles:
     prefill: &override_1p2d_mns256_prefill
       nodes: 2
-      workers: 1
       env: &override_mns256_prefill_env
         VLLM_WORKER_MULTIPROC_METHOD: "spawn"
       args: &override_1p2d_mns256_prefill_args {}
     decode: &override_1p2d_mns256_decode
       nodes: 4
-      workers: 2
       env: &override_mns256_decode_env
         VLLM_WORKER_MULTIPROC_METHOD: "spawn"
       args: &override_1p2d_mns256_decode_args
@@ -351,12 +379,10 @@ override_1p3d_mns256:
   roles:
     prefill: &override_1p3d_mns256_prefill
       nodes: 2
-      workers: 1
       env: *override_mns256_prefill_env
       args: &override_1p3d_mns256_prefill_args {}
     decode: &override_1p3d_mns256_decode
       nodes: 6
-      workers: 3
       env: *override_mns256_decode_env
       args: &override_1p3d_mns256_decode_args
         max-num-seqs: 256
@@ -394,15 +420,29 @@ override_hyb4_3p1d:
   roles:
     prefill: &override_hyb4_3p1d_prefill
       nodes: 6
-      workers: 3
-      env: *override_mns256_prefill_env
+      env: &override_hyb_prefill_env
+        VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+        # Mooncake store: keep the tail a hit loaded and drop consumed partial tails, so live prefixes are not evicted.
+        VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
+        VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
       args: &override_hyb4_3p1d_prefill_args
         max-num-batched-tokens: 16384
+        # Store and match prefixes in units of 1408 tokens on the hybrid points.
+        prefix-match-unit: 1408
+        # Five draft tokens on the hybrid points.
+        speculative-config: &spec_hyb_k5 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        # Expert-parallel load balancing: re-place experts every 3000 steps from a 1000-step load window (symm_mem copy, no redundant experts).
+        enable-eplb: true
+        eplb-config: &eplb_cfg '{"num_redundant_experts":0,"window_size":1000,"step_interval":3000,"communicator":"symm_mem","log_balancedness":true,"log_balancedness_interval":500}'
     decode: &override_hyb4_3p1d_decode
       nodes: 8
-      workers: 1
-      gpus: 32
-      env: *override_mns256_decode_env
+      env:
+        <<: &override_hyb_decode_env
+          VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+          VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
+          VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
+        # Run the hybrid decode's MegaMoE layers on the DEP EpMoeLayer schedule.
+        VLLM_KIMI_K3_HYBRID_EP_MOE: "1"
       args: &override_hyb4_3p1d_decode_args
         data-parallel-size: 4
         data-parallel-rpc-port: 13345
@@ -410,9 +450,14 @@ override_hyb4_3p1d:
         moe-backend: deep_gemm_mega_moe
         gpu-memory-utilization: 0.92
         max-num-seqs: 256
-        max-num-batched-tokens: 1280
-        max-cudagraph-capture-size: 1280
-        compilation-config: *decode_graphs_1280
+        prefix-match-unit: 1408
+        speculative-config: *spec_hyb_k5
+        # Decode graphs in multiples of K+1 = 6, up to max-num-seqs x 6.
+        max-num-batched-tokens: 1536
+        max-cudagraph-capture-size: 1536
+        compilation-config: '{"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,294,300,306,312,318,324,330,336,342,348,354,360,366,372,378,384,390,396,402,408,414,420,426,432,438,444,450,456,462,468,474,480,486,492,498,504,510,516,522,528,534,540,546,552,558,564,570,576,582,588,594,600,606,612,618,624,630,636,642,648,654,660,666,672,678,684,690,696,702,708,714,720,726,732,738,744,750,756,762,768,774,780,786,792,798,804,810,816,822,828,834,840,846,852,858,864,870,876,882,888,894,900,906,912,918,924,930,936,942,948,954,960,966,972,978,984,990,996,1002,1008,1014,1020,1026,1032,1038,1044,1050,1056,1062,1068,1074,1080,1086,1092,1098,1104,1110,1116,1122,1128,1134,1140,1146,1152,1158,1164,1170,1176,1182,1188,1194,1200,1206,1212,1218,1224,1230,1236,1242,1248,1254,1260,1266,1272,1278,1284,1290,1296,1302,1308,1314,1320,1326,1332,1338,1344,1350,1356,1362,1368,1374,1380,1386,1392,1398,1404,1410,1416,1422,1428,1434,1440,1446,1452,1458,1464,1470,1476,1482,1488,1494,1500,1506,1512,1518,1524,1530,1536]}'
+        enable-eplb: true
+        eplb-config: *eplb_cfg
 
 override_hyb4_3p1d_eval:
   engine:
@@ -431,6 +476,182 @@ override_hyb4_3p1d_eval:
       <<: *override_hyb4_3p1d_decode
       args:
         <<: *override_hyb4_3p1d_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+override_hyb4_2p1d_lpt4k:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill: &override_hyb4_2p1d_lpt4k_prefill
+      <<: *override_hyb4_3p1d_prefill
+      nodes: 4
+      args: &override_hyb4_2p1d_lpt4k_prefill_args
+        <<: *override_hyb4_3p1d_prefill_args
+        long-prefill-token-threshold: 4096
+        long-prefill-token-threshold-adaptive: true
+    decode: &override_hyb4_2p1d_lpt4k_decode
+      <<: *override_hyb4_3p1d_decode
+      args: &override_hyb4_2p1d_lpt4k_decode_args
+        <<: *override_hyb4_3p1d_decode_args
+        # No decode EPLB at c256: with about 20 requests per decode engine there is little expert skew to rebalance.
+        enable-eplb: null
+        eplb-config: null
+
+override_hyb4_2p1d_lpt4k_eval:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill:
+      <<: *override_hyb4_2p1d_lpt4k_prefill
+      args:
+        <<: *override_hyb4_2p1d_lpt4k_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_hyb4_2p1d_lpt4k_decode
+      args:
+        <<: *override_hyb4_2p1d_lpt4k_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# 1P5D with 4 drafts for c104: the prefill engine caps a long prompt's chunk at 4096 tokens next to
+# other requests (never below an equal share of the 16384-token budget), so short follow-up turns are
+# not queued behind it.
+override_1p5d_lpt:
+  engine:
+    set_visible_devices: true
+  roles:
+    prefill: &override_1p5d_lpt_prefill
+      nodes: 2
+      env:
+        VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+      args: &override_1p5d_lpt_prefill_args
+        speculative-config: &spec_k4 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        prefix-match-unit: 1408
+        long-prefill-token-threshold: 4096
+        long-prefill-token-threshold-adaptive: true
+    decode: &override_1p5d_lpt_decode
+      nodes: 10
+      # Opt-in TP8 x DCP8 decode paths of this image (default off) for the 1P5D points: specialized decode
+      # steps at 5-40 rows (T8T/T8M/S21/S22/S23), KDA and attention kernels (KDA8/TCS/E32/EXP8), one-pass
+      # decode prep (NP1), fused drafter layers (DRF/S31).
+      env: &k31_tp8_decode_env
+        VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+        K31_DRF_ATTN: "1"
+        K31_DRF_ACT: "1"
+        K31_S31MK: "1"
+        K31_S31FC: "1"
+        K31_S31DG: "1"
+        K31_S31AR: "1"
+        K31_DCPV8: "1"
+        K31_NP1: "1"
+        K31_NP1_MAX_REQS: "8"
+        K31_T8T: "1"
+        K31_T8T_POLL0: "1"
+        K31_T8T_VOTE: "1"
+        K31_T8T_SD15: "1"
+        K31_T8M: "1"
+        K31_E32: "1"
+        K31_TCS: "1"
+        K31_TCS45: "1"
+        K31_EXP8: "1"
+        K31_EXP8W: "1"
+        K31_KDA8: "1"
+        K31_KDA8_TABLE: "12:1-8;6:1"
+        K31_KDA8_LEAN: "12:1-8"
+        K31_S20J: "1"
+        K31_S20QAF: "1"
+        K31_S20OPU: "1"
+        K31_S21N8: "1"
+        K31_S21T8M: "1"
+        K31_S21T8T: "1"
+        K31_S21W40: "1"
+        K31_S21E32W: "16"
+        K31_S22T56: "1"
+        K31_S22DG: "1"
+        K31_S22SP: "1"
+        K31_S22LC: "1"
+        K31_S22IP: "1"
+        K31_S23KS: "1"
+        K31_S23G4: "1"
+        K31_S23DR: "1"
+        K31_S24FM: "1"
+      args: &override_1p5d_lpt_decode_args
+        speculative-config: *spec_k4
+        prefix-match-unit: 1408
+
+override_1p5d_lpt_eval:
+  engine:
+    set_visible_devices: true
+  roles:
+    prefill:
+      <<: *override_1p5d_lpt_prefill
+      args:
+        <<: *override_1p5d_lpt_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p5d_lpt_decode
+      args:
+        <<: *override_1p5d_lpt_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# 1P5D with 5 drafts for c44.
+override_1p5d_k5:
+  engine:
+    # Lets vLLM bind each spawned worker to its GPU's NUMA node.
+    set_visible_devices: true
+  roles:
+    prefill: &override_1p5d_k5_prefill
+      nodes: 2
+      env:
+        VLLM_WORKER_MULTIPROC_METHOD: "spawn"
+      args: &override_1p5d_k5_prefill_args
+        speculative-config: &spec_k5 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        # The released drafter's KV block at TP8 x DCP8.
+        prefix-match-unit: 1408
+    decode: &override_1p5d_k5_decode
+      nodes: 10
+      env:
+        <<: *k31_tp8_decode_env
+        # Specialized decode table for 6-token rows (5 drafts).
+        K31_S30K: "6"
+      args: &override_1p5d_k5_decode_args
+        speculative-config: *spec_k5
+        prefix-match-unit: 1408
+        max-cudagraph-capture-size: 384
+        compilation-config: '{"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,294,300,306,312,318,324,330,336,342,348,354,360,366,372,378,384]}'
+
+override_1p5d_k5_eval:
+  engine:
+    set_visible_devices: true
+  roles:
+    prefill:
+      <<: *override_1p5d_k5_prefill
+      args:
+        <<: *override_1p5d_k5_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_1p5d_k5_decode
+      args:
+        <<: *override_1p5d_k5_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3

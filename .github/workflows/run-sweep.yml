@@ -11,6 +11,7 @@ concurrency:
           github.event.label.name != 'all-evals' &&
           github.event.label.name != 'evals-only' &&
           github.event.label.name != 'agentx-fast' &&
+          github.event.label.name != 'evals-last' &&
           github.run_id ||
           'active'
         }}
@@ -39,6 +40,7 @@ jobs:
         runs-on: ubuntu-latest
         permissions:
             contents: read
+            pull-requests: read # Read a stacked parent PR's head.
         if: >-
             github.event.pull_request.head.repo.full_name == github.repository &&
             (
@@ -48,10 +50,13 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast'
+              github.event.label.name == 'agentx-fast' ||
+              github.event.label.name == 'evals-last'
             )
         outputs:
             skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
+            plan-base-ref: ${{ steps.stack_base.outputs.base-ref }}
+            stack-parent-pr: ${{ steps.stack_base.outputs.parent-pr }}
         steps:
             - name: Reject conflicting sweep labels
               env:
@@ -93,8 +98,25 @@ jobs:
             - name: Set up uv
               uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
+            - name: Resolve stacked append-only base
+              id: stack_base
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+              run: |
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
+                  uv run --no-project --exclude-newer PT12H --python 3.12 \
+                    --with "pydantic>=2" --with pyyaml python -m infx.workflows.stack_base \
+                    --repo "${GITHUB_REPOSITORY}" \
+                    --pr-number "${PR_NUMBER}" \
+                    --base-ref "origin/${GITHUB_BASE_REF}" \
+                    --head-ref "${PR_HEAD_SHA}" \
+                    --changelog-file perf-changelog.yaml
+
             - name: Validate perf-changelog matrix
               env:
+                  PLAN_BASE_REF: ${{ steps.stack_base.outputs.base-ref }}
                   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
@@ -104,7 +126,7 @@ jobs:
                       uv run --no-project --exclude-newer PT12H --python 3.12
                       --with "pydantic>=2" --with pyyaml python -m infx.workflows.validate_perf_changelog
                       --changelog-file perf-changelog.yaml
-                      --base-ref "origin/${GITHUB_BASE_REF}"
+                      --base-ref "${PLAN_BASE_REF}"
                       --head-ref "${PR_HEAD_SHA}"
                   )
                   if [ "$ALL_EVALS" = "true" ]; then
@@ -132,6 +154,9 @@ jobs:
             !contains(github.event.pull_request.labels.*.name, 'agentx-fast')
         outputs:
             skip-pr-sweep: ${{ steps.gate.outputs.skip-pr-sweep }}
+            source-run-id: ${{ steps.gate.outputs.reuse-source-run-id }}
+            source-run-attempt: ${{ steps.gate.outputs.reuse-source-run-attempt }}
+            source-head-sha: ${{ steps.gate.outputs.reuse-source-head-sha }}
         steps:
             - name: Checkout code
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -154,6 +179,66 @@ jobs:
                     --pr-number "${PR_NUMBER}" \
                     --ref "${GITHUB_REF}" \
                     --workflow-id "run-sweep.yml"
+
+    # Merge Ingest's video validation, run before merge: a push after /use that changes a
+    # video row fails here instead of leaving the merge with nothing to publish.
+    video-reuse-check:
+        name: video-reuse-check
+        needs: reuse-sweep-gate
+        if: needs.reuse-sweep-gate.outputs.skip-pr-sweep == 'true'
+        runs-on: ubuntu-latest
+        permissions:
+            actions: read # Download the reused run's artifacts.
+            contents: read
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+            # The checkout is the PR merge ref, so this is the plan Merge Ingest computes at merge.
+            - name: Plan the merged video rows
+              id: plan
+              env:
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+              run: |
+                  source "$GITHUB_WORKSPACE/inferencex-e2e/benchmarks/check_env.sh"
+                  check_env_vars GITHUB_WORKSPACE RUNNER_TEMP GITHUB_OUTPUT GITHUB_REPOSITORY PR_NUMBER
+                  cd "$GITHUB_WORKSPACE/inferencex-e2e"
+                  uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
+                    python -m infx.matrix.plan \
+                    --changelog-file perf-changelog.yaml \
+                    --base-ref "$(git rev-parse HEAD^1)" \
+                    --head-ref "$(git rev-parse HEAD)" \
+                    --repository "$GITHUB_REPOSITORY" \
+                    --pull-request "$PR_NUMBER" > "$RUNNER_TEMP/plan.json"
+                  video=$(jq '(.single_node.video // []) | length > 0' "$RUNNER_TEMP/plan.json")
+                  echo "video=$video" >> "$GITHUB_OUTPUT"
+
+            - name: Download the reused video bundles and matrix
+              if: steps.plan.outputs.video == 'true'
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  github-token: ${{ github.token }}
+                  run-id: ${{ needs.reuse-sweep-gate.outputs.source-run-id }}
+                  pattern: '{h3-results-*,video-sweep-manifest}'
+                  path: video-artifacts
+
+            - name: Validate the reused run against the merged video rows
+              if: steps.plan.outputs.video == 'true'
+              env:
+                  SOURCE_RUN_ID: ${{ needs.reuse-sweep-gate.outputs.source-run-id }}
+                  SOURCE_RUN_ATTEMPT: ${{ needs.reuse-sweep-gate.outputs.source-run-attempt }}
+                  SOURCE_HEAD_SHA: ${{ needs.reuse-sweep-gate.outputs.source-head-sha }}
+              run: |
+                  source "$GITHUB_WORKSPACE/inferencex-e2e/benchmarks/check_env.sh"
+                  check_env_vars GITHUB_WORKSPACE RUNNER_TEMP SOURCE_RUN_ID SOURCE_RUN_ATTEMPT SOURCE_HEAD_SHA
+                  python3 -m infx.results.video_artifacts --artifacts-dir video-artifacts \
+                    --run-id "$SOURCE_RUN_ID" --run-attempt "$SOURCE_RUN_ATTEMPT" --head-sha "$SOURCE_HEAD_SHA" \
+                    --merged-plan "$RUNNER_TEMP/plan.json"
 
     setup:
         name: setup
@@ -188,7 +273,8 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast'
+              github.event.label.name == 'agentx-fast' ||
+              github.event.label.name == 'evals-last'
             )
         outputs:
             tooling-ref: ${{ steps.tooling.outputs.result }}
@@ -232,9 +318,19 @@ jobs:
                   anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
                   github-token: ${{ github.token }}
 
+            - name: Fetch stacked parent head
+              if: needs.check-changelog.outputs.stack-parent-pr != ''
+              env:
+                  PARENT_PR: ${{ needs.check-changelog.outputs.stack-parent-pr }}
+                  PLAN_BASE_REF: ${{ needs.check-changelog.outputs.plan-base-ref }}
+              run: |
+                  git cat-file -e "${PLAN_BASE_REF}^{commit}" 2>/dev/null ||
+                    git fetch --no-tags origin "+refs/pull/${PARENT_PR}/head"
+
             - id: setup
               env:
                   PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                  PLAN_BASE_REF: ${{ needs.check-changelog.outputs.plan-base-ref || format('origin/{0}', github.base_ref) }}
                   PRIORITY_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
                   ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
                   EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
@@ -245,7 +341,7 @@ jobs:
                       uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                       python -m infx.matrix.plan
                       --changelog-file "${GITHUB_WORKSPACE}/inferencex-e2e/perf-changelog.yaml"
-                      --base-ref "origin/${GITHUB_BASE_REF}"
+                      --base-ref "${PLAN_BASE_REF}"
                       --head-ref "${PR_HEAD_SHA}"
                   )
                   if [ "$ALL_EVALS" = "true" ]; then
@@ -259,14 +355,24 @@ jobs:
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pydantic --with pyyaml \
                     python -m infx.workflows.benchmark_schema --plan)
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-                    python -m infx.workflows.ci_priority \
+                    python -m infx.workflows.scheduler_facts \
                     --event-name "${GITHUB_EVENT_NAME}" \
                     --queue-namespace "${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
-                    --criteria-json "$PRIORITY_CRITERIA")
+                    --criteria-json "$PRIORITY_CRITERIA" \
+                    --facts-file "${RUNNER_TEMP}/scheduling-facts.json")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
                   has_benchmark_results=$(jq '[.single_node | to_entries[] | select(.key != "video") | .value[]] + [.multi_node | .[][]] | length > 0' <<<"$CONFIG_JSON")
                   echo "has-benchmark-results=$has_benchmark_results" >> "$GITHUB_OUTPUT"
+
+            - name: Upload scheduling facts
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  path: ${{ runner.temp }}/scheduling-facts.json
+                  archive: false
+                  overwrite: true
+                  if-no-files-found: error
 
     canary-select:
         name: canary-select
@@ -341,7 +447,6 @@ jobs:
             pr-number: &pr-number ${{ github.event.pull_request.number }}
             klaud-run: &klaud-run ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'Klaud-Cold' && (startsWith(github.head_ref, 'klaud/auto-') || startsWith(github.head_ref, 'klaude/auto-')) }}
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
@@ -367,7 +472,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
@@ -420,7 +524,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             require-power: ${{ matrix.config['require-power'] == true && matrix.config['eval-only'] != true }}
             conc-list: ${{ toJson(matrix.config.conc) }}
@@ -470,7 +573,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: ${{ matrix.config.run-eval }}
@@ -520,7 +622,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
@@ -553,7 +654,6 @@ jobs:
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             run-eval: false
@@ -584,7 +684,6 @@ jobs:
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             conc: ${{ matrix.config.conc[0] }}
@@ -595,10 +694,14 @@ jobs:
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-evals:
+        # Evals start alongside throughput. With the evals-last label this job is skipped and
+        # sweep-evals-last runs the same matrix after throughput. The other eval jobs pair up
+        # the same way, because needs cannot depend on a label.
         needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
+              !contains(github.event.pull_request.labels.*.name, 'evals-last') &&
               needs.setup.result == 'success' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -607,18 +710,17 @@ jobs:
             }}
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: eval /
-        strategy:
+        strategy: &sweep-evals-strategy
             fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
-        secrets:
+        secrets: &sweep-evals-secrets
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-        with:
+        with: &sweep-evals-with
             config: ${{ toJSON(matrix.config) }}
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
@@ -626,12 +728,48 @@ jobs:
             run-eval: true
             eval-only: true
 
+    sweep-evals-last:
+        # With evals-last, throughput runs go first; evals wait for them to finish (any result).
+        # Under evals-only the throughput jobs are skipped, so evals start right away.
+        # Agentic evals also need al-gate-prompts, a short job that runs only when they do.
+        needs: &evals-last-needs
+            [
+                setup,
+                canary-select,
+                canary-sweep,
+                canary-multi-node-sweep,
+                al-gate-prompts,
+                sweep-single-node-1k1k,
+                sweep-single-node-8k1k,
+                sweep-agentic,
+                sweep-video,
+                sweep-multi-node-1k1k,
+                sweep-multi-node-8k1k,
+                sweep-multi-node-agentic,
+            ]
+        if: >-
+            ${{
+              !cancelled() &&
+              contains(github.event.pull_request.labels.*.name, 'evals-last') &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null'
+            }}
+        uses: $/.github/workflows/benchmark-tmpl.yml
+        name: eval /
+        strategy: *sweep-evals-strategy
+        secrets: *sweep-evals-secrets
+        with: *sweep-evals-with
+
     sweep-agentic-evals:
         # The acceptance gate is report-only: the evals run whether or not its prompts were prepared.
         needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, al-gate-prompts]
         if: >-
             ${{
               !cancelled() &&
+              !contains(github.event.pull_request.labels.*.name, 'evals-last') &&
               needs.setup.result == 'success' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -640,18 +778,17 @@ jobs:
             }}
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
-        strategy:
+        strategy: &sweep-agentic-evals-strategy
             fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
-        secrets:
+        secrets: &sweep-agentic-evals-secrets
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-        with:
+        with: &sweep-agentic-evals-with
             config: ${{ toJSON(matrix.config) }}
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             dp-attn: ${{ matrix.config.dp-attn }}
             duration: ${{ matrix.config.duration }}
@@ -661,11 +798,30 @@ jobs:
             eval-only: true
             scenario-type: agentic-coding
 
+    sweep-agentic-evals-last:
+        needs: *evals-last-needs
+        if: >-
+            ${{
+              !cancelled() &&
+              contains(github.event.pull_request.labels.*.name, 'evals-last') &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != 'null'
+            }}
+        uses: $/.github/workflows/benchmark-tmpl.yml
+        name: agentic eval /
+        strategy: *sweep-agentic-evals-strategy
+        secrets: *sweep-agentic-evals-secrets
+        with: *sweep-agentic-evals-with
+
     sweep-multi-node-evals:
         needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
         if: >-
             ${{
               !cancelled() &&
+              !contains(github.event.pull_request.labels.*.name, 'evals-last') &&
               needs.setup.result == 'success' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -674,19 +830,18 @@ jobs:
             }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
-        strategy:
+        strategy: &sweep-multi-node-evals-strategy
             fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
-        secrets:
+        secrets: &sweep-multi-node-evals-secrets
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-        with:
+        with: &sweep-multi-node-evals-with
             config: ${{ toJSON(matrix.config) }}
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
@@ -695,12 +850,31 @@ jobs:
             eval-only: true
             eval-conc: ${{ (matrix.config['eval-framework'] || 'lm-eval') == 'lm-eval' && matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
+    sweep-multi-node-evals-last:
+        needs: *evals-last-needs
+        if: >-
+            ${{
+              !cancelled() &&
+              contains(github.event.pull_request.labels.*.name, 'evals-last') &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null'
+            }}
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        name: multi-node eval /
+        strategy: *sweep-multi-node-evals-strategy
+        secrets: *sweep-multi-node-evals-secrets
+        with: *sweep-multi-node-evals-with
+
     sweep-multi-node-agentic-evals:
         # The acceptance gate is report-only: the evals run whether or not its prompts were prepared.
         needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, al-gate-prompts]
         if: >-
             ${{
               !cancelled() &&
+              !contains(github.event.pull_request.labels.*.name, 'evals-last') &&
               needs.setup.result == 'success' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -709,19 +883,18 @@ jobs:
             }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
-        strategy:
+        strategy: &sweep-multi-node-agentic-evals-strategy
             fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
-        secrets:
+        secrets: &sweep-multi-node-agentic-evals-secrets
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-        with:
+        with: &sweep-multi-node-agentic-evals-with
             config: ${{ toJSON(matrix.config) }}
             pr-number: *pr-number
             klaud-run: *klaud-run
             runner: ${{ matrix.config.runner }}
             node-count: ${{ matrix.config.node-count }}
-            priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
             conc-list: ${{ format('[{0}]', matrix.config['eval-conc']) }}
             conc: ${{ matrix.config['eval-conc'] }}
@@ -732,6 +905,24 @@ jobs:
             eval-only: true
             eval-conc: ${{ matrix.config['eval-conc'] }}
             scenario-type: agentic-coding
+
+    sweep-multi-node-agentic-evals-last:
+        needs: *evals-last-needs
+        if: >-
+            ${{
+              !cancelled() &&
+              contains(github.event.pull_request.labels.*.name, 'evals-last') &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != 'null'
+            }}
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        name: multi-node agentic eval /
+        strategy: *sweep-multi-node-agentic-evals-strategy
+        secrets: *sweep-multi-node-agentic-evals-secrets
+        with: *sweep-multi-node-agentic-evals-with
 
     collect-results:
         name: collect-results
@@ -757,8 +948,10 @@ jobs:
                 needs.canary-multi-node-sweep.result == 'success' ||
                 needs.sweep-single-node-1k1k.result != 'skipped' ||
                 needs.sweep-single-node-8k1k.result != 'skipped' ||
+                needs.sweep-agentic.result != 'skipped' ||
                 needs.sweep-multi-node-1k1k.result != 'skipped' ||
-                needs.sweep-multi-node-8k1k.result != 'skipped'
+                needs.sweep-multi-node-8k1k.result != 'skipped' ||
+                needs.sweep-multi-node-agentic.result != 'skipped'
               )
             }}
         uses: $/.github/workflows/collect-results.yml
@@ -768,8 +961,33 @@ jobs:
 
     collect-evals:
         name: collect-evals
-        needs: [sweep-evals, sweep-agentic-evals, sweep-multi-node-evals, sweep-multi-node-agentic-evals, setup]
-        if: ${{ always() && needs.setup.result != 'skipped' && (needs.sweep-evals.result != 'skipped' || needs.sweep-agentic-evals.result != 'skipped' || needs.sweep-multi-node-evals.result != 'skipped' || needs.sweep-multi-node-agentic-evals.result != 'skipped') }}
+        needs:
+            [
+                sweep-evals,
+                sweep-agentic-evals,
+                sweep-multi-node-evals,
+                sweep-multi-node-agentic-evals,
+                sweep-evals-last,
+                sweep-agentic-evals-last,
+                sweep-multi-node-evals-last,
+                sweep-multi-node-agentic-evals-last,
+                setup,
+            ]
+        if: >-
+            ${{
+              always() &&
+              needs.setup.result != 'skipped' &&
+              (
+                needs.sweep-evals.result != 'skipped' ||
+                needs.sweep-agentic-evals.result != 'skipped' ||
+                needs.sweep-multi-node-evals.result != 'skipped' ||
+                needs.sweep-multi-node-agentic-evals.result != 'skipped' ||
+                needs.sweep-evals-last.result != 'skipped' ||
+                needs.sweep-agentic-evals-last.result != 'skipped' ||
+                needs.sweep-multi-node-evals-last.result != 'skipped' ||
+                needs.sweep-multi-node-agentic-evals-last.result != 'skipped'
+              )
+            }}
         uses: $/.github/workflows/collect-evals.yml
         with:
             tooling-ref: ${{ needs.setup.outputs.tooling-ref }}
@@ -792,6 +1010,10 @@ jobs:
                 sweep-agentic-evals,
                 sweep-multi-node-evals,
                 sweep-multi-node-agentic-evals,
+                sweep-evals-last,
+                sweep-agentic-evals-last,
+                sweep-multi-node-evals-last,
+                sweep-multi-node-agentic-evals-last,
             ]
         if: ${{ !cancelled() && needs.setup.result == 'success' }}
         permissions:
@@ -885,7 +1107,21 @@ jobs:
 
     calc-success-rate:
         name: calc-success-rate
-        needs: [setup, collect-results, sweep-video]
+        # Wait for evals so in-flight eval jobs are not counted as failures.
+        needs:
+            [
+                setup,
+                collect-results,
+                sweep-video,
+                sweep-evals,
+                sweep-agentic-evals,
+                sweep-multi-node-evals,
+                sweep-multi-node-agentic-evals,
+                sweep-evals-last,
+                sweep-agentic-evals-last,
+                sweep-multi-node-evals-last,
+                sweep-multi-node-agentic-evals-last,
+            ]
         if: ${{ always() && needs.collect-results.result != 'skipped'}}
         runs-on: ubuntu-latest
         permissions:
@@ -910,23 +1146,8 @@ jobs:
                   path: ${{ env.RESULTS_DIR }}
                   pattern: results_*
 
-            - name: Select Python project
-              run: |
-                python_project="$GITHUB_WORKSPACE"
-                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-                  python_project="$python_project/inferencex-e2e"
-                fi
-                test -f "$python_project/pyproject.toml"
-                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-            - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-              with:
-                  cache-dependency-glob: |
-                      pyproject.toml
-                      uv.lock
-                      inferencex-e2e/pyproject.toml
-                      inferencex-e2e/uv.lock
+            - name: Set up Python project
+              uses: $/.github/actions/setup-python-project
 
             - name: Calculate success rate
               run: >-
@@ -965,23 +1186,8 @@ jobs:
                   path: results/
                   pattern: results_bmk
 
-            - name: Select Python project
-              run: |
-                python_project="$GITHUB_WORKSPACE"
-                if [[ -f "$python_project/inferencex-e2e/pyproject.toml" ]]; then
-                  python_project="$python_project/inferencex-e2e"
-                fi
-                test -f "$python_project/pyproject.toml"
-                echo "INFERENCEX_PYTHON_PROJECT=$python_project" >> "$GITHUB_ENV"
-
-            - name: Set up uv
-              uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-              with:
-                  cache-dependency-glob: |
-                      pyproject.toml
-                      uv.lock
-                      inferencex-e2e/pyproject.toml
-                      inferencex-e2e/uv.lock
+            - name: Set up Python project
+              uses: $/.github/actions/setup-python-project
 
             - name: Compare results against main
               run: >-
@@ -1013,7 +1219,8 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast'
+              github.event.label.name == 'agentx-fast' ||
+              github.event.label.name == 'evals-last'
             )
         runs-on: ubuntu-latest
         concurrency:
@@ -1024,16 +1231,21 @@ jobs:
         steps:
             - name: Update unofficial run visualizer links on PR
               uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  # Video results live on the VideoGenX page, not the inference charts.
+                  HAS_VIDEO: ${{ toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != 'null' && toJson(fromJson(needs.setup.outputs.search-space-config).single_node.video) != '[]' }}
               with:
                   github-token: ${{ github.token }}
                   script: |
                       const marker = '<!-- inferencex-unofficial-run-visualizer -->';
                       const inferenceUrl = `https://inferencex.semianalysis.com/inference?unofficialRun=${context.runId}`;
                       const evaluationUrl = `https://inferencex.semianalysis.com/evaluation?unofficialRun=${context.runId}`;
+                      const videoUrl = `https://inferencex.semianalysis.com/vgx?unofficialRun=${context.runId}`;
                       const body = [
                           marker,
                           `View unofficial run (performance): ${inferenceUrl}`,
                           `View unofficial run (accuracy): ${evaluationUrl}`,
+                          ...(process.env.HAS_VIDEO === 'true' ? [`View unofficial run (video): ${videoUrl}`] : []),
                       ].join('\n\n');
                       const comments = await github.paginate(github.rest.issues.listComments, {
                           ...context.repo,

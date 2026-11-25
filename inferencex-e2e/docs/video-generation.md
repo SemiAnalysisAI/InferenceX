@@ -2,11 +2,17 @@
 
 The `video-generation` scenario schedules one server job per deployment. SGLang
 selects C1 deployments on 1, 2, 4 and 8 B200, H200 or MI355X GPUs (Ulysses
-across all GPUs) and on 2, 4 and 8 H100 GPUs (TP2, since the model does not fit
-one 80 GB GPU), all using
+across all GPUs) and on 2, 4 and 8 H100 or A100 GPUs (TP2, since the model does
+not fit one 80 GB GPU), and vLLM-Omni the same B200, H200, H100, A100 and MI355X deployments, all using
 `h3-v2.yaml`: 20 distinct measured prompts, a separate warmup, 49 denoising
 updates, and 124 frames at 24 fps and 1344×768. A five-second request produces
-124/24 seconds of video. Config presence is not GPU or quality qualification.
+124/24 seconds of video. Wan2.2-T2V-A14B runs vLLM-Omni on 1, 2, 4 and 8
+H100, H200, B200 or B300 GPUs and SGLang on 1, 2, 4 and 8 H200 GPUs and 4 and
+8 H100 GPUs (CFG parallel 1 x Ulysses 1 on one GPU, then CFG parallel 2 x
+Ulysses 1, 2 and 4 on 2, 4 and 8 GPUs) using `wan22.yaml` `release-v1`: four
+prompts by five seeds, one warmup, 40 UniPC steps, and 81 silent frames at 16 fps
+and 832×480; its `smoke` set sends the same request controls for one case.
+Config presence is not GPU or quality qualification.
 Each deployment's image pin is its `*-video` entry in
 [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml) or
 [`configs/amd-master.yaml`](../configs/amd-master.yaml).
@@ -15,10 +21,17 @@ and power must be checked in the original run. The YAML workload has no `model.p
 or Python field: the binder derives the pinned model snapshot path from `MODEL`,
 `HF_HUB_CACHE`, and the model revision. The service recipe selects the engine executable.
 Native power is accepted only when its sampled GPU UUIDs match the server's
-`spec.json` and `launch.json` assignment. On ROCm the server names each GPU by
+`spec.json` and `launch.json` assignment. The bundle's `power.json` records the native
+manifest's `source_metric` and `power_scope` as `semantics.sensor` and `semantics.scope`.
+AMD deployments can report `gpu_power_usage` and NVIDIA deployments can report
+`DCGM_FI_DEV_POWER_USAGE`. Bundling a sidecar that predates these fields leaves them null.
+Older sealed bundles used a fixed DCGM label. Use their original power manifest to
+identify the sensor. On ROCm the server names each GPU by
 its board serial, which is how the AMD power exporter identifies it.
 The H100 runner provides an HF hub cache mount, but the pinned H3 snapshot must
-be verified there before execution. Historical artifacts remain evidence of their
+be verified there before execution. On the clusters in `HUB_DOWNLOAD_CLUSTERS`
+([`models.py`](../infx/launch/drivers/srt/models.py)) the launcher downloads the
+snapshot, without the Ref2VA weights, into that cache before it submits. Historical artifacts remain evidence of their
 original workloads.
 
 Each video service uses `command: [python3, -m, infx.bench, video, serve]`.
@@ -44,7 +57,11 @@ includes the declared settings.
 
 The Python entrypoint validates the workload and GPU identity, prepares an
 explicitly selected model view, records the final command, then starts it.
-It adds no engine flags or performance environment defaults. The SGLang child
+It adds no engine flags or performance environment defaults. For Wan2.2 on
+SGLang it also requires `--flow-shift` and the checkpoint's `boundary_ratio` to
+equal the plan, because SGLang reads neither from a request. SGLang's Wan2.2
+requests set `x264_preset: ultrafast` and `output_compression: 63` (CRF 18),
+the libx264 encoding vLLM-Omni v0.32.0 delivers by default. The SGLang child
 checks the assigned UUID order before importing its engine. The previous B200
 `frozen-c124` four-clip JSON and YAML artifacts remain readable as historical evidence.
 The App shows their four-sample cells in History, below its ten-valid-sample chart
@@ -88,9 +105,30 @@ or production acceptance. Old unsuffixed bundles remain readable by the App but
 do not qualify this new native reuse path. Video append-only sweeps are unsupported;
 use the regular sweep so one server's complete workload stays together.
 
-After authorized reuse and merge, Merge Ingest validates source artifacts and
-sends `publish-video-results` with the original `source_run_id` to the App's media
-publisher. Mixed runs separately retain their existing LLM/AgentX ingest event.
+Merge Ingest also requires the merge commit's planned video rows to be the manifest's
+rows: the two sets of `recipe-fingerprint` values must be equal. A row added, dropped,
+or changed after the sweep, through its recipe, its config row or a shared block, fails
+the run before anything is published, as does a planned row without a fingerprint.
+Sweep the final commit and `/use` that run before merging.
+
+Run Sweep's `video-reuse-check` job runs the same validation before merge. On each push
+to a same-repository PR with an accepted `/use`, it plans the PR merge ref and validates
+the pinned run against it, so a video row changed after the sweep fails on the PR.
+`merge_with_reuse` waits for it. A merge with no push after `/use`, and a fork PR, are
+checked only by Merge Ingest. To clear a failure, remove and re-add the primary sweep
+label to sweep the current head, then `/use` the new run.
+
+After authorized reuse and merge, Merge Ingest uploads `video-publication-selection.json`
+as the `video-publication-selection` artifact. Its version 1 payload records
+`source_run_id`, `source_run_attempt`, `source_head_sha`, and for each deployment the
+selected artifact name and the SHA-256 of its raw `manifest.json` and of its `SHA256SUMS`,
+which lists every other file in the bundle. Deployments
+that succeeded in an earlier attempt keep that attempt's bundle unless superseded.
+The `publish-video-results` dispatch gives the App `source_run_id`, `merge_run_id`,
+and `selection_artifact_id`. An artifact cannot change after upload, so the App checks
+only that the selection artifact belongs to this Merge Ingest run on `main`, then
+publishes the bundles it names. Mixed runs
+separately retain their existing LLM/AgentX ingest event.
 Verify the downstream publication and playback before claiming delivery. The
 trusted main-branch `/use` handler must support video artifacts before accepting
 the first native video reuse request; a PR-local checker cannot bypass that gate.

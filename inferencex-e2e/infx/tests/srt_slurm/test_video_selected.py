@@ -25,9 +25,10 @@ ENV = {
 }
 
 
-def test_fairness_requires_disabled_cross_request_caches(native_fragment):
+@pytest.mark.parametrize("spec", ["h3-v2.yaml", "h3.yaml"])
+def test_fairness_requires_disabled_cross_request_caches(native_fragment, spec):
     raw, write = native_fragment
-    selected = {**ENV, "FRAMEWORK": "sglang", "VIDEO_SPEC": "h3-v2.yaml", "GPU_COUNT": "4"}
+    selected = {**ENV, "FRAMEWORK": "sglang", "VIDEO_SPEC": spec, "GPU_COUNT": "4"}
     with pytest.raises(ValueError, match="--disable-conditioning-cache"):
         video.prepare(write(), selected, root=ROOT)
 
@@ -96,7 +97,7 @@ def native_fragment(tmp_path):
             "env": {"VIDEO_SERVER_SERVICE": "video-server", "VIDEO_SERVER_PORT": "30283"},
         },
     }
-    path = tmp_path / "serving-client.yaml"
+    path = tmp_path / "agg-ulysses.yaml"
 
     def write(recipe=raw):
         path.write_text(yaml.safe_dump(recipe))
@@ -137,6 +138,7 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     )
     args = raw["services"][0]["args"]
     args[3:7] = [sys.executable, str(engine)]
+    args.append("--disable-conditioning-cache")
     raw["services"][0]["env"]["PYTHONPATH"] = os.pathsep.join(
         (str(video.video_package(ROOT)), str(ROOT))
     )
@@ -174,7 +176,7 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     spec = json.loads((output / "server/spec.json").read_text())
     expected_command = [sys.executable, str(engine), *server["args"][5:]]
     assert child["argv"] == expected_command[1:]
-    flags = dict(zip(child["argv"][1::2], child["argv"][2::2], strict=True))
+    flags = dict(zip(child["argv"][1:-1:2], child["argv"][2:-1:2], strict=True))
     assert flags["--tp-size"] == flags["--ulysses-degree"] == "2"
     assert launch["environment"]["MODEL_REVISION_IN_ENV"] == launch["model_revision"]
     assert launch["argv"] == expected_command == spec["baseline"]["argv"]
