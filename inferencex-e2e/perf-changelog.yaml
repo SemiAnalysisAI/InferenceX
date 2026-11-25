@@ -13401,3 +13401,13 @@
     - "NVFP4 target and indexer KV caches, FP8 draft KV, the DSpark draft as shipped, golden-curve synthetic acceptance. Disaggregated points move KV with NIXL over UCX and offload it to the Mooncake store (188.875 GB host segment per rank, dram-utilization 1.0). Dynamo 1.6.0.dev20261023 frontend with KV routing on every point. Aggregated: KV events on, 14400 s session-affinity TTL. Disaggregated: no router KV events or busy thresholds, soft session affinity (15 s TTL at 950, Dynamo's default elsewhere), router temperature 0, and prefill workers chosen by Dynamo's two-tier cost function (cache threshold 0.8 at 260 and 340, 1.0 at 590 and 950). Dynamo sidecar gRPC ports from 65001 on all six."
     - "Disaggregated workers leave numa-bind unset, as the aggregated points do, so vLLM's automatic NUMA binding applies (numactl --cpunodebind=N --preferred=N where its conditions hold) instead of --membind=N."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5153
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add TP4 concurrency 4, 16, 24, 32 and 48 to the MI355X vLLM curve, on the same image as the existing points. TP4 caps the running requests at 1, 2, 4, 6 and 8 for concurrency 4, 16, 24, 32 and 48 (32768-token prefill chunks at 4, 8192 elsewhere), so every decode step fits the 48-row mono decode launch; sessions past the cap queue."
+    - "The existing points (TP4 concurrency 1-2, TP2 concurrency 1-64, TP8 concurrency 1, DP2 concurrency 128-384) keep their recipes and do not rerun."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5158
+  append-only: true

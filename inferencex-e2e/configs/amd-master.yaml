@@ -972,10 +972,9 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
   scenarios:
     agentic-coding:
     - search-space:
-      # TP4 runs c1 and c2 only; TP2 covers concurrency 1-64. c128 and c192
-      # are excluded: c128 did not raise the scored metric at TP=2 (150,683
-      # against 151,896 tok/s/chip at c64).
-      - { gpus-per-worker: 4, tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2], srt-recipe: agentic.yaml }
+      # TP4 covers the interactivity end and TP2 the throughput end; concurrency
+      # 128 and above runs on the DP2 key below.
+      - { gpus-per-worker: 4, tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 16, 24, 32, 48], srt-recipe: agentic.yaml }
       - { gpus-per-worker: 2, tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
