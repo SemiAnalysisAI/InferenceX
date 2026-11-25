@@ -48,8 +48,8 @@ binding.
 - Pin the image by SHA256 digest, and use its real interpreter and architecture.
   The A100, H100, H200, and B200 SGLang rows, the B200, H200, H100 and A100 vLLM-Omni H3 rows, and
   the H100, H200, B200 and B300 vLLM-Omni Wan2.2 rows use the public CUDA amd64 image. The MI355X SGLang
-  row uses its ROCm MI35x build, and the MI355X vLLM-Omni row the public
-  `vllm/vllm-omni-rocm` amd64 image.
+  row uses its ROCm MI35x build, and the MI355X vLLM-Omni row AMD's public
+  `rocm/vllm-omni` amd64 image, tagged with the engine commit.
 
 Name the recipe `<model-prefix>/<engine>/<gpu>-<precision>/video/agg-<layout>.yaml`, which
 extends the [recipe naming convention](../inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#directory-and-filename-convention).

@@ -13443,3 +13443,10 @@
     - "DCP8 disaggregated with NIXL P/D transfer and session-affinity prefill routing: 1P5D at concurrency 44 (5 draft tokens) and concurrency 104 (4 draft tokens, adaptive 4096-token long-prefill threshold) with opt-in TP8 x DCP8 decode paths (K31_* env); hybrid DP4xTP8xDCP8 3P1D at concurrency 448 and 2P1D at concurrency 256 with 5 draft tokens and decode graphs in multiples of 6 up to 1536; prefix-match-unit 1408."
     - "Aggregated TP16/DCP16 at concurrency 1: 7 draft tokens with opt-in c=1 decode paths (K31_* env) and prefix-match-unit 768."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5149
+
+- config-keys:
+    - h3-bf16-mi355x-vllm-omni-video
+  scenario-type: [video-generation]
+  description:
+    - "Update the MI355X H3 vLLM-Omni deployment to vLLM-Omni v0.32.0 (commit 5917730a) on rocm/vllm-omni:5917730a4b02aedb44d374173cdc1b10484ccd52, pinned by its linux/amd64 digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
