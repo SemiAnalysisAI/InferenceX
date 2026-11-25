@@ -13300,6 +13300,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the TokenSpeed wheels from the November 19 nightly (lightseekorg/tokenspeed@8080ba138) to the November 24 nightly (lightseekorg/tokenspeed@c75135ef6), which includes lightseekorg/tokenspeed PR 3755, and tokenspeed-smg from 1.16.0.post20261118 to 1.16.0.post20261121."
+    - "Recipe, topology, concurrencies, speculative decoding and KV store settings are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5201
+
+- config-keys:
     - dsv41flash-fp4-gb300-tilert-agentic-dspark-dep
     - dsv41flash-fp4-gb300-tilert-agentic-dspark-tp
   scenario-type: [agentic-coding]
@@ -13333,6 +13341,108 @@
     - "Bump utils/srt-slurm from 2d9079c to cc9db05 (21 commits), which adds NVIDIA/srt-slurm#669: one bootstrap port per prefill engine and Router start after every worker's health check. The shared vllm-router.sh setup script now raises the worker parent shell's soft RLIMIT_MEMLOCK to its hard limit."
     - "Draft data type unchanged: the DSpark draft from the checkpoint's dspark/ subfolder runs as shipped, with MXFP8 attention and MLP projections, BF16 fc, norms and the shared target embedding and LM head, and an FP8 E4M3 draft KV cache."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5090
+
+- config-keys:
+    - minimaxm31flash-fp4-mi355x-atom-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "New MiniMax-M3.1-Flash AgentX config on MI355X with ATOM: rocm/atom-dev:nightly_202611200431 (ATOM 0.1.11.dev71+g17edc6157 and AITER a485545d3, built from ROCm/ATOM main; the atomesh frontend container_image pins its digest sha256:57c08153e332315b85c00bb3bb6c1dd71504950f7989be83915be456cfb6749f), serving amd/MiniMax-M3.1-Flash-Quark-MXFP4 as shipped: MXFP4 routed experts; MXFP8 attention, dense MLP and shared expert, the shared expert kept as its own MLP."
+    - "Points: TP4 at concurrency 1, 2, 4, 8, 16 and 32 on the GPU prefix cache, and at 48 with the LMCache 0.5.6.dev139+gf22dec28 CPU tier (200 GiB per rank, dram-utilization 0.58)."
+    - "Every point runs the NVFP4 KV and index caches (the checkpoint is QAT-trained for an NVFP4 KV cache), 128-token blocks, prefix caching, gpu-memory-utilization 0.85, max-num-batched-tokens 32768 (16384 at concurrency 32), max-num-seqs at twice the concurrency, and decode graphs at every batch size up to 8, then in steps of 2, 4, 8 and 16 up to max-num-seqs."
+    - "Concurrency 1 to 8 run ATOM's mono decode (on by default) for decode steps of up to 16 rows. From 16, decode indexer scoring splits across the TP ranks by context (ATOM_M3_INDEXER_CP=1), which mono decode does not run with. Concurrency 32 adds the prefill delayer (interval 8, target fill 0.05, stall 2 ticks). The LMCache point uses 256-token chunks."
+    - "All-reduce is not quantized: AITER_QUICK_REDUCE_QUANTIZATION is left unset, so tensor-parallel all-reduce runs in BF16. No online quantization and no shared-expert fusion. Throughput runs use the minimax-m3.1-flash__dspark__native__probabilistic-block golden AL (4.04 at seven draft tokens)."
+    - "Relevant ATOM changes in the image: ROCm/ATOM#3310 (NVFP4 KV and index caches), #3308 (mono decode with the MXFP8 shared expert), #3576 with ROCm/aiter#8285 (indexer CP over the NVFP4 caches) and #3591 (LMCache offload with an NVFP4 KV and a DSpark draft of its own dtype)."
+    - "Draft data types: the DSpark draft weights run as shipped, MXFP8 (1x32 UE8M0 scales) attention and MLP linears with BF16 fc, Markov and confidence heads, sharing the target's embedding and LM head; the draft path is the MiniMaxAI snapshot whose dspark/ files are byte-identical to the served checkpoint's. Its KV cache, in a pool of its own, is ATOM's default beside an NVFP4 target (BF16) up to concurrency 32; at 48, --spec-decode-kv-cache-dtype fp8 lowers it to FP8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5157
+
+- config-keys:
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp
+    - glm5.2-fp4-mi355x-atom-disagg-agentic-mtp-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update both entries from rocm/atom-dev:nightly_202611110332 (ATOM 920a200a3) to rocm/atom-dev:nightly_202611171508 (ATOM 5f3ae2b5b, Mooncake 206d634), pinned by digest, and move the AToMesh router from 920a200a3 to the same ATOM commit."
+    - "Add single-node TP8 points at concurrency 1 and 2 (new key glm5.2-fp4-mi355x-atom-disagg-agentic-mtp-agg). Both entries now use framework atom instead of atom-disagg, so the single-node and disaggregated ATOM points form one curve."
+    - "Drop 1P1D concurrency 128 and 1P3D concurrency 12 and 16. 1P1D 56, 72, 96 and 112, 1P2D 56 and 1P3D 24 remain."
+    - "The TP8 server runs ATOM's GLM-5.2 mono decode (ATOM_MONO_ENABLE=1) and the DSA indexer mono decode on FP8 KV and index caches, with MTP at three draft tokens and the golden acceptance 2.99. It admits 2 requests, captures graphs at 1 and 2, and uses max-num-batched-tokens 16384 and gpu-memory-utilization 0.95."
+    - "The disaggregated points keep their recipes and set ATOM_MONO_ENABLE=0 on prefill and decode, so their decode stays on the path the previous image ran."
+    - "The disaggregated workers raise RLIMIT_MEMLOCK's soft limit to the hard limit before they start (setup script raise-memlock-soft-limit.sh). Slurm sets the soft limit to 8 MiB, and the ionic driver charges every GPU KV registration against it before falling back to peer memory, so without the raise each Mooncake KV registration fails with ENOMEM."
+    - "Weights run as shipped in amd/GLM-5.2-MXFP4 with no online quantization, AITER quick reduce is unset, and the mono decode's all-reduce sums BF16 partials in FP32."
+    - "Relevant ATOM changes in the image: ROCm/ATOM#3266 (GLM-5.2 mono decode on the checkpoint's BF16 attention), #3350 (mono mailbox polling stalls during concurrent transfers), #3043 (FP8 indexer prefill logits and key gathers in bounded passes), #3097 and #3324 (shared Mooncake Store loads and restores) and #3147 (P/D decode admission bounded by pending receive KV bytes)."
+    - "Draft data types: no change. The MTP draft (model.layers.78) ships in BF16 and is excluded from the checkpoint's MXFP4 quantization, so ATOM loads it in BF16 at both the old and new commit; it shares the target's FP8 KV cache, as before."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5120
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-dep32-disagg
+    - kimik3.1-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the Kimi-K3.1-Pro GB300 Dynamo+vLLM AgentX dcp8-disagg, dep32-disagg and agg configs to vllm/vllm-openai:kimi-k31-mc-f4c9618 (vLLM 0.1.dev25380+gf4c96184b) with Dynamo ec06c09e72 (the source of the 1.8.0.dev20261119 nightly)."
+    - "DSpark uses the released draft Inferact/Kimi-K3.1-Pro-DSpark (revision e4e6e626), so synthetic acceptance follows its golden AL curve (4 draft tokens 3.46, 5 draft tokens 3.81, 7 draft tokens 4.16). prefix-match-unit is 1408 on the TP8/DCP8 and hybrid points, 768 on agg c1 and 512 on dep32-disagg."
+    - "Expert-parallel load balancing (enable-eplb, symm_mem copy, no redundant experts, re-placement every 3000 steps from a 1000-step window) on the dep32-disagg prefill and decode engines, the hybrid 3P1D prefill and decode engines, and the hybrid 2P1D prefill engines."
+    - "DEP32 1P1D at concurrency 960: one DEP32 prefill engine with an 80 GiB KV cache per rank replaces the two DEP16 prefill engines (same 16 nodes), 5 draft tokens (was 4) with decode graphs in multiples of 6 up to 192, DSpark sliding-window tail store and hits (VLLM_DFLASH_SWA_TAIL_STORE=1, VLLM_DFLASH_SWA_TAIL_HITS=1, VLLM_SWA_FINE_GRAINED_HITS=1), a 2048 MB sparse-indexer logits budget per call on prefill, and a Mooncake master that evicts 5% of the store at a time with a 0.98 high watermark (was 10% and 0.95)."
+    - "Hybrid 3P1D at concurrency 448 and 2P1D at concurrency 256: 5 draft tokens (3P1D was 4, 2P1D was 6) with decode graphs in multiples of 6 up to 1536."
+    - "TP8/DCP8 1P5D: concurrency 44 with 5 draft tokens (was 4), and concurrency 104 with 4 draft tokens and an adaptive 4096-token long-prefill threshold on the prefill engine; both decode engines turn on the image's opt-in TP8 x DCP8 decode paths (K31_* env). They replace 1P5D at 44 and 56 and 1P3D at 56."
+    - "Aggregated TP16/DCP16 at concurrency 1: 7 draft tokens with the image's opt-in c=1 decode paths (K31_* env) and prefix-match-unit 768."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5109
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-cu135-agg
+    - minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-cu135-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add six MiniMax-M3.1-Flash NVFP4 GB300 Dynamo vLLM AgentX points on two new keys with DSpark draft length 7: aggregated TP8 over two nodes at concurrency 4 and TP4 at 18; disaggregated DEP4 prefill and DEP16 decode with the Mooncake store at 1P1D concurrency 260 and 340, 2P1D at 590 and 4P1D at 950. The published minimaxm31flash-fp4-gb300-dynamo-vllm-agentic-dspark-agg and -disagg keys are unchanged and not rerun."
+    - "Image vllm/vllm-openai:minimax-m31-flash-arm64-cu135-ddd43a5@sha256:af9226f5a9575088611050e71bf7666d90e4faac41dd8166fb9d63cfa27f88c8 (linux/arm64), built from a public vLLM fork branch, commit ddd43a54d91bd686a46e3cf42e3e50a9dbf09917 (the image's OCI revision label), by docker/Dockerfile.m3p1-gb300 over vllm/vllm-openai:cu135-nightly-153dc046462c4724a9a4eb393cadd60169ed943c (arm64 sha256:18dfff3057619a1353d939c0030e9371b71fdf7519951bfe67eb9965c6b513b9). It adds the vLLM files of that branch (34 commits on 153dc046); vllm-project/DeepGEMM 196f3387 MegaMoE headers (deepseek-ai/DeepGEMM#451; vllm-project/vllm#67181 moves vLLM's pin to it) and vllm-project/MSA#49 (head 56bf386f) over the pinned MSA 14437868 in the vendored kernel packages; and Mooncake 0.3.13.post1+hbm, whose store can mount a GPU-memory segment, from the last layer of vllm/vllm-openai:cu134-arm64-1107-mdev."
+    - "The branch's engine features are opt-in and set per role in agg-cu135-variants.yaml and disagg-cu135-variants.yaml. Disaggregated: Mooncake store HBM pool and size classes, the drafter KV tail and a separate drafter KV block pool, MSA MXFP8 o_proj input, row-block NVFP4 MegaMoE staging, the fused QKV+indexer epilogue at decode sizes, MegaMoE fused routing and EPLB on decode, and the vllm-project/vllm#57987 background NIXL receiver on decode; at 260 and 340 decode also takes the MXFP8 qkv input from the input norm, the small-M epilogue tile, cold-chain MXFP8 GEMM tactic ranking, split top-p in one launch and DP vocabulary-sharded LM heads. Aggregated: the vllm-project/vllm#65483 low-batch decode (decode_backend latency_specialized), per-token NVFP4 quantization without the scale zero fill, the vocabulary-sharded DSpark Markov sampler and split top-p; TP4 adds the TP-split DSpark context fc, draft norms that write their linear's MXFP8 input and the fused attention front, and TP8 the padded Q8KV4 prefill, the TP8 low-batch FFN and attention kernels and clustered sparse-attention CTAs."
+    - "NVFP4 target and indexer KV caches, FP8 draft KV, the DSpark draft as shipped, golden-curve synthetic acceptance. Disaggregated points move KV with NIXL over UCX and offload it to the Mooncake store (188.875 GB host segment per rank, dram-utilization 1.0). Dynamo 1.6.0.dev20261023 frontend with KV routing on every point. Aggregated: KV events on, 14400 s session-affinity TTL. Disaggregated: no router KV events or busy thresholds, soft session affinity (15 s TTL at 950, Dynamo's default elsewhere), router temperature 0, and prefill workers chosen by Dynamo's two-tier cost function (cache threshold 0.8 at 260 and 340, 1.0 at 590 and 950). Dynamo sidecar gRPC ports from 65001 on all six."
+    - "Disaggregated workers leave numa-bind unset, as the aggregated points do, so vLLM's automatic NUMA binding applies (numactl --cpunodebind=N --preferred=N where its conditions hold) instead of --membind=N."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5153
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-linker-d1115
+  scenario-type: [agentic-coding]
+  description:
+    - "Remove the four 150 GB Mooncake stores from the infra node and rerun all five points (1P at concurrency 288, 320 and 352, 2P at 448 and 480). The infra node hosts no inference worker, so MODELS.md gives it no KV offload DRAM. The linker pool is now the 190 GB prefill segments and the decode-node stores only."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5226
+
+- config-keys:
+    - musespark-fp4-mi355x-tokenspeed-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open MXFP4 MI355X AgentX on TokenSpeed with the DFlash2 draft as it ships (BF16, seven draft tokens), FP8 KV cache, 1M context and 8K prefill chunks. Every point runs startup requests."
+    - "Attention TP8 with MoE TP8/EP1 and decode-monokernel on, no host KV store: running-request cap 1 at concurrency 1; cap 2 with prefill/decode interval 384 at 2, 4, 8, 10 and 16; cap 1 with interval 384 at 6; cap 8 with interval 256 and at most 1 back-to-back prefill round at 28, owing the interval's decode rounds only while at least 5 requests are ready to decode (`--prefill-interval-min-decoding`); stream interval 50, 40 and 20 at 6, 10 and 28."
+    - "Attention TP4 with EP4 on four GPUs at concurrency 28, 36 and 40: regular decode path, 24K prefill chunks, owned-row attention output by all-to-all, short-prefill-first, running-request caps 13, 20 and 80, prefill/decode interval 96, 80 and 48 with at most 1 back-to-back prefill round and `--prefill-interval-min-decoding` 7, 6 and 2, a 360 GB host KV store per GPU, the QKV projection as an FP8 GEMM in decode (dense-fp8-small-m qkv) and stream interval 20."
+    - "Pin the TokenSpeed 0.1.1.post20261125, ROCm 7.2 kernel 0.1.5.post20261125, kernel-amd 0.1.4.post20261125 and engine 0.1.1.post20261125 wheels by release URL and SHA256, scheduler 0.1.58, tokenspeed-smg 1.16.0.post20261121, the runner image by digest, and the checkpoint and DFlash2 draft revisions. The recipe uses tokenspeed-nightly-rocm.sh, which keeps the image's ROCm torch."
+    - "Select golden DFlash2 acceptance and the greedy sampler for TokenSpeed DFLASH throughput; evals verify for real with the triton sampler and speculative sampling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5211
+
+- config-keys:
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+    - kimik3.1-fp4-gb300-dynamo-sglang-agentic-dflash-agg-mk
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update SGLang image from lmsysorg/sglang:dev-kimi-k31-pro to lmsysorg/sglang:nightly-dev-cu13-20261120-03fde9cc (SGLang 0.0.0.dev1+g03fde9cc3, Dynamo 1.8.0.dev20261119 from the image)."
+    - "Aggregated megakernel points (c2, c4): set hybrid-cache-checkpoints-level 3, restoring the published per-chunk, uncapped KDA state checkpoints that the new SGLang default (level 2) drops."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5186
+
+- config-keys:
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep32-disagg
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-agg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add Kimi-K3.1-Pro FP4/FP8-KV AgentX recipes on GB300 behind llm-d-router v1.0.0 (llmd-vllm) on vllm/vllm-openai:kimi-k31-mc-f4c9618 (vLLM 0.1.dev25380+gf4c96184b) with embedded Mooncake RDMA prefix-cache sharing (4 GB local buffer, 160 GB segment) and released DSpark draft Inferact/Kimi-K3.1-Pro-DSpark (revision e4e6e626; golden AL curve: 4 draft tokens 3.46, 5 draft tokens 3.81, 7 draft tokens 4.16)."
+    - "Expert-parallel load balancing (enable-eplb, symm_mem copy, no redundant experts, re-placement every 3000 steps from a 1000-step window) on the DEP32 prefill and decode engines, the hybrid 3P1D prefill and decode engines, and the hybrid 2P1D prefill engines."
+    - "DEP32 1P1D disaggregated at concurrency 960: one external-LB DEP32 prefill engine with 80 GiB KV cache per rank and one external-LB DEP32 decode engine (16 nodes total, head-node client), 5 draft tokens with decode graphs in multiples of 6 up to 192, prefix-match-unit 512, DSpark sliding-window tail store and hits (VLLM_DFLASH_SWA_TAIL_STORE=1, VLLM_DFLASH_SWA_TAIL_HITS=1, VLLM_SWA_FINE_GRAINED_HITS=1), 2048 MB sparse-indexer logits budget on prefill, Mooncake master eviction 0.98/0.05, NIXL P/D transfer, and session-affinity prefill routing (1s TTL)."
+    - "DCP8 disaggregated with NIXL P/D transfer and session-affinity prefill routing: 1P5D at concurrency 44 (5 draft tokens) and concurrency 104 (4 draft tokens, adaptive 4096-token long-prefill threshold) with opt-in TP8 x DCP8 decode paths (K31_* env); hybrid DP4xTP8xDCP8 3P1D at concurrency 448 and 2P1D at concurrency 256 with 5 draft tokens and decode graphs in multiples of 6 up to 1536; prefix-match-unit 1408."
+    - "Aggregated TP16/DCP16 at concurrency 1: 7 draft tokens with opt-in c=1 decode paths (K31_* env) and prefix-match-unit 768."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5149
 
 - config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark

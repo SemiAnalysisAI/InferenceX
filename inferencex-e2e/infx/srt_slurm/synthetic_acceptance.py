@@ -57,15 +57,21 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     if engine == "tokenspeed":
         if "speculative-config" in args:
             raise ValueError(
-                "TokenSpeed AgentX requires explicit MTP or DSPARK flags, not speculative-config"
+                "TokenSpeed AgentX requires explicit MTP, DFLASH or DSPARK flags, not speculative-config"
             )
         algorithm = str(args.get("speculative-algorithm", "")).lower()
         if not algorithm:
             return {}
         if algorithm == "mtp":
             return {"method": "mtp", "num_speculative_tokens": args.get("speculative-num-steps")}
+        if algorithm == "dflash":
+            return {
+                "method": "dflash",
+                "num_speculative_tokens": args.get("speculative-num-steps"),
+                "model": args.get("speculative-draft-model-path", ""),
+            }
         if algorithm != "dspark":
-            raise ValueError("TokenSpeed AgentX supports MTP and DSPARK speculation")
+            raise ValueError("TokenSpeed AgentX supports MTP, DFLASH and DSPARK speculation")
         return {
             "method": "dspark",
             "num_speculative_tokens": args.get("speculative-num-steps"),
@@ -340,8 +346,12 @@ def build_overrides(
             else:
                 if key in args:
                     overrides += ["--unset", f"{prefix}.args.{key}"]
+                if worker_spec.get("method") == "dflash":
+                    # Only the triton sampler reads the DFlash2 draft distribution.
+                    overrides += ["--set", f'{prefix}.args.sampling-backend="triton"']
+                    overrides += ["--set", f"{prefix}.args.enable-speculative-sampling=true"]
                 # DSPARK keeps the recipe's verification, which depends on the platform.
-                if worker_spec.get("method") == "mtp":
+                elif worker_spec.get("method") == "mtp":
                     overrides += ["--set", f'{prefix}.args.sampling-backend="flashinfer"']
         elif worker_engine == "atom":
             key = "spec-decode-acceptance-length"
