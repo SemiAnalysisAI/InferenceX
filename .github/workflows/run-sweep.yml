@@ -11,6 +11,7 @@ concurrency:
           github.event.label.name != 'all-evals' &&
           github.event.label.name != 'evals-only' &&
           github.event.label.name != 'agentx-fast' &&
+          github.event.label.name != 'evals-last' &&
           github.run_id ||
           'active'
         }}
@@ -49,7 +50,8 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast'
+              github.event.label.name == 'agentx-fast' ||
+              github.event.label.name == 'evals-last'
             )
         outputs:
             skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
@@ -208,7 +210,8 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast'
+              github.event.label.name == 'agentx-fast' ||
+              github.event.label.name == 'evals-last'
             )
         outputs:
             tooling-ref: ${{ steps.tooling.outputs.result }}
@@ -628,10 +631,45 @@ jobs:
             agentx-fast: ${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}
 
     sweep-evals:
-        # Throughput runs go first; evals wait for them to finish (any result).
+        # Evals start alongside throughput. With the evals-last label this job is skipped and
+        # sweep-evals-last runs the same matrix after throughput. The other eval jobs pair up
+        # the same way, because needs cannot depend on a label.
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              !contains(github.event.pull_request.labels.*.name, 'evals-last') &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).evals) != 'null'
+            }}
+        uses: $/.github/workflows/benchmark-tmpl.yml
+        name: eval /
+        strategy: &sweep-evals-strategy
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
+            matrix:
+                config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
+        secrets: &sweep-evals-secrets
+            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+        with: &sweep-evals-with
+            config: ${{ toJSON(matrix.config) }}
+            pr-number: *pr-number
+            klaud-run: *klaud-run
+            runner: ${{ matrix.config.runner }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
+            eval-suite: ${{ matrix.config['eval-suite'] || '' }}
+            run-eval: true
+            eval-only: true
+
+    sweep-evals-last:
+        # With evals-last, throughput runs go first; evals wait for them to finish (any result).
         # Under evals-only the throughput jobs are skipped, so evals start right away.
         # Agentic evals also need al-gate-prompts, a short job that runs only when they do.
-        needs: &eval-needs
+        needs: &evals-last-needs
             [
                 setup,
                 canary-select,
@@ -649,6 +687,7 @@ jobs:
         if: >-
             ${{
               !cancelled() &&
+              contains(github.event.pull_request.labels.*.name, 'evals-last') &&
               needs.setup.result == 'success' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -657,30 +696,17 @@ jobs:
             }}
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: eval /
-        strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
-            matrix:
-                config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
-        secrets:
-            INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-        with:
-            config: ${{ toJSON(matrix.config) }}
-            pr-number: *pr-number
-            klaud-run: *klaud-run
-            runner: ${{ matrix.config.runner }}
-            queue-token: ${{ matrix.config['queue-token'] }}
-            dp-attn: ${{ matrix.config.dp-attn }}
-            eval-framework: ${{ matrix.config['eval-framework'] || 'lm-eval' }}
-            eval-suite: ${{ matrix.config['eval-suite'] || '' }}
-            run-eval: true
-            eval-only: true
+        strategy: *sweep-evals-strategy
+        secrets: *sweep-evals-secrets
+        with: *sweep-evals-with
 
     sweep-agentic-evals:
         # The acceptance gate is report-only: the evals run whether or not its prompts were prepared.
-        needs: *eval-needs
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, al-gate-prompts]
         if: >-
             ${{
               !cancelled() &&
+              !contains(github.event.pull_request.labels.*.name, 'evals-last') &&
               needs.setup.result == 'success' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -689,13 +715,13 @@ jobs:
             }}
         uses: $/.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
-        strategy:
+        strategy: &sweep-agentic-evals-strategy
             fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
-        secrets:
+        secrets: &sweep-agentic-evals-secrets
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-        with:
+        with: &sweep-agentic-evals-with
             config: ${{ toJSON(matrix.config) }}
             pr-number: *pr-number
             klaud-run: *klaud-run
@@ -709,11 +735,30 @@ jobs:
             eval-only: true
             scenario-type: agentic-coding
 
-    sweep-multi-node-evals:
-        needs: *eval-needs
+    sweep-agentic-evals-last:
+        needs: *evals-last-needs
         if: >-
             ${{
               !cancelled() &&
+              contains(github.event.pull_request.labels.*.name, 'evals-last') &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != 'null'
+            }}
+        uses: $/.github/workflows/benchmark-tmpl.yml
+        name: agentic eval /
+        strategy: *sweep-agentic-evals-strategy
+        secrets: *sweep-agentic-evals-secrets
+        with: *sweep-agentic-evals-with
+
+    sweep-multi-node-evals:
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              !contains(github.event.pull_request.labels.*.name, 'evals-last') &&
               needs.setup.result == 'success' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -722,13 +767,13 @@ jobs:
             }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
-        strategy:
+        strategy: &sweep-multi-node-evals-strategy
             fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
-        secrets:
+        secrets: &sweep-multi-node-evals-secrets
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-        with:
+        with: &sweep-multi-node-evals-with
             config: ${{ toJSON(matrix.config) }}
             pr-number: *pr-number
             klaud-run: *klaud-run
@@ -742,12 +787,31 @@ jobs:
             eval-only: true
             eval-conc: ${{ (matrix.config['eval-framework'] || 'lm-eval') == 'lm-eval' && matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
-    sweep-multi-node-agentic-evals:
-        # The acceptance gate is report-only: the evals run whether or not its prompts were prepared.
-        needs: *eval-needs
+    sweep-multi-node-evals-last:
+        needs: *evals-last-needs
         if: >-
             ${{
               !cancelled() &&
+              contains(github.event.pull_request.labels.*.name, 'evals-last') &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multinode_evals) != 'null'
+            }}
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        name: multi-node eval /
+        strategy: *sweep-multi-node-evals-strategy
+        secrets: *sweep-multi-node-evals-secrets
+        with: *sweep-multi-node-evals-with
+
+    sweep-multi-node-agentic-evals:
+        # The acceptance gate is report-only: the evals run whether or not its prompts were prepared.
+        needs: [setup, canary-select, canary-sweep, canary-multi-node-sweep, al-gate-prompts]
+        if: >-
+            ${{
+              !cancelled() &&
+              !contains(github.event.pull_request.labels.*.name, 'evals-last') &&
               needs.setup.result == 'success' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
               (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
@@ -756,13 +820,13 @@ jobs:
             }}
         uses: $/.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic eval /
-        strategy:
+        strategy: &sweep-multi-node-agentic-evals-strategy
             fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals }}
-        secrets:
+        secrets: &sweep-multi-node-agentic-evals-secrets
             INFERENCEX_OFFICIAL_RO_HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
-        with:
+        with: &sweep-multi-node-agentic-evals-with
             config: ${{ toJSON(matrix.config) }}
             pr-number: *pr-number
             klaud-run: *klaud-run
@@ -778,6 +842,24 @@ jobs:
             eval-only: true
             eval-conc: ${{ matrix.config['eval-conc'] }}
             scenario-type: agentic-coding
+
+    sweep-multi-node-agentic-evals-last:
+        needs: *evals-last-needs
+        if: >-
+            ${{
+              !cancelled() &&
+              contains(github.event.pull_request.labels.*.name, 'evals-last') &&
+              needs.setup.result == 'success' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              (needs.canary-multi-node-sweep.result == 'success' || needs.canary-multi-node-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).multinode_agentic_evals) != 'null'
+            }}
+        uses: $/.github/workflows/benchmark-multinode-tmpl.yml
+        name: multi-node agentic eval /
+        strategy: *sweep-multi-node-agentic-evals-strategy
+        secrets: *sweep-multi-node-agentic-evals-secrets
+        with: *sweep-multi-node-agentic-evals-with
 
     collect-results:
         name: collect-results
@@ -816,8 +898,33 @@ jobs:
 
     collect-evals:
         name: collect-evals
-        needs: [sweep-evals, sweep-agentic-evals, sweep-multi-node-evals, sweep-multi-node-agentic-evals, setup]
-        if: ${{ always() && needs.setup.result != 'skipped' && (needs.sweep-evals.result != 'skipped' || needs.sweep-agentic-evals.result != 'skipped' || needs.sweep-multi-node-evals.result != 'skipped' || needs.sweep-multi-node-agentic-evals.result != 'skipped') }}
+        needs:
+            [
+                sweep-evals,
+                sweep-agentic-evals,
+                sweep-multi-node-evals,
+                sweep-multi-node-agentic-evals,
+                sweep-evals-last,
+                sweep-agentic-evals-last,
+                sweep-multi-node-evals-last,
+                sweep-multi-node-agentic-evals-last,
+                setup,
+            ]
+        if: >-
+            ${{
+              always() &&
+              needs.setup.result != 'skipped' &&
+              (
+                needs.sweep-evals.result != 'skipped' ||
+                needs.sweep-agentic-evals.result != 'skipped' ||
+                needs.sweep-multi-node-evals.result != 'skipped' ||
+                needs.sweep-multi-node-agentic-evals.result != 'skipped' ||
+                needs.sweep-evals-last.result != 'skipped' ||
+                needs.sweep-agentic-evals-last.result != 'skipped' ||
+                needs.sweep-multi-node-evals-last.result != 'skipped' ||
+                needs.sweep-multi-node-agentic-evals-last.result != 'skipped'
+              )
+            }}
         uses: $/.github/workflows/collect-evals.yml
         with:
             tooling-ref: ${{ needs.setup.outputs.tooling-ref }}
@@ -840,6 +947,10 @@ jobs:
                 sweep-agentic-evals,
                 sweep-multi-node-evals,
                 sweep-multi-node-agentic-evals,
+                sweep-evals-last,
+                sweep-agentic-evals-last,
+                sweep-multi-node-evals-last,
+                sweep-multi-node-agentic-evals-last,
             ]
         if: ${{ !cancelled() && needs.setup.result == 'success' }}
         permissions:
@@ -934,7 +1045,20 @@ jobs:
     calc-success-rate:
         name: calc-success-rate
         # Wait for evals so in-flight eval jobs are not counted as failures.
-        needs: [setup, collect-results, sweep-video, sweep-evals, sweep-agentic-evals, sweep-multi-node-evals, sweep-multi-node-agentic-evals]
+        needs:
+            [
+                setup,
+                collect-results,
+                sweep-video,
+                sweep-evals,
+                sweep-agentic-evals,
+                sweep-multi-node-evals,
+                sweep-multi-node-agentic-evals,
+                sweep-evals-last,
+                sweep-agentic-evals-last,
+                sweep-multi-node-evals-last,
+                sweep-multi-node-agentic-evals-last,
+            ]
         if: ${{ always() && needs.collect-results.result != 'skipped'}}
         runs-on: ubuntu-latest
         permissions:
@@ -1032,7 +1156,8 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'agentx-fast'
+              github.event.label.name == 'agentx-fast' ||
+              github.event.label.name == 'evals-last'
             )
         runs-on: ubuntu-latest
         concurrency:

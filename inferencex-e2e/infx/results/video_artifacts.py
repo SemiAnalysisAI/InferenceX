@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path, PurePosixPath
 
-from infx.bench.video import read_object
+from infx.bench.video import read_object, write_json
 
 VIDEO_ARTIFACT = re.compile(r"h3-results-([0-9]+)-([0-9]+)-([0-9a-f]{64})")
 # Released plan hash per (spec file, set). A result publishes only when it ran one of these
@@ -19,9 +19,10 @@ RELEASED_PLANS = {
 }  # fmt: skip
 
 
-def _inventory(root: Path) -> dict[str, str]:
+def _inventory(root: Path) -> tuple[dict[str, str], str]:
+    sums = (root / "SHA256SUMS").read_bytes()
     expected = {}
-    for line in (root / "SHA256SUMS").read_text().splitlines():
+    for line in sums.decode().splitlines():
         match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
         if not match or match[2] in expected:
             raise ValueError(f"{root.name}: malformed or duplicate checksum entry")
@@ -37,7 +38,7 @@ def _inventory(root: Path) -> dict[str, str]:
                 ).hexdigest()
     if actual != expected:
         raise ValueError(f"{root.name}: checksum mismatch or incomplete inventory")
-    return actual
+    return actual, hashlib.sha256(sums).hexdigest()
 
 
 def _reference(inventory: dict[str, str], reference: dict, *, prefix: str = "") -> str:
@@ -56,14 +57,46 @@ def _reference(inventory: dict[str, str], reference: dict, *, prefix: str = "") 
     return relative
 
 
+def _by_fingerprint(rows: list[dict], kind: str) -> dict[str, dict]:
+    indexed = {}
+    for row in rows:
+        fingerprint = row.get("recipe-fingerprint", "")
+        if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+            raise ValueError(f"{kind} video deployment is missing its recipe fingerprint")
+        if fingerprint in indexed:
+            raise ValueError(f"duplicate {kind} video deployment")
+        indexed[fingerprint] = row
+    return indexed
+
+
+def require_merged_rows(swept: dict[str, dict], merged: dict[str, dict]) -> None:
+    # A fingerprint digests the row and its bound recipe, so equal sets mean the merge commit
+    # runs what the sweep ran.
+    if merged.keys() == swept.keys():
+        return
+
+    def only(rows: dict[str, dict], others: dict[str, dict]) -> list[str]:
+        return sorted(
+            f"{row.get('exp-name')} {row.get('framework')} on {row.get('runner')} ({key[:12]})"
+            for key, row in rows.items()
+            if key not in others
+        )
+
+    raise ValueError(
+        "merged video matrix differs from the reused sweep: "
+        f"merged but not swept={only(merged, swept)}, swept but not merged={only(swept, merged)}"
+    )
+
+
 def validate_video_artifacts(
     root: Path,
     *,
     run_id: str | None = None,
     run_attempt: str | None = None,
     head_sha: str | None = None,
-) -> int:
-    """Return the deployment count; reject missing rows, cells, provenance or sealed files.
+    merged_plan: Path | None = None,
+) -> dict:
+    """Return the publication selection; reject missing rows, cells, provenance or sealed files.
 
     The workflow supplies trusted run/head identity. ``git_commit`` remains the
     actual executed checkout, which can be the PR merge commit rather than its head.
@@ -83,14 +116,10 @@ def validate_video_artifacts(
     rows = sweep["matrix"].get("single_node", {}).get("video", [])
     if not rows:
         raise ValueError("video sweep manifest has no selected video deployments")
-    expected = {}
-    for row in rows:
-        fingerprint = row.get("recipe-fingerprint", "")
-        if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
-            raise ValueError("selected video deployment is missing its recipe fingerprint")
-        if fingerprint in expected:
-            raise ValueError("duplicate selected video deployment")
-        expected[fingerprint] = row
+    expected = _by_fingerprint(rows, "selected")
+    if merged_plan is not None:
+        merged = read_object(merged_plan).get("single_node", {}).get("video", [])
+        require_merged_rows(expected, _by_fingerprint(merged, "merged"))
     newest = {}
     for path in root.glob(f"h3-results-{source_run}-*"):
         match = VIDEO_ARTIFACT.fullmatch(path.name)
@@ -103,11 +132,12 @@ def validate_video_artifacts(
         raise ValueError(
             f"video deployment coverage mismatch: missing={sorted(expected.keys() - newest.keys())}, extra={sorted(newest.keys() - expected.keys())}"
         )
-    for fingerprint, row in expected.items():
+    selected = []
+    for fingerprint, row in sorted(expected.items()):
         bundle_attempt = newest[fingerprint]
         name = f"h3-results-{source_run}-{bundle_attempt}-{fingerprint}"
         bundle = root / name
-        inventory = _inventory(bundle)
+        inventory, sums = _inventory(bundle)
         manifest, ci, matrix = (
             read_object(bundle / filename)
             for filename in ("manifest.json", "ci.json", "serving-smoke.json")
@@ -241,7 +271,16 @@ def validate_video_artifacts(
                 or len(matrix.get("gpu_uuids", [])) != row["gpus"]
             ):
                 raise ValueError(f"{name}: selected engine or GPU count mismatch")
-    return len(expected)
+        selected.append(
+            {"name": name, "manifest_sha256": inventory["manifest.json"], "sha256sums_sha256": sums}
+        )
+    return {
+        "version": 1,
+        "source_run_id": source_run,
+        "source_run_attempt": attempt,
+        "source_head_sha": head,
+        "artifacts": selected,
+    }
 
 
 def main() -> None:
@@ -250,17 +289,28 @@ def main() -> None:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--run-attempt", required=True)
     parser.add_argument("--head-sha", required=True)
+    parser.add_argument(
+        "--merged-plan",
+        type=Path,
+        help="Merge commit's plan; its video rows must be the swept rows",
+    )
+    parser.add_argument(
+        "--selection-output", type=Path, help="Write the validated publication selection"
+    )
     args = parser.parse_args()
     try:
-        count = validate_video_artifacts(
+        selection = validate_video_artifacts(
             args.artifacts_dir,
             run_id=args.run_id,
             run_attempt=args.run_attempt,
             head_sha=args.head_sha,
+            merged_plan=args.merged_plan,
         )
+        if args.selection_output is not None:
+            write_json(args.selection_output, selection)
     except (OSError, KeyError, TypeError, ValueError) as error:
         parser.exit(1, f"Video sweep artifact validation failed: {error}\n")
-    print(f"Validated {count} complete native video deployment(s).")
+    print(f"Validated {len(selection['artifacts'])} complete native video deployment(s).")
 
 
 if __name__ == "__main__":
