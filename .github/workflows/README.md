@@ -177,7 +177,10 @@ All primary labels run the full selected concurrency matrix. Modifiers require
 a primary label: `all-evals` expands eligible evals while retaining throughput;
 `evals-only` suppresses throughput; `agentx-fast` uses one extra AgentX warmup
 request after mandatory primers and a 20-minute profile, leaving fixed-sequence
-and eval settings canonical. `all-evals`/`evals-only` reject changelog additions
+and eval settings canonical; `evals-last` holds the eval jobs until every
+throughput job has finished with any result, where by default they start
+alongside throughput. `evals-last` applies to same-repository sweeps only and
+its runs stay reusable. `all-evals`/`evals-only` reject changelog additions
 with `append-only: true` or `no-evals: true`. Do not reuse an `evals-only` or
 `agentx-fast` run. For lowest-concurrency smoke, dispatch `e2e-tests.yml` with
 `trim-conc: true`; no PR label trims concurrency.
@@ -187,15 +190,22 @@ does not dispatch a sweep. Changing a recognized primary or modifier label
 cancels the active sweep; another starts only if a primary label remains.
 To retrigger an already-labeled PR, remove and reapply its primary label.
 Merge conflicts block sweeps. Queue priority comes from the PR diff and the
-PR description's checklist, not priority labels. A PR gets a small bonus when
+PR description's checklist, not priority labels. When
+`PRIORITY_SCHEDULER_ENABLED` is true, each sweep's setup job uploads a
+`scheduling-facts.json` artifact. It keys every queued job by the token in its
+`ci-job-<token>` runner label and lists the facts the classifier credited
+(framework, model prefix, precision, speculative decoding, multi-node, AgentX,
+eval-only and node count), plus whether the PR is patchwork and whether its
+checklist is complete. The priority scheduler scores jobs from those facts.
+Its weights are not kept in this repository. A checklist is complete when
 every item under its `Checklist` heading is checked, except conditional items
 ("If ...", "Before merging ...") that do not apply yet. The checklist is read
 when the sweep starts, so later edits count from the next sweep. Trusted
 external sweeps classify the approved PR diff the same way. Manual
 `e2e-tests.yml` and `profile.yml` dispatches of a revision not yet on `main`
-classify its diff from the merge
-base only for patchwork, so engine-patching branches still run last. Klaud runs
-and revisions already on `main` keep unclassified scoring.
+classify its diff from the merge base only for patchwork, so engine-patching
+branches are still flagged. Klaud runs and revisions already on `main` stay
+unclassified and report every fact of each job.
 
 Patchwork classification requires concrete evidence of engine/runtime source
 changes, a local engine build, or a fork/image containing unmerged changes.
@@ -308,7 +318,9 @@ one was applied. A PR without a primary label can instead stage only the run
 pinned by its latest authorized `/use <run_id>`, after the same validation that
 acknowledges the request. It posts a staging comment, or a rejection comment
 when neither applies. Comments do not trigger or cancel GPU sweeps. Later commits
-skip a new sweep after changelog/matrix and source-run validation. Merge-time
+skip a new sweep after changelog/matrix and source-run validation. When the PR
+plans video rows, `video-reuse-check` also runs Merge Ingest's video validation of
+the pinned run against the PR merge ref. Merge-time
 validation remains authoritative; an acknowledgment cannot override expired or
 invalid artifacts. Reuse is rejected while the PR currently carries
 `evals-only` or `agentx-fast`, checked when `/use` is acknowledged and at merge
@@ -347,7 +359,9 @@ The app downloads source artifacts, keeps the newest upload for each exact
 artifact name, and ingests them with changelog metadata from the merge run. The
 normal ingestion code skips failed benchmark rows. Benchmark rows and public
 links retain source-run provenance. Source coverage is authoritative, so later
-matrix/eval policy changes do not invalidate reuse.
+matrix/eval policy changes do not invalidate reuse. Video is the exception: Merge
+Ingest publishes only when the merge commit's video rows have the recipe
+fingerprints of the reused run's `video-sweep-manifest`.
 
 When the app's ingest finishes, on success or failure, it sends
 `ingest-results-completed` back with per-run counts (benchmark, eval, trace and

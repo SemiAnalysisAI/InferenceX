@@ -14,6 +14,7 @@ import yaml
 from infx.matrix import changed
 from infx.matrix.revision import Revision
 from infx.tests.srt_recipes import (
+    VIDEO_RECIPE,
     fixed_seq_entry,
     single_node_fragment,
     video_entry,
@@ -24,12 +25,13 @@ from infx.tests.srt_recipes import (
 
 ROOT = Path(__file__).resolve().parents[3]
 RECIPES = "benchmarks/single_node/srt-slurm-recipes/fixture"
+UNBOUND_RECIPE = "video/agg-ulysses.yaml"
 
 
 def write(project: Path, master: dict, edited: dict, video: dict) -> None:
     (project / "configs/nvidia-master.yaml").write_text(yaml.safe_dump(master))
     (project / RECIPES / "edited.yaml").write_text(yaml.safe_dump(edited))
-    (project / RECIPES / "video.yaml").write_text(yaml.safe_dump(video))
+    (project / RECIPES / VIDEO_RECIPE).write_text(yaml.safe_dump(video))
 
 
 def git(root: Path, *args: str) -> str:
@@ -41,7 +43,7 @@ def git(root: Path, *args: str) -> str:
 def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, capsys):
     project = tmp_path / "inferencex-e2e"
     shutil.copytree(ROOT / "infx", project / "infx", ignore=shutil.ignore_patterns("__pycache__"))
-    (project / RECIPES).mkdir(parents=True)
+    (project / RECIPES / "video").mkdir(parents=True)
     write_shared_blocks(project)
     write_video_specs(tmp_path)
     (project / "configs/amd-master.yaml").write_text("{}\n")
@@ -53,13 +55,13 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
     (project / RECIPES / "stable.yaml").write_text(yaml.safe_dump(single_node_fragment(4)))
     unbound = video_fragment()
     del unbound["services"][0]["env"]["VIDEO_RUNTIME_REVISION"]
-    (project / RECIPES / "unbound.yaml").write_text(yaml.safe_dump(unbound))
+    (project / RECIPES / UNBOUND_RECIPE).write_text(yaml.safe_dump(unbound))
     write(project, {
         "edited": fixed_seq_entry("edited.yaml", [2, 4]),
         "grown": fixed_seq_entry("stable.yaml", [2]),
         "same": fixed_seq_entry("stable.yaml", [8]),
         "video": video_entry(),
-        "unbound": video_entry("unbound.yaml"),
+        "unbound": video_entry(UNBOUND_RECIPE),
         "gone": fixed_seq_entry("stable.yaml", [2]),
     }, single_node_fragment(4), video_fragment())  # fmt: skip
     (tmp_path / ".gitignore").write_text("__pycache__/\n")
@@ -74,9 +76,9 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
         "grown": fixed_seq_entry("stable.yaml", [2, 4]),
         "same": fixed_seq_entry("stable.yaml", [8]),
         "video": video_entry(),
-        "unbound": video_entry("unbound.yaml"),
+        "unbound": video_entry(UNBOUND_RECIPE),
     }, single_node_fragment(4, **{"max-running-requests": 16}), video_fragment(**{"max-running-requests": "7"}))  # fmt: skip
-    (project / RECIPES / "unbound.yaml").write_text(yaml.safe_dump(video_fragment()))
+    (project / RECIPES / UNBOUND_RECIPE).write_text(yaml.safe_dump(video_fragment()))
     monkeypatch.chdir(project)
 
     changed.main(["--base", "base", "--json"])
@@ -96,8 +98,8 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
     ]  # fmt: skip
     assert git(tmp_path, "status", "--porcelain").splitlines() == [
         f" M inferencex-e2e/{RECIPES}/edited.yaml",
-        f" M inferencex-e2e/{RECIPES}/unbound.yaml",
-        f" M inferencex-e2e/{RECIPES}/video.yaml",
+        f" M inferencex-e2e/{RECIPES}/{VIDEO_RECIPE}",
+        f" M inferencex-e2e/{RECIPES}/{UNBOUND_RECIPE}",
         " M inferencex-e2e/configs/nvidia-master.yaml",
     ]
 
@@ -304,7 +306,7 @@ def test_a_bases_points_are_reused_only_when_git_vouches_for_every_other_input(
 def test_rows_without_fingerprints_are_compared_individually(tmp_path):
     def matrix(*tps: int) -> changed.Matrix:
         rows = [
-            {"exp-name": f"key_tp{tp}", "tp": tp, "ep": 1, "conc": [4], "srt-recipe": "gone.yaml"}
+            {"exp-name": f"key_tp{tp}", "gpus-per-worker": (tp), "tp": tp, "ep": 1, "conc": [4], "srt-recipe": "gone.yaml"}
             for tp in tps
         ]
         return {"key": changed._points(rows, tmp_path)}
@@ -322,7 +324,7 @@ def test_rows_without_fingerprints_are_compared_individually(tmp_path):
 
 def test_points_sharing_a_name_and_concurrency_keep_generation_order(tmp_path):
     tps = [8, 4, 2, 1, 16, 32, 64, 128]
-    rows = [{"exp-name": "dsr1_8k1k", "tp": tp, "ep": 1, "conc": [32]} for tp in tps]
+    rows = [{"exp-name": "dsr1_8k1k", "gpus-per-worker": (tp), "tp": tp, "ep": 1, "conc": [32]} for tp in tps]
     head = {"key": changed._points(rows, tmp_path)}
 
     [change] = changed.compare({}, head)

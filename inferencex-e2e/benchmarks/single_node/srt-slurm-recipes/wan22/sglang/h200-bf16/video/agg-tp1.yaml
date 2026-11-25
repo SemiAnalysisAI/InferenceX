@@ -1,0 +1,70 @@
+schema: 2
+name: wan22-sglang-agg-tp1
+
+resources:
+  gpu_type: h200
+
+services:
+  - name: video-server
+    type: generic
+    nodes: 1
+    critical: true
+    start: before_workers
+    command: [python3, -m, infx.bench, video, serve]
+    args:
+      - --model-view
+      - snapshot
+      - --
+      - /opt/sglang/bin/python3
+      - -m
+      - evaluator.srt_selected
+      - serve
+      - --model-type
+      - diffusion
+      - --model-path
+      - "{model_path}"
+      - --model-id
+      - "{model_id}"
+      - --revision
+      - "{model_revision}"
+      - --num-gpus
+      - "{gpus_per_node}"
+      # Deployment only: one GPU runs both CFG branches with no sequence parallelism.
+      - --cfg-parallel-size
+      - "1"
+      - --ulysses-degree
+      - "1"
+      - --tp-size
+      - "1"
+      - --encoder-parallel
+      - auto
+      # SGLang takes the UniPC shift from this flag and ignores the request field.
+      - --flow-shift
+      - "12.0"
+      - --warmup-resolutions
+      - 832x480
+      # The release set reuses each prompt across five seeds; cached text embeddings would skip work.
+      - --disable-conditioning-cache
+      - --performance-mode
+      - speed
+      - --host
+      - 0.0.0.0
+      - --port
+      - "30283"
+      - --enable-torch-compile
+      - "false"
+      - --dit-cpu-offload
+      - "false"
+    env:
+      PYTHONPATH: /video-package:/infmax-workspace
+      PYTHONUNBUFFERED: "1"
+      VIDEO_SERVER_PORT: "30283"
+      VIDEO_RUNTIME_REVISION: 297e54fd105e974cdf401e5b4d20253a22c16f90
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    readiness:
+      http:
+        port: 30283
+        path: /health
+      timeout_seconds: 3600
+      interval_seconds: 5

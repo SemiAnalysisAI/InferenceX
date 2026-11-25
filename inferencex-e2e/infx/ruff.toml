@@ -23,7 +23,7 @@ known-first-party = ["infx"]
 combine-as-imports = true
 
 [lint.flake8-bugbear]
-extend-immutable-calls = ["infx.matrix.generate.FullSweepOptions", "infx.workflows.ci_priority.PriorityContext"]
+extend-immutable-calls = ["infx.matrix.generate.FullSweepOptions", "infx.workflows.scheduler_facts.SchedulingContext"]
 
 [format]
 quote-style = "double"

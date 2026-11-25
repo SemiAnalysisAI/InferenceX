@@ -6,8 +6,8 @@ base:
     model: {}
     container: {}
     frameworks:
-      dynamo: "1.6.0"
-      sglang: "0.0.0.dev1+ge79de62d2.d20261104"
+      dynamo: "1.8.0.dev20261119"
+      sglang: "0.0.0.dev1+g03fde9cc3"
   dynamo:
     install: false
     request_plane: tcp
@@ -65,8 +65,6 @@ base:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         PYTHONUNBUFFERED: "1"
         CUDA_MODULE_LOADING: EAGER
@@ -135,8 +133,6 @@ base:
       kv_events: false
     decode:
       nodes: 6
-      workers: 3
-      gpus: 8
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: "32768"
@@ -202,8 +198,8 @@ base:
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
       AGENTIC_WARMUP_GRACE_PERIOD: "1800"
 
-override_1p3d_c50:
-  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp8-1p3d-c50
+override_1p3d_c58:
+  name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp8-1p3d-c58
 
 override_1p4d_c36:
   name: kimik3.1-fp4-gb300-dynamo-sglang-agentx-disagg-tp8-1p4d-c36
@@ -214,7 +210,6 @@ override_1p4d_c36:
         speculative-num-draft-tokens: 9
     decode:
       nodes: 8
-      workers: 4
       args:
         speculative-num-draft-tokens: 9
 
@@ -226,6 +221,5 @@ override_1p4d_c16:
         speculative-num-draft-tokens: 9
     decode:
       nodes: 8
-      workers: 4
       args:
         speculative-num-draft-tokens: 9
