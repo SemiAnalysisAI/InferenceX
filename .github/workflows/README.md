@@ -318,7 +318,9 @@ one was applied. A PR without a primary label can instead stage only the run
 pinned by its latest authorized `/use <run_id>`, after the same validation that
 acknowledges the request. It posts a staging comment, or a rejection comment
 when neither applies. Comments do not trigger or cancel GPU sweeps. Later commits
-skip a new sweep after changelog/matrix and source-run validation. Merge-time
+skip a new sweep after changelog/matrix and source-run validation. When the PR
+plans video rows, `video-reuse-check` also runs Merge Ingest's video validation of
+the pinned run against the PR merge ref. Merge-time
 validation remains authoritative; an acknowledgment cannot override expired or
 invalid artifacts. Reuse is rejected while the PR currently carries
 `evals-only` or `agentx-fast`, checked when `/use` is acknowledged and at merge
@@ -357,7 +359,9 @@ The app downloads source artifacts, keeps the newest upload for each exact
 artifact name, and ingests them with changelog metadata from the merge run. The
 normal ingestion code skips failed benchmark rows. Benchmark rows and public
 links retain source-run provenance. Source coverage is authoritative, so later
-matrix/eval policy changes do not invalidate reuse.
+matrix/eval policy changes do not invalidate reuse. Video is the exception: Merge
+Ingest publishes only when the merge commit's video rows have the recipe
+fingerprints of the reused run's `video-sweep-manifest`.
 
 When the app's ingest finishes, on success or failure, it sends
 `ingest-results-completed` back with per-run counts (benchmark, eval, trace and
