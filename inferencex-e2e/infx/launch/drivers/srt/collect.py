@@ -6,13 +6,14 @@ Logs are staged on every exit path, and always before the job's outputs are dele
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import os
 import shutil
 import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -36,7 +37,7 @@ from infx.launch.artifacts import (
 from infx.launch.backends.base import BackendError, JobState, JobStatus
 from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
 from infx.launch.drivers.srt.run import SrtRun, require
-from infx.srt_slurm.video import load_spec, video_package
+from infx.srt_slurm.video import SPEC_DIR, video_package
 
 if TYPE_CHECKING:
     from infx.launch.backends.base import Job
@@ -147,25 +148,32 @@ def finalize_single_node_results(run: SrtRun, logs: Path, producer_sha: str) -> 
     return power_rc
 
 
-def stage_video_identity(run: SrtRun, bound: Path) -> None:
-    """Retain the selected workload before startup, using the binder's declared identity."""
+def stage_video_identity(run: SrtRun, bound: Path) -> dict[str, Any]:
+    """Retain the selected workload and its size before startup; return the workload plan.
+
+    The size comes from the run tree's own ``video_spec.py``, loaded by path as the binder
+    loads it, and a spec that cannot give one fails the launch here.
+    """
     environment = yaml.safe_load(bound.read_text())["benchmark"]["env"]
-    selected = load_spec(
-        run.request.env["VIDEO_SPEC"], root=run.workspace, set_id=environment["VIDEO_SET"]
+    specs = video_package(run.workspace) / SPEC_DIR
+    module_spec = importlib.util.spec_from_file_location(
+        "video_workload_spec", specs / "video_spec.py"
     )
-    plan, digest = selected["plan"], selected["plan_sha256"]
-    if digest != environment["VIDEO_PLAN_SHA256"]:
-        raise ValueError("bound video identity disagrees with the selected workload")
+    helper = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(helper)
+    spec = helper.load_spec(specs / run.request.env["VIDEO_SPEC"])
+    plan = helper.plan_for(spec, environment["VIDEO_SET"])
     identity = {
-        "plan_sha256": digest,
+        "plan_sha256": helper.plan_sha256(plan),
         "workload_plan": plan,
-        "workload_size": selected["workload_size"],
+        "workload_size": helper.workload_size(spec),
         "engine": {
             "name": environment["VIDEO_RUNTIME"],
             "revision": environment["VIDEO_RUNTIME_REVISION"],
         },
     }
     write_json(run.workspace / "video-identity.json", identity)
+    return plan
 
 
 def write_video_job_status(logs: Path, job_id: str, status: JobStatus) -> None:

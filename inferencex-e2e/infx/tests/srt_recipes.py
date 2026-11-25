@@ -60,7 +60,7 @@ def write_video_specs(repository: Path) -> None:
             "cases": [{"case_id": "fixture", "prompt": "fixture", "seed": 1}],
         }},
         "reference": {},
-        "workload_size": {"latent_frames": 1, "latent_tokens_audio": 0, "guidance_branches": 1, "model": {
+        "workload_size": {"latent_frames": 3, "latent_tokens_audio": 2, "guidance_branches": 1, "model": {
             "latent_patch_pixels": 16, "dit_weights_per_token": 1, "attention_width": 1, "layers": 1,
         }},
     }))  # fmt: skip

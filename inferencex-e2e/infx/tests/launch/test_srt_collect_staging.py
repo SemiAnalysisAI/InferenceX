@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from infx.launch.drivers.srt import collect
 from infx.launch.drivers.srt.config import EXPORTER_PROVENANCE
 from infx.launch.lifecycle import Lifecycle
+from infx.matrix.validation import VIDEO_SPEC_DIR
+from infx.tests.srt_recipes import VIDEO_SET, VIDEO_SPEC, write_video_specs
 
 
 class _Backend:
@@ -72,3 +76,38 @@ def test_power_package_is_staged_beside_the_result(tmp_path: Path) -> None:
     assert (workspace / "LOGS" / "power" / "samples.csv").read_text() == "retained native samples\n"
     assert (workspace / "LOGS" / "power" / "power-producer-sha.txt").is_file()
     assert (workspace / "point.json").is_file()
+
+
+def _video_point(tmp_path: Path) -> tuple[SimpleNamespace, Path]:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    write_video_specs(tmp_path)
+    bound = tmp_path / "bound.yaml"
+    bound.write_text(yaml.safe_dump({"benchmark": {"env": {
+        "VIDEO_SET": VIDEO_SET, "VIDEO_RUNTIME": "sglang", "VIDEO_RUNTIME_REVISION": "b" * 40,
+    }}}))  # fmt: skip
+    run = SimpleNamespace(workspace=workspace, request=SimpleNamespace(env={"VIDEO_SPEC": VIDEO_SPEC}))
+    return run, bound
+
+
+def test_video_identity_carries_the_size_computed_from_the_run_tree_and_returns_the_plan(tmp_path: Path) -> None:
+    run, bound = _video_point(tmp_path)
+
+    plan = collect.stage_video_identity(run, bound)
+
+    identity = json.loads((run.workspace / "video-identity.json").read_text())
+    assert plan == identity["workload_plan"] and plan["plan_id"] == "fixture-plan"
+    # The fixture spec: 3 latent frames of one patch plus 2 audio tokens, in one pass.
+    size = identity["workload_size"]
+    assert (size["latent_tokens"], size["dit_forward_passes"], size["dit_flops_per_clip"]) == (5, 1, 110)
+
+
+def test_video_identity_refuses_a_spec_that_cannot_give_a_size(tmp_path: Path) -> None:
+    run, bound = _video_point(tmp_path)
+    path = tmp_path / VIDEO_SPEC_DIR / VIDEO_SPEC
+    unsized = yaml.safe_load(path.read_text())
+    del unsized["workload_size"]
+    path.write_text(yaml.safe_dump(unsized))
+
+    with pytest.raises(ValueError, match="declares no workload_size"):
+        collect.stage_video_identity(run, bound)

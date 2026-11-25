@@ -27,7 +27,7 @@ Code that needs the version calls `schema_version(plan)` instead of testing whic
 - `reference` (version 1 only) records the SGLang run on #2916 whose plan hash `frozen-c124` reproduces.
 - `workload_size` (`h3-v2.yaml` and `wan22.yaml` declare it) holds what `generation` cannot give: latent frames, audio latent tokens, guidance branches and the DiT's model constants.
   `workload_size(spec)` computes one clip's latent tokens (latent frames × width × height ÷ `latent_patch_pixels`², plus audio tokens), DiT forward passes (denoising steps × guidance branches) and estimated DiT FLOPs (per pass, 2 × tokens × `dit_weights_per_token` + 4 × tokens² × `attention_width` × `layers`).
-  The launcher refuses to bind a spec without it, and the bundle manifest carries the computed size beside `workload_plan`.
+  A launch computes the size before startup and fails for a spec without the key; the bundle manifest carries it beside `workload_plan`.
 
 ## Hash contract
 

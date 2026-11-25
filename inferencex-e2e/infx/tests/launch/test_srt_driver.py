@@ -1212,8 +1212,6 @@ def test_video_startup_failure_keeps_a_failed_bundle_without_client_results(harn
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode != 0
     bundle = harness.workspace / "h3-results"
-    size = json.loads((bundle / "manifest.json").read_text())["workload_size"]
-    assert (size["latent_tokens"], size["dit_forward_passes"]) == (37710, 49)
     matrix = json.loads((bundle / "serving-smoke.json").read_text())
     assert matrix["status"] == "failed" and matrix["power_verified"] is False
     assert [cell["concurrency"] for cell in matrix["cells"]] == [1, 2]

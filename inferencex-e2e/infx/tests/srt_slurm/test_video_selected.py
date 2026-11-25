@@ -17,7 +17,7 @@ ENV = {
     "PRECISION": "bf16",
     "GPU_COUNT": "2",
     "CONC_LIST": "1",
-    "VIDEO_SPEC": "h3-v2.yaml",
+    "VIDEO_SPEC": "h3.yaml",
     "VIDEO_SET": "release-v1",
     "FRAMEWORK": "vllm-omni",
     "HF_HUB_CACHE": "/mnt/hf_hub_cache",
@@ -63,11 +63,6 @@ def test_server_port_must_be_a_tcp_port_before_submission(native_fragment):
     server["readiness"]["http"]["port"] = port
     with pytest.raises(ValueError, match="TCP port"):
         video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
-
-
-def test_a_spec_without_a_workload_size_does_not_bind():
-    with pytest.raises(ValueError, match="declares no workload_size"):
-        video.load_spec("h3.yaml", root=ROOT, set_id="release-v1")
 
 
 @pytest.fixture
@@ -153,7 +148,7 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     [server] = bound["services"]
     assert bound["resources"]["gpus_per_node"] == 2
     assert server["env"]["VIDEO_SPEC_PATH"] == bound["benchmark"]["env"]["VIDEO_SPEC_PATH"] == (
-        "/video-package/specs/h3-v2.yaml"
+        "/video-package/specs/h3.yaml"
     )
     Path(server["env"]["VIDEO_MODEL_PATH"]).mkdir(parents=True)
     output = tmp_path / "result"
@@ -161,7 +156,7 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
         **os.environ,
         **bound.get("environment", {}),
         **server["env"],
-        "VIDEO_SPEC_PATH": str(video.video_package(ROOT) / "specs/h3-v2.yaml"),
+        "VIDEO_SPEC_PATH": str(video.video_package(ROOT) / "specs/h3.yaml"),
         "VIDEO_RESULT_DIR": str(output),
     }
     bootstrap = (

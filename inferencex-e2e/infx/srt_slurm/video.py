@@ -179,8 +179,6 @@ def load_spec(name: str, *, root: Path, set_id: str) -> dict[str, Any]:
         "plan": plan,
         "plan_sha256": module.plan_sha256(plan),
         "schema_version": module.schema_version(plan),
-        # A base revision that matrix.changed binds may carry a helper that predates the size.
-        "workload_size": module.workload_size(source) if hasattr(module, "workload_size") else None,
     }
 
 
