@@ -3,10 +3,12 @@
 # AITER 581579ab 0.1.29.dev156 with FlyDSL 0.4.2, both editable checkouts under /sgl-workspace).
 # The image is used as shipped except for one patch, to its sgl-amd-mono checkout (32a12203,
 # /sgl-workspace/sgl-amd-mono, the monokernel package):
-#   01 sgl-project/sgl-amd-mono#184, the source files of the PR: the specs' SGLANG_READS contracts follow
-#      SGLang's moves (Qwen3.8-Flash-Next's "state" part name is now STATE_PART in kv/decl.py), the
-#      DeepSeek-V4.1 draft sampler's _Entries gets tensor_entry and binding, and Kimi-K3.1's column
-#      tail reads its row cap from NextAttnRead.max_tokens.
+#   01 qwen38_flash_next/draft.py: since sglang#46210 (merged 2026-11-20) the draft CUDA graph runners run
+#      the capture tail hooks, and SGLang's monokernel capture check, which keys on the target's
+#      target_verify steps, rejects the MTP draft's 1-token decode step, so c1-c8 (--enable-amd-monokernel)
+#      fail at the draft decode capture. The draft's build makes the check skip a draft runner; no SGLang
+#      change is needed (sgl-project/sgl-amd-mono PR #204). Drop the patch once the image's
+#      sgl-amd-mono has the PR.
 # SGLang, AITER and every other file are not touched. A patch that no longer applies fails the worker.
 set -euo pipefail
 # srtctl only looks up setup_script here; the patch lives with the single-node
@@ -30,6 +32,6 @@ apply() {
     echo "qwen3.8next patch applied: $2"
 }
 
-apply /sgl-workspace/sgl-amd-mono 01-sgl-amd-mono-184-keep-specs-working-on-current-sglang.patch
+apply /sgl-workspace/sgl-amd-mono 01-sgl-amd-mono-qwen38-draft-capture-check.patch
 
 echo "$digest" > "$marker"
