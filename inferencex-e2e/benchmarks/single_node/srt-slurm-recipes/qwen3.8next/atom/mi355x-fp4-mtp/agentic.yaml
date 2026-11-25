@@ -16,8 +16,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 1
       args:
         served-model-name: amd/Qwen3.8-Flash-Next-Quark-MXFP4
         trust-remote-code: true
@@ -81,8 +79,8 @@ override_c16:
       CONC: '16'
       KV_OFFLOADING: none
 
-# c32+ run the LMCache DRAM tier: a 208.6 GiB pool (224 GB, the TP1 share at
-# dram-utilization 0.6) with the 104.3 GiB GDN state allowance carved from it.
+# c32+ run the LMCache DRAM tier: a 208.6 GiB pool (224 GB) with the 104.3 GiB GDN
+# state allowance carved from it, within the TP1 worker's 1/8 share of node DRAM.
 
 override_c32_lmcache:
   roles:
@@ -104,7 +102,6 @@ override_c32_lmcache:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '224'
 
 override_c48_lmcache:
   roles:
@@ -124,7 +121,6 @@ override_c48_lmcache:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '224'
 
 override_c64_lmcache:
   roles:
@@ -144,4 +140,3 @@ override_c64_lmcache:
     env:
       CONC: '64'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '224'

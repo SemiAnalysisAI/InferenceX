@@ -313,11 +313,9 @@ qwen3.8next-fp4-mi355x-atom-agentic-mtp:
   srt-recipe-dir: qwen3.8next/atom/mi355x-fp4-mtp
   scenarios:
     agentic-coding:
-    # 0.6 of the node's DRAM over 8 GPUs = 224 GB per TP1 server; the recipe's LMCache pool is 208.6 GiB = 224.0 GB.
-    - dram-utilization: 0.6
-      search-space:
-      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
-      - { tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, conc-list: [32, 48, 64], srt-recipe: agentic.yaml }
+    - search-space:
+      - { gpus-per-worker: 1, tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16], srt-recipe: agentic.yaml }
+      - { gpus-per-worker: 1, tp: 1, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.6.dev139+gf22dec28" }, conc-list: [32, 48, 64], srt-recipe: agentic.yaml }
 
 # AgentX Pareto sweep for Qwen3.5 FP8 on MI300X. The fast discovery run peaks
 # at c24; c32 records the post-knee throughput and latency cliff.
