@@ -19,7 +19,7 @@ exemption: Wan2.2 is exempt from rule 5 until it moves to spec schema 2 in v0.2.
 
 | # | Rule | Why | Owner |
 | --- | --- | --- | --- |
-| 1 | Every measured deployment runs a released set, `release-v<N>`, of its model's spec in [`specs/`](specs/). A released set never changes; a workload change adds the next `release-v<N>`. | Deployments with the same plan hash ran the same work. | `@functionstackx` |
+| 1 | Every measured deployment runs a released set, `release-v<N>`, of a spec for its model in [`specs/`](specs/). A released set never changes. A change to prompts, seeds or run counts adds the next `release-v<N>` to the same spec file. A change to the file's `model`, `generation` or `fairness` block, such as the denoising steps or the resolution, adds a new spec file whose first set is `release-v1`, because every set in a file shares those blocks. | Deployments with the same plan hash ran the same work. | `@functionstackx` |
 | 2 | The image is pinned by SHA256 digest, the engine by its 40-character commit (`VIDEO_RUNTIME_REVISION`) and the model by revision. | Anyone can rerun the exact point. | `@edwingao28` |
 | 3 | One node per deployment. Each GPU count is its own deployment and names a `video/agg-<layout>.yaml` recipe, where `<layout>` states the GPU split. | Each layout qualifies on its own sweep. | `@edwingao28` |
 | 4 | Concurrency 1. | Rule 11's zero failure tolerance and fixed sample count assume one request at a time. | `@edwingao28` |
