@@ -13420,3 +13420,10 @@
     - "Pin the TokenSpeed 0.1.1.post20261125, ROCm 7.2 kernel 0.1.5.post20261125, kernel-amd 0.1.4.post20261125 and engine 0.1.1.post20261125 wheels by release URL and SHA256, scheduler 0.1.58, tokenspeed-smg 1.16.0.post20261121, the runner image by digest, and the checkpoint and DFlash2 draft revisions. The recipe uses tokenspeed-nightly-rocm.sh, which keeps the image's ROCm torch."
     - "Select golden DFlash2 acceptance and the greedy sampler for TokenSpeed DFLASH throughput; evals verify for real with the triton sampler and speculative sampling."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5211
+
+- config-keys:
+    - minimaxm31flash-fp4-b300-dynamo-vllm-agentic-dspark-agg-dram
+  scenario-type: [agentic-coding]
+  description:
+    - "Add MiniMax-M3.1-Flash B300 Dynamo + vLLM TP2/TP4 AgentX points with CPU KV offload."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5204
