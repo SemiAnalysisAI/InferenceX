@@ -13300,6 +13300,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5119
 
 - config-keys:
+    - kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the TokenSpeed wheels from the November 19 nightly (lightseekorg/tokenspeed@8080ba138) to the November 24 nightly (lightseekorg/tokenspeed@c75135ef6), which includes lightseekorg/tokenspeed PR 3755, and tokenspeed-smg from 1.16.0.post20261118 to 1.16.0.post20261121."
+    - "Recipe, topology, concurrencies, speculative decoding and KV store settings are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5201
+
+- config-keys:
     - dsv41flash-fp4-gb300-tilert-agentic-dspark-dep
     - dsv41flash-fp4-gb300-tilert-agentic-dspark-tp
   scenario-type: [agentic-coding]
