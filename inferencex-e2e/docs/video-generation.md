@@ -40,6 +40,10 @@ model, revision, port, or GPU-count mismatches before submission. Other native
 srt-slurm service placeholders retain their existing meaning. For a schema version 2
 fairness plan, the binder also requires SGLang's `--disable-conditioning-cache`
 or vLLM-Omni's `OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0` in the selected recipe.
+Each engine accepts only the flags, spelled in full, environment variables and
+preambles that `_REVIEWED` in [`video.py`](../infx/srt_slurm/video.py) registers
+for it, and SGLang rows must set `--performance-mode speed`. The binder refuses
+anything else before submission, so a new setting needs a reviewed change there.
 It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.
 

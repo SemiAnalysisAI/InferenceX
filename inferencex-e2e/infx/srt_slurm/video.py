@@ -8,6 +8,7 @@ import re
 import shlex
 from collections.abc import Mapping
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -217,7 +218,9 @@ def _bind_command(
     revision: str,
     port: str,
     gpus: int,
-) -> None:
+) -> list[str]:
+    """Render the engine command, check the values the binder owns and return the engine's own
+    arguments."""
     values = {
         "model_path": model_path,
         "model_id": model,
@@ -244,114 +247,199 @@ def _bind_command(
     command = parsed.command
     expected = {"--port": port, "--num-gpus": str(gpus)}
     if runtime == "sglang":
+        # The harness entry hands everything after it to SGLang's CLI, so the registry sees all.
+        if command[1:4] != ["-m", "evaluator.srt_selected", "serve"]:
+            raise ValueError("SGLang video command must run python -m evaluator.srt_selected serve")
         expected.update({"--model-path": model_path, "--model-id": model, "--revision": revision})
+        arguments = command[4:]
     elif runtime == "vllm-omni":
         if command[:3] != ["vllm", "serve", model_path]:
             raise ValueError("vLLM video command must serve the bound model snapshot")
         expected["--served-model-name"] = model
+        arguments = command[3:]
     else:
         raise ValueError(f"unsupported video runtime: {runtime!r}")
     for flag, value in expected.items():
         if _argument(command, flag) != value:
             raise ValueError(f"video engine {flag} must match the bound value {value!r}")
     _argument(command, "--host")
+    return arguments
 
 
-_DENSE_ATTENTION = frozenset(
-    {
-        "FLASH_ATTN",
-        "TORCH_SDPA",
-        "CUDNN_ATTN",
-        "FLASHINFER_ATTN",
-        "FLASH_ATTN_HUB",
-        "FLASH_ATTN_3_HUB",
-        "TRTLLM_ATTN",
-    }
-)
-# The reviewed lossless registry for vLLM-Omni, which has no log attestation. A row may use only
-# these flags, spelled in full, and these environment variables; anything else is refused, so a
-# new engine option enters VideoGenX v0.1 only by review here. A value set limits what a setting
-# may be given; None allows any value. --cache-config is judged by its JSON.
-_VLLM_OMNI_SWITCHES = frozenset({"--omni", "--trust-remote-code", "--vae-use-tiling"})
-_VLLM_OMNI_FLAGS: dict[str, frozenset[str] | None] = {
-    "--served-model-name": None,
-    "--host": None,
-    "--port": None,
-    "--num-gpus": None,
-    "--init-timeout": None,
-    "--stage-init-timeout": None,
-    "--task-type": None,
-    "--tensor-parallel-size": None,
-    "--cfg-parallel-size": None,
-    "--usp": None,
-    "--ring": None,
-    "--text-encoder-tp-size": None,
-    "--vae-parallel-mode": None,
-    "--vae-patch-parallel-size": None,
-    "--diffusion-attention-backend": _DENSE_ATTENTION,
-    "--cache-config": None,
+@dataclass(frozen=True)
+class _Reviewed:
+    """One engine's reviewed lossless settings.
+
+    A row may give its engine only these flags, spelled in full, environment variables and
+    preambles; anything else is refused, so a new engine option enters VideoGenX v0.1 only by
+    review here. A value set limits what a setting may be given; None allows any value.
+    """
+
+    engine: str
+    switches: frozenset[str]
+    flags: Mapping[str, frozenset[str] | None]
+    env: Mapping[str, frozenset[str] | None]
+    preambles: frozenset[str]
+    required: frozenset[str]
+
+
+_REVIEWED = {
+    # SGLang's log attestation runs after the sweep and sees only the settings it names; this
+    # refuses any other setting before a GPU runs it.
+    "sglang": _Reviewed(
+        engine="SGLang",
+        switches=frozenset({"--disable-conditioning-cache"}),
+        flags={
+            "--model-type": None,
+            "--model-path": None,
+            "--model-id": None,
+            "--revision": None,
+            # The pipeline the spec's workload names.
+            "--model-variant": frozenset({"fl2va"}),
+            "--num-gpus": None,
+            "--host": None,
+            "--port": None,
+            "--tp-size": None,
+            "--ulysses-degree": None,
+            "--cfg-parallel-size": None,
+            "--encoder-parallel": None,
+            "--warmup-resolutions": None,
+            "--warmup-num-frames": None,
+            # auto and memory pick offload and sharding from free GPU memory.
+            "--performance-mode": frozenset({"speed"}),
+            "--enable-torch-compile": None,
+            "--dit-cpu-offload": None,
+            # The plan pins it; srt_selected and the attestation compare.
+            "--flow-shift": None,
+            # The dense members of AttentionBackendEnum that attestation.py accepts.
+            "--attention-backend": frozenset(
+                {"fa", "fa2", "torch_sdpa", "torch_cudnn_sdpa", "dynamic_cudnn_sdpa", "aiter"}
+            ),
+        },
+        env={
+            "HF_HUB_OFFLINE": None,
+            "TRANSFORMERS_OFFLINE": None,
+            "PYTHONPATH": None,
+            "PYTHONUNBUFFERED": None,
+            "ROCM_QUICK_REDUCE_QUANTIZATION": frozenset({"NONE"}),
+            "SGLANG_USE_AITER": None,
+            "VIDEO_RUNTIME_REVISION": None,
+            "VIDEO_SERVER_PORT": None,
+        },
+        preambles=frozenset(),
+        required=frozenset({"--performance-mode"}),
+    ),
+    # vLLM-Omni has no log attestation, so this is its only check. --cache-config is judged by
+    # its JSON.
+    "vllm-omni": _Reviewed(
+        engine="vLLM-Omni",
+        switches=frozenset({"--omni", "--trust-remote-code", "--vae-use-tiling"}),
+        flags={
+            "--served-model-name": None,
+            "--host": None,
+            "--port": None,
+            "--num-gpus": None,
+            "--init-timeout": None,
+            "--stage-init-timeout": None,
+            "--task-type": None,
+            "--tensor-parallel-size": None,
+            "--cfg-parallel-size": None,
+            "--usp": None,
+            "--ring": None,
+            "--text-encoder-tp-size": None,
+            "--vae-parallel-mode": None,
+            "--vae-patch-parallel-size": None,
+            "--diffusion-attention-backend": frozenset(
+                {
+                    "FLASH_ATTN",
+                    "TORCH_SDPA",
+                    "CUDNN_ATTN",
+                    "FLASHINFER_ATTN",
+                    "FLASH_ATTN_HUB",
+                    "FLASH_ATTN_3_HUB",
+                    "TRTLLM_ATTN",
+                }
+            ),
+            "--cache-config": None,
+        },
+        env={
+            "HF_HUB_OFFLINE": None,
+            "TRANSFORMERS_OFFLINE": None,
+            "OMNI_DIFFUSION_PROMPT_EMBED_CACHE": None,
+            "PYTHONPATH": None,
+            "PYTHONUNBUFFERED": None,
+            "VIDEO_PREFETCH_MODEL": None,
+            "VIDEO_RUNTIME_REVISION": None,
+            "VIDEO_SERVER_PORT": None,
+            "VLLM_OMNI_SERVER_STORAGE__PATH": None,
+            "VLLM_OMNI_VIDEO_SYNC_TIMEOUT": None,
+            "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION": frozenset({"NONE"}),
+            "VLLM_WORKER_MULTIPROC_METHOD": None,
+        },
+        # ROCm vLLM starts only with HIP_VISIBLE_DEVICES set, numbered inside the GPU mask.
+        preambles=frozenset({"export HIP_VISIBLE_DEVICES=$(seq -s, 0 $(( {gpus_per_node} - 1 )))"}),
+        required=frozenset(),
+    ),
 }
-_VLLM_OMNI_ENV: dict[str, frozenset[str] | None] = {
-    "HF_HUB_OFFLINE": None,
-    "TRANSFORMERS_OFFLINE": None,
-    "OMNI_DIFFUSION_PROMPT_EMBED_CACHE": None,
-    "PYTHONPATH": None,
-    "PYTHONUNBUFFERED": None,
-    "VIDEO_PREFETCH_MODEL": None,
-    "VIDEO_RUNTIME_REVISION": None,
-    "VIDEO_SERVER_PORT": None,
-    "VLLM_OMNI_SERVER_STORAGE__PATH": None,
-    "VLLM_OMNI_VIDEO_SYNC_TIMEOUT": None,
-    "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION": frozenset({"NONE"}),
-    "VLLM_WORKER_MULTIPROC_METHOD": None,
-}
-# ROCm vLLM starts only with HIP_VISIBLE_DEVICES set, numbered inside the launcher's GPU mask.
-_VLLM_OMNI_PREAMBLES = frozenset(
-    {"export HIP_VISIBLE_DEVICES=$(seq -s, 0 $(( {gpus_per_node} - 1 )))"}
-)
 # --cache-config keys vLLM-Omni turns on by default for a model; its rows must pass each as false.
 _VLLM_OMNI_DEFAULT_ON: dict[str, tuple[str, ...]] = {
     "MiniMaxAI/MiniMax-H3": ("minimax_h3_adaln_cache",),
 }
 
 
-def _refuse_unreviewed(kind: str, name: str, value: str, allowed: frozenset[str] | None) -> None:
-    if allowed is not None and value not in allowed:
-        raise ValueError(f"vLLM-Omni {kind} {name}={value!r} is not lossless")
-
-
-def _refuse_lossy_vllm_omni(
-    model: str, command: list[str], env: Mapping[str, Any], preamble: Any
+def _refuse_value(
+    engine: str, kind: str, name: str, value: str, allowed: frozenset[str] | None
 ) -> None:
-    """Refuse a vLLM-Omni row that sets anything outside the reviewed lossless registry."""
-    if preamble and preamble not in _VLLM_OMNI_PREAMBLES:
-        raise ValueError(f"vLLM-Omni preamble {preamble!r} is not a reviewed preamble")
+    if allowed is not None and value not in allowed:
+        raise ValueError(f"{engine} {kind} {name}={value!r} is not a reviewed value")
+
+
+def _refuse_unreviewed(
+    reviewed: _Reviewed, arguments: list[str], env: Mapping[str, Any], preamble: Any
+) -> dict[str, list[str]]:
+    """Refuse a row that gives its engine a setting outside ``reviewed``; return each flag's
+    values."""
+    engine = reviewed.engine
+    if preamble and preamble not in reviewed.preambles:
+        raise ValueError(f"{engine} preamble {preamble!r} is not a reviewed preamble")
     for name, value in env.items():
-        if name not in _VLLM_OMNI_ENV:
+        if name not in reviewed.env:
             raise ValueError(
-                f"vLLM-Omni environment variable {name} is not in the reviewed registry"
+                f"{engine} environment variable {name} is not in the reviewed registry"
             )
-        _refuse_unreviewed("environment variable", name, str(value), _VLLM_OMNI_ENV[name])
-    cache_configs = []
-    arguments = iter(command)
-    for flag in arguments:
-        if flag in _VLLM_OMNI_SWITCHES:
+        _refuse_value(engine, "environment variable", name, str(value), reviewed.env[name])
+    values: dict[str, list[str]] = {}
+    tokens = iter(arguments)
+    for flag in tokens:
+        if flag in reviewed.switches:
             continue
-        if flag not in _VLLM_OMNI_FLAGS:
-            raise ValueError(f"vLLM-Omni argument {flag!r} is not a reviewed flag spelled in full")
-        value = next(arguments, "")
-        _refuse_unreviewed("flag", flag, value, _VLLM_OMNI_FLAGS[flag])
-        if flag == "--cache-config":
-            try:
-                config = json.loads(value)
-                cache_configs.append(config)
-                lossless = all(enabled is False for enabled in config.values())
-            except (ValueError, AttributeError):
-                lossless = False
-            if not lossless:
-                raise ValueError(f"vLLM-Omni flag --cache-config={value!r} is not lossless")
+        if flag not in reviewed.flags:
+            raise ValueError(f"{engine} argument {flag!r} is not a reviewed flag spelled in full")
+        # A flag with an optional value would otherwise hide the switch that follows it.
+        value = next(tokens, "")
+        if not value or value.startswith("--"):
+            raise ValueError(f"{engine} flag {flag} needs a value, not {value!r}")
+        _refuse_value(engine, "flag", flag, value, reviewed.flags[flag])
+        values.setdefault(flag, []).append(value)
+    missing = sorted(reviewed.required - values.keys())
+    if missing:
+        raise ValueError(f"{engine} rows must set {', '.join(missing)}")
+    return values
+
+
+def _refuse_cached_vllm_omni(model: str, cache_configs: list[str]) -> None:
+    configs = []
+    for value in cache_configs:
+        try:
+            config = json.loads(value)
+            lossless = all(enabled is False for enabled in config.values())
+        except (ValueError, AttributeError):
+            lossless = False
+        if not lossless:
+            raise ValueError(f"vLLM-Omni flag --cache-config={value!r} is not lossless")
+        configs.append(config)
     for key in _VLLM_OMNI_DEFAULT_ON.get(model, ()):
-        if not any(key in config for config in cache_configs):
+        if not any(key in config for config in configs):
             raise ValueError(
                 f"vLLM-Omni turns {key} on by default for {model}: the recipe must pass "
                 "it as false in --cache-config"
@@ -417,7 +505,7 @@ def bind_video(
     if workload.get("VIDEO_SERVER_SERVICE") != service["name"]:
         raise ValueError("benchmark.env.VIDEO_SERVER_SERVICE must name the server service")
     runtime = _required(environment, "FRAMEWORK")
-    _bind_command(
+    arguments = _bind_command(
         service,
         runtime=runtime,
         model=model,
@@ -436,13 +524,14 @@ def bind_video(
     revision = str((service.get("env") or {}).get("VIDEO_RUNTIME_REVISION", ""))
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("video service requires a pinned VIDEO_RUNTIME_REVISION")
+    flags = _refuse_unreviewed(
+        _REVIEWED[runtime],
+        arguments,
+        {**(bound.get("environment") or {}), **service["env"]},
+        service.get("preamble"),
+    )
     if runtime == "vllm-omni":
-        _refuse_lossy_vllm_omni(
-            model,
-            parse_args(["serve", *service["args"]]).command[3:],
-            {**(bound.get("environment") or {}), **service["env"]},
-            service.get("preamble"),
-        )
+        _refuse_cached_vllm_omni(model, flags.get("--cache-config", []))
     values = {
         "MODEL": model,
         "CONC_LIST": " ".join(map(str, concurrencies)),
