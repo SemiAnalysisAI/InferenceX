@@ -13408,3 +13408,11 @@
   description:
     - "Remove the four 150 GB Mooncake stores from the infra node and rerun all five points (1P at concurrency 288, 320 and 352, 2P at 448 and 480). The infra node hosts no inference worker, so MODELS.md gives it no KV offload DRAM. The linker pool is now the 190 GB prefill segments and the decode-node stores only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5226
+
+- config-keys:
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg
+  description:
+    - "Update image and points."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5021
+  scenario-type: [agentic-coding]

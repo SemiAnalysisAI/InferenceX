@@ -5,8 +5,8 @@ base:
   identity:
     model: {}
     frameworks:
-      dynamo: "1.7.0.dev20261030"
-      sglang: "0.0.0.dev1+ge3718813e"
+      dynamo: "1.8.0.dev20261121"
+      sglang: "0.0.0.dev1+g93edbeb3a"
   dynamo:
     install: false
     request_plane: tcp
@@ -88,9 +88,9 @@ base:
         reasoning-parser: minimax-m3
         tool-call-parser: minimax-m3
         tensor-parallel-size: 2
-        data-parallel-size: 2
+        # SGLang 1.0 sets attention DP with attn-dp-size; dp-size now counts replicas.
+        attn-dp-size: 2
         expert-parallel-size: 2
-        enable-dp-attention: true
         enable-dp-lm-head: true
         # flashinfer_trtllm_routed needs attention TP to match EP, which attention DP breaks.
         moe-a2a-backend: megamoe
@@ -146,9 +146,8 @@ base:
         reasoning-parser: minimax-m3
         tool-call-parser: minimax-m3
         tensor-parallel-size: 8
-        data-parallel-size: 8
+        attn-dp-size: 8
         expert-parallel-size: 8
-        enable-dp-attention: true
         enable-dp-lm-head: true
         moe-a2a-backend: megamoe
         disaggregation-transfer-backend: mooncake
@@ -182,28 +181,135 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
 
-override_4p_dep2_dep8:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep2-dep8
-  roles:
-    prefill:
-      nodes: 2
-
-override_8p_dep2_dep8:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-8p-dep2-dep8
+override_4p_dep4_dep16_si20_linker:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker
+  # Lists replace on merge, so this repeats every base service. Every decode
+  # node runs 4 x 190 GB stores; the infra node runs no inference worker, so it
+  # holds no KV cache.
+  services: &gb300-linker-services
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: mooncake-master
+      type: mooncake-master
+      # The image ships mooncake-transfer-engine-cuda13 without the master
+      # binary on PATH; find it or reinstall the same version.
+      preamble: |
+        export PATH="$(dirname "$(python3 -c 'import sys; print(sys.executable)')"):$PATH"
+        if ! command -v mooncake_master >/dev/null; then
+          MC_DIR=$(python3 -c 'import mooncake, os; print(os.path.dirname(mooncake.__file__))')
+          if [ -x "$MC_DIR/mooncake_master" ]; then
+            export PATH="$MC_DIR:$PATH"
+          else
+            pip_install=(python3 -m pip install)
+            if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
+              pip_install+=(--break-system-packages)
+            fi
+            "${pip_install[@]}" --quiet --no-cache-dir --no-deps --force-reinstall \
+              "mooncake-transfer-engine-cuda13==$(python3 -c 'import importlib.metadata as m; print(m.version("mooncake-transfer-engine-cuda13"))')"
+          fi
+        fi
+        command -v mooncake_master
+      args:
+        # Past 95% full the master evicts the 10% of objects with the oldest
+        # lease. The lease sets when an object becomes evictable, not the
+        # order; 120 s stays above the slowest load batch.
+        - --default_kv_lease_ttl=120000
+        - --eviction_high_watermark_ratio=0.95
+        - --eviction_ratio=0.10
+        - --rpc_thread_num=64
+    # Each store runs once on every decode node.
+    - &gb300-decode-store
+      name: store-decode-0
+      type: mooncake-store
+      command: ["python3", "-m", "mooncake.mooncake_store_service"]
+      placement:
+        node: decode
+      args: ["--port", "8800"]
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+        MC_TCP_BIND_ADDRESS: "{node_ip}"
+      preamble: |
+        ulimit -n 1048576
+        ulimit -l unlimited
+      readiness:
+        port: 8800
+        timeout_seconds: 600
+    - <<: *gb300-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *gb300-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *gb300-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
   roles:
     prefill:
       nodes: 4
-
-override_6p_dep2_dep8:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep2-dep8
-
-override_6p_dep2_dep16:
-  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep2-dep16
-  roles:
-    decode:
+      env: &gb300-linker-prefill-env
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        # Per worker, split across its TP ranks: 190 GB per DEP4 rank.
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 190gb
+        MOONCAKE_STANDALONE_STORAGE: "0"
+      args: &gb300-dep4-linker-prefill-args
+        tensor-parallel-size: 4
+        attn-dp-size: 4
+        expert-parallel-size: 4
+        # Divided by the DP size: 8192 per rank.
+        chunked-prefill-size: 32768
+        max-running-requests: 256
+        stream-interval: 20
+        mem-fraction-static: 0.85
+        enable-hierarchical-cache: null
+        hicache-size: null
+        hicache-write-policy: null
+        enable-unified-cache-external-linker: true
+        unified-cache-external-linker-backend: mooncake
+        unified-cache-external-linker-config: '{"load_mode":"prefetch","enable_group_semantics":false}'
+    decode: &gb300-dep16-decode
       nodes: 4
       args:
         tensor-parallel-size: 16
-        data-parallel-size: 16
+        attn-dp-size: 16
         expert-parallel-size: 16
         max-running-requests: 768
+        stream-interval: 20
+
+override_3p_dep4_dep16_si20_linker:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-3p-dep4-dep16-si20-linker
+  services: *gb300-linker-services
+  roles:
+    prefill:
+      nodes: 3
+      env: *gb300-linker-prefill-env
+      args: *gb300-dep4-linker-prefill-args
+    decode: *gb300-dep16-decode
+
+override_6p_dep4_dep16_si20_linker:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-6p-dep4-dep16-si20-linker
+  services: *gb300-linker-services
+  roles:
+    prefill:
+      nodes: 6
+      env: *gb300-linker-prefill-env
+      args: *gb300-dep4-linker-prefill-args
+    decode: *gb300-dep16-decode
