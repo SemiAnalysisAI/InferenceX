@@ -63,7 +63,7 @@ def main() -> int:
     video_count = 0
     if (args.artifacts_dir / "video-sweep-manifest").is_dir():
         try:
-            video_count = validate_video_artifacts(args.artifacts_dir)
+            video_count = len(validate_video_artifacts(args.artifacts_dir)["artifacts"])
         except (OSError, KeyError, TypeError, ValueError) as error:
             errors.append(str(error))
     if not fixed_rows and not agentic_rows and not eval_rows and not video_count:
