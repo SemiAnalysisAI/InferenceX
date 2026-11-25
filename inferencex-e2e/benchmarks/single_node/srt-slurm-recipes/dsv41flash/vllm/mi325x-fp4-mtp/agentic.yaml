@@ -62,8 +62,8 @@ base:
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
 
 # One variant per point. TP2 leaves ~145 GiB of offloaded weights per rank, so it
-# halves the indexer buffer, bounds the scheduler at 2x CONC within [16, 256]
-# and stops capturing above 512 tokens.
+# bounds the scheduler at 2x CONC within [16, 256] and stops capturing above 512
+# tokens. Its 32768-token indexer buffer (32 GiB of fp8 logits) still fits.
 override_tp8_c1:
   roles:
     agg:
@@ -197,9 +197,12 @@ override_tp2_c1:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-num-batched-tokens: 8192
+        max-num-batched-tokens: 32768
         max-num-seqs: 16
         max-cudagraph-capture-size: 512
+        # The mono decode layers stay off at TP2; the flag still runs the gfx942
+        # indexer top-k, decode metadata and DSpark sampling helpers.
+        monokernel: true
   benchmark:
     env:
       CONC: '1'
@@ -210,9 +213,10 @@ override_tp2_c2:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-num-batched-tokens: 8192
+        max-num-batched-tokens: 32768
         max-num-seqs: 16
         max-cudagraph-capture-size: 512
+        monokernel: true
   benchmark:
     env:
       CONC: '2'
@@ -223,9 +227,10 @@ override_tp2_c4:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-num-batched-tokens: 8192
+        max-num-batched-tokens: 32768
         max-num-seqs: 16
         max-cudagraph-capture-size: 512
+        monokernel: true
   benchmark:
     env:
       CONC: '4'
@@ -236,9 +241,10 @@ override_tp2_c8:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-num-batched-tokens: 8192
+        max-num-batched-tokens: 32768
         max-num-seqs: 16
         max-cudagraph-capture-size: 512
+        monokernel: true
   benchmark:
     env:
       CONC: '8'
@@ -249,9 +255,10 @@ override_tp2_c16:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-num-batched-tokens: 8192
+        max-num-batched-tokens: 32768
         max-num-seqs: 32
         max-cudagraph-capture-size: 512
+        monokernel: true
   benchmark:
     env:
       CONC: '16'
@@ -262,9 +269,10 @@ override_tp2_c32:
       args:
         tensor-parallel-size: 2
         engram-config: '{"cpu_offload":true}'
-        max-num-batched-tokens: 8192
+        max-num-batched-tokens: 32768
         max-num-seqs: 64
         max-cudagraph-capture-size: 512
+        monokernel: true
   benchmark:
     env:
       CONC: '32'
