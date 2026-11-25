@@ -8,6 +8,8 @@
 
 `wan22.yaml` defines the silent Wan2.2-T2V-A14B text-to-video workload: 832×480, 81 frames at 16 fps, 40 steps, guidance 4.0 for the high-noise expert and 3.0 for the low-noise expert, boundary 0.875, flow shift 12 and an empty negative prompt. vLLM-Omni takes every control per request. SGLang does not read the flow shift or the boundary from a request, so its server refuses to start unless `--flow-shift` and the checkpoint's `model_index.json` `boundary_ratio` equal the spec. SGLang's requests also set `x264_preset: ultrafast` and `output_compression: 63` (CRF 18), the libx264 encoding vLLM-Omni v0.32.0 delivers by default, because SGLang's own default is `fast` at CRF 25. `release-v1` crosses four prompts with five seeds (one warmup); `smoke` runs the first case with the same controls.
 
+A workload change adds the next `release-v<N>` set (`../STANDARD.md` rule 1).
+
 `h3.yaml` and `wan22.yaml` use schema version 1 and `h3-v2.yaml` uses schema version 2.
 Version 2 adds a `warmup_case` to every set and a `fairness` block that seals the schedule, the requested libx264 ultrafast/CRF 18/yuv420p plus AAC encoding, the disabled cross-request conditioning cache, and the official Diffusers source, model and RNG candidate.
 The loader enforces the version 2 policy once: 20 measured cases with distinct prompt text, one warmup run on a disjoint prompt, a schedule that matches the request, and encoding audio that matches generation.
