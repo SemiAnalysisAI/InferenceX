@@ -13430,3 +13430,11 @@
     - "Update SGLang image from lmsysorg/sglang:dev-kimi-k31-pro to lmsysorg/sglang:nightly-dev-cu13-20261120-03fde9cc (SGLang 0.0.0.dev1+g03fde9cc3, Dynamo 1.8.0.dev20261119 from the image)."
     - "Aggregated megakernel points (c2, c4): set hybrid-cache-checkpoints-level 3, restoring the published per-chunk, uncapped KDA state checkpoints that the new SGLang default (level 2) drops."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5186
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-sglang-agentic-dspark-disagg-linker-d1115
+  scenario-type: [agentic-coding]
+  description:
+    - "Rerun the aggregated and disaggregated points together, with recipes unchanged, so the latest GB200 Dynamo SGLang curve holds both lines in one run."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
