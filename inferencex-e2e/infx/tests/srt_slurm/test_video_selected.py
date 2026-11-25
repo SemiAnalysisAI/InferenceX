@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -73,24 +74,51 @@ def native_fragment(tmp_path):
         "name": "video-fixture",
         "resources": {"gpu_type": "test-gpu"},
         "frontend": {"type": "none"},
-        "services": [{
-            "name": "video-server", "type": "generic", "nodes": 1, "critical": True,
-            "command": ["/usr/bin/python3", "-m", "infx.bench", "video", "serve"],
-            "args": [
-                "--model-view", "snapshot", "--", "/usr/bin/python3", "-m",
-                "evaluator.srt_selected", "serve", "--model-type", "diffusion",
-                "--model-path", "{model_path}", "--model-id", "{model_id}",
-                "--revision", "{model_revision}", "--port", "30283",
-                "--num-gpus", "{gpus_per_node}", "--host", "0.0.0.0",
-                "--tp-size", "{gpus_per_node}", "--ulysses-degree", "{gpus_per_node}",
-                "--attention-backend", "fixture-backend",
-            ],
-            "env": {
-                "VIDEO_SERVER_PORT": "30283", "VIDEO_RUNTIME_REVISION": "b" * 40,
-                "MODEL_REVISION_IN_ENV": "{model_revision}", "TUNABLE_ENV": "keep-this-value",
-            },
-            "readiness": {"http": {"port": 30283, "path": "/health"}},
-        }],
+        "services": [
+            {
+                "name": "video-server",
+                "type": "generic",
+                "nodes": 1,
+                "critical": True,
+                "command": ["/usr/bin/python3", "-m", "infx.bench", "video", "serve"],
+                "args": [
+                    "--model-view",
+                    "snapshot",
+                    "--",
+                    "/usr/bin/python3",
+                    "-m",
+                    "evaluator.srt_selected",
+                    "serve",
+                    "--model-type",
+                    "diffusion",
+                    "--model-path",
+                    "{model_path}",
+                    "--model-id",
+                    "{model_id}",
+                    "--revision",
+                    "{model_revision}",
+                    "--port",
+                    "30283",
+                    "--num-gpus",
+                    "{gpus_per_node}",
+                    "--host",
+                    "0.0.0.0",
+                    "--tp-size",
+                    "{gpus_per_node}",
+                    "--ulysses-degree",
+                    "{gpus_per_node}",
+                    "--attention-backend",
+                    "fixture-backend",
+                ],
+                "env": {
+                    "VIDEO_SERVER_PORT": "30283",
+                    "VIDEO_RUNTIME_REVISION": "b" * 40,
+                    "MODEL_REVISION_IN_ENV": "{model_revision}",
+                    "TUNABLE_ENV": "keep-this-value",
+                },
+                "readiness": {"http": {"port": 30283, "path": "/health"}},
+            }
+        ],
         "benchmark": {
             "type": "custom",
             "command": "python3 -m infx.bench video client --request-seconds 73",
@@ -115,35 +143,55 @@ def test_selected_engine_revision_must_match_bound_point(native_fragment):
 
 
 def _as_vllm(raw):
-    raw["services"][0]["args"] = [
-        "--model-view", "h3-fl2va", "--", "vllm", "serve", "{model_path}",
-        "--served-model-name", "{model_id}", "--port", "30283",
-        "--num-gpus", "{gpus_per_node}", "--host", "0.0.0.0",
-        "--gpu-memory-utilization", "0.84",
-        "--cache-config", '{"minimax_h3_adaln_cache": false}',
+    [server] = raw["services"]
+    server["args"] = [
+        "--model-view",
+        "h3-fl2va",
+        "--",
+        "vllm",
+        "serve",
+        "{model_path}",
+        "--served-model-name",
+        "{model_id}",
+        "--port",
+        "30283",
+        "--num-gpus",
+        "{gpus_per_node}",
+        "--host",
+        "0.0.0.0",
+        "--omni",
+        "--cache-config",
+        '{"minimax_h3_adaln_cache": false}',
     ]
+    server["env"] = {"VIDEO_SERVER_PORT": "30283", "VIDEO_RUNTIME_REVISION": "b" * 40}
 
 
-@pytest.mark.parametrize(("fault", "name"), [
-    ({"args": ["--cache-backend", "tea_cache"]}, "--cache-backend"),
-    ({"args": ["--cache-config", '{"minimax_h3_adaln_cache": true}']}, "--cache-config"),
-    ({"args": ["--quantization=fp8"]}, "--quantization"),
-    ({"args": ["--kv-cache-dtype", "fp8"]}, "--kv-cache-dtype"),
-    ({"args": ["--diffusion-attention-backend", "RAINFUSION_ATTN"]}, "--diffusion-attention-backend"),
-    ({"args": ["--diffusion_attention_back", "NEW_ATTN"]}, "--diffusion-attention-backend"),
-    ({"env": {"DIFFUSION_CACHE_BACKEND": "cache_dit"}}, "DIFFUSION_CACHE_BACKEND"),
+@pytest.mark.parametrize(("fault", "refusal"), [
+    ({"args": ["--cache-backend", "tea_cache"]}, "argument '--cache-backend'"),
+    ({"args": ["--quantization=fp8"]}, "argument '--quantization=fp8'"),
+    ({"args": ["-qfp8"]}, "argument '-qfp8'"),
+    ({"args": ["--diffusion_attention_back", "FLASH_ATTN"]}, "argument '--diffusion_attention_back'"),
+    ({"args": ["--diffusion-attention-backend", "RAINFUSION_ATTN"]}, "flag --diffusion-attention-backend="),
+    ({"args": ["--cache-config", '{"minimax_h3_adaln_cache": true}']}, "flag --cache-config="),
+    ({"env": {"DIFFUSION_CACHE_BACKEND": "cache_dit"}}, "variable DIFFUSION_CACHE_BACKEND"),
+    ({"env": {"VLLM_ROCM_QUICK_REDUCE_QUANTIZATION": "FP8"}}, "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION='FP8'"),
+    ({"preamble": "export DIFFUSION_CACHE_BACKEND=cache_dit"}, "preamble"),
 ])  # fmt: skip
-def test_vllm_omni_recipe_binds_until_it_turns_on_a_lossy_switch(native_fragment, fault, name):
+def test_vllm_omni_recipe_binds_only_reviewed_settings(native_fragment, fault, refusal):
     raw, write = native_fragment
     _as_vllm(raw)
     [server] = raw["services"]
     server["args"] += ["--diffusion-attention-backend", "FLASH_ATTN"]
-    server["env"] |= {"OMNI_DIFFUSION_PROMPT_EMBED_CACHE": "0", "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION": "NONE"}
+    server["env"] |= {
+        "OMNI_DIFFUSION_PROMPT_EMBED_CACHE": "0",
+        "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION": "NONE",
+    }
     video.prepare(write(raw), ENV, root=ROOT)
 
     server["args"] += fault.get("args", [])
     server["env"] |= fault.get("env", {})
-    with pytest.raises(ValueError, match=f"vLLM-Omni {name}=.* is not lossless"):
+    server.update({"preamble": fault["preamble"]} if "preamble" in fault else {})
+    with pytest.raises(ValueError, match=re.escape(refusal)):
         video.prepare(write(raw), ENV, root=ROOT)
 
 
@@ -153,11 +201,15 @@ def test_vllm_omni_recipe_must_turn_off_a_cache_its_engine_defaults_on(native_fr
     [server] = raw["services"]
     server["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] = "0"
     server["args"] = server["args"][:-2]
-    with pytest.raises(ValueError, match="minimax_h3_adaln_cache on by default for MiniMaxAI/MiniMax-H3"):
+    with pytest.raises(
+        ValueError, match="minimax_h3_adaln_cache on by default for MiniMaxAI/MiniMax-H3"
+    ):
         video.prepare(write(raw), ENV, root=ROOT)
 
 
-def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(native_fragment, tmp_path):
+def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
+    native_fragment, tmp_path
+):
     raw, write = native_fragment
     raw["environment"] = {"GLOBAL_TUNABLE": "literal-$DOLLAR", "TUNABLE_ENV": "global-override"}
     engine = tmp_path / "engine.py"
@@ -181,8 +233,10 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     bound = video.prepare(write(raw), environment, root=ROOT)
     [server] = bound["services"]
     assert bound["resources"]["gpus_per_node"] == 2
-    assert server["env"]["VIDEO_SPEC_PATH"] == bound["benchmark"]["env"]["VIDEO_SPEC_PATH"] == (
-        "/video-package/specs/h3.yaml"
+    assert (
+        server["env"]["VIDEO_SPEC_PATH"]
+        == bound["benchmark"]["env"]["VIDEO_SPEC_PATH"]
+        == ("/video-package/specs/h3.yaml")
     )
     Path(server["env"]["VIDEO_MODEL_PATH"]).mkdir(parents=True)
     output = tmp_path / "result"
@@ -202,7 +256,10 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     )
     result = subprocess.run(
         [sys.executable, "-c", bootstrap, "serve", *server["args"]],
-        env=process_env, capture_output=True, text=True, check=False,
+        env=process_env,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert result.returncode == 0, result.stderr
     child = json.loads((tmp_path / "child.json").read_text())
