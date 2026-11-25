@@ -218,7 +218,7 @@ def finalize_video_results(run: SrtRun, logs: Path, producer_sha: str) -> int:
     concurrency fails the point; invalid power fails it only under REQUIRE_POWER.
     """
     request, event = run.request, run.life.event
-    require(request, "INFERENCEX_RESULTS_PYTHON", "CONC_LIST", "GPU_COUNT", "VIDEO_SPEC")
+    require(request, "INFERENCEX_RESULTS_PYTHON", "GPU_COUNT", "VIDEO_SPEC")
     power_rc = _stage_power_package(run, logs)
     rc = validate_video_results(
         request.inferencex_results_python, run.workspace, logs, producer_sha,

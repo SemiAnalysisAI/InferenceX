@@ -51,7 +51,6 @@ def _service_package(tmp_path, service="video-server"):
         uuids = list(dict.fromkeys(row["gpu_uuid"] for row in csv.DictReader(stream)))
     server = pkg.logs_root / "video/server"
     server.mkdir(parents=True)
-    (server / "spec.json").write_text(json.dumps({"gpu_uuids": uuids}))
     (server / "launch.json").write_text(json.dumps({"gpu_uuids": uuids}))
     return pkg
 
@@ -102,20 +101,18 @@ def test_service_planned_gpus_validate_with_clip_normalized_energy(tmp_path):
 
 @pytest.mark.parametrize('fault', [
     "disjoint",
-    "launch_mismatch",
-], ids=['disjoint', 'launch_mismatch'])
+    "short",
+], ids=['disjoint', 'short'])
 def test_video_power_rejects_unjoined_server_gpu_identity(tmp_path, fault):
     pkg = _service_package(tmp_path)
     _cell(pkg, pkg.logs_root)
-    server = pkg.logs_root / "video/server"
-    spec_path, launch_path = server / "spec.json", server / "launch.json"
-    spec = json.loads(spec_path.read_text())
+    launch_path = pkg.logs_root / "video/server/launch.json"
+    uuids = json.loads(launch_path.read_text())["gpu_uuids"]
     if fault == "disjoint":
-        spec["gpu_uuids"] = [f"GPU-other-{index}" for index in range(4)]
-        launch_path.write_text(json.dumps(spec))
-        spec_path.write_text(json.dumps(spec))
+        uuids = [f"GPU-other-{index}" for index in range(4)]
     else:
-        launch_path.write_text(json.dumps({"gpu_uuids": [*spec["gpu_uuids"][:-1], "GPU-other"]}))
+        uuids = uuids[:-1]
+    launch_path.write_text(json.dumps({"gpu_uuids": uuids}))
     workspace = tmp_path / "ws"
     workspace.mkdir()
     assert video.run(

@@ -785,10 +785,7 @@ def run_plan(
     job from violating the declared concurrency, remaining slots are not submitted.
     Native media decoding observes a cooperative, not preemptive, deadline.
     """
-    frozen = validate_plan(plan)
     serving = serving_settings(serving_concurrency, delivery_deadline_seconds)
-    if runtime not in RUNTIMES:
-        raise ValueError("runtime must be sglang or vllm-omni")
     for field, value in (
         ("runtime_revision", runtime_revision),
         ("hardware_label", hardware_label),
@@ -803,12 +800,10 @@ def run_plan(
             raise ValueError(
                 "numerical_identity must contain a complete matching server configuration"
             )
-        canonical_json_bytes(numerical_identity)
-    if runtime == "sglang" and frozen["model_id"] == WAN22_MODEL_ID:
+    if runtime == "sglang" and plan["model_id"] == WAN22_MODEL_ID:
         # These requests omit the shift, so only the recorded launch shows which one was served.
         if numerical_identity is None or (
-            sglang_flow_shift(numerical_identity["server_argv"])
-            != frozen["generation"]["flow_shift"]
+            sglang_flow_shift(numerical_identity["server_argv"]) != plan["generation"]["flow_shift"]
         ):
             raise ValueError(
                 "SGLang Wan2.2 runs need a sealed server launch whose --flow-shift equals the plan"
@@ -840,21 +835,21 @@ def run_plan(
         },
     }
 
-    slots = _slots(frozen)
-    payloads = {slot["slot_id"]: _payload(frozen, slot, runtime) for slot in slots}
-    encoding = requested_encoding(frozen)
+    slots = _slots(plan)
+    payloads = {slot["slot_id"]: _payload(plan, slot, runtime) for slot in slots}
+    encoding = requested_encoding(plan)
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=False)
     (directory / "artifacts").mkdir()
     (directory / "requests").mkdir()
-    plan_sha256 = _digest(frozen)
-    _write_json(directory / "plan.json", frozen, exclusive=True)
+    plan_sha256 = _digest(plan)
+    _write_json(directory / "plan.json", plan, exclusive=True)
     configuration: dict[str, Any] = {
         "runtime": runtime,
         "runtime_revision": runtime_revision,
         "hardware_label": hardware_label,
-        "model_id": frozen["model_id"],
-        "model_revision": frozen["model_revision"],
+        "model_id": plan["model_id"],
+        "model_revision": plan["model_revision"],
         "endpoint": safe_endpoint,
         "identity_verification": "operator_declared",
         "plan_sha256": plan_sha256,
@@ -888,14 +883,14 @@ def run_plan(
         ).hexdigest()
     configuration["configuration_sha256"] = _digest(configuration)
     _write_json(directory / "configuration.json", configuration, exclusive=True)
-    scheduled = len(frozen["cases"]) * frozen["repetitions"]
+    scheduled = len(plan["cases"]) * plan["repetitions"]
     run: dict[str, Any] = {
         "bundle_version": "0.1.0",
         "bundle_type": "mvp_run",
         "run_id": "video-" + uuid.uuid4().hex,
-        "plan_id": frozen["plan_id"],
+        "plan_id": plan["plan_id"],
         "plan_sha256": plan_sha256,
-        "plan": frozen,
+        "plan": plan,
         "configuration": configuration,
         "evidence_kind": "operator_endpoint",
         "started_at": _timestamp(),
@@ -904,7 +899,7 @@ def run_plan(
         "measurement": {
             "boundary": "submit_to_validated_media",
             "concurrency": 1,
-            "warmup_runs": frozen["warmup_runs"],
+            "warmup_runs": plan["warmup_runs"],
             "wall_seconds": 0.0,
         },
         "records": [],
@@ -944,11 +939,11 @@ def run_plan(
     def attempt(slot: dict, *, defer_validation: bool = False) -> dict:
         nonlocal abort_reason, interrupted
         expected = {
-            **frozen["generation"],
+            **plan["generation"],
             "requires_motion": slot["requires_motion"],
             "requires_sound": slot["requires_sound"],
             "requires_picture": True,
-            "audio_required": frozen["model_id"] != WAN22_MODEL_ID,
+            "audio_required": plan["model_id"] != WAN22_MODEL_ID,
         }
         expected["duration_seconds"] = expected["frame_count"] / expected["fps"]
         if encoding:

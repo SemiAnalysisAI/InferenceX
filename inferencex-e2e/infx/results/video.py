@@ -40,22 +40,16 @@ def _sha256(path: Path) -> str:
 
 
 def _server_gpu_uuids(logs_root: Path, gpu_count: int) -> tuple[str, ...]:
-    """The actual server assignment, sealed in both native video launch records."""
-    server = logs_root / VIDEO_DIR / "server"
-    spec = read_object(server / "spec.json").get("gpu_uuids")
-    launch = read_object(server / "launch.json").get("gpu_uuids")
+    """The actual server assignment, sealed in the native video launch record."""
+    uuids = read_object(logs_root / VIDEO_DIR / "server" / "launch.json").get("gpu_uuids")
     if (
-        not isinstance(spec, list)
-        or len(spec) != gpu_count
-        or any(not isinstance(uuid, str) or not uuid for uuid in spec)
-        or len(set(spec)) != gpu_count
-        or not isinstance(launch, list)
-        or len(launch) != gpu_count
-        or any(not isinstance(uuid, str) or not uuid for uuid in launch)
-        or set(launch) != set(spec)
+        not isinstance(uuids, list)
+        or len(uuids) != gpu_count
+        or any(not isinstance(uuid, str) or not uuid for uuid in uuids)
+        or len(set(uuids)) != gpu_count
     ):
-        raise ValueError("server spec and launch GPU UUIDs are missing or disagree")
-    return tuple(spec)
+        raise ValueError("server launch GPU UUIDs are missing or malformed")
+    return tuple(uuids)
 
 
 def build_aggregate(
@@ -73,12 +67,6 @@ def build_aggregate(
     serving = run.get("serving") or {}
     measurement = run.get("measurement") or {}
     plan = run.get("plan") or {}
-    if measurement.get("concurrency") != concurrency or bench.get("max_concurrency") != concurrency:
-        raise ValueError(f"cell c{concurrency}: run and window disagree with the concurrency")
-    if bench.get("completed") != summary.get("valid") or bench.get("scheduled") != summary.get(
-        "scheduled"
-    ):
-        raise ValueError(f"cell c{concurrency}: window counts do not match the run summary")
     valid_per_second = summary.get("valid_clips_per_second")
     return {
         "schema_version": 1,

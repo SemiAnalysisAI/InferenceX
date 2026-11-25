@@ -77,4 +77,4 @@ def test_trusted_external_dispatch_records_reusable_video_matrix(tmp_path, agent
         return
     assert output.read_text() == "video-manifest=true\n"
     assert json.loads((tmp_path / "sweep_manifest.json").read_text()) == {
-        "head": head, "run-id": 123, "run-attempt": 2, "video-full-sweep": True, "matrix": plan}
+        "head": head, "run-id": 123, "run-attempt": 2, "matrix": plan}

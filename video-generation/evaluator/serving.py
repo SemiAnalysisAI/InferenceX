@@ -30,7 +30,22 @@ def _finite(value: object) -> bool:
     return type(value) in (int, float) and math.isfinite(value)
 
 
-def validate_window(run: dict) -> int:
+def _peak_in_flight(run: dict) -> int:
+    """The most measurement requests in transport at one moment."""
+    events = []
+    for record in run["records"]:
+        if record["phase"] == "measurement" and record["attempted"]:
+            timing = record["timing_window"]
+            events.append((timing["start_monotonic_seconds"], 1))
+            events.append((timing["transport_end_monotonic_seconds"], -1))
+    active = peak = 0
+    for _, delta in sorted(events, key=lambda item: (item[0], item[1])):
+        active += delta
+        peak = max(peak, active)
+    return peak
+
+
+def validate_window(run: dict) -> None:
     """Verify wall time and observed client concurrency from request intervals."""
     load = run["configuration"].get("serving")
     if not isinstance(load, dict) or load != settings(
@@ -50,7 +65,6 @@ def validate_window(run: dict) -> int:
         or abs(end - start - wall) > 1e-6
     ):
         raise ValueError("invalid serving measurement window")
-    events = []
     if not isinstance(run.get("records"), list):
         raise ValueError("serving records must be a list")
     for record in run["records"]:
@@ -76,14 +90,8 @@ def validate_window(run: dict) -> int:
             )
         ):
             raise ValueError("request transport falls outside serving window")
-        events.extend(((begin, 1), (finish, -1)))
-    active = peak = 0
-    for _, delta in sorted(events, key=lambda item: (item[0], item[1])):
-        active += delta
-        peak = max(peak, active)
-    if peak > load["concurrency"]:
+    if _peak_in_flight(run) > load["concurrency"]:
         raise ValueError("observed requests exceed declared serving concurrency")
-    return peak
 
 
 def _quantiles(ordered: list) -> dict:
@@ -142,7 +150,7 @@ def summarize(run: dict) -> dict:
         "observed_submission_rate_per_second": sum(r["attempted"] for r in records) / wall
         if wall > 0
         else None,
-        "peak_client_in_flight": validate_window(run),
+        "peak_client_in_flight": _peak_in_flight(run),
         "valid_video_seconds_per_second": seconds / wall
         if seconds is not None and wall > 0
         else None,

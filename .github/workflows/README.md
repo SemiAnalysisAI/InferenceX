@@ -361,7 +361,9 @@ normal ingestion code skips failed benchmark rows. Benchmark rows and public
 links retain source-run provenance. Source coverage is authoritative, so later
 matrix/eval policy changes do not invalidate reuse. Video is the exception: Merge
 Ingest publishes only when the merge commit's video rows have the recipe
-fingerprints of the reused run's `video-sweep-manifest`.
+fingerprints of the reused run's `video-sweep-manifest`. On a push with both LLM
+and video rows, that check runs before either dispatch, so a failed video check
+publishes nothing.
 
 When the app's ingest finishes, on success or failure, it sends
 `ingest-results-completed` back with per-run counts (benchmark, eval, trace and

@@ -407,7 +407,7 @@ jobs:
                       Path(os.environ['RUNNER_TEMP'], 'sweep_manifest.json').write_text(json.dumps({
                           'head': identity['head_sha'], 'run-id': int(os.environ['GITHUB_RUN_ID']),
                           'run-attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
-                          'video-full-sweep': True, 'matrix': plan,
+                          'matrix': plan,
                       }))
                       with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                           output.write('video-manifest=true\n')
