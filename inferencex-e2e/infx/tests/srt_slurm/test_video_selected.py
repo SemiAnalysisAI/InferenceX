@@ -10,6 +10,13 @@ import yaml
 
 from infx.config import repository_root
 from infx.srt_slurm import video
+from infx.tests.srt_recipes import (
+    VIDEO_MODEL,
+    VIDEO_SET,
+    VIDEO_SPEC,
+    write_shared_blocks,
+    write_video_specs,
+)
 
 ROOT = repository_root()
 ENV = {
@@ -129,7 +136,6 @@ def _as_vllm(raw):
     ({"args": ["-qfp8"]}, "argument '-qfp8'"),
     ({"args": ["--diffusion_attention_back", "FLASH_ATTN"]}, "argument '--diffusion_attention_back'"),
     ({"args": ["--diffusion-attention-backend", "RAINFUSION_ATTN"]}, "flag --diffusion-attention-backend="),
-    ({"args": ["--cache-config", '{"minimax_h3_adaln_cache": true}']}, "flag --cache-config="),
     ({"env": {"DIFFUSION_CACHE_BACKEND": "cache_dit"}}, "variable DIFFUSION_CACHE_BACKEND"),
     ({"env": {"VLLM_ROCM_QUICK_REDUCE_QUANTIZATION": "FP8"}}, "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION='FP8'"),
     ({"preamble": "export DIFFUSION_CACHE_BACKEND=cache_dit"}, "preamble"),
@@ -153,6 +159,7 @@ def test_vllm_omni_recipe_binds_only_reviewed_settings(native_fragment, fault, r
     (["--quantization", "fp8"], {}, "argument '--quantization'"),
     (["--attention-backend", "sage_attn"], {}, "flag --attention-backend='sage_attn'"),
     (["--enable-torch-compile", "--enable-cache-dit"], {}, "flag --enable-torch-compile needs a value"),
+    (["--tp-size", "4"], {}, "argument --tp-size is given twice"),
     ([], {"SGLANG_CACHE_DIT_ENABLED": "true"}, "variable SGLANG_CACHE_DIT_ENABLED"),
 ])  # fmt: skip
 def test_sglang_recipe_binds_only_reviewed_settings(native_fragment, args, env, refusal):
@@ -181,11 +188,29 @@ def test_sglang_recipe_must_reach_the_engine_through_the_harness_and_fix_its_mod
         video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
 
 
+def test_a_model_row_reviews_its_flags_for_that_model_only(native_fragment, tmp_path):
+    raw, write = native_fragment
+    raw["services"][0]["args"] += ["--disable-conditioning-cache", "--model-variant", "fl2va"]
+    selected = {**ENV, "FRAMEWORK": "sglang"}
+    video.prepare(write(raw), selected, root=ROOT)
+
+    project = tmp_path / "repository/inferencex-e2e"
+    write_shared_blocks(project)
+    write_video_specs(project.parent)
+    other = {**selected, "MODEL": VIDEO_MODEL, "VIDEO_SPEC": VIDEO_SPEC, "VIDEO_SET": VIDEO_SET}
+    with pytest.raises(ValueError, match="argument '--model-variant'"):
+        video.prepare(write(raw), other, root=project)
+
+
 def test_vllm_omni_recipe_must_turn_off_a_cache_its_engine_defaults_on(native_fragment):
     raw, write = native_fragment
     _as_vllm(raw)
     [server] = raw["services"]
     server["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] = "0"
+    server["args"][-1] = '{"minimax_h3_adaln_cache": true}'
+    with pytest.raises(ValueError, match=re.escape("flag --cache-config=")):
+        video.prepare(write(raw), ENV, root=ROOT)
+
     server["args"] = server["args"][:-2]
     with pytest.raises(ValueError, match="minimax_h3_adaln_cache on by default for MiniMaxAI/MiniMax-H3"):
         video.prepare(write(raw), ENV, root=ROOT)

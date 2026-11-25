@@ -8,7 +8,7 @@ import re
 import shlex
 from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -290,8 +290,6 @@ _REVIEWED = {
             "--model-path": None,
             "--model-id": None,
             "--revision": None,
-            # The pipeline the spec's workload names.
-            "--model-variant": frozenset({"fl2va"}),
             "--num-gpus": None,
             "--host": None,
             "--port": None,
@@ -307,7 +305,7 @@ _REVIEWED = {
             "--dit-cpu-offload": None,
             # The plan pins it; srt_selected and the attestation compare.
             "--flow-shift": None,
-            # The dense members of AttentionBackendEnum that attestation.py accepts.
+            # Copies SGLANG.dense_attention in attestation.py, which infx has no import path to.
             "--attention-backend": frozenset(
                 {"fa", "fa2", "torch_sdpa", "torch_cudnn_sdpa", "dynamic_cudnn_sdpa", "aiter"}
             ),
@@ -377,10 +375,30 @@ _REVIEWED = {
         required=frozenset(),
     ),
 }
-# --cache-config keys vLLM-Omni turns on by default for a model; its rows must pass each as false.
-_VLLM_OMNI_DEFAULT_ON: dict[str, tuple[str, ...]] = {
-    "MiniMaxAI/MiniMax-H3": ("minimax_h3_adaln_cache",),
+
+
+@dataclass(frozen=True)
+class _ReviewedModel:
+    """What one model adds to the engine registries, so a new model is one row.
+
+    ``flags`` maps each runtime to the flags only this model's rows may pass on it, with value
+    sets as in ``_Reviewed``. ``vllm_omni_default_on`` names the --cache-config keys vLLM-Omni
+    turns on by default for the model; its rows must pass each as false.
+    """
+
+    flags: Mapping[str, Mapping[str, frozenset[str] | None]]
+    vllm_omni_default_on: tuple[str, ...]
+
+
+_REVIEWED_MODELS = {
+    "MiniMaxAI/MiniMax-H3": _ReviewedModel(
+        # The pipeline the spec's workload names.
+        flags={"sglang": {"--model-variant": frozenset({"fl2va"})}, "vllm-omni": {}},
+        vllm_omni_default_on=("minimax_h3_adaln_cache",),
+    ),
 }
+# A model without a row adds nothing to its engine's registry.
+_NO_ADDITIONS = _ReviewedModel(flags={name: {} for name in _REVIEWED}, vllm_omni_default_on=())
 
 
 def _refuse_value(
@@ -392,9 +410,9 @@ def _refuse_value(
 
 def _refuse_unreviewed(
     reviewed: _Reviewed, arguments: list[str], env: Mapping[str, Any], preamble: Any
-) -> dict[str, list[str]]:
-    """Refuse a row that gives its engine a setting outside ``reviewed``; return each flag's
-    values."""
+) -> dict[str, str]:
+    """Refuse a row that gives its engine a setting outside ``reviewed``, or one flag or switch
+    twice; return each flag's value."""
     engine = reviewed.engine
     if preamble and preamble not in reviewed.preambles:
         raise ValueError(f"{engine} preamble {preamble!r} is not a reviewed preamble")
@@ -404,38 +422,45 @@ def _refuse_unreviewed(
                 f"{engine} environment variable {name} is not in the reviewed registry"
             )
         _refuse_value(engine, "environment variable", name, str(value), reviewed.env[name])
-    values: dict[str, list[str]] = {}
+    values: dict[str, str] = {}
+    given: set[str] = set()
     tokens = iter(arguments)
     for flag in tokens:
-        if flag in reviewed.switches:
-            continue
-        if flag not in reviewed.flags:
-            raise ValueError(f"{engine} argument {flag!r} is not a reviewed flag spelled in full")
-        # A flag with an optional value would otherwise hide the switch that follows it.
-        value = next(tokens, "")
-        if not value or value.startswith("--"):
-            raise ValueError(f"{engine} flag {flag} needs a value, not {value!r}")
-        _refuse_value(engine, "flag", flag, value, reviewed.flags[flag])
-        values.setdefault(flag, []).append(value)
+        if flag not in reviewed.switches:
+            if flag not in reviewed.flags:
+                raise ValueError(
+                    f"{engine} argument {flag!r} is not a reviewed flag spelled in full"
+                )
+            # A flag with an optional value would otherwise hide the switch that follows it.
+            value = next(tokens, "")
+            if not value or value.startswith("--"):
+                raise ValueError(f"{engine} flag {flag} needs a value, not {value!r}")
+            _refuse_value(engine, "flag", flag, value, reviewed.flags[flag])
+            values[flag] = value
+        # The engine would keep the last value and ignore the earlier one.
+        if flag in given:
+            raise ValueError(f"{engine} argument {flag} is given twice")
+        given.add(flag)
     missing = sorted(reviewed.required - values.keys())
     if missing:
         raise ValueError(f"{engine} rows must set {', '.join(missing)}")
     return values
 
 
-def _refuse_cached_vllm_omni(model: str, cache_configs: list[str]) -> None:
-    configs = []
-    for value in cache_configs:
+def _refuse_cached_vllm_omni(
+    model: str, default_on: tuple[str, ...], cache_config: str | None
+) -> None:
+    config: dict[str, Any] = {}
+    if cache_config is not None:
         try:
-            config = json.loads(value)
+            config = json.loads(cache_config)
             lossless = all(enabled is False for enabled in config.values())
         except (ValueError, AttributeError):
             lossless = False
         if not lossless:
-            raise ValueError(f"vLLM-Omni flag --cache-config={value!r} is not lossless")
-        configs.append(config)
-    for key in _VLLM_OMNI_DEFAULT_ON.get(model, ()):
-        if not any(key in config for config in configs):
+            raise ValueError(f"vLLM-Omni flag --cache-config={cache_config!r} is not lossless")
+    for key in default_on:
+        if key not in config:
             raise ValueError(
                 f"vLLM-Omni turns {key} on by default for {model}: the recipe must pass "
                 "it as false in --cache-config"
@@ -520,14 +545,16 @@ def bind_video(
     revision = str((service.get("env") or {}).get("VIDEO_RUNTIME_REVISION", ""))
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("video service requires a pinned VIDEO_RUNTIME_REVISION")
+    reviewed = _REVIEWED[runtime]
+    additions = _REVIEWED_MODELS.get(model, _NO_ADDITIONS)
     flags = _refuse_unreviewed(
-        _REVIEWED[runtime],
+        replace(reviewed, flags={**reviewed.flags, **additions.flags[runtime]}),
         arguments,
         {**(bound.get("environment") or {}), **service["env"]},
         service.get("preamble"),
     )
     if runtime == "vllm-omni":
-        _refuse_cached_vllm_omni(model, flags.get("--cache-config", []))
+        _refuse_cached_vllm_omni(model, additions.vllm_omni_default_on, flags.get("--cache-config"))
     values = {
         "MODEL": model,
         "CONC_LIST": " ".join(map(str, concurrencies)),
