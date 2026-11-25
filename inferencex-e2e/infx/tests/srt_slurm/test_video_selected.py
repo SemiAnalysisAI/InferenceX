@@ -200,19 +200,17 @@ def test_vllm_omni_recipe_must_turn_off_a_cache_its_engine_defaults_on(native_fr
 
 def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(native_fragment, tmp_path):
     raw, write = native_fragment
-    # Reviewed SGLang names stand in for any recipe setting.
-    raw["environment"] = {"ROCM_QUICK_REDUCE_QUANTIZATION": "NONE", "SGLANG_USE_AITER": "global-override"}
     engine = tmp_path / "engine.py"
     engine.write_text(
         "import json, os, sys\n"
         "from pathlib import Path\n"
         "Path(os.environ['CHILD_RECEIPT']).write_text(json.dumps({"
         "'argv': sys.argv, 'tunable': os.environ['SGLANG_USE_AITER'], "
-        "'global_tunable': os.environ['ROCM_QUICK_REDUCE_QUANTIZATION'], "
         "'metadata_present': 'VIDEO_RECIPE_ENV_KEYS' in os.environ, "
         "'gpu_uuids': os.environ['VGBENCH_GPU_UUIDS']}))\n"
     )
     raw["services"][0]["args"].append("--disable-conditioning-cache")
+    # Reviewed SGLang names stand in for any recipe setting.
     raw["services"][0]["env"]["SGLANG_USE_AITER"] = "{model_revision}"
     environment = {**ENV, "FRAMEWORK": "sglang", "HF_HUB_CACHE": str(tmp_path / "cache")}
     bound = video.prepare(write(raw), environment, root=ROOT)
@@ -226,7 +224,6 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     output = tmp_path / "result"
     process_env = {
         **os.environ,
-        **bound.get("environment", {}),
         **server["env"],
         "PYTHONPATH": os.pathsep.join((str(video.video_package(ROOT)), str(ROOT))),
         "VIDEO_SPEC_PATH": str(video.video_package(ROOT) / "specs/h3.yaml"),
@@ -255,15 +252,13 @@ def test_bound_selected_service_executes_its_engine_and_retains_launch_receipts(
     assert launch["environment"]["SGLANG_USE_AITER"] == launch["model_revision"]
     assert launch["argv"] == expected_command == spec["baseline"]["argv"]
     assert child["tunable"] == launch["model_revision"]
-    assert child["global_tunable"] == raw["environment"]["ROCM_QUICK_REDUCE_QUANTIZATION"]
     assert child["metadata_present"] is False
-    assert launch["environment"]["ROCM_QUICK_REDUCE_QUANTIZATION"] == child["global_tunable"]
     assert "VIDEO_RECIPE_ENV_KEYS" not in launch["environment"]
     assert child["gpu_uuids"].split(",") == launch["gpu_uuids"] == spec["gpu_uuids"]
     assert launch["model_revision"] == spec["baseline"]["model_revision"]
 
 
-def test_fragment_extends_the_shared_blocks_and_may_not_restate_their_keys(tmp_path):
+def test_recipe_sets_only_allowlisted_keys_on_the_one_shared_server(tmp_path):
     shared = {
         "name": "video-server", "type": "generic", "nodes": 1,
         "env": {"VIDEO_SERVER_PORT": "30283", "HF_HUB_OFFLINE": "1"},
@@ -282,11 +277,12 @@ def test_fragment_extends_the_shared_blocks_and_may_not_restate_their_keys(tmp_p
         return video.compose_video_recipe(fragment, root=tmp_path)
 
     lean = {
-        "name": "video-server", "args": ["--tp-size", "1"],
+        "name": "video-server", "preamble": "export FIXTURE=1", "args": ["--tp-size", "1"],
         "env": {"VIDEO_RUNTIME_REVISION": "b" * 40}, "readiness": {"timeout_seconds": 60},
     }
     complete = {
-        "name": "video-server", "type": "generic", "nodes": 1, "args": ["--tp-size", "1"],
+        "name": "video-server", "type": "generic", "nodes": 1,
+        "preamble": "export FIXTURE=1", "args": ["--tp-size", "1"],
         "env": {
             "VIDEO_SERVER_PORT": "30283", "HF_HUB_OFFLINE": "1",
             "VIDEO_RUNTIME_REVISION": "b" * 40,
@@ -296,26 +292,19 @@ def test_fragment_extends_the_shared_blocks_and_may_not_restate_their_keys(tmp_p
             "timeout_seconds": 60,
         },
     }
-    sidecar = {"name": "sidecar", "command": ["true"]}
-    extended = compose(lean, sidecar, benchmark={"env": {"CLIENT_ENV": "kept"}})
-    assert extended["services"] == [complete, sidecar]
-    assert extended["benchmark"] == {**client, "env": {**client["env"], "CLIENT_ENV": "kept"}}
+    composed = compose(lean, name="fixture", resources={"gpu_type": "fixture"})
+    assert composed["services"] == [complete]
+    assert composed["benchmark"] == client
 
+    own_server = {**lean, "name": "own-server", "nodes": 1, "command": ["true"]}
     for declared, blocks, refusal in (
-        (
-            {**lean, "nodes": 2, "env": {"HF_HUB_OFFLINE": "0"}}, {},
-            "env.HF_HUB_OFFLINE, nodes from service 'video-server'",
-        ),
-        (
-            complete, {},
-            "env.HF_HUB_OFFLINE, env.VIDEO_SERVER_PORT, nodes, readiness.http, "
-            "readiness.interval_seconds, type from service 'video-server'",
-        ),
-        (
-            lean, {"benchmark": {"type": "custom", "env": {"VIDEO_SERVER_PORT": "1"}}},
-            "benchmark.env.VIDEO_SERVER_PORT, benchmark.type from the fragment",
-        ),
-        (lean, {"frontend": {"type": "none"}}, "frontend.type from the fragment"),
+        # srtctl appends each srun option after its own --container-image.
+        ([lean], {"srun_options": {"container-image": "other/engine:1"}}, "remove srun_options;"),
+        ([{**lean, "container": "other/engine:1"}], {}, "remove services.container;"),
+        ([{**lean, "readiness": {"http": {"port": 1}}}], {}, "remove services.readiness.http;"),
+        ([lean, {"name": "sidecar", "command": ["true"]}], {}, "a video recipe declares exactly"),
+        ([own_server], {}, "a video recipe declares exactly"),
+        ([{**lean, "env": {"HF_HUB_OFFLINE": "0"}}], {}, "remove env.HF_HUB_OFFLINE;"),
     ):
-        with pytest.raises(ValueError, match=f"agg-tp1.yaml: remove {refusal}"):
-            compose(declared, **blocks)
+        with pytest.raises(ValueError, match=f"agg-tp1.yaml: {refusal}"):
+            compose(*declared, **blocks)
