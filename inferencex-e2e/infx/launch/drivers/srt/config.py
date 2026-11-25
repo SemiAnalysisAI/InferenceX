@@ -152,8 +152,9 @@ def render(cluster: Cluster, job: SrtJob) -> dict[str, Any]:
     exclusive = srt.single_node_exclusive if job.single_node else settings.exclusive
     config["use_exclusive_sbatch_directive"] = exclusive
     directives: dict[str, str] = {}
-    if settings.exclude:
-        directives["exclude"] = ",".join(settings.exclude)
+    exclude = (*settings.exclude, *(() if job.single_node else srt.multi_node_exclude))
+    if exclude:
+        directives["exclude"] = ",".join(exclude)
     directives.update(settings.cpu_directives())
     if job.mem_mib is not None:
         directives["mem"] = f"{job.mem_mib}M" if job.mem_mib else "0"

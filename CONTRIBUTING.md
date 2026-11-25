@@ -49,6 +49,8 @@ what the pinned upstream image does with it out of the box. The baseline is the
 same checkpoint loaded by the same pinned image with no draft-related settings from
 the submission. A submission is compliant when its effective draft precision matches
 that baseline. It is not compliant when it makes the draft cheaper than that baseline.
+The draft KV-cache dtype is judged only by the draft KV-cache rule below, not by this
+baseline comparison.
 
 Allowed (this is the baseline, not an exception):
 
@@ -72,6 +74,30 @@ Allowed (this is the baseline, not an exception):
   the same draft computation faster without lowering the precision of its weights or
   activations below what ships.
 
+Draft KV-cache dtype rule. Besides the framework's default draft KV-cache dtype for
+that checkpoint (allowed above), a submission may set the storage dtype of the draft's
+own KV cache to `bf16`, `fp16`, `fp32`, `fp8`, `fp8_e4m3`, or `fp8_e5m2` (or the
+pinned framework's spelling of these), even when it is below the framework default or
+differs from the target KV-cache dtype, only if all of the following hold:
+
+- It is set through launch flags or engine config fields documented by the pinned
+  image (CLI flags, `--speculative-config` JSON, srt-slurm recipe YAML), not through
+  checkpoint-file edits, patches, or undocumented environment variables.
+- For runs that use golden/synthetic acceptance, the golden AL identity used for that
+  run in `inferencex-e2e/infx/golden_al_distribution/identities.yaml` records the same
+  `draft_kv_cache_dtype`. This is a condition of the rule, checked from the committed
+  file, not an AL-based exemption.
+- It changes only the draft KV storage dtype and the attention-input cast the pinned
+  framework applies automatically to read that dtype (for example an FP8 query for
+  FP8-KV attention). It does not allow any other quantization of draft weights,
+  activations, or GEMMs, or settings that change how the draft reads the target's KV
+  pool or enable quantized draft attention compute (for example ATOM DeepSeek-V4.1
+  `DSparkConfig.draft_kv_dtype=fp8`, which reads MXFP8 windows with OPUS A8W8).
+
+Any other draft KV-cache dtype (for example `int8`, `int4`, `fp8_per_token_head`,
+MXFP8, FP4, NVFP4, MXFP4) is allowed only when it is the framework's default for that
+checkpoint. This rule does not change eval requirements.
+
 Forbidden (submission-side precision hacking of the draft):
 
 - Enabling `SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE` (`=1` or any other enabling
@@ -89,7 +115,7 @@ Forbidden (submission-side precision hacking of the draft):
   applied to a BF16 MTP head, `SGLANG_GLM_NEXTN_MOE_PTPC=1`, and an ATOM
   `--online_quant_config` whose `exclude_layer` patterns do not cover the entire draft
   head.
-- Dtype overrides aimed at the draft that lower its precision below the framework's default for that checkpoint.
+- Weight, activation, or compute dtype overrides aimed at the draft that lower its precision below the framework's default for that checkpoint, and draft KV-cache dtypes that the draft KV-cache rule above does not allow.
 - Substituting a precision-converted or differently quantized draft checkpoint, or a
   draft head taken from a different release than the served target.
 - Patching the pinned image so that it loads or computes the draft at a different
@@ -116,7 +142,10 @@ name or precision label.
 For speculative-decoding changes, the CODEOWNER's additional detail section must
 identify the draft checkpoint/revision (or embedded head), the precision it ships in,
 how the pinned upstream image handles it by default, and its effective serving
-precision, so the reviewer can confirm the last two match. If evidence is missing
+precision, including the effective draft KV-cache dtype per configuration and, for
+synthetic-acceptance runs, the golden AL identity used, so the reviewer can confirm
+the last two match apart from a draft KV-cache dtype allowed by the draft KV-cache
+rule. If evidence is missing
 or inaccessible, record the uncertainty and missing evidence instead of claiming
 verification. Check 13 reports WARN and requests human review; this does not
 establish compliance or grant an exception. A demonstrated precision violation or

@@ -120,6 +120,19 @@ jobs:
       checks: read # Read check-runs on PR commits.
     outputs:
       verification-succeeded: ${{ steps.outcome.outputs.succeeded }}
+    env:
+      VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
+      VERIFIER_CLAUDE_ARGS: |
+        --model 'claude-opus-5-5'
+        --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(docker manifest inspect:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_facts:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
+        --disallowedTools "Read(//proc/**),Write(//proc/**)"
+      # claude-code-action hides the transcript, so log only why the agent stopped and what it was denied.
+      CLAUDE_RUN_SUMMARY_JQ: |
+        .[] | select(.type == "result")
+        | "Stop: \(.subtype) after \(.num_turns) turns",
+          "Final message:", (.result // "(none)"),
+          "Permission denials (\(.permission_denials | length)):",
+          (.permission_denials[]? | "- \(.tool_name): \(.tool_input.command // .tool_input.file_path // .tool_input.url // (.tool_input | tostring))")
     steps:
       - name: Checkout trusted workflow code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -185,35 +198,97 @@ jobs:
           settings: |
             {"fastMode": true}
 
-          claude_args: |
-            --model 'claude-opus-5-5'
-            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(docker manifest inspect:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_facts:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
-            --disallowedTools "Read(//proc/**),Write(//proc/**)"
+          claude_args: ${{ env.VERIFIER_CLAUDE_ARGS }}
           prompt: |
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the
             instructions in it exactly — it is your complete task specification,
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
 
+      - name: Summarize Claude run
+        if: always() && steps.claude.outputs.execution_file != ''
+        continue-on-error: true
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        # Agent text can be steered by the PR, so print it with workflow commands disabled.
+        run: |
+          token="$(openssl rand -hex 16)"
+          echo "::stop-commands::$token"
+          trap 'echo "::$token::"' EXIT
+          jq -r "$CLAUDE_RUN_SUMMARY_JQ" "$EXECUTION_FILE"
+
+      - name: Check for verdict
+        id: verdict
+        if: steps.claude.outcome == 'success'
+        run: |
+          if [[ -f "$VERDICT_PATH" ]]; then
+            echo "written=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The agent sometimes ends its turn before writing the verdict; resuming keeps its findings.
+      - name: Resume Claude to write the verdict
+        id: claude_resume
+        if: steps.claude.outcome == 'success' && steps.verdict.outputs.written != 'true' && steps.claude.outputs.session_id != ''
+        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          BASH_DEFAULT_TIMEOUT_MS: "1800000"
+          BASH_MAX_TIMEOUT_MS: "3600000"
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          github_token: ${{ github.token }}
+          path_to_claude_code_executable: ${{ steps.claude_cli.outputs.path }}
+          track_progress: false
+          allowed_bots: ''
+          additional_permissions: |
+            actions: read
+          settings: |
+            {"fastMode": true}
+
+          claude_args: |
+            ${{ env.VERIFIER_CLAUDE_ARGS }}
+            --resume ${{ steps.claude.outputs.session_id }}
+          prompt: |
+            You ended your turn without writing /tmp/codeowner-signoff-verdict.md, so no
+            verdict was published. Finish any checks from
+            /tmp/codeowner-signoff-verify-prompt.md that you have not completed, then write
+            the verdict file and run signoff_validate on it as that file's "Verdict and
+            output" section requires. Do not stop until the file exists and validates.
+
+      - name: Summarize resumed Claude run
+        if: always() && steps.claude_resume.outputs.execution_file != ''
+        continue-on-error: true
+        env:
+          EXECUTION_FILE: ${{ steps.claude_resume.outputs.execution_file }}
+        run: |
+          token="$(openssl rand -hex 16)"
+          echo "::stop-commands::$token"
+          trap 'echo "::$token::"' EXIT
+          jq -r "$CLAUDE_RUN_SUMMARY_JQ" "$EXECUTION_FILE"
+
       - name: Record verification outcome
         id: outcome
         if: always()
         env:
-          CLAUDE_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
-          VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
+          CLAUDE_SUCCEEDED: ${{ steps.claude.outcome == 'success' && steps.claude_resume.outcome != 'failure' }}
         run: |
           succeeded=false
           if [[ "$CLAUDE_SUCCEEDED" == true && -f "$VERDICT_PATH" ]]; then
             succeeded=true
           fi
           echo "succeeded=$succeeded" >> "$GITHUB_OUTPUT"
+          if [[ "$succeeded" != true ]]; then
+            echo "::error::Verifier did not write $VERDICT_PATH"
+            exit 1
+          fi
 
       - name: Upload verdict
         if: always() && steps.outcome.outputs.succeeded == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codeowner-signoff-verdict
-          path: /tmp/codeowner-signoff-verdict.md
+          path: ${{ env.VERDICT_PATH }}
           if-no-files-found: error
           retention-days: 7
 
