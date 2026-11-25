@@ -124,8 +124,8 @@ jobs:
       VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
       VERIFIER_CLAUDE_ARGS: |
         --model 'claude-opus-5-5'
-        --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(docker manifest inspect:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_facts:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
-        --disallowedTools "Agent,Read(//proc/**),Write(//proc/**)"
+        --allowedTools "Agent,Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(docker manifest inspect:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_facts:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
+        --disallowedTools "Read(//proc/**),Write(//proc/**)"
       # claude-code-action hides the transcript, so log only why the agent stopped and what it was denied.
       CLAUDE_RUN_SUMMARY_JQ: |
         .[] | select(.type == "result")
@@ -187,6 +187,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
           github_token: ${{ github.token }}
@@ -203,8 +204,8 @@ jobs:
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the
             instructions in it exactly — it is your complete task specification,
             already rendered with this run's PR number, head SHA, and sign-off
-            metadata. Complete the checks directly and write the verdict file
-            before ending your turn.
+            metadata. Wait for any delegated checks to finish, then write the
+            verdict file before ending your turn.
 
       - name: Summarize Claude run
         if: always() && steps.claude.outputs.execution_file != ''
