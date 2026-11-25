@@ -1,3 +1,4 @@
 # Empty patch context lines retain their required space prefix.
 *.diff -text whitespace=-blank-at-eol
 *.csv -text
+manifest.json text eol=lf

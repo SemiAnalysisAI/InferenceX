@@ -2,7 +2,7 @@
 
 I document the pinned inputs, the nine-point replay contract and the available reproduction evidence for Ravi's final-mainline package. I provide the active image/patch/recipe integration in [the CI instructions](hyperloom-qwen38-ci.md). The reference JSON in this directory remains provenance data and is not consumed by the benchmark launcher.
 
-I have five scored full replays on MI350X. I have not completed C8/C24/C48/C80, natural model accuracy or an InferenceX CI sweep of this candidate. I keep this work in draft until those gaps and the image/recipe integration are resolved.
+I have five scored full replays on MI350X. In MI355X CI, C1/C2/C4/C8/C12/C16/C24 completed successfully at the earlier recipe revision; C48 failed temporal metric coverage in both attempts, the C80 performance job was cancelled, and C80 eval failed with GPU OOM. I retain these outcomes separately from the local replays and from validation of the corrected recipe.
 
 ## Inputs and attribution
 
@@ -13,6 +13,14 @@ I record all original file hashes, all nine original configurations and replay c
 I use the November 18 ROCm nightly pinned in the manifest. Its SGLang tree is upstream `3a41a599192906eee6aace241798136a6db2b9ad` plus the image's changes; its AITER tree is upstream `581579ab51ca26ddd4a08a6aa6aa983a78aaf276` plus the image's changes. The package patches apply to those image trees, not directly to clean upstream. I exclude the nightly's changes from upstream SGLang/AITER proposals.
 
 I pin model revision `bd6e49d9abfe0ce1da53a45593daaee83580035b`, InferenceX client `5a1f81029fe7421f2f6e870cae4af9c5ff2f2290`, lm-evaluation-harness `b315ef3b05176acc9732bb7fdec116abe1ecc476`, and AgentX dataset revision `8fecd2fc56694469f758f0afbbb6335ad3043740`. These are the reproduction pins; I do not claim they describe the current InferenceX runtime on this branch.
+
+## Effective reference-run clarification
+
+I incorporate Ravi's November 25 clarification that the final reference run used C80 `mem-fraction-static: 0.87` and C24 `hicache-size: 298`. The supplied JSON inputs contain C80 `0.88` and C24 `200`, which the first CI conversion retained; `reproduce.sh` passes those files directly and does not supply the clarified overrides. I preserve those original bytes and record the discrepancy as later source clarification. I apply the corrected values in the active CI recipe and require new GPU evidence before treating them as validated.
+
+I verified that the C48 attempt-2 figure of about 81% means latency-metric duration coverage, not request completion: TTFT/ITL cover 81.13%/81.20% of the hour against a 95% requirement, while 1,364 of 1,420 requests completed. I retain both C48 attempts as failures. I also distinguish all package gains from stock-image claims: even F1's reported 43–50% at C16/C80 was measured in the patched context, so I require a new unpatched comparison before quoting a stock-image gain.
+
+I keep public reproduction links limited to accessible image, engine and InferenceX resources; an inaccessible internal hand-off repository is not a public prerequisite.
 
 ## Replay contract
 

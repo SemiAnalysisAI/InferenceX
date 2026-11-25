@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
 set -eo pipefail
+source /infmax-workspace/benchmarks/check_env.sh
+check_env_vars HYPERLOOM_MANIFEST_SHA256
 python3 - <<'PY'
 from pathlib import Path
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 
 package = Path('/infmax-workspace/benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/mi355x-fp4-mtp/hyperloom')
-manifest = json.loads((package / 'manifest.json').read_text())
+manifest_bytes = (package / 'manifest.json').read_bytes()
+digest = hashlib.sha256(manifest_bytes).hexdigest()
+expected = os.environ['HYPERLOOM_MANIFEST_SHA256']
+if digest != expected:
+    raise RuntimeError(f'Hyperloom manifest hash mismatch: expected {expected}, got {digest}')
+manifest = json.loads(manifest_bytes)
 for entry in manifest['files']:
     path = package / entry['file']
     if hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']:
         raise RuntimeError(f'Hyperloom asset hash mismatch: {path}')
 
-digest = hashlib.sha256((package / 'manifest.json').read_bytes()).hexdigest()
 marker = Path('/sgl-workspace/.qwen38-hyperloom-patches')
 targets = [(Path('/sgl-workspace/sglang'), package / 'sglang.diff'),
            (Path('/sgl-workspace/aiter'), package / 'aiter.diff')]

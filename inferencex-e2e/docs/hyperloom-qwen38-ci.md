@@ -12,6 +12,8 @@ lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261118@sha256:723fbc92690378341609b5
 
 I apply exactly the assets in [the patch manifest](../benchmarks/single_node/srt-slurm-recipes/qwen3.8next/sglang/mi355x-fp4-mtp/hyperloom/manifest.json). I retain their original bytes and SHA256 values.
 
+I bind the manifest SHA256 `843c443145a81372265153a857734bf0107aa81863b5bed49ba202f0fef84648` in `base.environment.HYPERLOOM_MANIFEST_SHA256`. This global environment reaches setup before engine launch and is included in each bound recipe's fingerprint. I keep `manifest.json` in LF format across checkouts. When I change any package asset, I must update its manifest entry and the recipe's manifest pin; leaving either stale fails setup instead of producing a result under an old package identity.
+
 | Asset | Where I use it |
 | --- | --- |
 | `hyperloom/sglang.diff` | I apply it to `/sgl-workspace/sglang` inside the base image. |
@@ -24,6 +26,8 @@ I use [qwen3.8next-hyperloom-patches.sh](../benchmarks/multi_node/srt-slurm-reci
 I use the image's source trees as patch bases: SGLang upstream `3a41a599192906eee6aace241798136a6db2b9ad` and AITER upstream `581579ab51ca26ddd4a08a6aa6aa983a78aaf276`, each with the nightly image's own changes. I do not replace those trees with clean upstream checkouts.
 
 I require no separate SGLang/AITER PR checkout for this aggregate reproduction: the two included diffs supply the package changes. For upstream review I track those changes separately; the reported series of 38 SGLang and eight AITER commits is not yet independently recovered. I do not substitute a partial upstream PR for the complete package diff or import the nightly's own changes into an upstream code PR.
+
+I request the required serving-stack exception in [waiver/5240.md](waiver/5240.md), covering both complete diffs, the JIT sorting rebuild and both external MoE table copies. The stock image can serve a baseline configuration but does not contain the complete optimized package selected here. The waiver records partial upstream links and outstanding coverage, and requires a Core decision. The eligible CODEOWNER must link it in their additional-detail section; filing the request does not approve it or exempt draft-precision and golden-identity rules.
 
 ## Recipe and matrix
 
@@ -42,6 +46,22 @@ I connect [agentic.yaml](../benchmarks/single_node/srt-slurm-recipes/qwen3.8next
 | 80 | `override_c80` | HiCache DRAM | 128 | 3 / 4 | 16384 |
 
 I retain the package's per-point engine flags, breakable prefill graphs, checkpoint settings and explicit decode graph sizes. C24 uses `write_through_selective`, C48/C80 use `write_back`; C80 has `max-mamba-cache-size: 760`. I do not copy these settings from #4832, whose point set and settings differ.
+
+I incorporate Ravi's November 25 clarification of the effective reference-run settings: C80 uses `mem-fraction-static: 0.87`, and C24 uses `hicache-size: 298`. The supplied `configs/C80.json` and `configs/C24.json`, preserved in provenance, instead contain `0.88` and `200`; the first CI recipe retained those values. I record the later clarification rather than rewrite original inputs. C48 remains at `mem-fraction-static: 0.88` and `hicache-size: 298`. Increasing C24's host cache changes the benchmark, so its earlier successful CI result does not validate the corrected cache setting.
+
+The original C80 eval failed in `_short_conv` with an explicit GPU OOM: an additional 1.48 GiB allocation failed after PyTorch had allocated 281.66 GiB on the 287.98 GiB GPU. I use the clarified 0.87 fraction to leave more headroom, but require a new run to verify that this resolves the failure. I do not classify the cancelled C80 performance job as an observed OOM.
+
+## C48 coverage and interpreting results
+
+I verified the C48 failure criterion from AIPerf's `metadata.metric_duration_coverage`. In attempt 2 of [run #45597647764](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/45597647764), TTFT covered 2,920.68 seconds (81.13%) and inter-token latency 2,923.16 seconds (81.20%) of the requested 3,600 seconds; each requires at least 95%, or 3,420 seconds. This is temporal coverage of latency signals, not the percentage of completed requests. The request count was 1,364 completed out of 1,420 sent (96.06%), with 56 cancelled at teardown and zero errors among completed requests. The request-error check passed; metric coverage failed, including no latency signal during the last 180 seconds.
+
+Attempt 1 had only about 13.7% temporal coverage. I retain both attempts as failed/partial evidence rather than present either as a validated C48 performance point, and I keep the 95% requirement intact. The first server log shows prefill stalling while `/metrics` stays responsive; it does not establish a specific kernel or OOM cause for C48.
+
+## Expectations for an unpatched image
+
+I distinguish this patched-package recipe from a stock-image benchmark. The `SGLANG_INFX_*` switches used here select paths introduced by the package changes, so I do not reuse its reported gains as expected stock-image gains. A plain upstream flag can still have been measured only in the patched context: Ravi cites `hybrid-cache-checkpoints-level: 3` (F1) and a reported 43–50% gain at C16/C80. I treat that as a report from the patched configuration, not an independently measured gain on the unmodified image. Before quoting any stock-image improvement I run a fresh comparison on the pinned unpatched image with the effective flags, workload and baseline recorded.
+
+I use public image and repository references in public descriptions and replies. I do not link inaccessible internal hand-off repositories as reproduction instructions. I preserve contributor attribution separately from the links needed to run the benchmark.
 
 I pin the model with the engine's `revision` argument to `bd6e49d9abfe0ce1da53a45593daaee83580035b`. I let the InferenceX binder supply the model location, network endpoint and workload, rather than reuse the reproduction host's absolute cache paths. I use the served model repository for the tokenizer.
 
@@ -101,4 +121,6 @@ I use one complete sweep to validate CI operation. If I compare a two-replay mea
 
 ## Verification status
 
-I have prepared the image reference, exact package assets, container setup, nine-point recipe and changelog. I generated all nine resolved recipes, ran the real setup twice on the pinned base image without GPU devices, checked that a corrupted asset fails, and passed 396 focused existing configuration tests. I record this limited validation in [ci-preflight.json](reference/hyperloom-qwen38/ci-preflight.json). These local checks did not use the complete locked CI dependency environment. I retain the five earlier local MI350X scores in [the reproduction record](hyperloom-qwen38-reproduction.md). I have not run the integrated candidate on MI355X or started its CI sweep. C8 startup and the offload points still need actual GPU validation; the shared local node is currently reserved by another workload.
+I have prepared the image reference, exact package assets, container setup, nine-point recipe and changelog. I generated all nine resolved recipes, ran the real setup twice on the pinned base image without GPU devices, checked that a corrupted asset fails, and passed 396 focused existing configuration tests. I record this limited validation in [ci-preflight.json](reference/hyperloom-qwen38/ci-preflight.json). These local checks did not use the complete locked CI dependency environment. I retain the five earlier local MI350X scores in [the reproduction record](hyperloom-qwen38-reproduction.md).
+
+I started [MI355X CI run #45597647764](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/45597647764) on head `2613600914cc9ab18413f9a36acb797d1331c94c`; at the November 25 review check its C1 canary was executing. That head predates the waiver and manifest-pin correction. I verified the correction with focused fingerprint/matrix/binder tests and repeated CPU-only setup in the pinned image: missing or mismatched pins fail before patching, the correct pin passes first and repeated setup, and a corrupted CSV fails. I finish these branch changes before starting a new candidate sweep; a push while the primary label is retained can cancel the active run. I require a complete sweep and natural evals on the final candidate identity before sign-off or reuse.

@@ -11,6 +11,14 @@
     "aiter": "581579ab51ca26ddd4a08a6aa6aa983a78aaf276"
   },
   "source_tree_note": "Package diffs apply to upstream commits plus the nightly image changes; nightly changes are excluded from proposed upstream PRs.",
+  "effective_reference_run_clarification": {
+    "date": "2026-11-25",
+    "source": "Ravi Dwivedula follow-up clarification",
+    "c80_mem_fraction_static": {"supplied_json": 0.88, "clarified_reference_run": 0.87},
+    "c24_hicache_size": {"supplied_json": 200, "clarified_reference_run": 298},
+    "original_inputs": "Original file hashes and configurations below remain unchanged; these are later reference-run corrections, not edits to the supplied package.",
+    "verification": "Clarified values supplied by the package author; effective reference-run command has not independently been recovered. Corrected CI recipe requires new GPU validation."
+  },
   "model": {
     "id": "amd/Qwen3.8-Flash-Next-Quark-MXFP4-AttnFP8-PLEFP8",
     "revision": "bd6e49d9abfe0ce1da53a45593daaee83580035b"

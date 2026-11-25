@@ -43,7 +43,9 @@ MASTER = {
     }]}]}),
 }  # fmt: skip
 RECIPES = {
-    f"{SINGLE}/bundle.yaml": {"base": single_node_fragment(4), "zip_override_conc": {
+    f"{SINGLE}/bundle.yaml": {"base": {
+        **single_node_fragment(4), "environment": {"HYPERLOOM_MANIFEST_SHA256": "a" * 64},
+    }, "zip_override_conc": {
         "roles": {"agg": {"args": {"max-running-requests": [2, 4]}}},
         "benchmark": {"env": {"CONC": ["2", "4"]}},
     }},
@@ -111,6 +113,12 @@ AGENTX_POINTS = {("agentx", "agentx.yaml:override_bench", 2)}
 
 
 @pytest.mark.parametrize(("path", "change", "changed"), [
+    pytest.param(
+        f"{SINGLE}/bundle.yaml",
+        lambda recipe: recipe["base"]["environment"].update(HYPERLOOM_MANIFEST_SHA256="b" * 64),
+        {("single", "bundle.yaml", 2), ("single", "bundle.yaml", 4)},
+        id="setup-manifest-digest",
+    ),
     pytest.param(
         f"{SINGLE}/bundle.yaml",
         lambda recipe: recipe["zip_override_conc"]["roles"]["agg"]["args"].update(
