@@ -5,7 +5,6 @@ import importlib.util
 import json
 import os
 import re
-import shlex
 from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path, PurePosixPath
@@ -36,7 +35,6 @@ VIDEO_PACKAGE = "video-generation"
 SPEC_DIR = "specs"
 PACKAGE_MOUNT = "/video-package"
 RESULT_DIR = "/logs/video"
-READINESS_PATH = "/health"
 VIDEO_ENV = (
     "MODEL",
     "CONC_LIST",
@@ -235,13 +233,7 @@ def _pool_service(recipe: Mapping[str, Any]) -> dict[str, Any]:
     owners = [s for s in services or [] if isinstance(s, Mapping) and s.get("nodes")]
     if len(owners) != 1:
         raise ValueError("video recipes declare exactly one service that owns nodes (the server)")
-    [service] = owners
-    if service.get("type") != "generic" or not service.get("critical", False):
-        raise ValueError("the video server service must be a critical generic service")
-    command = service.get("command")
-    if not (isinstance(command, list) and command[1:] == ["-m", "infx.bench", "video", "serve"]):
-        raise ValueError("the video server service must run python -m infx.bench video serve")
-    return service
+    return owners[0]
 
 
 def _argument(command: list[str], flag: str) -> str:
@@ -319,8 +311,6 @@ def bind_video(
     model_path = spec_model_path(
         _required(environment, "HF_HUB_CACHE"), model, spec["plan"]["model_revision"]
     )
-    if recipe.get("frontend", {}).get("type") != "none":
-        raise ValueError("video recipes are services-only: frontend.type must be none")
     bound = {key: deepcopy(value) for key, value in recipe.items() if key in ("schema", "name")}
     bound["model"] = {
         "path": f"hf:{model}",
@@ -332,35 +322,7 @@ def bind_video(
     service = _pool_service(bound)
     recipe_env_keys = _declared_server_env_keys(bound, service)
     benchmark = bound.setdefault("benchmark", {})
-    client_command = shlex.split(str(benchmark.get("command", "")))
-    if benchmark.get("type") != "custom" or client_command[1:5] != [
-        "-m",
-        "infx.bench",
-        "video",
-        "client",
-    ]:
-        raise ValueError(
-            "video recipes run python -m infx.bench video client as benchmark.type custom"
-        )
-    try:
-        parse_args(client_command[4:])
-    except (SystemExit, ValueError, BenchError) as error:
-        raise ValueError("invalid video client arguments") from error
     workload = benchmark.setdefault("env", {})
-    readiness = (service.get("readiness") or {}).get("http") or {}
-    port = readiness.get("port")
-    if type(port) is not int or not 0 < port <= 65535:
-        raise ValueError(f"the server service must probe a TCP port, not {port!r}")
-    port = str(port)
-    if (
-        str(workload.get("VIDEO_SERVER_PORT")) != port
-        or str((service.get("env") or {}).get("VIDEO_SERVER_PORT")) != port
-        or readiness.get("path") != READINESS_PATH
-    ):
-        raise ValueError(
-            f"the server service must probe {READINESS_PATH} on its port and the client "
-            "must address that port (VIDEO_SERVER_PORT)"
-        )
     if workload.get("VIDEO_SERVER_SERVICE") != service["name"]:
         raise ValueError("benchmark.env.VIDEO_SERVER_SERVICE must name the server service")
     runtime = _required(environment, "FRAMEWORK")
@@ -370,7 +332,7 @@ def bind_video(
         model=model,
         model_path=model_path,
         revision=spec["plan"]["model_revision"],
-        port=port,
+        port=workload["VIDEO_SERVER_PORT"],
         gpus=gpus,
     )
     if runtime == "sglang":

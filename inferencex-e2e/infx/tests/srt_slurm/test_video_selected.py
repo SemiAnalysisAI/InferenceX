@@ -55,18 +55,6 @@ def test_fairness_requires_disabled_cross_request_caches(native_fragment, spec):
     assert recipe["services"][0]["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] == "0"
 
 
-def test_server_port_must_be_a_tcp_port_before_submission(native_fragment):
-    _, write = native_fragment
-    recipe = video.compose_video_recipe(write(), root=ROOT)
-    port = 65536
-    [server] = recipe["services"]
-    server["args"][server["args"].index("--port") + 1] = str(port)
-    server["env"]["VIDEO_SERVER_PORT"] = recipe["benchmark"]["env"]["VIDEO_SERVER_PORT"] = str(port)
-    server["readiness"]["http"]["port"] = port
-    with pytest.raises(ValueError, match="TCP port"):
-        video.bind_video(recipe, {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
-
-
 @pytest.fixture
 def native_fragment(tmp_path):
     """A small recipe whose engine settings remain owned by the recipe."""
