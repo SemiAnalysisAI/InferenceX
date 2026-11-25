@@ -13408,3 +13408,15 @@
   description:
     - "Remove the four 150 GB Mooncake stores from the infra node and rerun all five points (1P at concurrency 288, 320 and 352, 2P at 448 and 480). The infra node hosts no inference worker, so MODELS.md gives it no KV offload DRAM. The linker pool is now the 190 GB prefill segments and the decode-node stores only."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5226
+
+- config-keys:
+    - musespark-fp4-mi355x-tokenspeed-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Muse Spark Open MXFP4 MI355X AgentX on TokenSpeed with the DFlash2 draft as it ships (BF16, seven draft tokens), FP8 KV cache, 1M context and 8K prefill chunks. Every point runs startup requests."
+    - "Attention TP8 with MoE TP8/EP1 and decode-monokernel on, no host KV store: running-request cap 1 at concurrency 1; cap 2 with prefill/decode interval 384 at 2, 4, 8, 10 and 16; cap 1 with interval 384 at 6; cap 8 with interval 256 and at most 1 back-to-back prefill round at 28, owing the interval's decode rounds only while at least 5 requests are ready to decode (`--prefill-interval-min-decoding`); stream interval 50, 40 and 20 at 6, 10 and 28."
+    - "Attention TP4 with EP4 on four GPUs at concurrency 28, 36 and 40: regular decode path, 24K prefill chunks, owned-row attention output by all-to-all, short-prefill-first, running-request caps 13, 20 and 80, prefill/decode interval 96, 80 and 48 with at most 1 back-to-back prefill round and `--prefill-interval-min-decoding` 7, 6 and 2, a 360 GB host KV store per GPU, the QKV projection as an FP8 GEMM in decode (dense-fp8-small-m qkv) and stream interval 20."
+    - "Pin the TokenSpeed 0.1.1.post20261125, ROCm 7.2 kernel 0.1.5.post20261125, kernel-amd 0.1.4.post20261125 and engine 0.1.1.post20261125 wheels by release URL and SHA256, scheduler 0.1.58, tokenspeed-smg 1.16.0.post20261121, the runner image by digest, and the checkpoint and DFlash2 draft revisions. The recipe uses tokenspeed-nightly-rocm.sh, which keeps the image's ROCm torch."
+    - "Select golden DFlash2 acceptance and the greedy sampler for TokenSpeed DFLASH throughput; evals verify for real with the triton sampler and speculative sampling."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5211
