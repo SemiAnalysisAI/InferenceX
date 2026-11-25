@@ -245,8 +245,6 @@ def _bind_command(
     expected = {"--port": port, "--num-gpus": str(gpus)}
     if runtime == "sglang":
         expected.update({"--model-path": model_path, "--model-id": model, "--revision": revision})
-        # The default mode, auto, chooses offload from free GPU memory; the recipe must choose.
-        _argument(command, "--performance-mode")
     elif runtime == "vllm-omni":
         if command[:3] != ["vllm", "serve", model_path]:
             raise ValueError("vLLM video command must serve the bound model snapshot")
