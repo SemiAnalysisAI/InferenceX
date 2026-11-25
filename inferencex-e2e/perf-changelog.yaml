@@ -13449,4 +13449,4 @@
   scenario-type: [video-generation]
   description:
     - "Update the MI355X H3 vLLM-Omni deployment to vLLM-Omni v0.32.0 (commit 5917730a) on rocm/vllm-omni:5917730a4b02aedb44d374173cdc1b10484ccd52, pinned by its linux/amd64 digest."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5251
