@@ -152,7 +152,8 @@ def stage_video_identity(run: SrtRun, bound: Path) -> dict[str, Any]:
     """Retain the selected workload and its size before startup; return the workload plan.
 
     The size comes from the run tree's own ``video_spec.py``, loaded by path as the binder
-    loads it, and a spec that cannot give one fails the launch here.
+    loads it. A plan whose hash differs from the bound recipe's, or a spec that cannot give a
+    size, fails the launch here.
     """
     environment = yaml.safe_load(bound.read_text())["benchmark"]["env"]
     specs = video_package(run.workspace) / SPEC_DIR
@@ -163,8 +164,11 @@ def stage_video_identity(run: SrtRun, bound: Path) -> dict[str, Any]:
     module_spec.loader.exec_module(helper)
     spec = helper.load_spec(specs / run.request.env["VIDEO_SPEC"])
     plan = helper.plan_for(spec, environment["VIDEO_SET"])
+    digest = helper.plan_sha256(plan)
+    if digest != environment["VIDEO_PLAN_SHA256"]:
+        raise ValueError("bound video identity disagrees with the selected workload")
     identity = {
-        "plan_sha256": helper.plan_sha256(plan),
+        "plan_sha256": digest,
         "workload_plan": plan,
         "workload_size": helper.workload_size(spec),
         "engine": {
