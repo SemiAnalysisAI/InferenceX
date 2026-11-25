@@ -26,8 +26,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The released-set step reads the commit before this change.
+          fetch-depth: 0
           persist-credentials: false
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Require released sets unchanged
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        env:
+          # A pull request checks out its merge commit; HEAD^1 is its base.
+          BEFORE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event.before }}
+        run: |
+          source "$GITHUB_WORKSPACE/inferencex-e2e/benchmarks/check_env.sh"
+          check_env_vars GITHUB_WORKSPACE RUNNER_TEMP BEFORE
+          git worktree add --detach "$RUNNER_TEMP/before" "$BEFORE"
+          uv run --no-project --python 3.12 --with 'pyyaml>=6,<7' \
+            python video-generation/specs/released_sets.py "$RUNNER_TEMP/before" "$GITHUB_WORKSPACE"
       - name: Test the harness, spec loader and hashes
         working-directory: video-generation
         env:

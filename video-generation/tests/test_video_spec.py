@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 import yaml
-from specs import video_spec
+from specs import released_sets, video_spec
 
 SPECS = Path(__file__).resolve().parents[1] / "specs"
 
@@ -153,3 +153,49 @@ def test_canonical_json_bytes_is_sorted_compact_utf8_and_finite() -> None:
     )
     with pytest.raises(ValueError, match="Out of range float values"):
         video_spec.canonical_json_bytes({"a": float("nan")})
+
+
+def _tree(
+    root: Path, spec: dict[str, Any], *, steps: int, sets: list[str], loader: str = ""
+) -> str:
+    specs = root / released_sets.SPECS
+    specs.mkdir(parents=True)
+    (specs / "video_spec.py").write_text((SPECS / "video_spec.py").read_text() + loader)
+    document = {
+        **spec,
+        "generation": {"num_inference_steps": steps},
+        "sets": dict.fromkeys(sets, spec["sets"]["s"]),
+    }
+    (specs / "clip.yaml").write_text(yaml.safe_dump(document))
+    return str(root)
+
+
+@pytest.mark.parametrize(
+    ("after", "violation"),
+    [
+        ({"steps": 39, "sets": ["release-v1"]}, "clip.yaml release-v1: plan changed"),
+        ({"steps": 40, "sets": ["release-v2"]}, "clip.yaml release-v1: removed"),
+        (
+            {
+                "steps": 40,
+                "sets": ["release-v1"],
+                "loader": "\n\ndef plan_sha256(plan):\n    return _sha256([plan])\n",
+            },
+            "clip.yaml release-v1: plan changed",
+        ),
+    ],
+)
+def test_a_released_set_cannot_change_or_disappear(
+    spec: dict[str, Any], tmp_path: Path, after: dict[str, Any], violation: str
+) -> None:
+    before = _tree(tmp_path / "before", spec, steps=40, sets=["release-v1"])
+    with pytest.raises(SystemExit, match=violation):
+        released_sets.main(["released_sets", before, _tree(tmp_path / "after", spec, **after)])
+
+
+def test_adding_a_released_set_or_dropping_an_unreleased_one_passes(
+    spec: dict[str, Any], tmp_path: Path
+) -> None:
+    before = _tree(tmp_path / "before", spec, steps=40, sets=["release-v1", "draft"])
+    after = _tree(tmp_path / "after", spec, steps=40, sets=["release-v1", "release-v2"])
+    released_sets.main(["released_sets", before, after])
