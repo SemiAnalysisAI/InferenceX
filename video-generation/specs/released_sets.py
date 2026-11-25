@@ -1,8 +1,14 @@
 import importlib.util
+import io
+import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 
 SPECS = "video-generation/specs"
+# The rule's first commit on main: sets may have changed before it, never after.
+RULE_START = "283fb864d08613b04c51ab581816089b0d3954c3"
 
 
 def released_plans(tree: str | Path) -> dict[tuple[str, str], str]:
@@ -21,16 +27,43 @@ def released_plans(tree: str | Path) -> dict[tuple[str, str], str]:
     return plans
 
 
+def _git(*args: str) -> bytes:
+    return subprocess.run(["git", *args], check=True, stdout=subprocess.PIPE).stdout
+
+
+def _released_plans_at(commit: str) -> dict[tuple[str, str], str]:
+    with tempfile.TemporaryDirectory() as tree:
+        with tarfile.open(fileobj=io.BytesIO(_git("archive", commit, SPECS))) as archive:
+            archive.extractall(tree, filter="data")
+        return released_plans(tree)
+
+
 def main(argv: list[str]) -> None:
-    """Exit nonzero when the second tree changes or drops a released set of the first."""
-    before, after = (released_plans(tree) for tree in argv[1:])
+    """Exit nonzero unless HEAD holds every released set as its history first committed it.
+
+    Reads ``argv[1]`` (default ``RULE_START``) and each later first-parent commit of HEAD that
+    touches the specs, so a set that was added and then edited fails until the edit is undone.
+    """
+    start = argv[1] if len(argv) > 1 else RULE_START
+    log = _git("rev-list", "--first-parent", "--reverse", f"{start}..HEAD", "--", SPECS)
+    commits = [start, *log.decode().split()]
+    plans = {commit: _released_plans_at(commit) for commit in commits}
+    head = plans[commits[-1]]  # No later commit touches the specs, so these are HEAD's plans.
+    first: dict[tuple[str, str], tuple[str, str]] = {}
+    for commit in commits:
+        for key, plan in plans[commit].items():
+            first.setdefault(key, (plan, commit))
     violations = [
-        f"{spec} {set_id}: " + ("plan changed" if (spec, set_id) in after else "removed")
-        for (spec, set_id), plan in before.items()
-        if after.get((spec, set_id)) != plan
+        f"{spec} {set_id}: {'plan changed' if (spec, set_id) in head else 'removed'}"
+        f" since {commit[:9]}"
+        for (spec, set_id), (plan, commit) in first.items()
+        if head.get((spec, set_id)) != plan
     ]
     if violations:
-        rule = "a released set never changes; add the next release-v<N> (STANDARD.md rule 1):"
+        rule = (
+            "a released set never changes; add the next release-v<N>, or a new spec file when"
+            " the model, generation or fairness changes (video-generation/specs/README.md):"
+        )
         sys.exit("\n".join([rule, *violations]))
 
 

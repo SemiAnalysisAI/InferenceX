@@ -74,19 +74,6 @@ jobs:
                   echo "llm=$llm" >> "$GITHUB_OUTPUT"
                   echo "retirement-only=$retirement_only" >> "$GITHUB_OUTPUT"
 
-            # Compared with the last ingested commit: a push without a changelog entry runs no ingest.
-            - name: Require released video sets unchanged
-              env:
-                  GH_TOKEN: ${{ github.token }}
-              run: |
-                  source "$GITHUB_WORKSPACE/inferencex-e2e/benchmarks/check_env.sh"
-                  check_env_vars GITHUB_WORKSPACE RUNNER_TEMP GITHUB_REPOSITORY
-                  before=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/merge-ingest.yml/runs?branch=main&status=success&per_page=1" \
-                    --jq '.workflow_runs[0].head_sha')
-                  git worktree add --detach "$RUNNER_TEMP/last-ingest" "$before"
-                  uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
-                    python video-generation/specs/released_sets.py "$RUNNER_TEMP/last-ingest" "$GITHUB_WORKSPACE"
-
             - name: Resolve reused sweep
               id: reuse
               if: steps.plan.outputs.entries == 'true' && steps.plan.outputs.retirement-only != 'true'
@@ -155,6 +142,13 @@ jobs:
                       event_type: agentic ? "ingest-agentic-results" : "ingest-results",
                       client_payload,
                     });
+
+            # After the LLM dispatch and only for a video publish, so it never holds back LLM or AgentX results.
+            - name: Require released video sets unchanged
+              if: steps.plan.outputs.video == 'true'
+              run: |
+                  uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+                    python video-generation/specs/released_sets.py
 
             # Matching the manifest too keeps one bundle in its named directory; a single match unpacks flat.
             - name: Download the reused video bundles and matrix

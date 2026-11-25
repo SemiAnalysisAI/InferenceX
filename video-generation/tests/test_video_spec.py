@@ -1,4 +1,6 @@
+import os
 import re
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -155,47 +157,107 @@ def test_canonical_json_bytes_is_sorted_compact_utf8_and_finite() -> None:
         video_spec.canonical_json_bytes({"a": float("nan")})
 
 
-def _tree(
-    root: Path, spec: dict[str, Any], *, steps: int, sets: list[str], loader: str = ""
-) -> str:
-    specs = root / released_sets.SPECS
+def _git(repo: Path, *args: str) -> str:
+    identity = ["-c", "user.name=test", "-c", "user.email=test@example.invalid"]
+    environment = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    return subprocess.run(
+        ["git", *identity, *args],
+        cwd=repo,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _history(repo: Path, spec: dict[str, Any], commits: list[dict[str, Any]]) -> list[str]:
+    """Commit one specs tree per entry and return the commit ids, oldest first.
+
+    An entry maps each set id in ``sets`` to its repetitions; ``steps``, ``file`` and ``loader``
+    override the denoising steps, the spec file written and the loader's source.
+    """
+    specs = repo / released_sets.SPECS
     specs.mkdir(parents=True)
-    (specs / "video_spec.py").write_text((SPECS / "video_spec.py").read_text() + loader)
-    document = {
-        **spec,
-        "generation": {"num_inference_steps": steps},
-        "sets": dict.fromkeys(sets, spec["sets"]["s"]),
-    }
-    (specs / "clip.yaml").write_text(yaml.safe_dump(document))
-    return str(root)
+    _git(repo, "init", "--quiet")
+    ids = []
+    for commit in commits:
+        loader = (SPECS / "video_spec.py").read_text() + commit.get("loader", "")
+        (specs / "video_spec.py").write_text(loader)
+        document = {
+            **spec,
+            "generation": {"num_inference_steps": commit.get("steps", 40)},
+            "sets": {
+                set_id: {**spec["sets"]["s"], "repetitions": repetitions}
+                for set_id, repetitions in commit["sets"].items()
+            },
+        }
+        (specs / commit.get("file", "clip.yaml")).write_text(yaml.safe_dump(document))
+        _git(repo, "add", "--all")
+        _git(repo, "commit", "--quiet", "--message", "specs")
+        ids.append(_git(repo, "rev-parse", "HEAD"))
+    return ids
+
+
+V1 = {"release-v1": 2}
+V2_ADDED = {"sets": V1 | {"release-v2": 2}}
+V2_EDITED = {"sets": V1 | {"release-v2": 3}}
 
 
 @pytest.mark.parametrize(
-    ("after", "violation"),
+    ("commits", "violation"),
     [
-        ({"steps": 39, "sets": ["release-v1"]}, "clip.yaml release-v1: plan changed"),
-        ({"steps": 40, "sets": ["release-v2"]}, "clip.yaml release-v1: removed"),
+        # A release-v2 that changes the denoising steps changes release-v1 too.
+        ([{"sets": V1}, {**V2_ADDED, "steps": 39}], "clip.yaml release-v1: plan changed"),
+        ([{"sets": V1}, {"sets": {"release-v2": 2}}], "clip.yaml release-v1: removed"),
         (
-            {
-                "steps": 40,
-                "sets": ["release-v1"],
-                "loader": "\n\ndef plan_sha256(plan):\n    return _sha256([plan])\n",
-            },
+            [
+                {"sets": V1},
+                {"sets": V1, "loader": "\n\ndef plan_sha256(plan):\n    return _sha256([plan])\n"},
+            ],
             "clip.yaml release-v1: plan changed",
         ),
+        # The first and last commits agree on every set the first one has.
+        ([{"sets": V1}, V2_ADDED, V2_EDITED], "clip.yaml release-v2: plan changed"),
     ],
 )
 def test_a_released_set_cannot_change_or_disappear(
-    spec: dict[str, Any], tmp_path: Path, after: dict[str, Any], violation: str
+    spec: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    commits: list[dict[str, Any]],
+    violation: str,
 ) -> None:
-    before = _tree(tmp_path / "before", spec, steps=40, sets=["release-v1"])
+    start = _history(tmp_path, spec, commits)[0]
+    monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit, match=violation):
-        released_sets.main(["released_sets", before, _tree(tmp_path / "after", spec, **after)])
+        released_sets.main(["released_sets", start])
 
 
-def test_adding_a_released_set_or_dropping_an_unreleased_one_passes(
-    spec: dict[str, Any], tmp_path: Path
+@pytest.mark.parametrize(
+    "commits",
+    [
+        [{"sets": V1 | {"draft": 2}}, V2_ADDED],
+        # New generation parameters go in a new spec file.
+        [{"sets": V1}, {"sets": V1, "file": "longer-clip.yaml", "steps": 30}],
+        # Undoing an edit restores the released plan.
+        [{"sets": V1}, V2_ADDED, V2_EDITED, V2_ADDED],
+    ],
+)
+def test_history_that_keeps_every_released_plan_passes(
+    spec: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    commits: list[dict[str, Any]],
 ) -> None:
-    before = _tree(tmp_path / "before", spec, steps=40, sets=["release-v1", "draft"])
-    after = _tree(tmp_path / "after", spec, steps=40, sets=["release-v1", "release-v2"])
-    released_sets.main(["released_sets", before, after])
+    start = _history(tmp_path, spec, commits)[0]
+    monkeypatch.chdir(tmp_path)
+    released_sets.main(["released_sets", start])
+
+
+def test_a_later_commit_does_not_change_an_older_commits_verdict(
+    spec: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    start, older, _newer = _history(tmp_path, spec, [{"sets": V1}, V2_ADDED, V2_EDITED])
+    _git(tmp_path, "checkout", "--quiet", "--detach", older)
+    monkeypatch.chdir(tmp_path)
+    released_sets.main(["released_sets", start])
