@@ -59,6 +59,7 @@ python ubenchX/l2_distance/nvidia/bench.py             # NVIDIA：SM 间，链�
 python ubenchX/l2_distance/amd/bench.py                # AMD：CU 间，链表大小 = 单个 XCD 的 L2（4 MB）
 python ubenchX/l2_distance/amd/bench.py --chain-mb 64  # AMD：链表驻留在 Infinity Cache
 python ubenchX/l2_distance/amd/plot_distance.py ubenchX/l2_distance/amd/results/distance.csv
+python ubenchX/l2_distance/amd/plot_distance.py --iods 4 results/distance.csv   # MI300X：四个 IOD
 ```
 
 `l2_distance/nvidia` 是 CUDA 的 SM 间基准测试；`l2_distance/amd` 是其面向 CDNA3/CDNA4 的
@@ -73,9 +74,11 @@ CU 间对应版本。每个 CU 上运行一个单 wavefront 的工作组，
 4 MB）。`--chain-mb 64` 超过 L2，驻留在 256 MB 的 Infinity Cache 中；`--chain-mb 1024` 则连
 Infinity Cache 也超过。每个 XCD 都有私有且组织方式相同的 L2，因此驻留在 L2 的链表不会显示
 跨 XCD 的结构，只反映 CU 在其 XCD 内的位置（SE0/SE1 与 SE2/SE3 两半）。驻留在 Infinity Cache
-的链表则显示 IOD 局部性：在 MI355X 上为 XCD 0-3 与 XCD 4-7。`plot_distance.py` 先按 IOD
-（默认 XCD 0-3 与 4-7；`--iod-groups` 可显式指定分组，或用 `cluster` 从数据聚类得到两组）
-分组，再按 XCD 和着色器引擎对 CU 分组。
+的链表则显示 IOD 局部性：在 MI355X（两个 IOD）上为 XCD 0-3 与 XCD 4-7；在 MI300X（四个 IOD）上为
+XCD 配对 {0,1}、{2,3}、{4,5}、{6,7}，同一 IOD 上的两个 XCD 无法区分，跨 IOD 的距离分为三个层级。
+`plot_distance.py` 先按 IOD（`--iods` 指定连续 XCD id 分组数，默认 2，MI300X 为 4；`--iod-groups`
+可显式指定分组，或用 `cluster` 从数据聚类得到分组）分组，再按 XCD 和着色器引擎对 CU 分组。在 LDS 为
+64 KB 的型号（MI300X）上，4 MB 链表分两段计时，并在下一段开始前重新触碰其行。
 
 `--num-passes` 以打乱的起点偏移进行多轮平均，`--num-hops` 限制每个 CU 的计时跳数，
 `--warm-hops` 设置计时前填充缓存的非计时遍历。成对 CSV（`cu_a, cu_b, mean_abs_diff,
