@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:1bb1909ada9e3d178e315a3f89d041c05c7e90e7cc32de8d507ff5ab4cd4702c
+    container_image: rocm/atom-dev:nightly_202611241524@sha256:e1b23616bd2a8453c1479eb221502fcf6f523a4d1e6e2d08a179ab8748d36843
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -34,11 +34,16 @@ base:
         cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,18,20,22,24,26,28,30,32,40,48,56,64]'
         enable_prefix_caching: true
         state-checkpoint-interval-tokens: 8192
+        # Experts stay MXFP4 as shipped; attention and dense layers go to PTPC FP8.
+        # mtp.* keeps the whole draft head at its shipped BF16.
+        online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","*mlp.gate","*shared_expert_gate","*mlp.experts*","*mlp.shared_expert*","*hyper_connection*","*indexer*","*.ple.*","model.visual.*","mtp.*"]}'
         method: mtp
         num-speculative-tokens: 3
       env:
         PYTHONNOUSERSITE: '1'
         AITER_LOG_LEVEL: WARNING
+        # Mono decode takes over at batch <= 4; off at c32+, which run LMCache offload.
+        ATOM_MONO_ENABLE: '1'
   benchmark:
     env:
       # Long AgentX stalls exceed AIPerf's 30 s TCP_USER_TIMEOUT default.
@@ -75,3 +80,68 @@ override_c16:
     env:
       CONC: '16'
       KV_OFFLOADING: none
+
+# c32+ run the LMCache DRAM tier: a 208.6 GiB pool (224 GB, the TP1 share at
+# dram-utilization 0.6) with the 104.3 GiB GDN state allowance carved from it.
+
+override_c32_lmcache:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        extra-kv-connectors: &lmcache_offload
+          - kv_connector: lmcache_offload
+            kv_role: offload
+      env:
+        ATOM_MONO_ENABLE: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '208.6'
+        LMCACHE_CHUNK_SIZE: '256'
+        OFFLOAD_STATE_CPU_SIZE: '104.3'
+        OFFLOAD_MIN_SAVE_TOKENS: '256'
+        OFFLOAD_MIN_LOAD_TOKENS: '256'
+  benchmark:
+    env:
+      CONC: '32'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '224'
+
+override_c48_lmcache:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        extra-kv-connectors: *lmcache_offload
+      env:
+        ATOM_MONO_ENABLE: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '208.6'
+        LMCACHE_CHUNK_SIZE: '256'
+        OFFLOAD_STATE_CPU_SIZE: '104.3'
+        OFFLOAD_MIN_SAVE_TOKENS: '256'
+        OFFLOAD_MIN_LOAD_TOKENS: '256'
+  benchmark:
+    env:
+      CONC: '48'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '224'
+
+override_c64_lmcache:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        extra-kv-connectors: *lmcache_offload
+      env:
+        ATOM_MONO_ENABLE: '0'
+        LMCACHE_LOCAL_CPU: 'True'
+        LMCACHE_MAX_LOCAL_CPU_SIZE: '208.6'
+        LMCACHE_CHUNK_SIZE: '256'
+        OFFLOAD_STATE_CPU_SIZE: '104.3'
+        OFFLOAD_MIN_SAVE_TOKENS: '256'
+        OFFLOAD_MIN_LOAD_TOKENS: '256'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+      TOTAL_CPU_DRAM_GB: '224'
