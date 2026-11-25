@@ -6,8 +6,8 @@ base:
     model: {}
     container: {}
     frameworks:
-      dynamo: "1.6.0"
-      sglang: "0.0.0.dev1+ge79de62d2.d20261104"
+      dynamo: "1.8.0.dev20261119"
+      sglang: "0.0.0.dev1+g03fde9cc3"
   dynamo:
     install: false
     request_plane: tcp
@@ -92,6 +92,7 @@ base:
         chunked-prefill-size: 16384
         mamba-radix-cache-strategy: extra_buffer
         mamba-track-interval: 256
+        hybrid-cache-checkpoints-level: 3
         enable-linear-replayssm-spec: true
         speculative-algorithm: DFLASH
         speculative-draft-model-path: RadixArk/Kimi-K3.1-Dflash2-Preview
