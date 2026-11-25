@@ -21,7 +21,12 @@ and power must be checked in the original run. The YAML workload has no `model.p
 or Python field: the binder derives the pinned model snapshot path from `MODEL`,
 `HF_HUB_CACHE`, and the model revision. The service recipe selects the engine executable.
 Native power is accepted only when its sampled GPU UUIDs match the server's
-`spec.json` and `launch.json` assignment. On ROCm the server names each GPU by
+`spec.json` and `launch.json` assignment. The bundle's `power.json` records the native
+manifest's `source_metric` and `power_scope` as `semantics.sensor` and `semantics.scope`.
+AMD deployments can report `gpu_power_usage` and NVIDIA deployments can report
+`DCGM_FI_DEV_POWER_USAGE`. Bundling a sidecar that predates these fields leaves them null.
+Older sealed bundles used a fixed DCGM label. Use their original power manifest to
+identify the sensor. On ROCm the server names each GPU by
 its board serial, which is how the AMD power exporter identifies it.
 The H100 runner provides an HF hub cache mount, but the pinned H3 snapshot must
 be verified there before execution. On the clusters in `HUB_DOWNLOAD_CLUSTERS`
@@ -105,6 +110,13 @@ rows: the two sets of `recipe-fingerprint` values must be equal. A row added, dr
 or changed after the sweep, through its recipe, its config row or a shared block, fails
 the run before anything is published, as does a planned row without a fingerprint.
 Sweep the final commit and `/use` that run before merging.
+
+Run Sweep's `video-reuse-check` job runs the same validation before merge. On each push
+to a same-repository PR with an accepted `/use`, it plans the PR merge ref and validates
+the pinned run against it, so a video row changed after the sweep fails on the PR.
+`merge_with_reuse` waits for it. A merge with no push after `/use`, and a fork PR, are
+checked only by Merge Ingest. To clear a failure, remove and re-add the primary sweep
+label to sweep the current head, then `/use` the new run.
 
 After authorized reuse and merge, Merge Ingest uploads `video-publication-selection.json`
 as the `video-publication-selection` artifact. Its version 1 payload records
