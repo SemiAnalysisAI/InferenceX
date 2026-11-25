@@ -917,6 +917,9 @@ def test_native_aggregate_role_through_result_processor(
     assert aggregate['total_gpu_energy_j'] == 84_000
     assert aggregate['power_audit']['producer_sha'] == PRODUCER_SHA
     assert set(ROLE_METRIC_KEYS).isdisjoint(aggregate)
+    sidecar = json.loads((tmp_path / 'power_validation_benchmark_result.json').read_text())
+    assert sidecar['producer']['source_metric'] == manifest['source_metric']
+    assert sidecar['producer']['power_scope'] == manifest['power_scope']
 
     manifest['source_metric'] = ''
     manifest_path.write_text(json.dumps(manifest))
