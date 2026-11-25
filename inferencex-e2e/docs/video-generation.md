@@ -105,8 +105,9 @@ Publication also requires each cell's plan hash to be the released plan of its r
 [`video_artifacts.py`](../infx/results/video_artifacts.py). A same-repository PR that
 edits a spec or adds a model adds the new hash there in the same PR, and review of that
 line is the check. `python -m specs.video_spec specs/<spec>.yaml`, run from
-`video-generation/`, prints each set's `plan_sha256`. A trusted fork sweep is validated by `main`'s code, so the spec and
-set it runs must already have a released plan on `main`.
+`video-generation/`, prints each set's `plan_sha256`. A trusted fork sweep is validated
+by `main`'s code, so the spec and set it runs must already have a released plan on
+`main`.
 
 Merge Ingest also requires the merge commit's planned video rows to be the manifest's
 rows: the two sets of `recipe-fingerprint` values must be equal. A row added, dropped,
