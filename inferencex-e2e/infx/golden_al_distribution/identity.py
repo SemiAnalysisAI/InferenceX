@@ -84,7 +84,12 @@ class Selector:
     def specificity(self) -> int:
         return sum(
             key is not None
-            for key in (self.draft_family, self.draft_sample, self.verify, self.draft_kv_cache_dtype)
+            for key in (
+                self.draft_family,
+                self.draft_sample,
+                self.verify,
+                self.draft_kv_cache_dtype,
+            )
         )
 
 

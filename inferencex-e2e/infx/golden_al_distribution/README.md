@@ -177,6 +177,7 @@ Before accepting an updated curve, reviewers should verify:
 | Kimi K3 | DSpark (probabilistic draft, block verify) | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml) |
 | Kimi K3 | DSpark (probabilistic draft) | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml) |
 | Kimi K3.1 Pro | DSpark (probabilistic draft, block verify) | [`kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block.yaml`](kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block.yaml) |
+| Kimi K3.1 Pro | DSpark (probabilistic draft, block verify, fp8 draft KV) | [`kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block__draft-kv-fp8.yaml`](kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block__draft-kv-fp8.yaml) |
 | Kimi K3.1 Pro | DFLASH (RadixArk draft, block verify) | [`kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block.yaml`](kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block.yaml) |
 | MiniMax-M3 | EAGLE3 | [`minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml) |
 | MiniMax-M3 | EAGLE3 (GQA) | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml) |
@@ -197,11 +198,11 @@ Before accepting an updated curve, reviewers should verify:
 
 ## Curve identities and names
 
-Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.yaml`: the curve's model key, its method (`mtp` for a model-native head, `eagle3`, `dspark`, `dflash`), its draft (`native` or the draft model), and the draft sampler and verifier the collector set (`default` when it left the engine default).
+Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.yaml`: the curve's model key, its method (`mtp` for a model-native head, `eagle3`, `dspark`, `dflash`), its draft (`native` or the draft model), and the draft sampler and verifier the collector set (`default` when it left the engine default). A curve that selects on `draft_kv_cache_dtype` adds `__draft-kv-<dtype>`.
 
 [`identities.yaml`](identities.yaml) gives each curve two blocks. A new curve needs both before it merges; a test checks each file name against them.
 
-`select` decides which runs use the curve. `curve_name` returns the most specific matching curve (the one declaring the most of `draft_family`, `draft_sample` and `verify`) and fails when none match or the most specific ones tie.
+`select` decides which runs use the curve. `curve_name` returns the most specific matching curve (the one declaring the most of `draft_family`, `draft_sample`, `verify` and `draft_kv_cache_dtype`) and fails when none match or the most specific ones tie.
 
 | Key | Meaning |
 | --- | --- |
@@ -210,6 +211,7 @@ Every curve file is named `<model>__<method>__<draft>__<draft_sample>-<verify>.y
 | `draft_family` | Only where one model's curves differ by draft: `gqa` when the draft model id contains `gqa`, else `default` |
 | `draft_sample` | Only where one model's curves differ by draft sampler: the run's `draft_sample_method` must equal it |
 | `verify` | Only where one model's curves differ by verifier: `standard`, `block` or `relaxed`. The run's verifier is read as the audit reads it; an unknown verifier (ATOM, TileRT) never matches a curve that sets `verify` |
+| `draft_kv_cache_dtype` | Only where one model's curves differ by draft KV cache dtype: the normalized `kv_cache_dtype` of the run's vLLM speculative config must equal it (`fp8_e4m3` is `fp8`). Runs that leave it unset select the curve without this key |
 
 `collection` records how the curve was measured: `engine`, `draft`, `draft_sample` (`greedy`, `probabilistic`), `verify` (`standard`, `block`, `relaxed`), `adaptive`, `topology` (`chain`, `tree-topk<N>`), `draft_precision` (the draft weights' quantization), `draft_kv_cache_dtype` and `kv_cache_dtype` (the target's). `provisional: true` marks a curve not measured for its model. Each fact is `{value, source}`:
 
@@ -239,7 +241,7 @@ python -m infx.golden_al_distribution lookup qwen3.5 mtp 3          # 3.39 (thin
 python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-method probabilistic --json
 ```
 
-`lookup` takes the InferenceX model prefix, the engine's method name (`mtp`, `eagle`, `nextn`, `eagle3`, `dspark`, `dflash`) and `num_speculative_tokens`. `--draft-model` selects the MiniMax GQA curve, and `--draft-sample-method` chooses between the two Kimi DSpark curves. A missing curve or cell exits non-zero, exactly as a launch would fail.
+`lookup` takes the InferenceX model prefix, the engine's method name (`mtp`, `eagle`, `nextn`, `eagle3`, `dspark`, `dflash`) and `num_speculative_tokens`. `--draft-model` selects the MiniMax GQA curve, and `--draft-sample-method` chooses between the two Kimi DSpark curves, and `--draft-kv-cache-dtype fp8` selects a curve collected with an fp8 draft KV cache. A missing curve or cell exits non-zero, exactly as a launch would fail.
 
 ## Primary references
 
