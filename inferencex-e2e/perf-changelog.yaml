@@ -13443,3 +13443,21 @@
     - "DCP8 disaggregated with NIXL P/D transfer and session-affinity prefill routing: 1P5D at concurrency 44 (5 draft tokens) and concurrency 104 (4 draft tokens, adaptive 4096-token long-prefill threshold) with opt-in TP8 x DCP8 decode paths (K31_* env); hybrid DP4xTP8xDCP8 3P1D at concurrency 448 and 2P1D at concurrency 256 with 5 draft tokens and decode graphs in multiples of 6 up to 1536; prefix-match-unit 1408."
     - "Aggregated TP16/DCP16 at concurrency 1: 7 draft tokens with opt-in c=1 decode paths (K31_* env) and prefix-match-unit 768."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5149
+
+- config-keys:
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp
+    - dsv41flash-fp4-mi355x-vllm-agentic-dspark-dep8
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the image of the existing MI355X vLLM DeepSeek-V4.1-Flash AgentX entries (TP4/TP2 c1-64, TP8 c1, UMBP c128/c256/c384) from vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47 to vllm/vllm-openai-rocm:deepseek-v41-flash-8a13616, which the new DEP8 entry also uses. The image is built from the vllm-project/vllm branch dsv41f-amd-kernels at 8a136163b6: main 647a76866 (which contains 9c1d45c2) plus 50 commits."
+    - "Add dsv41flash-fp4-mi355x-vllm-agentic-dspark-dep8: DEP8 (TP1 x DP8 with expert parallelism over the 8 ranks) behind a consistent-hash vllm-router 0.1.14 at concurrency 256, 512 and 1024. The search spaces and concurrencies of the existing entries are unchanged."
+    - "The existing points add kernel-config amd_kernels.enabled=false, so the amd_kernels bridge in the new image resolves no routes and they keep the stock vLLM kernels. Their other recipe settings are unchanged."
+    - "The DEP8 points run AITER MegaMoE over MoRI (--moe-backend aiter_mega_moe, --all2all-backend mori), the per-tensor FP8 KV cache (--kv-cache-dtype fp8_e4m3), Engram tables in HBM with embedding_across_dp, max-num-seqs 128 (160 at concurrency 1024), max-num-batched-tokens 32768, long-prefill-token-threshold 8192, max-cudagraph-capture-size 1024, monokernel off, and the inherited five-token DSpark."
+    - "The DEP8 points use the cross-DP prefill delayer (--prefill-schedule-policy delayer, --prefill-max-wait-ms 5000, --prefill-schedule-interval 96) and turn on every amd_kernels route (--kernel-config) with the static 49-slot-per-rank expert placement expert_plan_S49.npz shipped in the image."
+    - "The DEP8 router runs with LD_PRELOAD=/opt/dsv41f/lib/listen_backlog_shim.so and LISTEN_BACKLOG_MIN=4096, which raise its listen() backlog from the 128 that vllm-router 0.1.14 hard-codes and that resets connections in the AgentX warm-up burst."
+    - "The mi355x-amds cluster no longer excludes node mia1-p01-g11 from slurm jobs; mia1-p01-g09 stays out of multi-node jobs only, as on main."
+    - "Framework changes in the new image: the amd_kernels DEP8 routes and static expert placement (vllm-project/vllm#69097, stacked on #67850, with the kernels of Inferact/amd-kernels#12), the cross-DP prefill delayer (#65655) and hold (#66927); these four vLLM PRs are unmerged; from main, the fused compressed-KV insert (#67364), the one-launch sparse-MLA ragged top-k (#67365) and the DSpark draft packed_modules_mapping (#65647)."
+    - "Draft data type unchanged: the DSpark draft (mtp.0-2 in the target checkpoint) runs as shipped, with FP8 E4M3 32x32 UE8M0 block-scaled attention, shared-expert and main_proj weights run as MXFP8, MXFP4 routed experts (a8w4), BF16 gate, norms and the shared LM head, and the KV cache dtype it inherits from the target (fp8_ds_mla by default, per-tensor fp8_e4m3 at DP2 c128-c384 and DEP8). At DEP8, the amd_kernels routes keep the same MXFP8 and BF16 weight codes, scales and activation formats as the stock path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5195

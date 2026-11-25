@@ -958,10 +958,9 @@ glm5.2-fp4-mi355x-atom-disagg-agentic-mtp-agg:
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi355x-vllm-agentic-dspark:
-  # ROCm 10.0 nightly carrying vllm-project/vllm#59039 (decoder SWA bounded
-  # replay on ROCm), #61082 (mono decode on all 40 backbone layers) and #62131
-  # (mono decode on the DSpark draft layers), all switched by --monokernel.
-  image: vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47@sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32
+  # image carries, as the previous image nightly-9c1d45c2 did, vllm-project/vllm#59039 (decoder SWA
+  # bounded replay on ROCm), #61082 and #62131 (mono decode on the backbone and DSpark draft layers).
+  image: vllm/vllm-openai-rocm:deepseek-v41-flash-8a13616
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -979,9 +978,8 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark:
       - { gpus-per-worker: 2, tp: 2, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8, 16, 32, 64], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
-  # --monokernel at TP8 needs vllm-project/vllm#64101; earlier builds refuse it
-  # outside TP2/TP4.
-  image: vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47@sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32
+  # image carries vllm-project/vllm#64101; --monokernel at TP8 is refused without it.
+  image: vllm/vllm-openai-rocm:deepseek-v41-flash-8a13616
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -995,10 +993,10 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1:
       - { gpus-per-worker: 8, tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1], srt-recipe: agentic.yaml }
 
 dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp:
-  # Carries vllm-project/vllm#64715 (UMBP standalone for DeepSeek-V4.1-Flash), #66036
-  # (per-tensor fp8_e4m3 KV for sparse MLA) and #67377 (AITER FlyDSL dense MXFP8
-  # GEMMs); its MORI v1.2.3.post1 is built with UMBP.
-  image: vllm/vllm-openai-rocm:nightly-9c1d45c21836370104d4eb51d3b46eda20719c47@sha256:694108707f333787b1041caa0e948dd18b86f2450365a94e38819f026275ee32
+  # image carries vllm-project/vllm#64715 (UMBP standalone for DeepSeek-V4.1-Flash), #66036 (per-tensor
+  # fp8_e4m3 KV for sparse MLA), #67377 (AITER FlyDSL dense MXFP8 GEMMs); UMBP needs a MoRI built with it.
+  # Open: MoRI v1.2.3.post1 in the new image is not verified to be built with UMBP.
+  image: vllm/vllm-openai-rocm:deepseek-v41-flash-8a13616
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi355x-amds
@@ -1012,6 +1010,21 @@ dsv41flash-fp4-mi355x-vllm-agentic-dspark-umbp:
       - { gpus-per-worker: 2, tp: 2, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [128], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml:override_dp2_c128 }
       - { gpus-per-worker: 2, tp: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: umbp, version: "1.2.3.post1" }, spec-decoding: mtp, conc-list: [256], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml:override_dp2_umbp_c256 }
       - { gpus-per-worker: 2, tp: 2, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: umbp, version: "1.2.3.post1" }, spec-decoding: mtp, conc-list: [384], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml:override_dp2_umbp_c384 }
+
+dsv41flash-fp4-mi355x-vllm-agentic-dspark-dep8:
+  # vLLM ROCm nightly main 647a76866 + amd_kernels bridge + prefill delayer/hold schedulers (test bed: benenzhu/benenzhu-amd:dsv41f-amd-kernels)
+  image: vllm/vllm-openai-rocm:deepseek-v41-flash-8a13616
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  srt-recipe-dir: dsv41flash/vllm/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { gpus-per-worker: 8, tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [256, 512, 1024], router: { name: vllm-router, version: "0.1.14" }, srt-recipe: agentic.yaml }
 
 minimaxm31flash-fp4-mi355x-vllm-agentic-dspark:
   image: vllm/vllm-openai-rocm:minimax-m31-flash-75bc8cf1@sha256:f8e8ab239e5edb7c3070c5802fc7fc0cbb889513bf81183dfc98ce1c77e1dfe1
