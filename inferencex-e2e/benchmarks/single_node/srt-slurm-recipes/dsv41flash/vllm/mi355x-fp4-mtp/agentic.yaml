@@ -86,6 +86,9 @@ override_tp4_c1:
         max-cudagraph-capture-size: 8
         max-num-batched-tokens: 32768
         max-num-seqs: 1
+        # Builds every AITER GEMM token bucket at startup; branch prefix hits
+        # otherwise stall on first-use builds of small exact-M prefill shapes.
+        kernel-config: '{"enable_rocm_aiter_gemm_warmup":true}'
   benchmark:
     env:
       CONC: '1'
@@ -99,6 +102,9 @@ override_tp4_c2:
         max-cudagraph-capture-size: 8
         max-num-batched-tokens: 32768
         max-num-seqs: 1
+        # Builds every AITER GEMM token bucket at startup; branch prefix hits
+        # otherwise stall on first-use builds of small exact-M prefill shapes.
+        kernel-config: '{"enable_rocm_aiter_gemm_warmup":true}'
   benchmark:
     env:
       CONC: '2'
@@ -175,6 +181,9 @@ override_tp8_c1:
         max-cudagraph-capture-size: 8
         max-num-batched-tokens: 32768
         max-num-seqs: 1
+        # Builds every AITER GEMM token bucket at startup; branch prefix hits
+        # otherwise stall on first-use builds of small exact-M prefill shapes.
+        kernel-config: '{"enable_rocm_aiter_gemm_warmup":true}'
   benchmark:
     env:
       CONC: '1'
@@ -188,6 +197,9 @@ override_tp2_c1:
         max-cudagraph-capture-size: 8
         max-num-batched-tokens: 32768
         max-num-seqs: 1
+        # Builds every AITER GEMM token bucket at startup; branch prefix hits
+        # otherwise stall on first-use builds of small exact-M prefill shapes.
+        kernel-config: '{"enable_rocm_aiter_gemm_warmup":true}'
   benchmark:
     env:
       CONC: '1'
@@ -201,6 +213,9 @@ override_tp2_c2:
         max-cudagraph-capture-size: 8
         max-num-batched-tokens: 32768
         max-num-seqs: 1
+        # Builds every AITER GEMM token bucket at startup; branch prefix hits
+        # otherwise stall on first-use builds of small exact-M prefill shapes.
+        kernel-config: '{"enable_rocm_aiter_gemm_warmup":true}'
   benchmark:
     env:
       CONC: '2'
@@ -214,6 +229,9 @@ override_tp2_c4:
         max-cudagraph-capture-size: 8
         max-num-batched-tokens: 32768
         max-num-seqs: 1
+        # Builds every AITER GEMM token bucket at startup; branch prefix hits
+        # otherwise stall on first-use builds of small exact-M prefill shapes.
+        kernel-config: '{"enable_rocm_aiter_gemm_warmup":true}'
   benchmark:
     env:
       CONC: '4'
