@@ -177,7 +177,10 @@ All primary labels run the full selected concurrency matrix. Modifiers require
 a primary label: `all-evals` expands eligible evals while retaining throughput;
 `evals-only` suppresses throughput; `agentx-fast` uses one extra AgentX warmup
 request after mandatory primers and a 20-minute profile, leaving fixed-sequence
-and eval settings canonical. `all-evals`/`evals-only` reject changelog additions
+and eval settings canonical; `evals-last` holds the eval jobs until every
+throughput job has finished with any result, where by default they start
+alongside throughput. `evals-last` applies to same-repository sweeps only and
+its runs stay reusable. `all-evals`/`evals-only` reject changelog additions
 with `append-only: true` or `no-evals: true`. Do not reuse an `evals-only` or
 `agentx-fast` run. For lowest-concurrency smoke, dispatch `e2e-tests.yml` with
 `trim-conc: true`; no PR label trims concurrency.
@@ -354,7 +357,9 @@ The app downloads source artifacts, keeps the newest upload for each exact
 artifact name, and ingests them with changelog metadata from the merge run. The
 normal ingestion code skips failed benchmark rows. Benchmark rows and public
 links retain source-run provenance. Source coverage is authoritative, so later
-matrix/eval policy changes do not invalidate reuse.
+matrix/eval policy changes do not invalidate reuse. Video is the exception: Merge
+Ingest publishes only when the merge commit's video rows have the recipe
+fingerprints of the reused run's `video-sweep-manifest`.
 
 When the app's ingest finishes, on success or failure, it sends
 `ingest-results-completed` back with per-run counts (benchmark, eval, trace and
