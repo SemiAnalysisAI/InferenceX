@@ -157,23 +157,6 @@ base:
     mem: '0'
     container-remap-root: ''
 
-override_1p3d_pp4_tp4_c40:
-  name: glm5.3-fp4-gb300-dynamo-sglang-agentx-disagg-1p3d-pp4-tp4-c40
-  roles:
-    prefill:
-      args:
-        hicache-size: 100
-        active-decode-blocks-threshold: None
-        active-prefill-tokens-threshold: None
-        active-prefill-tokens-threshold-frac: None
-    decode:
-      nodes: 3
-      args:
-        tensor-parallel-size: 4
-        disaggregation-decode-enable-radix-cache: true
-        max-running-requests: 24
-        cuda-graph-max-bs-decode: 24
-
 override_1p1d_pp4_dep8_c56:
   name: glm5.3-fp4-gb300-dynamo-sglang-agentx-disagg-1p1d-pp4-dep8-c56
   roles:
