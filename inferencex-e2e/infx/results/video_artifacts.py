@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 from infx.bench.video import read_object, write_json
 
 VIDEO_ARTIFACT = re.compile(r"h3-results-([0-9]+)-([0-9]+)-([0-9a-f]{64})")
-# G2: vLLM-Omni logs cannot tie requests to parameters, so it publishes unattested; remove in v0.2.
+# vLLM-Omni logs cannot tie requests to parameters, so it has no attestation policy.
 UNATTESTED = frozenset({"vllm-omni"})
 
 
