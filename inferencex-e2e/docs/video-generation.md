@@ -42,13 +42,16 @@ owns engine environment values, including offline mode and vLLM storage and
 worker settings. The binder substitutes `{model_path}`, `{model_id}`,
 `{model_revision}`, and `{gpus_per_node}` in service args/env, and rejects
 model, revision, port, or GPU-count mismatches before submission. Other native
-srt-slurm service placeholders retain their existing meaning. For a schema version 2
-fairness plan, the binder also requires SGLang's `--disable-conditioning-cache`
+srt-slurm service placeholders retain their existing meaning. For every video
+spec, the binder also requires SGLang's `--disable-conditioning-cache`
 or vLLM-Omni's `OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0` in the selected recipe.
 Each engine accepts only the flags, spelled in full, environment variables and
 preambles that `_REVIEWED` in [`video.py`](../infx/srt_slurm/video.py) registers
-for it, and SGLang rows must set `--performance-mode speed`. The binder refuses
-anything else before submission, so a new setting needs a reviewed change there.
+for it, each flag and switch at most once, and SGLang rows must set
+`--performance-mode speed`. `_REVIEWED_MODELS` beside it holds what one model
+adds: the flags only its rows may pass, and the vLLM-Omni caches its rows must
+turn off. The binder refuses anything else before submission, so a new setting
+needs a reviewed change there, and a new model with its own settings needs one row.
 It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.
 
