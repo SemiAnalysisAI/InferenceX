@@ -52,12 +52,20 @@ if [[ " $* " == *" -j 42 "* && -n "${FAKE_ACTIVE:-}" && -e "$FAKE_ACTIVE" ]]; th
 exit 0
 """,
     "sacct": r"""
-state="${FAKE_STATE:-COMPLETED|0:0}"
+state="${FAKE_STATE:-COMPLETED|0:0|gpu03}"
 rc="$(cat "$FAKE_LOG_DIR/batch-rc" 2>/dev/null)"
 if [[ " $* " == *" 4242 "* && -n "$rc" && "$rc" != 0 ]]; then state="FAILED|$rc:0"; fi
 echo "$state"
 """,
-    "scontrol": "exit 1",
+    "scontrol": r"""
+if [[ "$1 $2" == 'show hostnames' ]]; then echo "$3"; exit 0; fi
+if [[ "$1 $2" == 'show node' ]]; then
+  if [[ -n "${FAKE_NODE_QUERY_RC:-}" ]]; then exit "$FAKE_NODE_QUERY_RC"; fi
+  printf 'NodeName=%s State=%s Reason=%s\n' "$3" "${FAKE_NODE_STATE:-IDLE}" "${FAKE_NODE_REASON:-none}"
+  exit 0
+fi
+exit 1
+""",
     "sacctmgr": "exit 0",
     "scancel": r"""
 printf '%s\n' "$*" >> "$FAKE_LOG_DIR/scancel.log"

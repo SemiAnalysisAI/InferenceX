@@ -11,12 +11,13 @@ the Slurm-only operations below the generic ones.
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 import subprocess
 import sys
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, override
 
@@ -32,7 +33,7 @@ from infx.launch.backends.base import (
     JobState,
     JobStatus,
 )
-from infx.launch.backends.slurm import cli
+from infx.launch.backends.slurm import cli, health
 from infx.launch.backends.slurm.squash import (
     ensure_image,
     registry_reference,
@@ -221,6 +222,23 @@ class SlurmBackend(Backend):
         else:
             message = f"could not verify terminal Slurm status for job {job.id}"
             event.fail("JobStatusUnknown", message, stage="run", retriable=True)
+
+    def check_node_health(self, job: Job, status: JobStatus, report: Path) -> int:
+        if not status.succeeded:
+            return 0
+        observed = health.inspect_nodes(job.id, status.nodes)
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(asdict(observed), indent=2) + "\n")
+        if observed.errors:
+            self.life.event.fail(
+                "NodeCleanupFailed",
+                f"Slurm job {job.id} ended successfully but its node health check failed: "
+                + "; ".join(observed.errors),
+                stage="collect",
+                retriable=True,
+            )
+            return 1
+        return 0
 
     @override
     def fetch_outputs(self, job: Job, dest: Path) -> Path:

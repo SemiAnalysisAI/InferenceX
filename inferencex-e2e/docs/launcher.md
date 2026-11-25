@@ -142,6 +142,15 @@ Results reach the workspace root in `finish_single_node`, the cleanup the driver
 registers before it submits. `Lifecycle` runs registered cleanups in reverse order on
 every exit path, including a signal, so a cancelled job still returns its logs.
 
+Before an srt launch reports success, it queries the health of every node in the
+completed Slurm job's placement. A drained, down, unresponsive or unverifiable node
+fails the launch with `NodeCleanupFailed`, even when the allocation reports
+`COMPLETED|0:0`. `LOGS/slurm-node-health.json` and the server-log bundle retain
+the observed states and drain reasons; benchmark results and native accounting
+remain available for diagnosis. A node already allocated to another job is valid.
+The check is read-only: node recovery belongs to the cluster operator's maintenance
+service, and a passing snapshot does not guarantee later node health.
+
 The other paths keep phases 1 and 3 and change the middle of phase 2:
 
 | Path | What differs |

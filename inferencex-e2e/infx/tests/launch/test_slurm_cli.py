@@ -12,7 +12,7 @@ import pytest
 from infx.clusters import load_inventory
 from infx.launch.backends import slurm
 from infx.launch.backends.base import Job, JobState
-from infx.launch.backends.slurm import cli
+from infx.launch.backends.slurm import cli, health
 from infx.launch.backends.slurm.cli import (
     ContainerSpec,
     Resources,
@@ -40,6 +40,8 @@ def fake_bin(tmp_path, monkeypatch):
         binary.write_text(f"#!/bin/bash\n{body}\n")
         binary.chmod(0o755)
 
+    for name in ("sacct", "scontrol", "squeue", "salloc", "srun", "scancel", "sbatch"):
+        install(name, "exit 127")
     return install
 
 
@@ -53,6 +55,65 @@ def recorder(log: Path) -> str:
 def calls(log: Path) -> list[list[str]]:
     """Recorded invocations, one argv per line."""
     return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+
+def test_node_health_checks_every_allocated_node_and_allows_new_jobs(fake_bin):
+    fake_bin("scontrol", """
+if [[ "$2" == hostnames ]]; then printf 'gpu01\\ngpu02\\n'; exit 0; fi
+printf '%s\\n' 'NodeName=gpu01 State=IDLE Reason=none'
+printf '%s\\n' 'NodeName=gpu02 State=ALLOCATED+CLOUD Reason=none'
+""")
+    report = health.inspect_nodes("42", "gpu[01-02]")
+    assert report.job_id == "42"
+    assert report.expected == ("gpu01", "gpu02")
+    assert [(node.name, node.state) for node in report.nodes] == [
+        ("gpu01", "IDLE"), ("gpu02", "ALLOCATED+CLOUD")]
+    assert report.errors == ()
+
+
+@pytest.mark.parametrize("state", ["IDLE+DRAIN", "DOWN", "MIXED+FAIL", "IDLE+NOT_RESPONDING",
+                                  "UNKNOWN", "IDLE+INVALID_REG", "IDLE+POWERING_DOWN"])
+def test_node_health_retains_the_bad_state_and_drain_reason(fake_bin, state):
+    fake_bin("scontrol", f"""
+if [[ "$2" == hostnames ]]; then echo gpu01; exit 0; fi
+echo 'NodeName=gpu01 State={state} Reason=Kill task failed (JobId=42 StepId=5) [slurm@now]'
+""")
+    report = health.inspect_nodes("42", "gpu01")
+    assert report.nodes[0].state == state
+    assert report.nodes[0].reason == "Kill task failed (JobId=42 StepId=5) [slurm@now]"
+    assert len(report.errors) == 1
+    assert f"state={state}" in report.errors[0]
+    assert "Kill task failed" in report.errors[0]
+
+
+@pytest.mark.parametrize("records", [
+    "NodeName=gpu01 State=IDLE", "NodeName=gpu01 State=IDLE\\nNodeName=gpu01 State=IDLE",
+    "NodeName=gpu01 State=IDLE\\nNodeName=gpu03 State=IDLE", "",
+])
+def test_node_health_rejects_incomplete_or_duplicate_coverage(fake_bin, records):
+    fake_bin("scontrol", f"""
+if [[ "$2" == hostnames ]]; then printf 'gpu01\\ngpu02\\n'; exit 0; fi
+printf '%b\\n' {shlex.quote(records)}
+""")
+    report = health.inspect_nodes("42", "gpu[01-02]")
+    assert any("coverage mismatch" in error or "incomplete node" in error for error in report.errors)
+
+
+def test_node_health_rejects_query_failure_and_timeout(fake_bin, monkeypatch):
+    fake_bin("scontrol", "echo 'controller unavailable' >&2; exit 1")
+    report = health.inspect_nodes("42", "gpu01")
+    assert "controller unavailable" in report.errors[0]
+    fake_bin("scontrol", "exec sleep 1")
+    monkeypatch.setattr(health, "_QUERY_TIMEOUT_S", 0.05)
+    report = health.inspect_nodes("42", "gpu01")
+    assert "timed out" in report.errors[0]
+
+
+@pytest.mark.parametrize("hostlist", [None, "", "None assigned", "-a"])
+def test_node_health_requires_verifiable_job_placement(hostlist):
+    report = health.inspect_nodes("42", hostlist)
+    assert "no verifiable node placement" in report.errors[0]
+    assert report.nodes == ()
 
 
 def test_salloc_returns_granted_job_and_requests_no_shell(fake_bin, tmp_path):
