@@ -44,8 +44,19 @@ SGLANG = Policy(
         "lora_path": None,
         "disable_conditioning_cache": True,
     },
+    # The logged arguments are the resolved ones: performance_mode may have chosen offload or
+    # FSDP from the GPU count and free memory. Placement is allowed but counts in latency.
     recorded_args=(
         "performance_mode",
+        "component_residency",
+        "cpu_offload_components",
+        "dit_cpu_offload",
+        "dit_layerwise_offload",
+        "layerwise_offload_components",
+        "text_encoder_cpu_offload",
+        "image_encoder_cpu_offload",
+        "vae_cpu_offload",
+        "use_fsdp_inference",
         "allow_bf16_reduced_precision_reduction",
         "allow_cudnn_tf32",
         "enable_torch_compile",
