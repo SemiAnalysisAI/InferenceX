@@ -293,6 +293,10 @@ def test_main_checks_source_before_skipping_pr_synchronize(
     assert outputs["reuse-enabled"] == "false"
     assert outputs["skip-pr-sweep"] == "true"
     assert outputs["reuse-source-pr-number"] == "1321"
+    # video-reuse-check validates exactly this run.
+    assert outputs["reuse-source-run-id"] == "123"
+    assert outputs["reuse-source-run-attempt"] == "1"
+    assert outputs["reuse-source-head-sha"] == "abc123"
 
 
 def test_main_allows_pr_synchronize_without_reuse_authorization(

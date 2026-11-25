@@ -9,7 +9,7 @@ from infx.tests.srt_recipes import single_node_fragment, write_shared_blocks
 
 SINGLE = "benchmarks/single_node/srt-slurm-recipes/fixture"
 MULTI = "benchmarks/multi_node/srt-slurm-recipes/fixture"
-ROLES = {role: {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False} for role in ("prefill", "decode")}
+ROLES = {role: {"num-worker": 1, "gpus-per-worker": 8, "tp": 8, "ep": 1, "dp-attn": False} for role in ("prefill", "decode")}
 
 
 def config(multinode: bool, *spaces: dict) -> dict:
@@ -27,7 +27,7 @@ def point(conc: int, **env: str) -> dict:
 
 
 MASTER = {
-    "single": config(False, {"tp": 4, "kv-offloading": "none", "conc-list": [1, 2, 4, 8],
+    "single": config(False, {"gpus-per-worker": 4, "tp": 4, "kv-offloading": "none", "conc-list": [1, 2, 4, 8],
                              "srt-recipe": "agentic.yaml"}),
     "multi": config(
         True,

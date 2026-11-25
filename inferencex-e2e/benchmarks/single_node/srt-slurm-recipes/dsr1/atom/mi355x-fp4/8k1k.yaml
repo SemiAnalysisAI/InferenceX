@@ -16,8 +16,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 4
       args:
         kv_cache_dtype: fp8
         max-model-len: 10240
@@ -30,8 +28,7 @@ zip_override_tp4_ep1:
       CONC: ['4', '8', '16', '32', '64', '128', '256']
 zip_override_tp8_ep1:
   roles:
-    agg:
-      gpus: 8
+    agg: {}
   benchmark:
     env:
       CONC: ['4']

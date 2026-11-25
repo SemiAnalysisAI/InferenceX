@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 1
       args:
         served-model-name: RadixArk/Qwen3.8-Flash-Next-NVFP4
         trust-remote-code: true
@@ -69,7 +67,6 @@ override_c8:
 override_tp2_c8:
   roles:
     agg:
-      gpus: 2
       args:
         tensor-parallel-size: 2
         max-running-requests: 16
@@ -101,7 +98,6 @@ override_dram_c16:
     env:
       CONC: '16'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '214'
 
 override_dram_c24:
   roles:
@@ -126,7 +122,6 @@ override_dram_c24:
     env:
       CONC: '24'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '214'
 
 override_dram_c32:
   roles:
@@ -148,4 +143,3 @@ override_dram_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '214'
