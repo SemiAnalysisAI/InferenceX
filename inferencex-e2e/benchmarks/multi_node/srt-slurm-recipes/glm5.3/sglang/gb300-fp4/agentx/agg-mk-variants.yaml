@@ -1,18 +1,21 @@
 schema: 2
 
 base:
-  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-agg
+  name: glm5.3-fp4-gb300-dynamo-sglang-agentx-agg-mk
   identity:
     model: {}
     container: {}
     frameworks:
-      dynamo: 1.6.0.dev20261019
-      sglang: 0.0.0.dev1+gc1c287a42
+      dynamo: 1.8.0.dev20261119
+      sglang: 0.0.0.dev1+ga8ac86595
   resources:
     gpu_type: gb300
     gpus_per_node: 4
+  # Dynamo 1.7 and older pass Engine.async_generate(data_parallel_rank=), which this SGLang rejects.
   dynamo:
-    install: false
+    install: true
+    source:
+      wheel: 1.8.0.dev20261119
   # Tachometer's per-node exporters slow decode steps and add host memory;
   # InferenceX does not read its output.
   observability:
@@ -40,7 +43,7 @@ base:
         DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
         SGLANG_TIMEOUT_KEEP_ALIVE: '900'
       args:
-        served-model-name: nvidia/GLM-5.2-NVFP4
+        served-model-name: nvidia/GLM-5.3-NVFP4
         trust-remote-code: true
         quantization: modelopt_fp4
         expert-parallel-size: 1
@@ -88,10 +91,12 @@ base:
     container-remap-root: ''
 
 override_tp4_c1:
-  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-agg-tp4-c1-mtp4
+  name: glm5.3-fp4-gb300-dynamo-sglang-agentx-agg-mk-tp4-c1-mtp4
   roles:
     agg:
       nodes: 1
+      env:
+        SGLANG_ENABLE_EMBED_REPLICATION: '1'
       args:
         tensor-parallel-size: 4
         kv-cache-dtype: fp8_e4m3
@@ -105,9 +110,11 @@ override_tp4_c1:
         cuda-graph-max-bs-decode: 8
         hicache-mem-layout: page_first_direct
         watchdog-timeout: 1800
+        enable-nvidia-megakernel: true
+        cuda-graph-max-bs-prefill: 4096
 
 override_tp8_c1:
-  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-agg-tp8-c1-mtp5
+  name: glm5.3-fp4-gb300-dynamo-sglang-agentx-agg-mk-tp8-c1-mtp5
   roles:
     agg:
       nodes: 2
@@ -120,6 +127,7 @@ override_tp8_c1:
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
         SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
         SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+        SGLANG_ENABLE_EMBED_REPLICATION: '1'
       args:
         tensor-parallel-size: 8
         data-parallel-size: 1
@@ -131,3 +139,5 @@ override_tp8_c1:
         cuda-graph-max-bs-decode: 2
         watchdog-timeout: 1000000
         enable-cache-report: true
+        enable-nvidia-megakernel: true
+        cuda-graph-max-bs-prefill: 4096
