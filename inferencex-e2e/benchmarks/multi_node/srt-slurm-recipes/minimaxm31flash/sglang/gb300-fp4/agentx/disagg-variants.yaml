@@ -184,7 +184,8 @@ base:
 override_4p_dep4_dep16_si20_linker:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker
   # Lists replace on merge, so this repeats every base service. Every decode
-  # node and the infra node run 4 x 190 GB stores.
+  # node runs 4 x 190 GB stores; the infra node runs no inference worker, so it
+  # holds no KV cache.
   services: &gb300-linker-services
     - name: etcd
       type: etcd
@@ -255,33 +256,6 @@ override_4p_dep4_dep16_si20_linker:
       args: ["--port", "8803"]
       readiness:
         port: 8803
-        timeout_seconds: 600
-    - &gb300-infra-store
-      <<: *gb300-decode-store
-      name: store-infra-0
-      placement:
-        node: infra
-      args: ["--port", "8810"]
-      readiness:
-        port: 8810
-        timeout_seconds: 600
-    - <<: *gb300-infra-store
-      name: store-infra-1
-      args: ["--port", "8811"]
-      readiness:
-        port: 8811
-        timeout_seconds: 600
-    - <<: *gb300-infra-store
-      name: store-infra-2
-      args: ["--port", "8812"]
-      readiness:
-        port: 8812
-        timeout_seconds: 600
-    - <<: *gb300-infra-store
-      name: store-infra-3
-      args: ["--port", "8813"]
-      readiness:
-        port: 8813
         timeout_seconds: 600
     # Disables Dynamo's per-request lifecycle span export; InferenceX does not read it.
     - name: otel-collector
