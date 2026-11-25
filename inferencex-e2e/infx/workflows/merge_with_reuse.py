@@ -703,9 +703,12 @@ def _merge_pr_inner(
     if current_head != post_merge:
         return die(f"PR head changed to {current_head[:8]}; expected {post_merge[:8]}")
 
-    rc = wait_for_check(post_merge, "check-changelog", gh_repo, check_timeout)
-    if rc != 0:
-        return rc
+    # wait_for_checks sees only existing check runs, and video-reuse-check starts only after
+    # the reuse gate finishes, so wait for it by name before the rest.
+    for check_name in ("check-changelog", "video-reuse-check"):
+        rc = wait_for_check(post_merge, check_name, gh_repo, check_timeout)
+        if rc != 0:
+            return rc
 
     log("Waiting for all PR checks")
     rc = wait_for_checks(pull, post_merge, gh_repo, check_timeout)

@@ -1069,7 +1069,8 @@ class TestMergePrFullFlow:
         assert result == 0
         pull.merge.assert_called_once_with(merge_method="squash", sha=sha)
 
-    def test_check_changelog_failure_exits_nonzero(self):
+    @pytest.mark.parametrize("failing", ["check-changelog", "video-reuse-check"])
+    def test_named_check_failure_exits_before_merge(self, failing):
         sha = "a" * 40
         pull = make_mock_pull(head_sha=sha)
         gh = make_mock_gh(pull)
@@ -1082,7 +1083,11 @@ class TestMergePrFullFlow:
             ),
             patch(
                 "infx.workflows.merge_with_reuse.wait_for_check",
-                return_value=1,
+                side_effect=lambda _sha, name, *_: int(name == failing),
+            ),
+            patch(
+                "infx.workflows.merge_with_reuse.wait_for_checks",
+                return_value=0,
             ),
             patch("infx.workflows.merge_with_reuse.canonicalize_changelog"),
         ):
@@ -1095,6 +1100,7 @@ class TestMergePrFullFlow:
                 _gh=gh,
             )
         assert result == 1
+        pull.merge.assert_not_called()
 
     def test_merge_api_error_surfaces_message(self, capsys):
         """Verify API error message is surfaced verbatim but token is not leaked."""
@@ -1601,6 +1607,7 @@ def test_merge_from_nested_directory_survives_historical_checkout(
     gh = make_mock_gh(pull)
     gh.get_repo.return_value.get_commit.return_value.get_check_runs.return_value = [
         make_check_run(name="check-changelog"),
+        make_check_run(name="video-reuse-check"),
     ]
     gh.get_repo.return_value.get_commit.return_value.get_combined_status.return_value.statuses = []
 
