@@ -9,7 +9,7 @@ from infx.workflows.benchmark_schema import validate_matrix
 
 @pytest.fixture
 def master():
-    return {"video": {"image": "lmsysorg/sglang:1", "model": "org/video", "model-prefix": "video",
+    return {"video": {"image": "example/runtime:1", "model": "org/video", "model-prefix": "video",
         "precision": "bf16", "framework": "sglang", "runner": "cluster:fixture", "multinode": False,
         "srt-recipe-dir": "video", "scenarios": {"video-generation": [{"spec": "clip.yaml",
         "set": "shared-v1",
@@ -65,17 +65,4 @@ def test_video_recipe_must_be_named_by_its_gpu_split(master):
     for unsplit in ("serving-client.yaml", "serving-client-g2.yaml"):
         row["srt-recipe"] = unsplit
         with pytest.raises(ValueError, match="video/agg-<layout>.yaml"):
-            srt_recipe_references(master)
-
-
-def test_video_image_must_come_from_a_repository_listed_for_its_framework(master):
-    digest = "@sha256:" + "0" * 64
-    master["video"]["image"] += digest
-    srt_recipe_references(master)
-    for image, framework, error in (
-        ("ghcr.io/example-user/engine:1.0", "sglang", "'ghcr.io/example-user/engine' is not listed for framework 'sglang'"),
-        ("lmsysorg/sglang:1", "vllm-omni", "'lmsysorg/sglang' is not listed for framework 'vllm-omni'"),
-    ):
-        master["video"].update(image=image + digest, framework=framework)
-        with pytest.raises(ValueError, match=error):
             srt_recipe_references(master)

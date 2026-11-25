@@ -81,7 +81,7 @@ VIDEO_RECIPE = "video/agg-tp2.yaml"
 def video_entry(recipe: str = VIDEO_RECIPE) -> dict:
     """A master entry with one 2-GPU video point of ``VIDEO_SPEC``'s set served by ``recipe``."""
     return {
-        "image": "lmsysorg/sglang:1", "model": VIDEO_MODEL, "model-prefix": "h3",
+        "image": "example/video:1", "model": VIDEO_MODEL, "model-prefix": "h3",
         "precision": "bf16", "framework": "sglang", "runner": "cluster:fixture",
         "multinode": False, "srt-recipe-dir": "fixture",
         "scenarios": {"video-generation": [{"spec": VIDEO_SPEC, "set": VIDEO_SET, "search-space": [
