@@ -491,7 +491,9 @@ override_4p5d_k5_eval:
 
 # Concurrency 640: the 4P5D settings with 704-token prefix-match units. Sliding-window KV hits use sub-block
 # hash units (VLLM_SWA_FINE_GRAINED_HITS) and the DSpark draft's tail hit rule (VLLM_DFLASH_SWA_TAIL_HITS),
-# so the draft's sliding-window group keeps prefix-cache hits at 704-token granularity.
+# so the draft's sliding-window group keeps prefix-cache hits at 704-token granularity. Prefill turns on
+# expert-parallel load balancing (EPLB, no redundant experts): it moves experts between ranks every 1500 steps
+# from the last 1000 steps' load, so the busiest rank waits less; the computation is the same.
 override_4p5d_k5_pmu704:
   roles:
     prefill: &override_4p5d_k5_pmu704_prefill
@@ -503,6 +505,8 @@ override_4p5d_k5_pmu704:
       args: &override_4p5d_k5_pmu704_prefill_args
         <<: *override_4p5d_k5_prefill_args
         prefix-match-unit: 704
+        enable-eplb: true
+        eplb-config: '{"window_size":1000,"step_interval":1500,"num_redundant_experts":0,"log_balancedness":true,"log_balancedness_interval":50}'
     decode: &override_4p5d_k5_pmu704_decode
       <<: *override_4p5d_k5_decode
       env:

@@ -6231,16 +6231,7 @@ kimik3.1-fp4-b300-dynamo-vllm-agentic-dspark-mooncake-dcp8-disagg:
         power: true
         prefill: { num-worker: 2, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
         decode: { num-worker: 3, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: 0.3.14 }
-        conc-list: [600]
-        srt-recipe: disagg-variants.yaml:override_4p5d_k5
-        eval-srt-recipe: disagg-variants.yaml:override_4p5d_k5_eval
-        power: true
-        prefill: { num-worker: 4, tp: 8, dcp-size: 8, ep: 8, dp-attn: false }
-        decode: { num-worker: 5, tp: 8, dcp-size: 8, ep: 1, dp-attn: false }
-      # 4P5D with 704-token prefix-match units.
+      # 4P5D with 704-token prefix-match units and prefill EPLB.
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
