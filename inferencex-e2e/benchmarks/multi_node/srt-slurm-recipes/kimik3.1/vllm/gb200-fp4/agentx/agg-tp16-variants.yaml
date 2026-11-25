@@ -74,7 +74,7 @@ base:
         enable-auto-tool-choice: true
         tool-call-parser: kimi_k3
         reasoning-parser: kimi_k3
-        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark-preview","method":"dspark","attention_backend":"TOKENSPEED_MLA","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":4,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         # 112742379520 bytes per rank is the dram-utilization 0.5 share of a 4-GPU tray.
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":112742379520,"lazy_offload":false}}'
 
