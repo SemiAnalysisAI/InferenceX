@@ -475,8 +475,20 @@ def _video_recipe_reference(value: str) -> str:
 VideoRecipeReference = Annotated[str, AfterValidator(_video_recipe_reference)]
 
 
+def _video_conc_list(value: list[int]) -> list[int]:
+    """VideoGenX v0.1 measures one request at a time."""
+    if value != [1]:
+        raise ValueError(
+            f"'conc-list' is {value}, but a video-generation row must list exactly [1]"
+        )
+    return value
+
+
+VideoConcList = Annotated[list[int], AfterValidator(_video_conc_list)]
+
+
 class VideoMatrixEntry(BaseModel):
-    """One video-generation job: every concurrency of ``conc`` against one server."""
+    """One video-generation job: one server measured at concurrency 1."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -490,7 +502,7 @@ class VideoMatrixEntry(BaseModel):
     spec: VideoSpec
     video_set: str = Field(alias="set", pattern=r"^[A-Za-z0-9_-]+$")
     gpus: int = Field(gt=0, strict=True)
-    conc_list: list[int] = Field(alias=Fields.CONC_LIST.value, min_length=1)
+    conc_list: VideoConcList = Field(alias=Fields.CONC_LIST.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: Literal["video-generation"] = Field(alias=Fields.SCENARIO_TYPE.value)
     spec_decoding: Literal["none"] = Field(alias=Fields.SPEC_DECODING.value)
@@ -502,13 +514,6 @@ class VideoMatrixEntry(BaseModel):
         alias=Fields.RECIPE_FINGERPRINT.value,
         pattern=r"^[0-9a-f]{64}$",
     )
-
-    @model_validator(mode="after")
-    def validate_conc(self) -> Self:
-        conc = self.conc_list
-        if any(value <= 0 for value in conc) or len(set(conc)) != len(conc):
-            raise ValueError("conc-list must list unique positive concurrencies")
-        return self
 
 
 def validate_video_matrix_entry(entry: dict) -> dict:
@@ -883,21 +888,13 @@ class AgenticCodingConfig(BaseModel):
 
 
 class VideoGenerationSearchSpaceEntry(BaseModel):
-    """One video serving job: a GPU count and the concurrencies one server serves in turn."""
+    """One video serving job: a GPU count and its recipe, measured at concurrency 1."""
 
     model_config = ConfigDict(extra="forbid")
 
     gpus: int = Field(gt=0, strict=True)
     srt_recipe: VideoRecipeReference = Field(alias=Fields.SRT_RECIPE.value)
-    conc_list: list[int] = Field(alias=Fields.CONC_LIST.value, min_length=1)
-
-    @model_validator(mode="after")
-    def validate_conc_list(self) -> Self:
-        if any(conc <= 0 for conc in self.conc_list):
-            raise ValueError(f"Input '{Fields.CONC_LIST.value}' entries must be greater than 0.")
-        if len(set(self.conc_list)) != len(self.conc_list):
-            raise ValueError(f"Input '{Fields.CONC_LIST.value}' entries must be unique.")
-        return self
+    conc_list: VideoConcList = Field(alias=Fields.CONC_LIST.value)
 
 
 class VideoGenerationConfig(BaseModel):
