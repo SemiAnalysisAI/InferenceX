@@ -13385,6 +13385,6 @@
     - qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp2-mooncake
   scenario-type: [agentic-coding]
   description:
-    - "Add ten GB300 Qwen3.5-397B-A17B NVFP4 Dynamo-SGLang AgentX configurations with TP1/PP2 prefill and TP8, TP8/EP4, or DEP4 decode."
+    - "Add eight GB300 Qwen3.5-397B-A17B NVFP4 Dynamo-SGLang AgentX configurations with TP1/PP2 prefill and TP8, TP8/EP4, or DEP4 decode."
     - "Use native MTP and configure prefill HiCache and Mooncake DRAM storage for disaggregated serving."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5233

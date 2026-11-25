@@ -4038,44 +4038,6 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp2-mooncake:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: mooncake, version: 0.3.14 }
-        conc-list: [190]
-        srt-recipe: disagg-pp2-mooncake-variants.yaml:override_1p_pp2_2d_tep8_x6a_c190
-        prefill:
-          num-worker: 1
-          gpus-per-worker: 2
-          tp: 1
-          pp: 2
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 2
-          gpus-per-worker: 8
-          tp: 8
-          pp: 1
-          ep: 4
-          dp-attn: false
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: 0.3.14 }
-        conc-list: [180]
-        srt-recipe: disagg-pp2-mooncake-variants.yaml:override_1p_pp2_1d_tep8_c210_n180
-        prefill:
-          num-worker: 1
-          gpus-per-worker: 2
-          tp: 1
-          pp: 2
-          ep: 1
-          dp-attn: false
-        decode:
-          num-worker: 1
-          gpus-per-worker: 8
-          tp: 8
-          pp: 1
-          ep: 4
-          dp-attn: false
-      - spec-decoding: mtp
-        kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: 0.3.14 }
         conc-list: [70]
         srt-recipe: disagg-pp2-mooncake-variants.yaml:override_2p_pp2_1d_tep8_c380
         prefill:

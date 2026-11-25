@@ -90,7 +90,6 @@ base:
       gpus: 2
       gpu_indices: [0, 2]
       env:
-        FLASHINFER_TACTIC_ROLE: prefill
         SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND: python
         DYN_REQUEST_PLANE: tcp
         DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
@@ -128,9 +127,6 @@ base:
         SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
         SGLANG_PP_COMM_OVERLAP: '1'
         SGLANG_PP_LAYER_PARTITION: 32,28
-        SGLANG_PP_PREFILL_EARLY_FINISH: '1'
-        SGLANG_PP_PREFILL_EARLY_FINISH_LOG_S: '60'
-        SGLANG_PP_PREFILL_EARLY_FINISH_POLL_MS: '1'
         SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
         TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
         TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: '1800'
@@ -202,7 +198,6 @@ base:
     decode:
       gpus: 8
       env:
-        FLASHINFER_TACTIC_ROLE: decode
         SGLANG_UNIFIED_RADIX_TREE_CORE_BACKEND: python
         DYN_REQUEST_PLANE: tcp
         DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
@@ -234,7 +229,6 @@ base:
         SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
         SGLANG_MOE_NVFP4_DISPATCH: '1'
         SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
-        SGLANG_NVIDIA_MEGAKERNEL_DRAFT_GATHER_EARLY: '0'
         SGLANG_OPT_MAMBA_SKIP_DECODE_LOCK: '1'
         SGLANG_PLB_STREAM_PRIORITY: '-1'
         SGLANG_SCHEDULER_SKIP_ALL_GATHER: '1'
@@ -310,15 +304,9 @@ base:
   srun_options:
     mem: '0'
     container-remap-root: ''
-  setup_script: qwen35-gb300-flashinfer-tactics.sh
-  environment:
-    SGLANG_IMAGE_COMMIT: 617bd6014ae3e2a2d234400d2c7371dcc9101796
-    SGLANG_MEGAKERNEL_COMMIT: fe8163cc788817ab6dd0f9ea09add97d7ac59004
 
 override_1p_pp2_1d_tp8_c1b1:
   name: qwen35-gb300-pp2-1p-pp2-1d-tp8-c1b1
-  environment:
-    FLASHINFER_TACTIC_SET: c1b1
   roles:
     prefill:
       nodes: 1
@@ -337,51 +325,8 @@ override_1p_pp2_1d_tp8_c1b1:
         cuda-graph-max-bs-decode: 1
         cuda-graph-bs-decode: [1]
 
-override_1p_pp2_2d_tep8_x6a_c190:
-  name: qwen35-gb300-pp2-1p-pp2-2d-tep8-x6a-c190
-  environment:
-    FLASHINFER_TACTIC_SET: x6a-c190
-  services: [*etcd, *nats, *otel-off, *mooncake-master-98, *store-decode-0, *store-decode-1]
-  roles:
-    prefill:
-      nodes: 1
-      workers: 1
-      args:
-        hicache-size: 200
-        hicache-mem-layout: page_first_direct
-    decode:
-      nodes: 4
-      workers: 2
-      args:
-        expert-parallel-size: 4
-        max-running-requests: 6
-        cuda-graph-max-bs-decode: 6
-        cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6]
-
-override_1p_pp2_1d_tep8_c210_n180:
-  name: qwen35-gb300-pp2-1p-pp2-1d-tep8-c210-n180
-  environment:
-    FLASHINFER_TACTIC_SET: c210-n180
-  roles:
-    prefill:
-      nodes: 1
-      workers: 1
-      args:
-        hicache-size: 216
-        hicache-mem-layout: page_first_direct
-    decode:
-      nodes: 2
-      workers: 1
-      args:
-        expert-parallel-size: 4
-        max-running-requests: 14
-        cuda-graph-max-bs-decode: 14
-        cuda-graph-bs-decode: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-
 override_2p_pp2_1d_tep8_c380:
   name: qwen35-gb300-pp2-2p-pp2-1d-tep8-c380
-  environment:
-    FLASHINFER_TACTIC_SET: c380
   services:
   - *etcd
   - *nats
@@ -427,8 +372,6 @@ override_2p_pp2_1d_tep8_c380:
 
 override_5p_pp2_2d_dep4_c600_n890:
   name: qwen35-gb300-pp2-5p-pp2-2d-dep4-c600-n890
-  environment:
-    FLASHINFER_TACTIC_SET: c600-n890-k1
   services:
   - *etcd
   - *nats
@@ -479,16 +422,8 @@ override_5p_pp2_2d_dep4_c600_n890:
         SGLANG_DISAGG_STAGING_BUFFER: '0'
         SGLANG_DISAGG_STAGING_POOL_SIZE_MB: null
         SGLANG_FLASHINFER_MOE_FUSED_FINALIZE: null
-        SGLANG_NVIDIA_MEGAKERNEL_DRAFT_FC_PUSH: '0'
-        SGLANG_NVIDIA_MEGAKERNEL_DRAFT_GATHER_EARLY: null
-        SGLANG_NVIDIA_MEGAKERNEL_DRAFT_OPROJ_PUSH: '0'
         SGLANG_PLB_STREAM_PRIORITY: null
         SGLANG_SCHEDULER_SKIP_ALL_GATHER: null
-        SGLANG_SPEC_CHUNKED_VERIFY_SAMPLING: '0'
-        SGLANG_SPEC_FUSED_DRAFT_EXTEND_TAIL: '0'
-        SGLANG_SPEC_FUSED_RELAY: '0'
-        SGLANG_SPEC_LEAN_SAMPLED_VERIFY: '0'
-        SGLANG_SPEC_PACKED_VERIFY_BROADCAST: '0'
         SGLANG_TRTLLM_MHA_FULL_ATTN_KV_SPLITS: '8'
         SGLANG_TRTLLM_MHA_FULL_ATTN_KV_SPLITS_MIN_BS: '8'
       args:
@@ -512,6 +447,5 @@ override_5p_pp2_2d_dep4_c600_n890:
         disable-attn-tp-gather: null
         enable-symm-mem: null
         disaggregation-decode-extra-slots: 16
-        random-seed: 864392834
         router-mode: kv
         router-replica-sync: true
