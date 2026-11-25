@@ -1,0 +1,111 @@
+{
+  "scope": "Actual local full replay scores; not GitHub Actions or candidate-branch validation",
+  "measured": [
+    {
+      "point": "C1",
+      "run_id": "c7da74265c",
+      "hardware": "MI350X",
+      "model_revision": "bd6e49d9abfe0ce1da53a45593daaee83580035b",
+      "client_sha": "5a1f81029fe7421f2f6e870cae4af9c5ff2f2290",
+      "dataset_revision": "8fecd2fc56694469f758f0afbbb6335ad3043740",
+      "execution_mode": "sequential",
+      "bench": {
+        "point": 1,
+        "duration": 3600.0,
+        "golden_expected": 2.32,
+        "window_s": 3614.6006,
+        "accept_observed": 2.325,
+        "p90_ttft_s": 1.26428,
+        "p90_interactivity": 393.92157,
+        "total_throughput_per_gpu": 16914.09003,
+        "status": "ok"
+      }
+    },
+    {
+      "point": "C2",
+      "run_id": "a658f186b4-C2-a2",
+      "hardware": "MI350X",
+      "model_revision": "bd6e49d9abfe0ce1da53a45593daaee83580035b",
+      "client_sha": "5a1f81029fe7421f2f6e870cae4af9c5ff2f2290",
+      "dataset_revision": "8fecd2fc56694469f758f0afbbb6335ad3043740",
+      "execution_mode": "sequential",
+      "bench": {
+        "point": 2,
+        "duration": 3600.0,
+        "golden_expected": 2.32,
+        "window_s": 3597.96965,
+        "accept_observed": 2.325,
+        "p90_ttft_s": 0.83734,
+        "p90_interactivity": 313.53253,
+        "total_throughput_per_gpu": 21138.5113,
+        "status": "ok"
+      }
+    },
+    {
+      "point": "C4",
+      "run_id": "a658f186b4-C4-a1",
+      "hardware": "MI350X",
+      "model_revision": "bd6e49d9abfe0ce1da53a45593daaee83580035b",
+      "client_sha": "5a1f81029fe7421f2f6e870cae4af9c5ff2f2290",
+      "dataset_revision": "8fecd2fc56694469f758f0afbbb6335ad3043740",
+      "execution_mode": "sequential",
+      "bench": {
+        "point": 4,
+        "duration": 3600.0,
+        "golden_expected": 2.32,
+        "window_s": 3599.91606,
+        "accept_observed": 2.325,
+        "p90_ttft_s": 1.28479,
+        "p90_interactivity": 218.42817,
+        "total_throughput_per_gpu": 25169.20217,
+        "status": "ok"
+      }
+    },
+    {
+      "point": "C12",
+      "run_id": "a658f186b4-C12-a1",
+      "hardware": "MI350X",
+      "model_revision": "bd6e49d9abfe0ce1da53a45593daaee83580035b",
+      "client_sha": "5a1f81029fe7421f2f6e870cae4af9c5ff2f2290",
+      "dataset_revision": "8fecd2fc56694469f758f0afbbb6335ad3043740",
+      "execution_mode": "sequential",
+      "bench": {
+        "point": 12,
+        "duration": 3600.0,
+        "golden_expected": 2.32,
+        "window_s": 3604.80013,
+        "accept_observed": 2.324561403508772,
+        "p90_ttft_s": 1.90554,
+        "p90_interactivity": 146.54688,
+        "total_throughput_per_gpu": 64205.4526,
+        "status": "ok"
+      }
+    },
+    {
+      "point": "C16",
+      "run_id": "a658f186b4-C16-a1",
+      "hardware": "MI350X",
+      "model_revision": "bd6e49d9abfe0ce1da53a45593daaee83580035b",
+      "client_sha": "5a1f81029fe7421f2f6e870cae4af9c5ff2f2290",
+      "dataset_revision": "8fecd2fc56694469f758f0afbbb6335ad3043740",
+      "execution_mode": "sequential",
+      "bench": {
+        "point": 16,
+        "duration": 3600.0,
+        "golden_expected": 2.32,
+        "window_s": 3603.3386,
+        "accept_observed": 2.3201970443349755,
+        "p90_ttft_s": 1.77929,
+        "p90_interactivity": 104.29951,
+        "total_throughput_per_gpu": 83799.99752,
+        "status": "ok"
+      }
+    }
+  ],
+  "unvalidated_points": [
+    "C8",
+    "C24",
+    "C48",
+    "C80"
+  ]
+}
