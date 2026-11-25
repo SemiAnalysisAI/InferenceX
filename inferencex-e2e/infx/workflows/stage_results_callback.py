@@ -13,21 +13,19 @@ from urllib.parse import parse_qs, quote, urlsplit
 from infx import github
 
 APP_REPOSITORY = os.environ.get("APP_REPO") or "SemiAnalysisAI/InferenceX-app"
-STAGING_SITE = (
-    os.environ.get("STAGING_APP_URL")
-    or "https://inferencemax-app-git-staging-semianalysisai.vercel.app"
-)
 INFERENCE_PATH = "/infx/inference"
 
 
-def chart_links(payload: dict[str, Any], run_id: str, run_date: str) -> list[str]:
+def chart_links(
+    payload: dict[str, Any], run_id: str, run_date: str, staging_site: str
+) -> list[str]:
     """Return markdown chart links from payload, or a default link for run_id on run_date.
 
-    Raises RuntimeError if any link is malformed or not on the staging site.
+    Raises RuntimeError if any link is malformed or not on staging_site.
     """
     links = payload.get("chart-links")
     if links is None:
-        return [f"{STAGING_SITE}{INFERENCE_PATH}?i_dates={quote(f'{run_date}~r{run_id}')}"]
+        return [f"{staging_site}{INFERENCE_PATH}?i_dates={quote(f'{run_date}~r{run_id}')}"]
     if not isinstance(links, list):
         raise RuntimeError("Callback chart-links must be a list")
     result = []
@@ -42,7 +40,7 @@ def chart_links(payload: dict[str, Any], run_id: str, run_date: str) -> list[str
         parsed = urlsplit(url)
         query = parse_qs(parsed.query)
         if (
-            f"{parsed.scheme}://{parsed.netloc}" != STAGING_SITE
+            f"{parsed.scheme}://{parsed.netloc}" != staging_site
             or parsed.path != INFERENCE_PATH
             or parsed.fragment
             or not all(query.get(key) for key in ("g_model", "i_seq", "i_prec", "i_gpus"))
@@ -55,7 +53,9 @@ def chart_links(payload: dict[str, Any], run_id: str, run_date: str) -> list[str
     return result
 
 
-def report(repo: str, event: dict[str, Any], token: str, server_url: str) -> None:
+def report(
+    repo: str, event: dict[str, Any], token: str, server_url: str, staging_site: str
+) -> None:
     """Post or update the PR comment for a staging callback event.
 
     Raises RuntimeError if the payload is malformed or from an unexpected source.
@@ -93,7 +93,7 @@ def report(repo: str, event: dict[str, Any], token: str, server_url: str) -> Non
             "Existing staged runs will be preserved; this comment will be updated when staging completes."
         )
     elif succeeded == "true":
-        links = chart_links(payload, run_id, run_date)
+        links = chart_links(payload, run_id, run_date, staging_site)
         body = "\n".join(
             [
                 f"@{requester} staged [run {run_id}]({source_url}).",
@@ -117,12 +117,16 @@ def report(repo: str, event: dict[str, Any], token: str, server_url: str) -> Non
 
 def main() -> None:
     """Report the staging callback from the GitHub Actions environment."""
+    staging_site = os.environ.get("STAGING_APP_URL")
+    if not staging_site:
+        raise RuntimeError("STAGING_APP_URL must be set to the app's staging site origin")
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     report(
         os.environ["GITHUB_REPOSITORY"],
         event,
         os.environ["GH_TOKEN"],
         os.environ["GITHUB_SERVER_URL"],
+        staging_site,
     )
 
 
