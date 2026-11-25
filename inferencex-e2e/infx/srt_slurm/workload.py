@@ -489,6 +489,16 @@ def selects_dedicated_discovery(recipe: str, *, agentic: bool, root: Path) -> bo
     return discovery_on_dedicated_node(selected)
 
 
+def selects_frontend_image(recipe: str, *, agentic: bool, root: Path) -> str | None:
+    """The image of its own that the frontend of the variant ``recipe`` selects runs in, if any.
+
+    The launcher stages it like the job's main image: steps that share a registry image on
+    one node otherwise import it at once and collide in enroot's layer cache.
+    """
+    _, selected = select_multinode(recipe, agentic=agentic, root=root, expand=expand_variants)
+    return (selected.get("frontend") or {}).get("container_image") or None
+
+
 def bind_speculation(recipe: dict[str, Any], environment: Mapping[str, str]) -> None:
     """Fail unless the matrix's SPEC_DECODING says whether the generation worker drafts, and
     give the client the algorithm and draft model it drafts with."""

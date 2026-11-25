@@ -147,6 +147,11 @@ jobs:
           [ -z "$CX_MODES" ] || args+=(--modes "$CX_MODES")
           [ -z "$CX_PRECISIONS" ] || args+=(--precisions "$CX_PRECISIONS")
           collectivex/run.sh "$CX_SHARD_SKU" --shard "$CX_SHARD" "${args[@]}"
+      - name: Redact stored artifacts
+        if: always()
+        env:
+          PYTHONPATH: inferencex-e2e
+        run: python3 -m infx.results.redact "collectivex/results/$CX_SHARD_SKU"
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
