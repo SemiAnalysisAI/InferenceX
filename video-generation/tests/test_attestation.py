@@ -133,3 +133,32 @@ def test_attestation_fails_when_the_log_does_not_prove_the_declared_work(tmp_pat
     document = attest("sglang", log, PLAN, records, "bf16")
 
     assert (document["valid"], _failed(document)) == (False, failed)
+
+
+# Lines in the format sgl-project/sglang@297e54fd logs them when cache-dit mounts. Wan2.2 has
+# two transformers.
+@pytest.mark.parametrize(
+    "clean,line",
+    [
+        (
+            (LOG, PLAN, RECORDS),
+            "Enabling cache-dit on transformer with config: Fn=1, Bn=0, W=4, R=0.04, MC=1, "
+            "DMD=False (history=6, rank=0, svd=medium), TaylorSeer=False (order=1), steps=49",
+        ),
+        (
+            (WAN_LOG, WAN_PLAN, WAN_RECORDS),
+            "Enabling cache-dit on wan2.2 dual transformers with BlockAdapter",
+        ),
+    ],
+    ids=["h3-cache-dit", "wan22-dual-cache-dit"],
+)
+def test_attestation_fails_when_the_log_shows_a_lossy_optimization(tmp_path, clean, line):
+    source, plan, records = clean
+    log = tmp_path / "server.out"
+    log.write_bytes(source.read_bytes() + f"[11-04 11:00:02] {line}\n".encode())
+
+    document = attest("sglang", log, plan, records, "bf16")
+
+    assert (document["valid"], _failed(document)) == (False, {"server.optimizations"})
+    [check] = [c for c in document["server"]["checks"] if c["name"] == "server.optimizations"]
+    assert check["observed"] == ["cache-dit"]

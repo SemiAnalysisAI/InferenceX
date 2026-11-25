@@ -31,6 +31,7 @@ class Policy:
     recorded_args: tuple[str, ...]
     dense_attention: frozenset[str]
     dit_dtypes: Mapping[str, str]
+    optimizations: Mapping[str, re.Pattern[str]]
 
 
 SGLANG = Policy(
@@ -73,6 +74,10 @@ SGLANG = Policy(
         {"fa", "fa2", "torch_sdpa", "torch_cudnn_sdpa", "dynamic_cudnn_sdpa", "aiter"}
     ),
     dit_dtypes={"bf16": "torch.bfloat16"},
+    # What SGLang logs when it mounts cache-dit on one transformer or on two.
+    # SGLANG_CACHE_DIT_ENABLED and per-request cache-dit leave server_args.cache_dit_config
+    # null, so the log line is the only evidence.
+    optimizations={"cache-dit": re.compile(r"Enabling cache-dit on ")},
 )
 POLICIES: dict[str, Policy] = {"sglang": SGLANG}
 
@@ -137,6 +142,7 @@ def _server(policy: Policy, text: str, precision: str) -> tuple[dict, list[dict]
     observed = {key: present[key] for key in policy.recorded_args if key in present}
     observed["reduced_precision_numerics"] = bool(_REDUCED_NUMERICS.search(text))
     ipc_fallbacks = text.count(_IPC_FALLBACK)
+    optimizations = sorted(name for name, line in policy.optimizations.items() if line.search(text))
     return observed, [
         _check(
             "server.args",
@@ -151,6 +157,13 @@ def _server(policy: Policy, text: str, precision: str) -> tuple[dict, list[dict]
             {key: present[key] for key in required if key in present},
             dict(required),
             "no step cache, quantization, precision override or LoRA; conditioning cache disabled",
+        ),
+        _check(
+            "server.optimizations",
+            not optimizations,
+            optimizations,
+            [],
+            "the log shows no lossy optimization running",
         ),
         _check(
             "server.attention_backends",

@@ -54,6 +54,7 @@ turn off. The binder refuses anything else before submission, so a new setting
 needs a reviewed change there, and a new model with its own settings needs one row.
 It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.
+The SGLang work attestation fails when the engine log shows cache-dit running.
 
 The launch receipt records recipe-wide `environment` and server `env` values
 after binding, with server values taking precedence. Use these fields only for
