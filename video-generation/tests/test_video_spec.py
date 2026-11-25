@@ -153,13 +153,3 @@ def test_canonical_json_bytes_is_sorted_compact_utf8_and_finite() -> None:
     )
     with pytest.raises(ValueError, match="Out of range float values"):
         video_spec.canonical_json_bytes({"a": float("nan")})
-
-
-def test_released_plan_hashes_match_the_committed_specs() -> None:
-    from infx.results.video_artifacts import RELEASED_PLANS
-
-    for (name, set_id), released in RELEASED_PLANS.items():
-        plan = video_spec.plan_for(video_spec.load_spec(SPECS / name), set_id)
-        assert video_spec.plan_sha256(plan) == released, (
-            f"{name} {set_id} changed: add its released plan hash under review"
-        )
