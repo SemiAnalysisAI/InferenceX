@@ -176,11 +176,7 @@ def load_spec(name: str, *, root: Path, set_id: str) -> dict[str, Any]:
     if set_id not in source["sets"]:
         raise ValueError(f"VIDEO_SET {set_id!r} is not defined in {name}")
     plan = module.plan_for(source, set_id)
-    return {
-        "plan": plan,
-        "plan_sha256": module.plan_sha256(plan),
-        "schema_version": module.schema_version(plan),
-    }
+    return {"plan": plan, "plan_sha256": module.plan_sha256(plan)}
 
 
 def _pool_service(recipe: Mapping[str, Any]) -> dict[str, Any]:
