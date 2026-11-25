@@ -13401,3 +13401,13 @@
     - "NVFP4 target and indexer KV caches, FP8 draft KV, the DSpark draft as shipped, golden-curve synthetic acceptance. Disaggregated points move KV with NIXL over UCX and offload it to the Mooncake store (188.875 GB host segment per rank, dram-utilization 1.0). Dynamo 1.6.0.dev20261023 frontend with KV routing on every point. Aggregated: KV events on, 14400 s session-affinity TTL. Disaggregated: no router KV events or busy thresholds, soft session affinity (15 s TTL at 950, Dynamo's default elsewhere), router temperature 0, and prefill workers chosen by Dynamo's two-tier cost function (cache threshold 0.8 at 260 and 340, 1.0 at 590 and 950). Dynamo sidecar gRPC ports from 65001 on all six."
     - "Disaggregated workers leave numa-bind unset, as the aggregated points do, so vLLM's automatic NUMA binding applies (numactl --cpunodebind=N --preferred=N where its conditions hold) instead of --membind=N."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5153
+
+- config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 GB200 Dynamo-SGLang AgentX points."
+    - "Image and existing points are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5235
+  append-only: true

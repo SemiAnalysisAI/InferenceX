@@ -205,3 +205,65 @@ override_tp2ep2_hicache_k3_baseline:
         hicache-mem-layout: page_first_direct
         hicache-write-policy: write_through_selective
         watchdog-timeout: 1000000
+
+override_tp4_mrr2:
+  name: qwen35-gb200-dynsg-agentic-mtp-agg-tp4-k5-mrr2
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        enable-symm-mem: true
+        mamba-radix-cache-strategy: extra_buffer
+        mamba-track-interval: 8192
+        mem-fraction-static: 0.80
+        max-mamba-cache-size: 360
+        cuda-graph-max-bs-decode: 2
+        max-running-requests: 2
+        prefill-max-requests: 2
+        prefill-decode-interval: 0
+
+override_tp4_mrr4:
+  name: qwen35-gb200-dynsg-agentic-mtp-agg-tp4-k5-mrr4
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 4
+        expert-parallel-size: 1
+        enable-symm-mem: true
+        mamba-radix-cache-strategy: extra_buffer
+        mamba-track-interval: 8192
+        mem-fraction-static: 0.80
+        max-mamba-cache-size: 360
+        cuda-graph-max-bs-decode: 4
+        max-running-requests: 4
+        prefill-max-requests: 4
+        prefill-decode-interval: 0
+
+override_tp2ep2_hicache_mrr6:
+  name: qwen35-gb200-dynsg-agentic-mtp-agg-tp2ep2-hicache-k5-mrr6
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 2
+        pipeline-parallel-size: 1
+        expert-parallel-size: 2
+        enable-dp-attention: false
+        enable-dp-lm-head: false
+        mamba-radix-cache-strategy: extra_buffer_lazy
+        linear-attn-prefill-backend: flashinfer
+        speculative-moe-runner-backend: flashinfer_trtllm
+        enable-linear-replayssm-spec: true
+        linear-replayssm-cache-len: 16
+        mem-fraction-static: 0.88
+        max-mamba-cache-size: 320
+        cuda-graph-max-bs-decode: 6
+        max-running-requests: 6
+        prefill-max-requests: 6
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-ratio: 2.5
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+        hicache-write-policy: write_through_selective
+        watchdog-timeout: 1000000
