@@ -108,7 +108,7 @@ def _validate_workload_size(size: Any, generation: dict[str, Any]) -> None:
     _integer(size["guidance_branches"], f"{where}.guidance_branches", minimum=1)
     # Classifier-free guidance adds the unconditional pass only when its scale exceeds 1.
     for key in ("guidance_scale", "guidance_scale_2"):
-        if key in generation and (generation[key] > 1) != (size["guidance_branches"] == 2):
+        if key in generation and size["guidance_branches"] != (2 if generation[key] > 1 else 1):
             raise ValueError(
                 f"{where}.guidance_branches must be 2 when generation.{key} exceeds 1, else 1"
             )

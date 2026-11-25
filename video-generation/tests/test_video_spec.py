@@ -158,6 +158,13 @@ def test_workload_size_stays_outside_the_plan_and_both_hashes(sized: dict[str, A
             lambda doc: doc["generation"].update(guidance_scale=1.0),
             "workload_size.guidance_branches must be 2 when generation.guidance_scale exceeds 1",
         ),
+        (
+            lambda doc: doc.update(
+                generation={**doc["generation"], "guidance_scale": 1.0},
+                workload_size={**doc["workload_size"], "guidance_branches": 3},
+            ),
+            "must be 2 when generation.guidance_scale exceeds 1, else 1",
+        ),
     ],
 )
 def test_loader_rejects_an_invalid_workload_size(
