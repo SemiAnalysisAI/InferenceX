@@ -73,7 +73,7 @@ def fixed_seq_entry(recipe: str, concurrencies: list[int]) -> dict:
         "precision": "fp8", "framework": "sglang", "runner": "cluster:fixture",
         "multinode": False, "srt-recipe-dir": "fixture",
         "scenarios": {"fixed-seq-len": [{"isl": 1024, "osl": 128, "search-space": [
-            {"tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
+            {"gpus-per-worker": 4, "tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
         ]}]},
     }  # fmt: skip
 
