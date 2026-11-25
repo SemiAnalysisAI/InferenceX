@@ -9,7 +9,7 @@
         "cpus_per_node": 128
       }
     },
-    "cluster:mi325x-amds": {
+    "cluster:mi325x-amd": {
       "arch": "gfx942",
       "gpus_per_node": 8,
       "image_platform": "linux/amd64",
