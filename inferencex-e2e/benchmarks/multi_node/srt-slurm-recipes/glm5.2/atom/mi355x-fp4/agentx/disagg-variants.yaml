@@ -21,8 +21,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 4
       env:
         <<: &environment
           PYTHONUNBUFFERED: "1"
@@ -43,6 +41,8 @@ base:
           MC_GID_INDEX: "@fabric.rdma-gid-index"
           ATOM_MOONCAKE_MATCHED_RAILS: auto
           NCCL_IB_DISABLE: "1"
+          # GLM-5.2 mono serves only decode batches of 1-2 and does not refuse a P/D connector.
+          ATOM_MONO_ENABLE: "0"
         VLLM_PP_LAYER_PARTITION: "20,20,20,18"
         OFFLOAD_PROFILE: "1"
         OFFLOAD_MIN_LOAD_TOKENS: "0"
@@ -63,8 +63,6 @@ base:
         max-num-batched-tokens: 8192
     decode:
       nodes: 1
-      workers: 1
-      gpus: 4
       env: *environment
       args: *server
   sbatch_directives:
@@ -74,6 +72,9 @@ base:
     mem: "0"
     container-writable: ""
     container-remap-root: ""
+  # The ionic driver charges each GPU KV registration against the soft RLIMIT_MEMLOCK (8 MiB from Slurm)
+  # before falling back to peer memory, and the remapped root has no CAP_IPC_LOCK.
+  setup_script: raise-memlock-soft-limit.sh
   extra_mount:
     # The node-local hub cache the single-node GLM-5.2 points already fill.
     - /var/lib/hf-hub-cache:/mnt/hf_home/hub
@@ -228,61 +229,12 @@ override_1p2d_mcstore_c56:
                 rdma3: {master: "127.0.0.1:26351", metadata: "http://127.0.0.1:26380/metadata"}
     decode:
       nodes: 2
-      workers: 2
       env:
         AITER_REUSE_IDENTICAL_COMM_GROUPS: "1"
         MC_NUM_QP_PER_EP: "1"
       args:
         <<: *dcp_decode
         num-speculative-tokens: 4
-
-override_1p3d_mcstore_c12:
-  resources: *spread
-  frontend:
-    args: *cache_aware
-  services: *prefill_budget_services
-  roles:
-    prefill:
-      env: *store_prefill_env
-      args:
-        num-speculative-tokens: 5
-        extra-kv-connectors: *per_nic_store_connector
-    decode:
-      nodes: 3
-      workers: 3
-      env: &tp4_decode_env
-        PYTHONNOUSERSITE: "1"
-        MC_NUM_QP_PER_EP: "1"
-      args:
-        num-speculative-tokens: 5
-        gpu-memory-utilization: 0.95
-        max-num-seqs: 24
-        max-num-batched-tokens: 16384
-        cudagraph-capture-sizes: '[1,2,4,8,12,16,20,24]'
-        disable-uvicorn-access-log: true
-
-override_1p3d_mcstore_c16:
-  resources: *spread
-  frontend:
-    args: *cache_aware
-  services: *prefill_budget_services
-  roles:
-    prefill:
-      env: *store_prefill_env
-      args:
-        num-speculative-tokens: 5
-        extra-kv-connectors: *per_nic_store_connector
-    decode:
-      nodes: 3
-      workers: 3
-      env: *tp4_decode_env
-      args:
-        num-speculative-tokens: 5
-        gpu-memory-utilization: 0.95
-        max-num-seqs: 32
-        max-num-batched-tokens: 16384
-        cudagraph-capture-sizes: '[1,2,4,8,12,16,20,24,28,32]'
-        disable-uvicorn-access-log: true
 
 override_1p3d_mcstore_c24:
   resources: *spread
@@ -297,8 +249,9 @@ override_1p3d_mcstore_c24:
         extra-kv-connectors: *per_nic_store_connector
     decode:
       nodes: 3
-      workers: 3
-      env: *tp4_decode_env
+      env:
+        PYTHONNOUSERSITE: "1"
+        MC_NUM_QP_PER_EP: "1"
       args:
         num-speculative-tokens: 5
         gpu-memory-utilization: 0.95

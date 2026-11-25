@@ -618,11 +618,12 @@ are gated.
   (multi-node fixed-seq-len), `test-sweep-agentic-evals` (single-node agentic), and
   `test-sweep-multi-node-agentic-evals` (multi-node agentic)
 - `run-sweep.yml`: `sweep-evals`, `sweep-multi-node-evals`, `sweep-agentic-evals`, and
-  `sweep-multi-node-agentic-evals` (same four-way split)
+  `sweep-multi-node-agentic-evals` (same four-way split). Each has a `-last` twin that runs
+  the same matrix after every throughput job; the `evals-last` PR label selects the twins
 - All four use their respective benchmark templates (`benchmark-tmpl.yml` for single-node,
   `benchmark-multinode-tmpl.yml` for multi-node) with `eval-only: true`, `run-eval: true`
 - `al-gate-prompts` runs before the two agentic eval jobs (see [Speculative acceptance gate](#speculative-acceptance-gate))
-- `collect-evals` depends on all four eval jobs; `collect-results` only runs when benchmark jobs ran
+- `collect-evals` depends on all four eval jobs and their `-last` twins; `collect-results` only runs when benchmark jobs ran
 - `infx.matrix.plan` splits eval results by node count and scenario type into `evals`
   (single-node fixed-seq-len), `agentic_evals` (single-node agentic), `multinode_evals`
   (multi-node fixed-seq-len), and `multinode_agentic_evals` (multi-node agentic)

@@ -200,6 +200,7 @@ class SrtSlurmSettings(Record):
     gpus_per_node_directive: bool | None = Field(default=None, alias="gpus-per-node-directive")
     segment_directive: bool | None = Field(default=None, alias="segment-directive")
     single_node_exclusive: bool = Field(default=True, alias="single-node-exclusive")
+    multi_node_exclude: tuple[str, ...] = Field(default=(), alias="multi-node-exclude")
     container_aliases: tuple[str, ...] = Field(default=(), alias="container-aliases")
     nginx_aliases: tuple[str, ...] = Field(default=(), alias="nginx-aliases")
     host_setup: HostSetup | None = Field(default=None, alias="host-setup")

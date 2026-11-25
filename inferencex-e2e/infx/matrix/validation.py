@@ -1,3 +1,4 @@
+import fnmatch
 import pprint
 import re
 from enum import Enum
@@ -21,7 +22,9 @@ from infx.clusters import CLUSTER_LABEL_PREFIX, RunnerInventory
 DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 SINGLE_NODE_RECIPES = "benchmarks/single_node/srt-slurm-recipes"
 MULTI_NODE_RECIPES = "benchmarks/multi_node/srt-slurm-recipes"
-RECIPE_SELECTOR = re.compile(r"base|override_[\w-]+|zip_override_[\w-]+\[\d+\]")
+RECIPE_SELECTOR = re.compile(
+    r"base|override_[\w*?-]+|zip_override_[\w-]+\[\d+\]|zip_override_[\w-]*[*?][\w*?-]*"
+)
 
 
 class Fields(Enum):
@@ -72,12 +75,9 @@ class Fields(Enum):
     KV_OFFLOAD_BACKEND = "kv-offload-backend"
     ROUTER = "router"
     KV_P2P_TRANSFER = "kv-p2p-transfer"
-    TOTAL_CPU_DRAM_GB = "total-cpu-dram-gb"
-    DECODE_CPU_DRAM_GB = "decode-cpu-dram-gb"
     AVAILABLE_CPU_DRAM_MIB = "available-cpu-dram-mib"
-    DRAM_UTILIZATION = "dram-utilization"
     GPUS_PER_NODE = "gpus-per-node"
-    NUM_NODES = "num-nodes"
+    GPUS_PER_WORKER = "gpus-per-worker"
     NODE_COUNT = "node-count"
     DURATION = "duration"
     REQUIRE_POWER = "require-power"
@@ -148,6 +148,8 @@ def _validate_tp_context_topology(self: Any) -> Any:
 class SingleNodeMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
+
     image: str
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
     model: str
@@ -189,7 +191,9 @@ class SingleNodeMatrixEntry(BaseModel):
 class WorkerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    num_worker: int = Field(alias=Fields.NUM_WORKER.value)
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
+
+    num_worker: int = Field(alias=Fields.NUM_WORKER.value, ge=0, strict=True)
     tp: int = Field(gt=0)
     pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
@@ -218,6 +222,8 @@ class WorkerConfig(BaseModel):
 
 class AggregateWorkerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     num_worker: int = Field(default=1, alias=Fields.NUM_WORKER.value, gt=0, strict=True)
     tp: int = Field(gt=0)
@@ -307,6 +313,8 @@ class MultiNodeMatrixEntry(BaseModel):
 class SingleNodeAgenticMatrixEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
+
     image: str
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     srt_recipe: str | None = Field(default=None, alias=Fields.SRT_RECIPE.value, min_length=1)
@@ -330,7 +338,6 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
     router: ComponentMetadata | None = None
-    total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
@@ -384,8 +391,6 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
-    total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
-    decode_cpu_dram_gb: int = Field(default=0, alias=Fields.DECODE_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
@@ -470,8 +475,20 @@ def _video_recipe_reference(value: str) -> str:
 VideoRecipeReference = Annotated[str, AfterValidator(_video_recipe_reference)]
 
 
+def _video_conc_list(value: list[int]) -> list[int]:
+    """VideoGenX v0.1 measures one request at a time."""
+    if value != [1]:
+        raise ValueError(
+            f"'conc-list' is {value}, but a video-generation row must list exactly [1]"
+        )
+    return value
+
+
+VideoConcList = Annotated[list[int], AfterValidator(_video_conc_list)]
+
+
 class VideoMatrixEntry(BaseModel):
-    """One video-generation job: every concurrency of ``conc`` against one server."""
+    """One video-generation job: one server measured at concurrency 1."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -485,7 +502,7 @@ class VideoMatrixEntry(BaseModel):
     spec: VideoSpec
     video_set: str = Field(alias="set", pattern=r"^[A-Za-z0-9_-]+$")
     gpus: int = Field(gt=0, strict=True)
-    conc_list: list[int] = Field(alias=Fields.CONC_LIST.value, min_length=1)
+    conc_list: VideoConcList = Field(alias=Fields.CONC_LIST.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: Literal["video-generation"] = Field(alias=Fields.SCENARIO_TYPE.value)
     spec_decoding: Literal["none"] = Field(alias=Fields.SPEC_DECODING.value)
@@ -497,13 +514,6 @@ class VideoMatrixEntry(BaseModel):
         alias=Fields.RECIPE_FINGERPRINT.value,
         pattern=r"^[0-9a-f]{64}$",
     )
-
-    @model_validator(mode="after")
-    def validate_conc(self) -> Self:
-        conc = self.conc_list
-        if any(value <= 0 for value in conc) or len(set(conc)) != len(conc):
-            raise ValueError("conc-list must list unique positive concurrencies")
-        return self
 
 
 def validate_video_matrix_entry(entry: dict) -> dict:
@@ -634,7 +644,7 @@ def _recipe_reference(value: str) -> str:
     _recipe_path(path)
     if separator and not RECIPE_SELECTOR.fullmatch(selector):
         raise ValueError(
-            f"{value!r} must select base, override_<name> or zip_override_<name>[<index>]"
+            f"{value!r} must select base, an override name/pattern or zip_override_<name>[<index>]"
         )
     return value
 
@@ -645,6 +655,8 @@ RecipeReference = Annotated[str, AfterValidator(_recipe_reference)]
 
 class SingleNodeSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    gpus_per_worker: int = Field(alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True)
 
     tp: int = Field(gt=0)
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
@@ -696,7 +708,6 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     )
     power: bool = Field(default=False, strict=True)
     cpu_power: bool = Field(default=False, alias=Fields.CPU_POWER.value, strict=True)
-    num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: ComponentMetadata | None = None
     kv_p2p_transfer: str | None = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
@@ -754,6 +765,9 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
 
     require_power: bool = Field(default=False, alias=Fields.REQUIRE_POWER.value, strict=True)
     tp: int | None = Field(default=None, gt=0)
+    gpus_per_worker: int | None = Field(
+        default=None, alias=Fields.GPUS_PER_WORKER.value, gt=0, strict=True
+    )
     srt_recipe: RecipeReference | None = Field(default=None, alias=Fields.SRT_RECIPE.value)
     eval_srt_recipe: RecipeReference | None = Field(
         default=None, alias=Fields.EVAL_SRT_RECIPE.value
@@ -771,7 +785,6 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     worker: AggregateWorkerConfig | None = None
     prefill: WorkerConfig | None = None
     decode: WorkerConfig | None = None
-    num_nodes: int | None = Field(default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     kv_offloading: Literal["none", "dram"] | None = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
@@ -816,6 +829,8 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 "worker, or both prefill and decode"
             )
         if has_single_node:
+            if self.gpus_per_worker is None:
+                raise ValueError("Single-node entries must specify gpus-per-worker")
             if self.kv_offloading is None:
                 raise ValueError(
                     f"Single-node agentic search-space entries must specify "
@@ -832,6 +847,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 "pp",
                 "dcp_size",
                 "pcp_size",
+                "gpus_per_worker",
             } & self.model_fields_set
             if explicitly_single_node_fields:
                 field_names = ", ".join(
@@ -841,6 +857,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                         Fields.DCP_SIZE.value,
                         Fields.PCP_SIZE.value,
                         Fields.DWDP_SIZE.value,
+                        Fields.GPUS_PER_WORKER.value,
                     )
                 )
                 raise ValueError(
@@ -855,21 +872,13 @@ class AgenticCodingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     search_space: list[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
-    dram_utilization: float | None = Field(
-        default=None, alias=Fields.DRAM_UTILIZATION.value, gt=0, le=1
-    )
 
     @model_validator(mode="after")
-    def validate_dram_offload_capacity(self) -> Self:
-        """Return the config, raising ValueError for DRAM offload it cannot size."""
+    def validate_dram_offload_hardware(self) -> Self:
+        """Return the config, raising ValueError for unsupported heterogeneous DRAM offload."""
         for entry in self.search_space:
             if entry.kv_offloading != "dram":
                 continue
-            if self.dram_utilization is None:
-                raise ValueError(
-                    f"{Fields.KV_OFFLOADING.value}='dram' requires "
-                    f"{Fields.DRAM_UTILIZATION.value} with runner hardware metadata"
-                )
             if entry.prefill is not None and entry.prefill.hardware is not None:
                 raise ValueError(
                     f"{Fields.KV_OFFLOADING.value}='dram' does not support per-worker "
@@ -879,21 +888,13 @@ class AgenticCodingConfig(BaseModel):
 
 
 class VideoGenerationSearchSpaceEntry(BaseModel):
-    """One video serving job: a GPU count and the concurrencies one server serves in turn."""
+    """One video serving job: a GPU count and its recipe, measured at concurrency 1."""
 
     model_config = ConfigDict(extra="forbid")
 
     gpus: int = Field(gt=0, strict=True)
     srt_recipe: VideoRecipeReference = Field(alias=Fields.SRT_RECIPE.value)
-    conc_list: list[int] = Field(alias=Fields.CONC_LIST.value, min_length=1)
-
-    @model_validator(mode="after")
-    def validate_conc_list(self) -> Self:
-        if any(conc <= 0 for conc in self.conc_list):
-            raise ValueError(f"Input '{Fields.CONC_LIST.value}' entries must be greater than 0.")
-        if len(set(self.conc_list)) != len(self.conc_list):
-            raise ValueError(f"Input '{Fields.CONC_LIST.value}' entries must be unique.")
-        return self
+    conc_list: VideoConcList = Field(alias=Fields.CONC_LIST.value)
 
 
 class VideoGenerationConfig(BaseModel):
@@ -1008,27 +1009,20 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
         worker = getattr(entry, "worker", None)
         prefill = getattr(entry, "prefill", None)
         decode = getattr(entry, "decode", None)
-        num_nodes = getattr(entry, "num_nodes", None)
 
         if not self.multinode:
-            if (
-                worker is not None
-                or prefill is not None
-                or decode is not None
-                or num_nodes is not None
-            ):
+            if worker is not None or prefill is not None or decode is not None:
                 raise ValueError(
                     "Single-node search-space entries must specify tp topology "
-                    "and cannot declare worker, prefill, decode, or num-nodes"
+                    "and cannot declare worker, prefill, or decode"
                 )
             continue
 
         if self.disagg:
-            if worker is not None or num_nodes is not None:
+            if worker is not None:
                 raise ValueError(
                     f"{Fields.DISAGG.value}=true requires prefill and decode "
-                    f"and rejects {Fields.WORKER.value} and "
-                    f"{Fields.NUM_NODES.value}"
+                    f"and rejects {Fields.WORKER.value}"
                 )
             if prefill is None or decode is None:
                 raise ValueError(f"{Fields.DISAGG.value}=true requires prefill and decode")
@@ -1038,11 +1032,6 @@ def _validate_multinode_entry_scope(self: BaseModel) -> BaseModel:
             raise ValueError(
                 f"{Fields.DISAGG.value}=false requires one "
                 f"{Fields.WORKER.value} and rejects prefill and decode"
-            )
-        if num_nodes is None:
-            raise ValueError(
-                f"{Fields.DISAGG.value}=false requires "
-                f"{Fields.NUM_NODES.value} in every search-space entry"
             )
     return self
 
@@ -1180,6 +1169,13 @@ def _check_srt_recipe(root: Path, reference: str, recipes: dict[str, Any]) -> No
         return
     if not isinstance(recipe, dict) or "base" not in recipe:
         raise ValueError(f"{reference}: only an override bundle with a base takes a selector")
+    if any(char in selector for char in "*?"):
+        if not any(
+            key.startswith(("override_", "zip_override_")) and fnmatch.fnmatchcase(key, selector)
+            for key in recipe
+        ):
+            raise ValueError(f"{reference}: {path} has no variant {selector}")
+        return
     group, _, index = selector.removesuffix("]").partition("[")
     if group not in recipe or (index and int(index) >= _zip_length(recipe[group])):
         raise ValueError(f"{reference}: {path} has no variant {selector}")
