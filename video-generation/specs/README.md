@@ -8,6 +8,13 @@
 
 `wan22.yaml` defines the silent Wan2.2-T2V-A14B text-to-video workload: 832×480, 81 frames at 16 fps, 40 steps, guidance 4.0 for the high-noise expert and 3.0 for the low-noise expert, boundary 0.875, flow shift 12 and an empty negative prompt. vLLM-Omni takes every control per request. SGLang does not read the flow shift or the boundary from a request, so its server refuses to start unless `--flow-shift` and the checkpoint's `model_index.json` `boundary_ratio` equal the spec. SGLang's requests also set `x264_preset: ultrafast` and `output_compression: 63` (CRF 18), the libx264 encoding vLLM-Omni v0.32.0 delivers by default, because SGLang's own default is `fast` at CRF 25. `release-v1` crosses four prompts with five seeds (one warmup); `smoke` runs the first case with the same controls.
 
+A released set never changes (`../STANDARD.md` rule 1).
+A set's plan holds the file's `model` and `generation` blocks, and its `fairness` block in schema version 2, so editing one of them changes every set in that file.
+A release that changes only prompts, seeds or run counts adds the next `release-v<N>` set to the same file.
+A release that changes the model revision, the denoising steps, the resolution or any other `generation` or `fairness` value adds a new spec file whose first set is `release-v1`.
+`h3-v2.yaml` has that shape: the model of `h3.yaml` with another duration, frame count and step count.
+`released_sets.py` compares each released set with the first commit that held it, over the history of `main` since its `RULE_START`.
+
 `h3.yaml` and `wan22.yaml` use schema version 1 and `h3-v2.yaml` uses schema version 2.
 Version 2 adds a `warmup_case` to every set and a `fairness` block that seals the schedule, the requested libx264 ultrafast/CRF 18/yuv420p plus AAC encoding, the disabled cross-request conditioning cache, and the official Diffusers source, model and RNG candidate.
 The loader enforces the version 2 policy once: 20 measured cases with distinct prompt text, one warmup run on a disjoint prompt, a schedule that matches the request, and encoding audio that matches generation.
@@ -25,6 +32,9 @@ Code that needs the version calls `schema_version(plan)` instead of testing whic
 - `prompts` defines each prompt once with its motion and sound requirements.
   Each entry in `sets` lists cases that pair a prompt with a seed; no two cases repeat both prompt text and seed.
 - `reference` (version 1 only) records the SGLang run on #2916 whose plan hash `frozen-c124` reproduces.
+- `workload_size` (`h3-v2.yaml` and `wan22.yaml` declare it) holds what `generation` cannot give: latent frames, audio latent tokens, guidance branches and the DiT's model constants.
+  `workload_size(spec)` computes one clip's latent tokens (latent frames × width × height ÷ `latent_patch_pixels`², plus audio tokens), DiT forward passes (denoising steps × guidance branches) and estimated DiT FLOPs (per pass, 2 × tokens × `dit_weights_per_token` + 4 × tokens² × `attention_width` × `layers`).
+  A launch computes the size before startup and fails for a spec without the key; the bundle manifest carries it beside `workload_plan`.
 
 ## Hash contract
 
@@ -35,7 +45,7 @@ Both hashes below and the runner's recorded `plan_sha256` are SHA-256 over those
   The `frozen-c124` set reproduces the `h3-serving-2gpu-c124-v1` plan that the reference run recorded, whose hash is `8d51a472caa7db0f5d4c33adec1e9c9f852e7144cf25356085802edaf7d80d68`; `test_video_spec.py` asserts it.
 - `spec_sha256(spec)` covers the model, the generation values, and each set's resolved cases and counts.
 - For `h3-v2.yaml`, both hashes also cover `warmup_case` and `fairness`, and the plan hash covers `schema_version`.
-- `reference`, YAML key order, comments, and formatting are outside both hashes.
+- `reference`, `workload_size`, YAML key order, comments, and formatting are outside both hashes.
   Neither hash includes GPU UUIDs, job IDs, ports, or hosts.
 - `plan_for(spec, set_id, repetitions=..., warmup_runs=...)` overrides the counts.
   If either count differs from the set's own, the plan ID gains a `-r<repetitions>-w<warmup_runs>` suffix, so a shortened run never shares an ID or a hash with the full one.
