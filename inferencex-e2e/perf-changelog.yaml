@@ -13432,6 +13432,32 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5186
 
 - config-keys:
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dcp8-disagg
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-dep32-disagg
+    - kimik3.1-fp4-gb300-llmd-vllm-agentic-dspark-mooncake-agg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add Kimi-K3.1-Pro FP4/FP8-KV AgentX recipes on GB300 behind llm-d-router v1.0.0 (llmd-vllm) on vllm/vllm-openai:kimi-k31-mc-f4c9618 (vLLM 0.1.dev25380+gf4c96184b) with embedded Mooncake RDMA prefix-cache sharing (4 GB local buffer, 160 GB segment) and released DSpark draft Inferact/Kimi-K3.1-Pro-DSpark (revision e4e6e626; golden AL curve: 4 draft tokens 3.46, 5 draft tokens 3.81, 7 draft tokens 4.16)."
+    - "Expert-parallel load balancing (enable-eplb, symm_mem copy, no redundant experts, re-placement every 3000 steps from a 1000-step window) on the DEP32 prefill and decode engines, the hybrid 3P1D prefill and decode engines, and the hybrid 2P1D prefill engines."
+    - "DEP32 1P1D disaggregated at concurrency 960: one external-LB DEP32 prefill engine with 80 GiB KV cache per rank and one external-LB DEP32 decode engine (16 nodes total, head-node client), 5 draft tokens with decode graphs in multiples of 6 up to 192, prefix-match-unit 512, DSpark sliding-window tail store and hits (VLLM_DFLASH_SWA_TAIL_STORE=1, VLLM_DFLASH_SWA_TAIL_HITS=1, VLLM_SWA_FINE_GRAINED_HITS=1), 2048 MB sparse-indexer logits budget on prefill, Mooncake master eviction 0.98/0.05, NIXL P/D transfer, and session-affinity prefill routing (1s TTL)."
+    - "DCP8 disaggregated with NIXL P/D transfer and session-affinity prefill routing: 1P5D at concurrency 44 (5 draft tokens) and concurrency 104 (4 draft tokens, adaptive 4096-token long-prefill threshold) with opt-in TP8 x DCP8 decode paths (K31_* env); hybrid DP4xTP8xDCP8 3P1D at concurrency 448 and 2P1D at concurrency 256 with 5 draft tokens and decode graphs in multiples of 6 up to 1536; prefix-match-unit 1408."
+    - "Aggregated TP16/DCP16 at concurrency 1: 7 draft tokens with opt-in c=1 decode paths (K31_* env) and prefix-match-unit 768."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5149
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-trt-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the image and native KV-offload backend from nvcr.io/nvidia/tensorrt-llm/release:1.4.0rc3.dev202611020007 to release:1.4.0rc4.dev202611170009. Move Dynamo (frontend, workers and dynamo-router) from the 1.6.0.dev20261010 wheel to 1.8.0.dev20261119."
+    - "Replace the ten-point search space with thirteen points, all with TEP2 prefill workers and MTP6 decode: 1P1D TEP8 at conc 240 (b16), 1P2D TEP8 at conc 48 (b4) and 200 (b5), 2P1D TEP8 at conc 192, 352 and 416 (b64), 2P3D TEP8 at conc 384 (b8), 3P2D TEP8 at conc 456 (b64) and 512 (b32) and 4P1D DEP8 at conc 840 (b48, max_num_tokens 336) use the TensorRT-LLM remote KV cache; 1P1D TEP16 at conc 32 (b1, max_num_tokens 7), 1P2D TEP8 at conc 96 (b2) and 1P4D TEP8 at conc 96 (b1) keep a 128 GiB host cache per rank on both roles instead."
+    - "Remote KV cache (kv_cache_config.remote_cache_config, rendezvous under /logs/rt_rdv): each decode rank donates 160 GiB (176 GiB on DEP8) of host memory and each prefill rank claims up to 200 GiB (160 GiB on 4P1D) beside its own 168 GiB host cache; decode keeps no host cache. These points also set UCX_RC_VERBS_TIMEOUT=4s and UCX_KEEPALIVE_INTERVAL=60s. The remote tier uses the fabric transport (NVLink, compact host memory) except on 4P1D DEP8 conc 840, which uses the NIXL transport (host-to-host RDMA over InfiniBand): on these nodes, host-memory fabric handles exported from some nodes cannot be imported (CUDA_ERROR_INVALID_HANDLE), and with its donations only 128 GiB above its claims, 4P1D cannot lose one decode node's donors."
+    - "All points set UCX_IB_DIRECT_NIC=n and UCX_CUDA_COPY_DMABUF=no on prefill and decode, so NIXL registers the GPU KV cache through nvidia_peermem instead of a dma-buf. With dma-buf, UCX's direct-NIC feature pairs each GPU with one NIC and exports its memory as a PCIe-mapped dma-buf, which the NVIDIA driver rejects on these nodes because the GPU and NIC are in different IOMMU groups (ibv_reg_dmabuf_mr error 524); UCX's GDA module pairs them even with UCX_IB_DIRECT_NIC=n."
+    - "TEP2 prefill: MTP max_draft_len 1, max_num_tokens 16384, TWOSHOT allreduce, 64 NCCL channels, Mamba branch snapshots, breakable prefill CUDA graphs to 16384 tokens and shortest-uncached-first context scheduling. TEP8 decode: TRTLLM MoE backend with MoE TP2 x EP4, max_num_tokens 896 (TEP16: EP8), and a 4194304-token GEN KV-transfer buffer; most TEP decode points admit by priority (waiting_queue_max_wait_s 60 or 120) and defer generation-only KV release. DEP8 decode uses the CUTEDSL MoE backend with attention DP and NIXL agent bounce buffers on both roles."
+    - "Frontend: Dynamo KV router with 14400 s session affinity on the first decode node and prefill by KV with conversation affinity; the AgentX client runs on the last decode node. Decode workers on the nine points that admit by priority advertise the KV router with the output_length_prediction request classifier (benchmarks/multi_node/srt-slurm-recipes/configs/dynamo-router-policy-output-length.yaml, mounted at /configs; ai-dynamo/dynamo#18940), and the frontend loads the same policy file so it can install the classifier, which forwards each request's predicted reply length as its TensorRT-LLM priority (ai-dynamo/dynamo#18772), replacing trtllm-serve's output_length_prediction; 2P1D conc 192, 3P2D conc 456 and 512 and 4P1D DEP8 conc 840 keep FCFS admission and route decode by least-loaded."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5147
+
+- config-keys:
     - glm5.3-fp4-gb300-dynamo-sglang-agentic-agg-megakernel
     - glm5.3-fp4-gb300-dynamo-sglang-agentic-disagg-megakernel
     - glm5.3-fp4-gb300-dynamo-sglang-agentic-disagg
