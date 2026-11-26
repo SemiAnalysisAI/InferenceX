@@ -31,6 +31,7 @@ class Policy:
     recorded_args: tuple[str, ...]
     dense_attention: frozenset[str]
     dit_dtypes: Mapping[str, str]
+    optimizations: Mapping[str, re.Pattern[str]]
 
 
 SGLANG = Policy(
@@ -44,8 +45,19 @@ SGLANG = Policy(
         "lora_path": None,
         "disable_conditioning_cache": True,
     },
+    # The logged arguments are the resolved ones: performance_mode may have chosen offload or
+    # FSDP from the GPU count and free memory. Placement is allowed but counts in latency.
     recorded_args=(
         "performance_mode",
+        "component_residency",
+        "cpu_offload_components",
+        "dit_cpu_offload",
+        "dit_layerwise_offload",
+        "layerwise_offload_components",
+        "text_encoder_cpu_offload",
+        "image_encoder_cpu_offload",
+        "vae_cpu_offload",
+        "use_fsdp_inference",
         "allow_bf16_reduced_precision_reduction",
         "allow_cudnn_tf32",
         "enable_torch_compile",
@@ -62,6 +74,10 @@ SGLANG = Policy(
         {"fa", "fa2", "torch_sdpa", "torch_cudnn_sdpa", "dynamic_cudnn_sdpa", "aiter"}
     ),
     dit_dtypes={"bf16": "torch.bfloat16"},
+    # What SGLang logs when it mounts cache-dit on one transformer or on two.
+    # SGLANG_CACHE_DIT_ENABLED and per-request cache-dit leave server_args.cache_dit_config
+    # null, so the log line is the only evidence.
+    optimizations={"cache-dit": re.compile(r"Enabling cache-dit on ")},
 )
 POLICIES: dict[str, Policy] = {"sglang": SGLANG}
 
@@ -126,6 +142,7 @@ def _server(policy: Policy, text: str, precision: str) -> tuple[dict, list[dict]
     observed = {key: present[key] for key in policy.recorded_args if key in present}
     observed["reduced_precision_numerics"] = bool(_REDUCED_NUMERICS.search(text))
     ipc_fallbacks = text.count(_IPC_FALLBACK)
+    optimizations = sorted(name for name, line in policy.optimizations.items() if line.search(text))
     return observed, [
         _check(
             "server.args",
@@ -140,6 +157,13 @@ def _server(policy: Policy, text: str, precision: str) -> tuple[dict, list[dict]
             {key: present[key] for key in required if key in present},
             dict(required),
             "no step cache, quantization, precision override or LoRA; conditioning cache disabled",
+        ),
+        _check(
+            "server.optimizations",
+            not optimizations,
+            optimizations,
+            [],
+            "the log shows no lossy optimization running",
         ),
         _check(
             "server.attention_backends",
