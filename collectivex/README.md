@@ -6,6 +6,11 @@ result file per case into `results/` on the cluster that ran it. A second suite,
 [vLLM `swap_blocks` benchmark](docs/swap-blocks.md), measures pinned CPU↔GPU and same-GPU block
 copies through the same matrix and pool launchers.
 
+The intent is to benchmark what production does: each library runs the configuration a serving
+engine selects for it, with no tuning sweep. Configurations no engine can select today (UCCL-EP,
+NCCL EP `normal` mode and NCCL EP FP8) still run, as library rows labelled `candidate`. The intent
+covers configuration only: the workload is synthetic, with no expert compute and uniform routing.
+
 CollectiveX runs through the [CollectiveX Sweep](#running-in-ci) workflow or by hand on each pool
 (see [Running By Hand](#running-by-hand)). Uploading the
 results to the CollectiveX database is the publish step: the dashboard shows the latest stored run.

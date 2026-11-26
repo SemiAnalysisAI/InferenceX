@@ -12,6 +12,8 @@ H100, H200, B200 or B300 GPUs and SGLang on 1, 2, 4 and 8 H200 GPUs and 4 and
 Ulysses 1, 2 and 4 on 2, 4 and 8 GPUs) using `wan22.yaml` `release-v1`: four
 prompts by five seeds, one warmup, 40 UniPC steps, and 81 silent frames at 16 fps
 and 832×480; its `smoke` set sends the same request controls for one case.
+A workload change adds the next `release-v<N>` set, or a new spec file when it changes the
+model or a generation parameter (`video-generation/specs/README.md`).
 Config presence is not GPU or quality qualification.
 Each deployment's image pin is its `*-video` entry in
 [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml) or
@@ -21,7 +23,12 @@ and power must be checked in the original run. The YAML workload has no `model.p
 or Python field: the binder derives the pinned model snapshot path from `MODEL`,
 `HF_HUB_CACHE`, and the model revision. The service recipe selects the engine executable.
 Native power is accepted only when its sampled GPU UUIDs match the server's
-`spec.json` and `launch.json` assignment. On ROCm the server names each GPU by
+`spec.json` and `launch.json` assignment. The bundle's `power.json` records the native
+manifest's `source_metric` and `power_scope` as `semantics.sensor` and `semantics.scope`.
+AMD deployments can report `gpu_power_usage` and NVIDIA deployments can report
+`DCGM_FI_DEV_POWER_USAGE`. Bundling a sidecar that predates these fields leaves them null.
+Older sealed bundles used a fixed DCGM label. Use their original power manifest to
+identify the sensor. On ROCm the server names each GPU by
 its board serial, which is how the AMD power exporter identifies it.
 The H100 runner provides an HF hub cache mount, but the pinned H3 snapshot must
 be verified there before execution. On the clusters in `HUB_DOWNLOAD_CLUSTERS`
@@ -33,15 +40,23 @@ Each video service uses `command: [python3, -m, infx.bench, video, serve]`.
 Its `args` select `--model-view snapshot` or `--model-view h3-fl2va`, followed
 by `--` and the complete engine executable and flags. TP, Ulysses, offload,
 compilation, host, and port are explicit recipe settings. `services[].env`
-owns engine environment values, including offline mode and vLLM storage and
-worker settings. The binder substitutes `{model_path}`, `{model_id}`,
+owns engine environment values, such as vLLM storage and worker settings.
+The binder substitutes `{model_path}`, `{model_id}`,
 `{model_revision}`, and `{gpus_per_node}` in service args/env, and rejects
 model, revision, port, or GPU-count mismatches before submission. Other native
-srt-slurm service placeholders retain their existing meaning. For a schema version 2
-fairness plan, the binder also requires SGLang's `--disable-conditioning-cache`
+srt-slurm service placeholders retain their existing meaning. For every video
+spec, the binder also requires SGLang's `--disable-conditioning-cache`
 or vLLM-Omni's `OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0` in the selected recipe.
+Each engine accepts only the flags, spelled in full, environment variables and
+preambles that `_REVIEWED` in [`video.py`](../infx/srt_slurm/video.py) registers
+for it, each flag and switch at most once, and SGLang rows must set
+`--performance-mode speed`. `_REVIEWED_MODELS` beside it holds what one model
+adds: the flags only its rows may pass, and the vLLM-Omni caches its rows must
+turn off. The binder refuses anything else before submission, so a new setting
+needs a reviewed change there, and a new model with its own settings needs one row.
 It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.
+The SGLang work attestation fails when the engine log shows cache-dit running.
 
 The launch receipt records recipe-wide `environment` and server `env` values
 after binding, with server values taking precedence. Use these fields only for
@@ -68,7 +83,12 @@ The shared [`configs/srt-recipes/video.yaml`](../configs/srt-recipes/video.yaml)
 block runs `python3 -m infx.bench video client` as the custom benchmark for every
 recipe. It resolves the native service IP and measurement-window directory at
 runtime, preserving per-concurrency outputs and native power windows. Its request
-timeout and environment are supplied by that block.
+timeout and environment are supplied by that block. The block also holds the
+`video-server` service every recipe starts: its command, node pool, readiness probe,
+port, and offline-mode environment. A recipe's `video-server` entry merges over it,
+so a recipe lists only its `args`, its own `env`, and `readiness.timeout_seconds`. A recipe
+may not restate a key the block sets, in `frontend`, `benchmark` or the service, even with
+the same value: the binder refuses the recipe and names the key.
 
 `perf-changelog.yaml` → `infx.matrix.plan` → `run-sweep.yml` →
 `benchmark-tmpl.yml` → `infx.launch` → native srt-slurm service/client → result bundle.
@@ -100,9 +120,30 @@ or production acceptance. Old unsuffixed bundles remain readable by the App but
 do not qualify this new native reuse path. Video append-only sweeps are unsupported;
 use the regular sweep so one server's complete workload stays together.
 
-After authorized reuse and merge, Merge Ingest validates source artifacts and
-sends `publish-video-results` with the original `source_run_id` to the App's media
-publisher. Mixed runs separately retain their existing LLM/AgentX ingest event.
+Merge Ingest also requires the merge commit's planned video rows to be the manifest's
+rows: the two sets of `recipe-fingerprint` values must be equal. A row added, dropped,
+or changed after the sweep, through its recipe, its config row or a shared block, fails
+the run before anything is published, as does a planned row without a fingerprint.
+Sweep the final commit and `/use` that run before merging.
+
+Run Sweep's `video-reuse-check` job runs the same validation before merge. On each push
+to a same-repository PR with an accepted `/use`, it plans the PR merge ref and validates
+the pinned run against it, so a video row changed after the sweep fails on the PR.
+`merge_with_reuse` waits for it. A merge with no push after `/use`, and a fork PR, are
+checked only by Merge Ingest. To clear a failure, remove and re-add the primary sweep
+label to sweep the current head, then `/use` the new run.
+
+After authorized reuse and merge, Merge Ingest uploads `video-publication-selection.json`
+as the `video-publication-selection` artifact. Its version 1 payload records
+`source_run_id`, `source_run_attempt`, `source_head_sha`, and for each deployment the
+selected artifact name and the SHA-256 of its raw `manifest.json` and of its `SHA256SUMS`,
+which lists every other file in the bundle. Deployments
+that succeeded in an earlier attempt keep that attempt's bundle unless superseded.
+The `publish-video-results` dispatch gives the App `source_run_id`, `merge_run_id`,
+and `selection_artifact_id`. An artifact cannot change after upload, so the App checks
+only that the selection artifact belongs to this Merge Ingest run on `main`, then
+publishes the bundles it names. Mixed runs
+separately retain their existing LLM/AgentX ingest event.
 Verify the downstream publication and playback before claiming delivery. The
 trusted main-branch `/use` handler must support video artifacts before accepting
 the first native video reuse request; a PR-local checker cannot bypass that gate.

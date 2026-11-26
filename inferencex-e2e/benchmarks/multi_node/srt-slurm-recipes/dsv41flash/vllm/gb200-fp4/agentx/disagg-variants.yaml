@@ -77,7 +77,6 @@ base:
     dp_launch_mode: per_node
   roles:
     prefill:
-      gpus: 4
       kv_events: true
       env:
         HF_HUB_CACHE: "/hf_hub_cache"
@@ -130,8 +129,6 @@ base:
         numa-bind-nodes: [0, 0, 1, 1]
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         HF_HUB_CACHE: "/hf_hub_cache"
         HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
@@ -199,10 +196,8 @@ override_3p1d_dep4_dep32_c3018:
   roles:
     prefill:
       nodes: 3
-      workers: 3
     decode:
       nodes: 8
-      gpus: 32
       args:
         data-parallel-size: 32
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":32,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":false,"log_balancedness_interval":3000}'
@@ -218,7 +213,6 @@ override_3p1d_dep4_dep16_c3018:
   roles:
     prefill:
       nodes: 3
-      workers: 3
       args:
         kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"transfer_mode":"push","backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":75161927680,"lazy_offload":true}}]}}'
     decode:
@@ -235,7 +229,6 @@ override_4p1d_dep4_dep16_c4096:
   roles:
     prefill:
       nodes: 4
-      workers: 4
     decode:
       args:
         max-num-seqs: 64
@@ -249,7 +242,6 @@ override_5p1d_dep4_dep16_c5600:
   roles:
     prefill:
       nodes: 5
-      workers: 5
     decode:
       args:
         max-num-seqs: 112

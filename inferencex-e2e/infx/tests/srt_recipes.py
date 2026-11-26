@@ -11,7 +11,8 @@ from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, SHARED_BLOCKS, TELEM
 ROOT = Path(__file__).resolve().parents[2]
 VIDEO_MODEL = "example/video-model"
 VIDEO_SPEC = "fixture.yaml"
-VIDEO_SET = "fixture-set"
+VIDEO_SET = "release-v1"
+VIDEO_IMAGE = f"example/video@sha256:{'a' * 64}"
 VIDEO_PORT = "30283"
 
 
@@ -35,6 +36,12 @@ def shared_blocks() -> dict[str, str]:
             "type": "custom", "command": "python3 -m infx.bench video client --request-seconds 60",
             "env": {"VIDEO_SERVER_SERVICE": "video-server", "VIDEO_SERVER_PORT": VIDEO_PORT},
         },
+        "services": [{
+            "name": "video-server", "type": "generic", "nodes": 1, "critical": True,
+            "command": ["python3", "-m", "infx.bench", "video", "serve"],
+            "env": {"VIDEO_SERVER_PORT": VIDEO_PORT},
+            "readiness": {"http": {"port": int(VIDEO_PORT), "path": "/health"}},
+        }],
     })  # fmt: skip
     return blocks
 
@@ -53,13 +60,16 @@ def write_video_specs(repository: Path) -> None:
     (specs / VIDEO_SPEC).write_text(yaml.safe_dump({
         "schema_version": 1,
         "model": {"id": VIDEO_MODEL, "revision": "a" * 40},
-        "generation": {"num_inference_steps": 1},
+        "generation": {"num_inference_steps": 1, "width": 16, "height": 16},
         "prompts": {"fixture": {"text": "a fixture prompt", "requires_motion": False, "requires_sound": False}},
         "sets": {VIDEO_SET: {
             "plan_id": "fixture-plan", "repetitions": 1, "warmup_runs": 0,
             "cases": [{"case_id": "fixture", "prompt": "fixture", "seed": 1}],
         }},
         "reference": {},
+        "workload_size": {"latent_frames": 3, "latent_tokens_audio": 2, "guidance_branches": 1, "model": {
+            "latent_patch_pixels": 16, "dit_weights_per_token": 1, "attention_width": 1, "layers": 1,
+        }},
     }))  # fmt: skip
 
 
@@ -70,7 +80,7 @@ def fixed_seq_entry(recipe: str, concurrencies: list[int]) -> dict:
         "precision": "fp8", "framework": "sglang", "runner": "cluster:fixture",
         "multinode": False, "srt-recipe-dir": "fixture",
         "scenarios": {"fixed-seq-len": [{"isl": 1024, "osl": 128, "search-space": [
-            {"tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
+            {"gpus-per-worker": 4, "tp": 4, "conc-list": concurrencies, "srt-recipe": recipe},
         ]}]},
     }  # fmt: skip
 
@@ -81,7 +91,7 @@ VIDEO_RECIPE = "video/agg-tp2.yaml"
 def video_entry(recipe: str = VIDEO_RECIPE) -> dict:
     """A master entry with one 2-GPU video point of ``VIDEO_SPEC``'s set served by ``recipe``."""
     return {
-        "image": "example/video:1", "model": VIDEO_MODEL, "model-prefix": "h3",
+        "image": VIDEO_IMAGE, "model": VIDEO_MODEL, "model-prefix": "h3",
         "precision": "bf16", "framework": "sglang", "runner": "cluster:fixture",
         "multinode": False, "srt-recipe-dir": "fixture",
         "scenarios": {"video-generation": [{"spec": VIDEO_SPEC, "set": VIDEO_SET, "search-space": [
@@ -100,15 +110,14 @@ def single_node_fragment(tp: int, **args) -> dict:
 def video_fragment(**args: str) -> dict:
     """A native sglang video fragment the binder accepts, with extra engine ``args`` appended."""
     return {"schema": 2, "name": "video-fixture", "resources": {"gpu_type": "fixture"}, "services": [{
-        "name": "video-server", "type": "generic", "nodes": 1, "critical": True,
-        "command": ["python3", "-m", "infx.bench", "video", "serve"],
+        "name": "video-server",
         "args": [
             "--model-view", "snapshot", "--", "python3", "-m", "evaluator.srt_selected", "serve",
             "--model-path", "{model_path}", "--model-id", "{model_id}",
             "--revision", "{model_revision}", "--num-gpus", "{gpus_per_node}",
             "--disable-conditioning-cache", "--host", "0.0.0.0", "--port", VIDEO_PORT,
-            *(f"--{flag}={value}" for flag, value in args.items()),
+            "--performance-mode", "speed",
+            *(token for flag, value in args.items() for token in (f"--{flag}", value)),
         ],
-        "env": {"VIDEO_SERVER_PORT": VIDEO_PORT, "VIDEO_RUNTIME_REVISION": "b" * 40},
-        "readiness": {"http": {"port": int(VIDEO_PORT), "path": "/health"}},
+        "env": {"VIDEO_RUNTIME_REVISION": "b" * 40},
     }]}  # fmt: skip
