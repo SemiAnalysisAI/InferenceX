@@ -10,6 +10,7 @@ from infx.cli import main
 from infx.launch.drivers.srt import lanes
 from infx.launch.policy import LaunchPath
 from infx.tests.srt_recipes import (
+    VIDEO_IMAGE,
     VIDEO_MODEL,
     VIDEO_RECIPE,
     VIDEO_SPEC,
@@ -339,7 +340,7 @@ def test_a_video_point_renders_its_bound_server_recipe(project, tmp_path):
     [(record, recipe)] = written(output)
     assert (record["variant"], record["cluster"]) == (None, "fixture")
     assert (record["matrix"]["scenario-type"], record["matrix"]["conc-list"]) == ("video-generation", [1])
-    assert recipe["model"] == {"path": f"hf:{VIDEO_MODEL}", "container": "example/video:1", "precision": "bf16"}
+    assert recipe["model"] == {"path": f"hf:{VIDEO_MODEL}", "container": VIDEO_IMAGE, "precision": "bf16"}
     assert recipe["resources"]["gpus_per_node"] == 2
     [server] = recipe["services"]
     assert server["args"][server["args"].index("--num-gpus") + 1] == "2"
