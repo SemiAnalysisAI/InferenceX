@@ -77,7 +77,7 @@ def test_keys_with_changed_recipes_or_points_are_listed(tmp_path, monkeypatch, c
         "same": fixed_seq_entry("stable.yaml", [8]),
         "video": video_entry(),
         "unbound": video_entry(UNBOUND_RECIPE),
-    }, single_node_fragment(4, **{"max-running-requests": 16}), video_fragment(**{"max-running-requests": "7"}))  # fmt: skip
+    }, single_node_fragment(4, **{"max-running-requests": 16}), video_fragment(**{"warmup-num-frames": "7"}))  # fmt: skip
     (project / RECIPES / UNBOUND_RECIPE).write_text(yaml.safe_dump(video_fragment()))
     monkeypatch.chdir(project)
 
