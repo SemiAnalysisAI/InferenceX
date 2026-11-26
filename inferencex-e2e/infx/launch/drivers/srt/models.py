@@ -39,21 +39,7 @@ class Override:
 
 
 OVERRIDES: dict[str, tuple[Override, ...]] = {
-    "b300-dsxe": (
-        Override(
-            Match(frameworks=any_of("vllm", "dynamo-sglang"), model_glob="*/DeepSeek-V4-Pro-0813"),
-            entry="DeepSeek-V4-Pro-0813@scratch",
-        ),
-        Override(Match(model_glob="*/DeepSeek-V4-Pro-0813"), entry="DeepSeek-V4-Pro-0813"),
-    ),
     "gb200-nv": (
-        Override(
-            Match(any_of("dsr1"), any_of("fp4"), any_of("dynamo-sglang")),
-            entry="deepseek-r1-0528-fp4-v2",
-        ),
-        Override(
-            Match(any_of("dsr1"), any_of("fp8"), any_of("dynamo-sglang")), entry="deepseek-r1-0528"
-        ),
         Override(
             Match(any_of("dsr1"), any_of("fp4"), any_of("dynamo-trt")),
             served_name="deepseek-r1-fp4",

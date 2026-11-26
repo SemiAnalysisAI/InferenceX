@@ -417,8 +417,8 @@ def test_a_recipe_the_binder_rejects_fails_the_point_with_the_binders_error(harn
         env = single_node_env(harness, "h100-cw", CONC="3")
         line = "single_node.py: error: Expected exactly one matching single-node SRT recipe; "
     else:
-        env = lane_env(harness, "h200-dgxc", "roles: [prefill]\n", MODEL_PREFIX="dsr1", PRECISION="fp8",
-                       FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528")  # fmt: skip
+        env = lane_env(harness, "h200-dgxc", "roles: [prefill]\n", MODEL_PREFIX="glm5.2", PRECISION="fp8",
+                       FRAMEWORK="dynamo-sglang", MODEL="zai-org/GLM-5.2-FP8")  # fmt: skip
         line = "AttributeError: 'list' object has no attribute 'values'"
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode != 0
@@ -718,8 +718,8 @@ def test_submission_failure_code_propagates_and_cancels_the_job(harness, shape):
     if shape == "single":
         env = single_node_env(harness, "mi355x-amds", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))
     else:
-        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-                       MODEL="deepseek-r1-fp4", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))  # fmt: skip
+        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-trt",
+                       MODEL="nvidia/GLM-5.2-NVFP4", FAKE_SRTCTL_RC="7", FAKE_ACTIVE=str(active))  # fmt: skip
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 7, result.stderr[-4000:]
     assert lines(harness.logs, "scancel") == ["42"]
@@ -734,8 +734,8 @@ def test_a_manifest_that_is_not_a_json_object_fails_as_a_launch_error(harness, s
     if shape == "single":
         env = single_node_env(harness, "mi355x-amds", FAKE_MANIFEST='["42"]')
     else:
-        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-                       MODEL="deepseek-r1-fp4", FAKE_MANIFEST='["42"]')  # fmt: skip
+        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-trt",
+                       MODEL="nvidia/GLM-5.2-NVFP4", FAKE_MANIFEST='["42"]')  # fmt: skip
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 1, result.stderr[-4000:]
     assert "Traceback" not in result.stderr
@@ -755,8 +755,8 @@ def test_sigterm_while_streaming_cancels_the_job_and_exits_143(harness, shape):
     if shape == "single":
         env = single_node_env(harness, "h100-cw", **extra)
     elif shape == "multi":
-        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="dsr1", PRECISION="fp4", FRAMEWORK="dynamo-trt",
-                       MODEL="deepseek-r1-fp4", **extra)  # fmt: skip
+        env = lane_env(harness, "b300-dsxe", MODEL_PREFIX="glm5.2", PRECISION="fp4", FRAMEWORK="dynamo-trt",
+                       MODEL="nvidia/GLM-5.2-NVFP4", **extra)  # fmt: skip
     else:
         env = video_env(harness, "b200-nscale", **extra)
     command = [sys.executable, "-m", "infx.launch", "--runner-config", str(harness.config), "run"]
@@ -1036,8 +1036,8 @@ def test_srt_recipe_outside_the_recipe_mirror_fails_before_any_setup(harness):
 
 def test_setup_retries_only_after_discarding_a_truncated_archive(harness):
     env = lane_env(
-        harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
-        MODEL="deepseek-ai/DeepSeek-R1-0528", FAKE_TRUNCATED_NATS="1",
+        harness, "h200-dgxc", MODEL_PREFIX="glm5.2", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="zai-org/GLM-5.2-FP8", FAKE_TRUNCATED_NATS="1",
     )  # fmt: skip
     assert_ok(launch(env, harness.config, harness.workspace))
     assert len(lines(harness.logs, "make")) == 2
@@ -1046,8 +1046,8 @@ def test_setup_retries_only_after_discarding_a_truncated_archive(harness):
 
 def test_a_setup_failure_without_a_bad_archive_is_not_retried(harness):
     env = lane_env(
-        harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
-        MODEL="deepseek-ai/DeepSeek-R1-0528", FAKE_MAKE_RC="2",
+        harness, "h200-dgxc", MODEL_PREFIX="glm5.2", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="zai-org/GLM-5.2-FP8", FAKE_MAKE_RC="2",
     )  # fmt: skip
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 2
@@ -1101,8 +1101,8 @@ def test_a_setup_step_killed_by_a_signal_exits_128_plus_the_signal(harness):
     fakes = Path(harness.env["PATH"].split(os.pathsep)[0])
     (fakes / "make").write_text("#!/bin/bash\nkill -KILL $$\n")
     env = lane_env(
-        harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
-        MODEL="deepseek-ai/DeepSeek-R1-0528",
+        harness, "h200-dgxc", MODEL_PREFIX="glm5.2", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="zai-org/GLM-5.2-FP8",
     )  # fmt: skip
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 137, result.stderr[-4000:]
@@ -1116,8 +1116,8 @@ def test_a_failed_uv_download_fails_the_uv_install(harness):
     (fakes / "curl").write_text("#!/bin/bash\necho 'curl: (6) Could not resolve host' >&2\nexit 6\n")
     (fakes / "curl").chmod(0o755)
     env = lane_env(
-        harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
-        MODEL="deepseek-ai/DeepSeek-R1-0528",
+        harness, "h200-dgxc", MODEL_PREFIX="glm5.2", PRECISION="fp8", FRAMEWORK="dynamo-sglang",
+        MODEL="zai-org/GLM-5.2-FP8",
     )  # fmt: skip
     result = launch(env, harness.config, harness.workspace)
     assert result.returncode == 1
@@ -1153,8 +1153,8 @@ def test_unsupported_multinode_requests_fail_before_any_setup(harness, cluster_i
 ])  # fmt: skip
 def test_a_missing_input_is_named_before_any_setup(harness, shape, overrides, missing):
     if shape == "multi":
-        env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="dsr1", PRECISION="fp8",
-                       FRAMEWORK="dynamo-sglang", MODEL="deepseek-ai/DeepSeek-R1-0528")  # fmt: skip
+        env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="glm5.2", PRECISION="fp8",
+                       FRAMEWORK="dynamo-sglang", MODEL="zai-org/GLM-5.2-FP8")  # fmt: skip
     elif shape == "power":
         env = lane_env(harness, "h200-dgxc", MODEL_PREFIX="glm5.2", PRECISION="fp8",
                        FRAMEWORK="dynamo-sglang", MODEL="zai-org/GLM-5.2-FP8", IS_AGENTIC="1",
@@ -1190,10 +1190,10 @@ def test_multinode_eval_overrides_image_offline_mode_and_host_model_path(harness
     env = lane_env(
         harness,
         "h200-dgxc",
-        MODEL_PREFIX="dsr1",
+        MODEL_PREFIX="glm5.2",
         PRECISION="fp8",
         FRAMEWORK="dynamo-sglang",
-        MODEL="deepseek-ai/DeepSeek-R1-0528",
+        MODEL="zai-org/GLM-5.2-FP8",
     )
     assert_ok(launch(env, harness.config, harness.workspace))
     [call] = srtctl_calls(harness.logs)
