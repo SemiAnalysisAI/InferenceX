@@ -13473,3 +13473,13 @@
     - "Append TP4/EP4 at concurrency 58 to the existing curve on the same lmsysorg/sglang-rocm:muse-spark-open-mi355-1106 image: the concurrency 40 recipe plus SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1 (frees SWA slots that left the window, so the SWA pool does not saturate above concurrency 40) and HSA_ENABLE_SCRATCH_ASYNC_RECLAIM=0."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5193
   append-only: true
+
+- config-keys:
+    - glm5.3flash-fp8-mi300x-sglang-agentic-mtp
+    - glm5.3flash-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Set SGLANG_AITER_GFX942_BLOCKSCALE_USE_CK=1 (sglang#41071), so the dense block-FP8 linears run on aiter's CK blockscale GEMM instead of its Triton one. In the image's aiter (285579b62), four of GLM-5.3-Flash's six linear shapes have no gfx942 Triton config and run the 128x128 default tile."
+    - "Image, search space and every other flag are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5150
