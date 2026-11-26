@@ -72,6 +72,7 @@ override_tp4_c1:
         tensor-parallel-size: 4
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '1'
@@ -84,6 +85,7 @@ override_tp4_c4:
         tensor-parallel-size: 4
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '4'
@@ -96,6 +98,8 @@ override_tp4_c8:
         tensor-parallel-size: 4
         max-running-requests: 16
         cuda-graph-max-bs-decode: 16
+        # The monokernel serves steps of up to 8 running requests; wider steps use SGLang's forward.
+        enable-amd-monokernel: true
   benchmark:
     env:
       CONC: '8'
