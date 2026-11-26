@@ -5,9 +5,9 @@ import importlib.util
 import json
 import os
 import re
-import shlex
 from collections.abc import Mapping
 from copy import deepcopy
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -36,7 +36,6 @@ VIDEO_PACKAGE = "video-generation"
 SPEC_DIR = "specs"
 PACKAGE_MOUNT = "/video-package"
 RESULT_DIR = "/logs/video"
-READINESS_PATH = "/health"
 VIDEO_ENV = (
     "MODEL",
     "CONC_LIST",
@@ -114,8 +113,31 @@ def video_package(root: Path) -> Path:
     return root.parent / VIDEO_PACKAGE
 
 
-def check_video_fragment(raw: Mapping[str, Any], source: Path) -> None:
-    """Reject a fragment that sets a launcher-owned key or carries engine roles."""
+def _restated(shared: Mapping[str, Any], fragment: Mapping[str, Any], depth: int) -> list[str]:
+    """The keys of ``fragment``, down to ``depth`` nested mappings, that ``shared`` sets."""
+    found = []
+    for key, value in fragment.items():
+        if key == "name" or key not in shared:
+            continue
+        if depth and isinstance(shared[key], Mapping) and isinstance(value, Mapping):
+            found.extend(f"{key}.{inner}" for inner in _restated(shared[key], value, depth - 1))
+        else:
+            found.append(key)
+    return found
+
+
+def check_video_fragment(
+    raw: Mapping[str, Any],
+    source: Path,
+    shared: Mapping[str, Any],
+    services: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Reject a fragment that sets a launcher-owned or shared key, or carries engine roles.
+
+    ``shared`` is the shared block and ``services`` its services by name. The fragment may
+    add to a shared block, and each of its services to the one of its name, but neither may
+    set a key the shared one already sets.
+    """
     found = [
         f"{'.'.join(key)} (= {value!r})"
         for key in _BOUND_KEYS
@@ -130,16 +152,41 @@ def check_video_fragment(raw: Mapping[str, Any], source: Path) -> None:
         raise ValueError(
             f"{source}: remove {', '.join(found)} from the fragment; the launcher sets them"
         )
+    blocks = {key: value for key, value in shared.items() if key != "services"}
+    scopes = [("the fragment", blocks, raw, 2)]
+    if isinstance(raw.get("services"), list):
+        scopes += [
+            (f"service {service['name']!r}", services.get(service["name"], {}), service, 1)
+            for service in raw["services"]
+        ]
+    for where, fixed, declared, depth in scopes:
+        restated = _restated(fixed, declared, depth)
+        if restated:
+            raise ValueError(
+                f"{source}: remove {', '.join(restated)} from {where}; "
+                f"{VIDEO_BLOCK} sets them for every recipe"
+            )
 
 
 def compose_video_recipe(path: Path, *, root: Path) -> dict[str, Any]:
-    """The fragment at ``path`` over the shared video and native telemetry blocks."""
+    """The fragment at ``path`` over the shared video and native telemetry blocks.
+
+    Each fragment service also merges over the shared service of the same name. The fragment
+    may extend what the shared blocks set but not restate it.
+    """
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
-    check_video_fragment(raw, path)
     shared = merge_blocks(_block(root / VIDEO_BLOCK), _block(root / NATIVE_TELEMETRY_BLOCK))
-    return merge_blocks(shared, raw)
+    # infx.matrix.changed binds a base revision's recipes with this code; its block may hold none.
+    by_name = {service["name"]: service for service in shared.get("services", [])}
+    check_video_fragment(raw, path, shared, by_name)
+    recipe = merge_blocks(shared, raw)
+    if isinstance(raw.get("services"), list):
+        recipe["services"] = [
+            merge_blocks(by_name.get(service["name"], {}), service) for service in raw["services"]
+        ]
+    return recipe
 
 
 def spec_model_path(hf_hub_cache: str, model: str, revision: str) -> str:
@@ -175,11 +222,7 @@ def load_spec(name: str, *, root: Path, set_id: str) -> dict[str, Any]:
     if set_id not in source["sets"]:
         raise ValueError(f"VIDEO_SET {set_id!r} is not defined in {name}")
     plan = module.plan_for(source, set_id)
-    return {
-        "plan": plan,
-        "plan_sha256": module.plan_sha256(plan),
-        "schema_version": module.schema_version(plan),
-    }
+    return {"plan": plan, "plan_sha256": module.plan_sha256(plan)}
 
 
 def _pool_service(recipe: Mapping[str, Any]) -> dict[str, Any]:
@@ -187,13 +230,7 @@ def _pool_service(recipe: Mapping[str, Any]) -> dict[str, Any]:
     owners = [s for s in services or [] if isinstance(s, Mapping) and s.get("nodes")]
     if len(owners) != 1:
         raise ValueError("video recipes declare exactly one service that owns nodes (the server)")
-    [service] = owners
-    if service.get("type") != "generic" or not service.get("critical", False):
-        raise ValueError("the video server service must be a critical generic service")
-    command = service.get("command")
-    if not (isinstance(command, list) and command[1:] == ["-m", "infx.bench", "video", "serve"]):
-        raise ValueError("the video server service must run python -m infx.bench video serve")
-    return service
+    return owners[0]
 
 
 def _argument(command: list[str], flag: str) -> str:
@@ -217,7 +254,9 @@ def _bind_command(
     revision: str,
     port: str,
     gpus: int,
-) -> None:
+) -> list[str]:
+    """Render the engine command, check the values the binder owns and return the engine's own
+    arguments."""
     values = {
         "model_path": model_path,
         "model_id": model,
@@ -244,17 +283,228 @@ def _bind_command(
     command = parsed.command
     expected = {"--port": port, "--num-gpus": str(gpus)}
     if runtime == "sglang":
+        # The harness entry hands everything after it to SGLang's CLI, so the registry sees all.
+        if command[1:4] != ["-m", "evaluator.srt_selected", "serve"]:
+            raise ValueError("SGLang video command must run python -m evaluator.srt_selected serve")
         expected.update({"--model-path": model_path, "--model-id": model, "--revision": revision})
+        arguments = command[4:]
     elif runtime == "vllm-omni":
         if command[:3] != ["vllm", "serve", model_path]:
             raise ValueError("vLLM video command must serve the bound model snapshot")
         expected["--served-model-name"] = model
+        arguments = command[3:]
     else:
         raise ValueError(f"unsupported video runtime: {runtime!r}")
     for flag, value in expected.items():
         if _argument(command, flag) != value:
             raise ValueError(f"video engine {flag} must match the bound value {value!r}")
     _argument(command, "--host")
+    return arguments
+
+
+@dataclass(frozen=True)
+class _Reviewed:
+    """One engine's reviewed lossless settings.
+
+    A row may give its engine only these flags, spelled in full, environment variables and
+    preambles; anything else is refused, so a new engine option enters VideoGenX v0.1 only by
+    review here. A value set limits what a setting may be given; None allows any value.
+    """
+
+    engine: str
+    switches: frozenset[str]
+    flags: Mapping[str, frozenset[str] | None]
+    env: Mapping[str, frozenset[str] | None]
+    preambles: frozenset[str]
+    required: frozenset[str]
+
+
+_REVIEWED = {
+    # SGLang's log attestation runs after the sweep and sees only the settings it names; this
+    # refuses any other setting before a GPU runs it.
+    "sglang": _Reviewed(
+        engine="SGLang",
+        switches=frozenset({"--disable-conditioning-cache"}),
+        flags={
+            "--model-type": None,
+            "--model-path": None,
+            "--model-id": None,
+            "--revision": None,
+            "--num-gpus": None,
+            "--host": None,
+            "--port": None,
+            "--tp-size": None,
+            "--ulysses-degree": None,
+            "--cfg-parallel-size": None,
+            "--encoder-parallel": None,
+            "--warmup-resolutions": None,
+            "--warmup-num-frames": None,
+            # auto and memory pick offload and sharding from free GPU memory.
+            "--performance-mode": frozenset({"speed"}),
+            "--enable-torch-compile": None,
+            "--dit-cpu-offload": None,
+            # The plan pins it; srt_selected and the attestation compare.
+            "--flow-shift": None,
+            # Copies SGLANG.dense_attention in attestation.py, which infx has no import path to.
+            "--attention-backend": frozenset(
+                {"fa", "fa2", "torch_sdpa", "torch_cudnn_sdpa", "dynamic_cudnn_sdpa", "aiter"}
+            ),
+        },
+        env={
+            "HF_HUB_OFFLINE": None,
+            "TRANSFORMERS_OFFLINE": None,
+            "PYTHONPATH": None,
+            "PYTHONUNBUFFERED": None,
+            "ROCM_QUICK_REDUCE_QUANTIZATION": frozenset({"NONE"}),
+            "SGLANG_USE_AITER": None,
+            "VIDEO_RUNTIME_REVISION": None,
+            "VIDEO_SERVER_PORT": None,
+        },
+        preambles=frozenset(),
+        required=frozenset({"--performance-mode"}),
+    ),
+    # vLLM-Omni has no log attestation, so this is its only check. --cache-config is judged by
+    # its JSON.
+    "vllm-omni": _Reviewed(
+        engine="vLLM-Omni",
+        switches=frozenset({"--omni", "--trust-remote-code", "--vae-use-tiling"}),
+        flags={
+            "--served-model-name": None,
+            "--host": None,
+            "--port": None,
+            "--num-gpus": None,
+            "--init-timeout": None,
+            "--stage-init-timeout": None,
+            "--task-type": None,
+            "--tensor-parallel-size": None,
+            "--cfg-parallel-size": None,
+            "--usp": None,
+            "--ring": None,
+            "--text-encoder-tp-size": None,
+            "--vae-parallel-mode": None,
+            "--vae-patch-parallel-size": None,
+            "--diffusion-attention-backend": frozenset(
+                {
+                    "FLASH_ATTN",
+                    "TORCH_SDPA",
+                    "CUDNN_ATTN",
+                    "FLASHINFER_ATTN",
+                    "FLASH_ATTN_HUB",
+                    "FLASH_ATTN_3_HUB",
+                    "TRTLLM_ATTN",
+                }
+            ),
+            "--cache-config": None,
+        },
+        env={
+            "HF_HUB_OFFLINE": None,
+            "TRANSFORMERS_OFFLINE": None,
+            "OMNI_DIFFUSION_PROMPT_EMBED_CACHE": None,
+            "PYTHONPATH": None,
+            "PYTHONUNBUFFERED": None,
+            "VIDEO_PREFETCH_MODEL": None,
+            "VIDEO_RUNTIME_REVISION": None,
+            "VIDEO_SERVER_PORT": None,
+            "VLLM_OMNI_SERVER_STORAGE__PATH": None,
+            "VLLM_OMNI_VIDEO_SYNC_TIMEOUT": None,
+            "VLLM_ROCM_QUICK_REDUCE_QUANTIZATION": frozenset({"NONE"}),
+            "VLLM_WORKER_MULTIPROC_METHOD": None,
+        },
+        # ROCm vLLM starts only with HIP_VISIBLE_DEVICES set, numbered inside the GPU mask.
+        preambles=frozenset({"export HIP_VISIBLE_DEVICES=$(seq -s, 0 $(( {gpus_per_node} - 1 )))"}),
+        required=frozenset(),
+    ),
+}
+
+
+@dataclass(frozen=True)
+class _ReviewedModel:
+    """What one model adds to the engine registries, so a new model is one row.
+
+    ``flags`` maps each runtime to the flags only this model's rows may pass on it, with value
+    sets as in ``_Reviewed``. ``vllm_omni_default_on`` names the --cache-config keys vLLM-Omni
+    turns on by default for the model; its rows must pass each as false.
+    """
+
+    flags: Mapping[str, Mapping[str, frozenset[str] | None]]
+    vllm_omni_default_on: tuple[str, ...]
+
+
+_REVIEWED_MODELS = {
+    "MiniMaxAI/MiniMax-H3": _ReviewedModel(
+        # The pipeline the spec's workload names.
+        flags={"sglang": {"--model-variant": frozenset({"fl2va"})}, "vllm-omni": {}},
+        vllm_omni_default_on=("minimax_h3_adaln_cache",),
+    ),
+}
+# A model without a row adds nothing to its engine's registry.
+_NO_ADDITIONS = _ReviewedModel(flags={name: {} for name in _REVIEWED}, vllm_omni_default_on=())
+
+
+def _refuse_value(
+    engine: str, kind: str, name: str, value: str, allowed: frozenset[str] | None
+) -> None:
+    if allowed is not None and value not in allowed:
+        raise ValueError(f"{engine} {kind} {name}={value!r} is not a reviewed value")
+
+
+def _refuse_unreviewed(
+    reviewed: _Reviewed, arguments: list[str], env: Mapping[str, Any], preamble: Any
+) -> dict[str, str]:
+    """Refuse a row that gives its engine a setting outside ``reviewed``, or one flag or switch
+    twice; return each flag's value."""
+    engine = reviewed.engine
+    if preamble and preamble not in reviewed.preambles:
+        raise ValueError(f"{engine} preamble {preamble!r} is not a reviewed preamble")
+    for name, value in env.items():
+        if name not in reviewed.env:
+            raise ValueError(
+                f"{engine} environment variable {name} is not in the reviewed registry"
+            )
+        _refuse_value(engine, "environment variable", name, str(value), reviewed.env[name])
+    values: dict[str, str] = {}
+    given: set[str] = set()
+    tokens = iter(arguments)
+    for flag in tokens:
+        if flag not in reviewed.switches:
+            if flag not in reviewed.flags:
+                raise ValueError(
+                    f"{engine} argument {flag!r} is not a reviewed flag spelled in full"
+                )
+            # A flag with an optional value would otherwise hide the switch that follows it.
+            value = next(tokens, "")
+            if not value or value.startswith("--"):
+                raise ValueError(f"{engine} flag {flag} needs a value, not {value!r}")
+            _refuse_value(engine, "flag", flag, value, reviewed.flags[flag])
+            values[flag] = value
+        # The engine would keep the last value and ignore the earlier one.
+        if flag in given:
+            raise ValueError(f"{engine} argument {flag} is given twice")
+        given.add(flag)
+    missing = sorted(reviewed.required - values.keys())
+    if missing:
+        raise ValueError(f"{engine} rows must set {', '.join(missing)}")
+    return values
+
+
+def _refuse_cached_vllm_omni(
+    model: str, default_on: tuple[str, ...], cache_config: str | None
+) -> None:
+    config: dict[str, Any] = {}
+    if cache_config is not None:
+        try:
+            config = json.loads(cache_config)
+            lossless = all(enabled is False for enabled in config.values())
+        except (ValueError, AttributeError):
+            lossless = False
+        if not lossless:
+            raise ValueError(f"vLLM-Omni flag --cache-config={cache_config!r} is not lossless")
+    for key in default_on:
+        if key not in config:
+            raise ValueError(
+                f"vLLM-Omni turns {key} on by default for {model}: the recipe must pass "
+                "it as false in --cache-config"
+            )
 
 
 def bind_video(
@@ -271,8 +521,6 @@ def bind_video(
     model_path = spec_model_path(
         _required(environment, "HF_HUB_CACHE"), model, spec["plan"]["model_revision"]
     )
-    if recipe.get("frontend", {}).get("type") != "none":
-        raise ValueError("video recipes are services-only: frontend.type must be none")
     bound = {key: deepcopy(value) for key, value in recipe.items() if key in ("schema", "name")}
     bound["model"] = {
         "path": f"hf:{model}",
@@ -284,58 +532,39 @@ def bind_video(
     service = _pool_service(bound)
     recipe_env_keys = _declared_server_env_keys(bound, service)
     benchmark = bound.setdefault("benchmark", {})
-    client_command = shlex.split(str(benchmark.get("command", "")))
-    if benchmark.get("type") != "custom" or client_command[1:5] != [
-        "-m",
-        "infx.bench",
-        "video",
-        "client",
-    ]:
-        raise ValueError(
-            "video recipes run python -m infx.bench video client as benchmark.type custom"
-        )
-    try:
-        parse_args(client_command[4:])
-    except (SystemExit, ValueError, BenchError) as error:
-        raise ValueError("invalid video client arguments") from error
     workload = benchmark.setdefault("env", {})
-    readiness = (service.get("readiness") or {}).get("http") or {}
-    port = readiness.get("port")
-    if type(port) is not int or not 0 < port <= 65535:
-        raise ValueError(f"the server service must probe a TCP port, not {port!r}")
-    port = str(port)
-    if (
-        str(workload.get("VIDEO_SERVER_PORT")) != port
-        or str((service.get("env") or {}).get("VIDEO_SERVER_PORT")) != port
-        or readiness.get("path") != READINESS_PATH
-    ):
-        raise ValueError(
-            f"the server service must probe {READINESS_PATH} on its port and the client "
-            "must address that port (VIDEO_SERVER_PORT)"
-        )
     if workload.get("VIDEO_SERVER_SERVICE") != service["name"]:
         raise ValueError("benchmark.env.VIDEO_SERVER_SERVICE must name the server service")
     runtime = _required(environment, "FRAMEWORK")
-    _bind_command(
+    arguments = _bind_command(
         service,
         runtime=runtime,
         model=model,
         model_path=model_path,
         revision=spec["plan"]["model_revision"],
-        port=port,
+        port=workload["VIDEO_SERVER_PORT"],
         gpus=gpus,
     )
-    if spec["schema_version"] == 2:
-        if runtime == "sglang":
-            if service["args"].count("--disable-conditioning-cache") != 1:
-                raise ValueError("fairness workload requires --disable-conditioning-cache")
-        elif {**(bound.get("environment") or {}), **service["env"]}.get(
-            "OMNI_DIFFUSION_PROMPT_EMBED_CACHE"
-        ) != "0":
-            raise ValueError("fairness workload requires OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0")
+    if runtime == "sglang":
+        if service["args"].count("--disable-conditioning-cache") != 1:
+            raise ValueError("fairness workload requires --disable-conditioning-cache")
+    elif {**(bound.get("environment") or {}), **service["env"]}.get(
+        "OMNI_DIFFUSION_PROMPT_EMBED_CACHE"
+    ) != "0":
+        raise ValueError("fairness workload requires OMNI_DIFFUSION_PROMPT_EMBED_CACHE=0")
     revision = str((service.get("env") or {}).get("VIDEO_RUNTIME_REVISION", ""))
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("video service requires a pinned VIDEO_RUNTIME_REVISION")
+    reviewed = _REVIEWED[runtime]
+    additions = _REVIEWED_MODELS.get(model, _NO_ADDITIONS)
+    flags = _refuse_unreviewed(
+        replace(reviewed, flags={**reviewed.flags, **additions.flags[runtime]}),
+        arguments,
+        {**(bound.get("environment") or {}), **service["env"]},
+        service.get("preamble"),
+    )
+    if runtime == "vllm-omni":
+        _refuse_cached_vllm_omni(model, additions.vllm_omni_default_on, flags.get("--cache-config"))
     values = {
         "MODEL": model,
         "CONC_LIST": " ".join(map(str, concurrencies)),

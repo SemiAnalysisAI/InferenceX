@@ -22,7 +22,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         trust-remote-code: true
@@ -62,7 +61,6 @@ base:
 override_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         cuda-graph-backend-prefill: disabled
         dsv4-attn-backend: trtllm
@@ -80,7 +78,6 @@ override_tp4_c8:
 override_tp4_c16:
   roles:
     agg:
-      gpus: 4
       args:
         cuda-graph-backend-prefill: breakable
         enable-decoder-swa-bounded-replay: true
@@ -98,7 +95,6 @@ override_tp4_c16:
 override_tp4_c20:
   roles:
     agg:
-      gpus: 4
       args:
         cuda-graph-backend-prefill: disabled
         dsv4-attn-backend: trtllm
@@ -116,7 +112,6 @@ override_tp4_c20:
 override_tp2_c16:
   roles:
     agg:
-      gpus: 2
       args:
         expert-parallel-size: 1
         mem-fraction-static: 0.7
@@ -135,7 +130,6 @@ override_tp2_c16:
 override_tp2_c32:
   roles:
     agg:
-      gpus: 2
       args:
         dsv4-attn-backend: trtllm
         enable-decoder-swa-bounded-replay: true
@@ -154,7 +148,6 @@ override_tp2_c32:
 override_tp2_c48:
   roles:
     agg:
-      gpus: 2
       args:
         cuda-graph-backend-prefill: disabled
         dsv4-attn-backend: trtllm
@@ -184,7 +177,6 @@ override_dep2_c64:
       disable-retries: true
   roles:
     agg:
-      gpus: 2
       args:
         chunked-prefill-size: 32768
         cuda-graph-max-bs-decode: 96
@@ -236,7 +228,6 @@ override_dep2_c256:
       disable-retries: true
   roles:
     agg:
-      gpus: 2
       args:
         chunked-prefill-size: 32768
         cuda-graph-max-bs-decode: 128

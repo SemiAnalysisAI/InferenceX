@@ -6,8 +6,8 @@ base:
     model: {}
     container: {}
     frameworks:
-      dynamo: "1.6.0"
-      sglang: "0.0.0.dev1+ge79de62d2.d20261104"
+      dynamo: "1.8.0.dev20261119"
+      sglang: "0.0.0.dev1+g03fde9cc3"
   dynamo:
     install: false
     request_plane: tcp
@@ -62,8 +62,6 @@ base:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
       env:
         PYTHONUNBUFFERED: "1"
         CUDA_MODULE_LOADING: EAGER
@@ -133,8 +131,6 @@ base:
       kv_events: true
     decode:
       nodes: 4
-      workers: 1
-      gpus: 16
       env:
         PYTHONUNBUFFERED: "1"
         SGLANG_CUSTOM_ALL_REDUCE_V2_MAX_SIZE_KB: "32768"
@@ -213,7 +209,6 @@ override_4p1d_c520:
   roles:
     prefill:
       nodes: 8
-      workers: 4
       args:
         # 132 GB per rank, 528 GB per prefill node: a larger host cache cuts prefill recompute.
         hicache-size: 132
@@ -228,7 +223,6 @@ override_3p1d_c340:
   roles:
     prefill:
       nodes: 6
-      workers: 3
       args:
         hicache-size: 132
         speculative-num-draft-tokens: 5
@@ -241,7 +235,6 @@ override_2p1d_c180:
   roles:
     prefill:
       nodes: 4
-      workers: 2
       args:
         # Verifies the current token plus 5 drafts.
         speculative-num-draft-tokens: 6
@@ -254,10 +247,8 @@ override_3p1d_tp32_c224:
   roles:
     prefill:
       nodes: 6
-      workers: 3
     decode:
       nodes: 8
-      gpus: 32
       args:
         # DCP8 x attention DP4 over the 32 GPUs; MoE runs EP32.
         tensor-parallel-size: 32

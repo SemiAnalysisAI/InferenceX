@@ -220,6 +220,7 @@ jobs:
       IMAGE: ${{ matrix.config.image }}
       FRAMEWORK: ${{ matrix.config.framework }}
       PRECISION: ${{ matrix.config.precision }}
+      GPU_COUNT: ${{ matrix.config['gpus-per-worker'] }}
       TP: ${{ matrix.config.tp }}
       PP_SIZE: ${{ matrix.config.pp }}
       DCP_SIZE: ${{ matrix.config.dcp-size }}
@@ -329,8 +330,6 @@ jobs:
           export GITHUB_WORKSPACE="$PWD"
           echo "INFERENCEX_E2E_ROOT=$PWD" >> "$GITHUB_ENV"
           set -eo pipefail
-          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
-          echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
           ep_val="${EP_SIZE:-1}"
           res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}-pp${PP_SIZE}-dcp${DCP_SIZE}-pcp${PCP_SIZE}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
           export RESULT_FILENAME="${res_name}"
@@ -377,6 +376,22 @@ jobs:
           source "$PYTHONPATH/benchmarks/check_env.sh"
           check_env_vars INFERENCEX_RESULTS_PYTHON
           "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.fixed_sequence
+
+      - name: Redact stored artifacts
+        if: ${{ always() && env.INFERENCEX_RESULTS_PYTHON != '' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/.result-tooling/inferencex-e2e
+          TRACE: ${{ steps.run.outputs.trace }}
+          TP0_DECODE: ${{ steps.run.outputs.tp0_decode }}
+          TP0_EXTEND: ${{ steps.run.outputs.tp0_extend }}
+        run: |
+          source "$PYTHONPATH/benchmarks/check_env.sh"
+          check_env_vars INFERENCEX_RESULTS_PYTHON INFERENCEX_E2E_ROOT
+          paths=("$INFERENCEX_E2E_ROOT/moe_debug.tp0.log")
+          for trace in "$TRACE" "$TP0_DECODE" "$TP0_EXTEND"; do
+            if [[ -n "$trace" ]]; then paths+=("$trace"); fi
+          done
+          "$INFERENCEX_RESULTS_PYTHON" -P -m infx.results.redact "${paths[@]}"
 
       - name: Upload profile as artifact
         if: ${{ steps.run.outputs.trace != '' }}
