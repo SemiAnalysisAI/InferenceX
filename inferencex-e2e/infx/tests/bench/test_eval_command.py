@@ -179,12 +179,13 @@ def model_args(run: dict) -> list[str]:
     return run["argv"][run["argv"].index("--model_args") + 1].split(",")
 
 
+@pytest.mark.parametrize("overrides", [{}, {"CONC": "48", "EVAL_CONC": "8"}])
 def test_single_node_shim_stages_the_eval_in_the_checkout_and_records_its_status(
-    checkout, single_node_env, openai, tmp_path
+    checkout, single_node_env, openai, tmp_path, overrides
 ):
     status = tmp_path / "infx-eval-exit-code"
 
-    result = shim(checkout, "single", single_node_env, openai.url, str(status))
+    result = shim(checkout, "single", {**single_node_env, **overrides}, openai.url, str(status))
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert status.read_text() == "0\n"

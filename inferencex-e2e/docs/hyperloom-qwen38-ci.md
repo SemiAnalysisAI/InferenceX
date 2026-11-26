@@ -75,6 +75,8 @@ I keep natural evals enabled. Eval-only launches remove synthetic acceptance and
 
 C48 sets `benchmark.env.AL_GATE_CONCURRENCY: '8'` for its natural acceptance gate. The gate still sends all 80 SPEED-Bench prompts with the recorded thinking mode, sampling and golden AL. Other points use the default concurrency 64. The C48 performance benchmark remains at concurrency 48 for 3,600 seconds. The gate result records its effective concurrency so this diagnostic can be distinguished from the standard replay.
 
+C48 also sets `environment.EVAL_CONC: '8'` for GSM8K. The single-node eval shim honors the `EVAL_CONC` forwarded by srt-slurm, independently of the performance point's `CONC`. The complete GSM8K split is evaluated at eight concurrent requests; no accuracy samples or output-token limits are reduced.
+
 ## Inspect the generated configuration on Linux
 
 I check out the PR branch and initialize its pinned srt-slurm dependency. From the repository root I run:

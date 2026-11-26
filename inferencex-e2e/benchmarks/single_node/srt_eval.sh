@@ -31,5 +31,10 @@ if [[ -d /model ]]; then
     export MODEL_PATH=/model
 fi
 cd "$root"
+# srt-slurm can select accuracy concurrency independently of the benchmark point.
+SRT_EVAL_CONC="$CONC"
+if [[ -n "${EVAL_CONC:-}" ]]; then
+    SRT_EVAL_CONC="$EVAL_CONC"
+fi
 PYTHONSAFEPATH=1 PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}" \
-    python3 -m infx.bench eval --endpoint "$1" --concurrency "$CONC" --stage-to "$root"
+    python3 -m infx.bench eval --endpoint "$1" --concurrency "$SRT_EVAL_CONC" --stage-to "$root"

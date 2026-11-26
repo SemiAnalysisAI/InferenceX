@@ -279,6 +279,8 @@ override_c24:
       CONC: '24'
       KV_OFFLOADING: dram
 override_c48:
+  environment:
+    EVAL_CONC: '8'
   roles:
     agg:
       args:
