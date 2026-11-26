@@ -144,7 +144,6 @@ base:
         disable-decode-cuda-graph: true
         disable-overlap-schedule: true
         disable-shared-experts-fusion: true
-        disaggregation-bootstrap-port: 31000
         disaggregation-mode: prefill
         dist-timeout: 1800
         enable-cache-report: true
