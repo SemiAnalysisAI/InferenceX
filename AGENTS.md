@@ -93,4 +93,4 @@ Run the focused test path first. Use `--extra workflows` for GitHub integrations
 
 Delete retired configs, recipes and assets in one PR; never archive. See [deprecating configs](CONTRIBUTING.md#deprecating-benchmark-configs).
 
-See also: [config fields](inferencex-e2e/configs/CONFIGS.md), [GitHub operations](.github/AGENT_OPERATIONS.md), [workflows](.github/workflows/README.md), [launcher flow](inferencex-e2e/docs/launcher.md), [evals](inferencex-e2e/infx/evals/EVALS.md), [AgentX replay](inferencex-e2e/docs/agentx-standalone.md), and [ingest recovery](.claude/commands/recover-failed-ingest.md).
+See also: [config fields](inferencex-e2e/configs/CONFIGS.md), [GitHub operations](.github/AGENT_OPERATIONS.md), [workflows](.github/workflows/README.md), [launcher flow](inferencex-e2e/docs/launcher.md), [evals](inferencex-e2e/infx/evals/EVALS.md), [AgentX replay](inferencex-e2e/docs/agentx-standalone.md), [DeepSWE standalone](inferencex-e2e/docs/deepswe-standalone.md), and [ingest recovery](.claude/commands/recover-failed-ingest.md).
