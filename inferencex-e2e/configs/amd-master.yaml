@@ -747,7 +747,7 @@ dsv41flash-fp4-mi300x-vllm-agentic-dspark:
 # GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
 # and enables EAGLE MTP with the committed thinking-on golden AL.
 glm5.2-fp8-mi325x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.23-rocm720-mi30x@sha256:a3a6eb293187b20012a5abc8f00423e6ab51d0169113a6e58a91da5614200170
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm720-mi30x-20261124@sha256:8576ac77272f8bc9abff19009f6e4514a11376c958355fdecd54dafc9b994374
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:mi325x-amd
