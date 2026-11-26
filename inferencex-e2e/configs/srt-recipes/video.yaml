@@ -1,6 +1,25 @@
 frontend:
   type: none
 
+services:
+  - name: video-server
+    type: generic
+    nodes: 1
+    critical: true
+    start: before_workers
+    command: [python3, -m, infx.bench, video, serve]
+    env:
+      PYTHONPATH: /video-package:/infmax-workspace
+      PYTHONUNBUFFERED: "1"
+      VIDEO_SERVER_PORT: "30283"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    readiness:
+      http:
+        port: 30283
+        path: /health
+      interval_seconds: 5
+
 benchmark:
   type: custom
   command: python3 -m infx.bench video client --request-seconds 900
