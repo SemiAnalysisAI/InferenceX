@@ -93,6 +93,93 @@ def test_v01_plan_declares_schema_2_with_its_fairness_and_warmup() -> None:
     assert plan["warmup_case"]["case_id"] == "warmup-only"
 
 
+@pytest.fixture
+def sized(spec: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **spec,
+        "generation": {"width": 64, "height": 32, "num_inference_steps": 5, "guidance_scale": 4.0},
+        "workload_size": {
+            "latent_frames": 3,
+            "latent_tokens_audio": 4,
+            "guidance_branches": 2,
+            "model": {
+                "latent_patch_pixels": 16,
+                "dit_weights_per_token": 10,
+                "attention_width": 7,
+                "layers": 2,
+            },
+        },
+    }
+
+
+def _load(document: dict[str, Any], tmp_path: Path) -> dict[str, Any]:
+    path = tmp_path / "spec.yaml"
+    path.write_text(yaml.safe_dump(document))
+    return video_spec.load_spec(path)
+
+
+def test_workload_size_is_computed_from_generation_and_the_declared_inputs(
+    sized: dict[str, Any], tmp_path: Path
+) -> None:
+    # 3 frames x (64 / 16) x (32 / 16) video tokens + 4 audio; 5 steps x 2 branches;
+    # each pass 2 x 28 x 10 + 4 x 28^2 x 7 x 2 = 44464.
+    assert video_spec.workload_size(_load(sized, tmp_path)) == {
+        **sized["workload_size"],
+        "latent_tokens_video": 24,
+        "latent_tokens": 28,
+        "dit_forward_passes": 10,
+        "dit_flops_per_clip": 444640,
+    }
+
+
+def test_workload_size_refuses_a_spec_without_the_inputs(
+    spec: dict[str, Any], tmp_path: Path
+) -> None:
+    with pytest.raises(ValueError, match="the spec declares no workload_size"):
+        video_spec.workload_size(_load(spec, tmp_path))
+
+
+def test_workload_size_stays_outside_the_plan_and_both_hashes(sized: dict[str, Any]) -> None:
+    unsized = {key: value for key, value in sized.items() if key != "workload_size"}
+    assert video_spec.plan_for(sized, "s") == video_spec.plan_for(unsized, "s")
+    assert video_spec.spec_sha256(sized) == video_spec.spec_sha256(unsized)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda doc: doc["workload_size"].update(guidance_branches=0),
+            "workload_size.guidance_branches must be an integer >= 1",
+        ),
+        (
+            lambda doc: doc["workload_size"]["model"].update(latent_patch_pixels=24),
+            "generation.width must divide by workload_size.model.latent_patch_pixels",
+        ),
+        (
+            lambda doc: doc["generation"].update(guidance_scale=1.0),
+            "workload_size.guidance_branches must be 2 when generation.guidance_scale exceeds 1",
+        ),
+        (
+            lambda doc: doc.update(
+                generation={**doc["generation"], "guidance_scale": 1.0},
+                workload_size={**doc["workload_size"], "guidance_branches": 3},
+            ),
+            "must be 2 when generation.guidance_scale exceeds 1, else 1",
+        ),
+    ],
+)
+def test_loader_rejects_an_invalid_workload_size(
+    sized: dict[str, Any],
+    tmp_path: Path,
+    mutate: Callable[[dict[str, Any]], None],
+    message: str,
+) -> None:
+    mutate(sized)
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _load(sized, tmp_path)
+
+
 def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
     return lambda doc: doc["prompts"][target].update(text=doc["prompts"][source]["text"])
 
