@@ -1205,7 +1205,9 @@ glm5.3-fp8-mi355x-sglang-agentic-mtp:
     - search-space:
       - { gpus-per-worker: 8, tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8], spec-decoding: mtp, srt-recipe: agentic-throughput.yaml:override_tp8_c8_hicache }
       - { gpus-per-worker: 8, tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [10], spec-decoding: mtp, srt-recipe: agentic-throughput.yaml:override_tp8_c10_hicache }
-      - { gpus-per-worker: 8, tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16], spec-decoding: mtp, srt-recipe: agentic-throughput.yaml:override_tp8_c16_hicache }
+    - search-space:
+      - { gpus-per-worker: 8, tp: 8, ep: 1, dcp-size: 4, kv-offloading: none, conc-list: [16], spec-decoding: mtp, srt-recipe: agentic-throughput.yaml:override_tp8_c16_dcp4 }
+      - { gpus-per-worker: 8, tp: 8, ep: 1, dcp-size: 4, kv-offloading: none, conc-list: [24], spec-decoding: mtp, srt-recipe: agentic-throughput.yaml:override_tp8_c24_dcp4 }
 glm5.3-fp8-mi355x-tilert-agentic:
   image: ghcr.io/tile-ai/tilert-rocm-decode:0.1.6
   model: zai-org/GLM-5.3

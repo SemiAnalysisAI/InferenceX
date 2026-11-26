@@ -81,20 +81,49 @@ override_tp8_c10_hicache:
       CONC: '10'
       KV_OFFLOADING: dram
 
-override_tp8_c16_hicache:
+override_tp8_c16_dcp4:
   roles:
     agg:
       args:
         tensor-parallel-size: 8
         expert-parallel-size: 1
+        # DCP4 shards the FP8 KV over four ranks (10.5M tokens), so the GPU pool
+        # holds the C16/C24 working set without HiCache.
+        dcp-size: 4
+        # Breakable prefill graphs fail with DCP>1 on this image.
+        cuda-graph-backend-prefill: disabled
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
-        enable-hierarchical-cache: true
-        hicache-ratio: 1.0
-        hicache-write-policy: write_through_selective
-        hicache-io-backend: direct
-        hicache-mem-layout: page_first_direct
+        max-prefill-tokens: 16384
+        # Batch long prefills instead of interleaving them one by one with decode.
+        # Keep 32k chunks: 16k chunks exhaust memory in the DSA indexer on a cold start.
+        prefill-max-requests: 2
+        enable-prefill-delayer: true
+        prefill-delayer-max-delay-ms: 800
+        prefill-delayer-max-delay-passes: 32
+        prefill-delayer-queue-min-ratio: 0.5
   benchmark:
     env:
       CONC: '16'
-      KV_OFFLOADING: dram
+      KV_OFFLOADING: none
+
+override_tp8_c24_dcp4:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        dcp-size: 4
+        cuda-graph-backend-prefill: disabled
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        max-prefill-tokens: 16384
+        prefill-max-requests: 2
+        enable-prefill-delayer: true
+        prefill-delayer-max-delay-ms: 800
+        prefill-delayer-max-delay-passes: 32
+        prefill-delayer-queue-min-ratio: 0.5
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: none
