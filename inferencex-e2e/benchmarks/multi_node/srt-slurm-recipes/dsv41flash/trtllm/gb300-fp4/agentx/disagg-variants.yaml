@@ -7,7 +7,7 @@ base:
     container: {}
     frameworks:
       dynamo: "1.7.0.dev20261110"
-      tensorrt_llm: "1.4.0rc5.dev202611190007"
+      tensorrt_llm: "1.4.0rc5.dev202611240007"
   dynamo:
     install: true
     source:
@@ -230,7 +230,7 @@ override_5p1d_dep2_dep8_c7000:
         kv_cache_config:
           fp8_context_mla_kv_len_cap: 8000000
           free_gpu_memory_fraction: 0.9
-          host_cache_size: 134217728000
+          host_cache_size: 155692564480
     decode:
       nodes: 2
       args:
@@ -345,11 +345,11 @@ override_7p1d_dep2_dep32_c7600:
         stream_interval: 20
         tensor_parallel_size: 32
 
-override_1p4d_dep2_tep8_c84:
-  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-1p4d-dep2-tep8-c84
+override_1p1d_dep2_tep8:
+  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-1p1d-dep2-tep8
   frontend:
     args:
-      # Session affinity pins each session to one batch-1 decode worker, leaving others idle.
+      # One prefill and one decode worker need neither session affinity nor KV events.
       router-mode: least-loaded
       router-session-affinity-ttl-secs: null
       no-kv-events: null
@@ -361,7 +361,7 @@ override_1p4d_dep2_tep8_c84:
         kv_cache_config:
           host_cache_size: 85899345920
     decode:
-      nodes: 8
+      nodes: 2
       args:
         cuda_graph_config:
           batch_sizes: [1, 2, 4]
@@ -400,7 +400,7 @@ override_7p1d_dep2_dep16_c7900:
           kv_cache_routing_strict_affinity_max_wait_iters: 2000
         kv_cache_config:
           fp8_context_mla_kv_len_cap: 8000000
-          host_cache_size: 134217728000
+          host_cache_size: 150323855360
     decode:
       nodes: 4
       args:
@@ -417,70 +417,6 @@ override_7p1d_dep2_dep16_c7900:
           iteration_stats_interval: 400
         max_batch_size: 128
         max_num_tokens: 512
-        moe_config:
-          backend: MEGAMOE_CUTEDSL
-          megamoe_fuse_shared_expert: true
-          load_balancer:
-            num_slots: 384
-            layer_updates_per_iter: 0
-            warmup_placement:
-              start_step: 0
-              interval_steps: 4000
-              max_migrations: 100000
-              min_rows: 1048576
-              min_pos: 2
-              planner: lpt
-              decay: 0.5
-              max_moved_fraction: 0.1
-              min_gain: 0.01
-              count_every_steps: 4
-        moe_expert_parallel_size: 16
-        scheduler_config:
-          max_gen_init_admissions_per_pass: 1
-        speculative_config:
-          max_draft_len: 3
-          block_size: 3
-          # The draft's routed experts ship as MXFP4; CUTLASS keeps their default W4A8 (MXFP8
-          # activation) path, while a MegaMoE draft would re-encode them as NVFP4.
-          moe_backend: CUTLASS
-        stream_interval: 20
-        tensor_parallel_size: 16
-
-override_5p1d_dep2_dep16_c5100:
-  name: dsv41flash-fp4-gb300-dynamo-trt-agentx-disagg-5p1d-dep2-dep16-c5100
-  benchmark:
-    # The client's thousands of concurrent sessions stay off the decode node's CPUs.
-    placement:
-      node: dedicated
-  roles:
-    prefill:
-      nodes: 3
-      env:
-        # A subagent's first turn goes to the attention-DP rank the KV router matched to its parent.
-        DYN_ENGINE_CONV_AFFINITY_DP_RANK_SOURCE: dynamo
-      args:
-        attention_dp_config:
-          kv_cache_routing_new_conv_placement: least_prefill
-          kv_cache_routing_strict_conversation_affinity: true
-          kv_cache_routing_strict_affinity_max_wait_iters: 2000
-        kv_cache_config:
-          fp8_context_mla_kv_len_cap: 8000000
-          host_cache_size: 134217728000
-    decode:
-      nodes: 4
-      args:
-        cuda_graph_config:
-          batch_sizes: [1, 2, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64]
-        enable_attention_dp: true
-        enable_client_io_during_gpu_wait: true
-        enable_lm_head_tp_in_adp: true
-        gen_prompt_tail_tokens: 8192
-        iter_perf_stats_interval: 400
-        kv_cache_config:
-          free_gpu_memory_fraction: 0.6
-          iteration_stats_interval: 400
-        max_batch_size: 64
-        max_num_tokens: 256
         moe_config:
           backend: MEGAMOE_CUTEDSL
           megamoe_fuse_shared_expert: true
