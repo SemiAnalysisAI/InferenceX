@@ -446,3 +446,66 @@ override_4p_dep4_dep16_si20_linker_x1126_dcap16:
         max-running-requests: 256
         cuda-graph-max-bs-decode: 16
         stream-interval: 20
+
+# The x1126 point with earlier, larger Mooncake eviction passes: start at 95%
+# full and free 5% per pass, so puts stop failing on a full segment.
+override_4p_dep4_dep16_si20_linker_x1126_wm95:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker-x1126-wm95
+  services:
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: mooncake-master
+      type: mooncake-master
+      preamble: |
+        export PATH="$(dirname "$(python3 -c 'import sys; print(sys.executable)')"):$PATH"
+        if ! command -v mooncake_master >/dev/null; then
+          MC_DIR=$(python3 -c 'import mooncake, os; print(os.path.dirname(mooncake.__file__))')
+          if [ -x "$MC_DIR/mooncake_master" ]; then
+            export PATH="$MC_DIR:$PATH"
+          else
+            pip_install=(python3 -m pip install)
+            if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
+              pip_install+=(--break-system-packages)
+            fi
+            "${pip_install[@]}" --quiet --no-cache-dir --no-deps --force-reinstall \
+              "mooncake-transfer-engine-cuda13==$(python3 -c 'import importlib.metadata as m; print(m.version("mooncake-transfer-engine-cuda13"))')"
+          fi
+        fi
+        command -v mooncake_master
+      args:
+        - --default_kv_lease_ttl=210000
+        - --eviction_high_watermark_ratio=0.95
+        - --eviction_ratio=0.05
+        - --rpc_thread_num=64
+    - *gb300-x1126-decode-store
+    - <<: *gb300-x1126-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *gb300-x1126-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *gb300-x1126-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  roles:
+    prefill:
+      nodes: 4
+      env:
+        <<: *gb300-linker-prefill-env
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 200gb
+      args: *gb300-dep4-linker-prefill-args
+    decode: *gb300-dep16-decode
