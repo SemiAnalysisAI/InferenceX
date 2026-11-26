@@ -20,6 +20,7 @@ from infx.srt_slurm.workload import (
     parse_concurrencies,
     resolve_fabric,
     selects_dedicated_discovery,
+    selects_frontend_image,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -170,6 +171,17 @@ def test_the_launcher_reads_dedicated_discovery_without_srtctl(project, monkeypa
 
     assert selects_dedicated_discovery(f"{path}:override_infra", agentic=True, root=project)
     assert not selects_dedicated_discovery(f"{path}:override_head", agentic=True, root=project)
+
+
+def test_the_launcher_reads_the_frontend_image_a_variant_selects(project):
+    path = fragment(project, {
+        "base": {"name": "bundle"},
+        "override_plain": {"roles": {"agg": {"nodes": 2}}},
+        "override_router": {"frontend": {"type": "llm-d", "container_image": "router:1"}},
+    })
+
+    assert selects_frontend_image(f"{path}:override_router", agentic=True, root=project) == "router:1"
+    assert selects_frontend_image(f"{path}:override_plain", agentic=True, root=project) is None
 
 
 def test_a_power_point_gets_telemetry_and_its_concurrencies_on_a_bundle_variant(project):
