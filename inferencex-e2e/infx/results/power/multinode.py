@@ -922,6 +922,8 @@ class MultinodePowerAudit:
     producer_git_commit: str | None = None
     expected_producer_git_commit: str | None = None
     exporter_image_sha256: str | None = None
+    source_metric: str | None = None
+    power_scope: str | None = None
     window: dict | None = None
     window_power_valid: bool = False
     window_metrics: dict[str, float] = field(default_factory=dict)
@@ -1041,6 +1043,9 @@ def _validate_gpu_leg(
     audit.stored_publication_valid = stored_valid if isinstance(stored_valid, bool) else None
     commit = manifest.get("producer_git_commit")
     audit.producer_git_commit = commit if isinstance(commit, str) else None
+    metric, scope = manifest.get("source_metric"), manifest.get("power_scope")
+    audit.source_metric = metric if isinstance(metric, str) and metric else None
+    audit.power_scope = scope if isinstance(scope, str) and scope else None
     exporter = manifest.get("dcgm_exporter")
     if isinstance(exporter, dict):
         sha = exporter.get("container_image_sha256")
@@ -1486,6 +1491,8 @@ def _sidecar_payload(
             "producer_git_commit": audit.producer_git_commit,
             "expected_producer_git_commit": audit.expected_producer_git_commit,
             "exporter_image_sha256": audit.exporter_image_sha256,
+            "source_metric": audit.source_metric,
+            "power_scope": audit.power_scope,
             "stored_publication_valid": audit.stored_publication_valid,
             "recomputed_publication_valid": audit.recomputed_publication_valid,
         },
