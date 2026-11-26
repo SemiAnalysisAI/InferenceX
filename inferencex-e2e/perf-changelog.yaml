@@ -13458,6 +13458,23 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5147
 
 - config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Rerun the unchanged MiniMax-M3.1-Flash GB200 Dynamo-vLLM AgentX configs to collect measured GPU and Grace CPU power; the published curve (2026-11-01) predates default-on multinode power collection and carries no power fields."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4863
+  scenario-type: [agentic-coding]
+
+- config-keys:
+    - musespark-fp4-mi355x-sglang-agentic-dflash
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Append TP4/EP4 at concurrency 58 to the existing curve on the same lmsysorg/sglang-rocm:muse-spark-open-mi355-1106 image: the concurrency 40 recipe plus SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1 (frees SWA slots that left the window, so the SWA pool does not saturate above concurrency 40) and HSA_ENABLE_SCRATCH_ASYNC_RECLAIM=0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5193
+  append-only: true
+
+- config-keys:
     - qwen3.5-fp8-mi355x-atom-agentic-mtp
   description:
     - "Update the ATOM image from rocm/atom-dev:nightly_202610181506 to nightly_202610291449."

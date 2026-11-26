@@ -143,6 +143,13 @@ jobs:
                       client_payload,
                     });
 
+            # After the LLM dispatch and only for a video publish, so it never holds back LLM or AgentX results.
+            - name: Require released video sets unchanged
+              if: steps.plan.outputs.video == 'true'
+              run: |
+                  uv run --no-project --exclude-newer PT12H --python 3.12 --with pyyaml \
+                    python video-generation/specs/released_sets.py
+
             # Matching the manifest too keeps one bundle in its named directory; a single match unpacks flat.
             - name: Download the reused video bundles and matrix
               if: steps.plan.outputs.video == 'true'
