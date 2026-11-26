@@ -1,5 +1,5 @@
 # [Fix] [MI355X] qwen38_flash_next: Keep the draft's graph captures out of SGLang's capture check
-# sgl-project/sgl-amd-mono PR: https://github.com/sgl-project/sgl-amd-mono/pull/204  (commit a88e568 on sgl-amd-mono main 7a5a075)
+# sgl-project/sgl-amd-mono PR: https://github.com/sgl-project/sgl-amd-mono/pull/204  (commit a36c1b2 on sgl-amd-mono main 129e6e5)
 # Patch for the image's sgl-amd-mono checkout (/sgl-workspace/sgl-amd-mono, 32a12203), not SGLang; the source file
 # only (the unit test of the PR dropped). Since sgl-project/sglang#46210 the draft CUDA graph runners run the
 # capture tail hooks, and SGLang's monokernel capture check rejects the MTP draft's decode step, so c1-c8
@@ -7,7 +7,7 @@
 # the check skip a draft runner. Drop the patch once the image's sgl-amd-mono has the PR.
 
 diff --git a/sgl_amd_mono/qwen38_flash_next/draft.py b/sgl_amd_mono/qwen38_flash_next/draft.py
-index 06f2783..514948b 100644
+index 06f2783..5db4d3b 100644
 --- a/sgl_amd_mono/qwen38_flash_next/draft.py
 +++ b/sgl_amd_mono/qwen38_flash_next/draft.py
 @@ -20,8 +20,9 @@ the launch cannot read raises instead of running SGLang's forward; larger steps
@@ -22,26 +22,18 @@ index 06f2783..514948b 100644
  (``SGLANG_AMD_MONO_CHECK``) does not cover the draft yet, and fault injection arms
  the target's launches only.
  
-@@ -38,6 +39,7 @@ shuffle.
- from __future__ import annotations
- 
- import functools
-+import importlib
- import logging
- from typing import Optional
- 
-@@ -107,6 +109,10 @@ SGLANG_READS = {
+@@ -107,6 +108,10 @@ SGLANG_READS = {
      "srt/speculative/draft_utils.py": ('"qsa"',),
      "srt/speculative/*.py": ("hidden_states",),
      "srt/runtime_context.py": ("get_parallel", '"tp_size"'),
 +    # the capture check the draft runners run since sgl-project/sglang#46210, and the
 +    # flag that tells a draft model runner from the target's
-+    "srt/kernel_plugins/amd/binding.py|srt/monokernels/guards.py": ("_CaptureCheck",),
++    "srt/kernel_plugins/amd/binding.py|srt/monokernels/runtime.py": ("_CaptureCheck",),
 +    "srt/model_executor/model_runner.py": ("is_draft_worker",),
  }
  
  # The draft runs on its own QSA backends whatever --speculative-draft-attention-backend
-@@ -277,6 +283,47 @@ def _route_draft_steps(model, draft: _Draft) -> None:
+@@ -277,6 +282,37 @@ def _route_draft_steps(model, draft: _Draft) -> None:
      model.forward = forward
  
  
@@ -56,23 +48,13 @@ index 06f2783..514948b 100644
 +    decode capture: ``none of the 1 captured decode graphs ... runs
 +    qwen38_flash_next_mtp_draft_hip's monokernels``. The draft's wrapper routes and
 +    logs those steps itself (see the module docstring), so a draft runner's captures
-+    are not checked. The target runner's check is unchanged. Idempotent; a no-op on an
-+    SGLang that has no such check, and redundant once SGLang skips draft runners in
-+    the check itself."""
-+    check = None
-+    for module in (
-+        "sglang.srt.kernel_plugins.amd.binding",
-+        "sglang.srt.monokernels.guards",  # SGLang before sgl-project/sglang#45389
-+    ):
-+        try:
-+            check = getattr(importlib.import_module(module), "_CaptureCheck", None)
-+        except ModuleNotFoundError:
-+            continue
-+        if check is not None:
-+            break
-+    if check is None:
-+        return
-+    call = check.__call__
++    are not checked. The target runner's check is unchanged. Idempotent, and
++    redundant once SGLang skips draft runners in the check itself."""
++    try:
++        from sglang.srt.kernel_plugins.amd.binding import _CaptureCheck
++    except ModuleNotFoundError:  # SGLang before sgl-project/sglang#45389
++        from sglang.srt.monokernels.runtime import _CaptureCheck
++    call = _CaptureCheck.__call__
 +    if getattr(call, "_skips_draft_runners", False):
 +        return
 +
@@ -83,13 +65,13 @@ index 06f2783..514948b 100644
 +        return call(self, runner, out, forward_batch, num_tokens)
 +
 +    skip_draft_runners._skips_draft_runners = True
-+    check.__call__ = skip_draft_runners
++    _CaptureCheck.__call__ = skip_draft_runners
 +
 +
  def _build(model, hf_config, ctx) -> _Draft:
      import torch
  
-@@ -304,6 +351,7 @@ def _build(model, hf_config, ctx) -> _Draft:
+@@ -304,6 +340,7 @@ def _build(model, hf_config, ctx) -> _Draft:
      runner.set_deadline(ctx.deadline_s)
      draft = _Draft(model, runner)
      _route_draft_steps(model, draft)
