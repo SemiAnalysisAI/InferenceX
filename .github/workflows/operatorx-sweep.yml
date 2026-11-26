@@ -226,6 +226,9 @@ jobs:
             timeout 15 sinfo --Node --noheader --format='%N|%P|%t' \
               > "$OPERATORX_OUTPUT/slurm-nodes.log" 2>&1 || true
           fi
+      - name: Redact stored artifacts
+        if: always()
+        run: python3 -m infx.results.redact "$OPERATORX_OUTPUT"
       - name: Upload results and diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
