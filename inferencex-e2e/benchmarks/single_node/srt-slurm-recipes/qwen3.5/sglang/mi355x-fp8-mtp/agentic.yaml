@@ -73,6 +73,9 @@ override_tp4_c1:
         max-running-requests: 2
         cuda-graph-max-bs-decode: 2
         enable-amd-monokernel: true
+      env:
+        # The monokernel turns SGLang's small-M FP8 helper off at startup on this image.
+        SGLANG_ROCM_SMALLM_FP8_BS: '0'
   benchmark:
     env:
       CONC: '1'
@@ -86,6 +89,8 @@ override_tp4_c4:
         max-running-requests: 8
         cuda-graph-max-bs-decode: 8
         enable-amd-monokernel: true
+      env:
+        SGLANG_ROCM_SMALLM_FP8_BS: '0'
   benchmark:
     env:
       CONC: '4'
@@ -100,6 +105,8 @@ override_tp4_c8:
         cuda-graph-max-bs-decode: 16
         # The monokernel serves steps of up to 8 running requests; wider steps use SGLang's forward.
         enable-amd-monokernel: true
+      env:
+        SGLANG_ROCM_SMALLM_FP8_BS: '0'
   benchmark:
     env:
       CONC: '8'
