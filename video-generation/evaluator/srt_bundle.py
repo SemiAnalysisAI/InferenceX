@@ -6,8 +6,8 @@ cell's measured window against the native power package and leaves the aggregate
 validation sidecar in the runner workspace. This module joins them into the matrix
 layout the dashboard ingests (``serving-smoke.json``,
 ``gpu/c<N>/{spec,gpu-job,power,attestation}.json``, ``manifest.json``, ``ci.json``,
-``SHA256SUMS``) with evidence kind ``srt_slurm_h3_service``: power comes from srt-slurm's DCGM
-telemetry, re-validated by InferenceX, never from the video supervisor's own sampler, and the
+``SHA256SUMS``) with evidence kind ``srt_slurm_h3_service``: power comes from srt-slurm's native
+GPU telemetry, re-validated by InferenceX, never from the video supervisor's own sampler, and the
 work attestation from the engine's own startup arguments and log.
 """
 
@@ -204,7 +204,7 @@ def _power(
         "schema_version": POWER_SCHEMA,
         "bundle_type": "h3_native_power",
         "evidence_kind": EVIDENCE_KIND,
-        "source": "srt-slurm.dcgm-power",
+        "source": "srt-slurm",
         "status": "valid" if valid else "invalid",
         "valid": valid,
         "invalid_reasons": list(validation.get("reasons") or []),
@@ -227,8 +227,8 @@ def _power(
             "power_percentile_method": validation.get("power_percentile_method"),
         },
         "semantics": {
-            "scope": "job GPUs sampled by srt-slurm's DCGM exporter; excludes host and unsampled devices",
-            "sensor": "DCGM_FI_DEV_POWER_USAGE board power, head-node Unix clock",
+            "scope": producer.get("power_scope"),
+            "sensor": producer.get("source_metric"),
             "integration": validation.get("integration_method"),
             "generation_window": "client measured block: first measurement submit to last downloaded media",
             "energy_per_valid_clip": "whole-window GPU energy divided by technically valid clips",
@@ -549,6 +549,7 @@ def build_bundle(
         "launcher": "srt-slurm",
         "evidence_kind": EVIDENCE_KIND,
         "workload_plan": plan,
+        "workload_size": declared.get("workload_size") if declared else None,
         "gpu_uuids": gpu_uuids,
         "runtime": {"image": environ.get("IMAGE")},
         "exit_code": 0 if status == "complete" else 1,

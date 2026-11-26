@@ -318,7 +318,9 @@ one was applied. A PR without a primary label can instead stage only the run
 pinned by its latest authorized `/use <run_id>`, after the same validation that
 acknowledges the request. It posts a staging comment, or a rejection comment
 when neither applies. Comments do not trigger or cancel GPU sweeps. Later commits
-skip a new sweep after changelog/matrix and source-run validation. Merge-time
+skip a new sweep after changelog/matrix and source-run validation. When the PR
+plans video rows, `video-reuse-check` also runs Merge Ingest's video validation of
+the pinned run against the PR merge ref. Merge-time
 validation remains authoritative; an acknowledgment cannot override expired or
 invalid artifacts. Reuse is rejected while the PR currently carries
 `evals-only` or `agentx-fast`, checked when `/use` is acknowledged and at merge
@@ -357,7 +359,9 @@ The app downloads source artifacts, keeps the newest upload for each exact
 artifact name, and ingests them with changelog metadata from the merge run. The
 normal ingestion code skips failed benchmark rows. Benchmark rows and public
 links retain source-run provenance. Source coverage is authoritative, so later
-matrix/eval policy changes do not invalidate reuse.
+matrix/eval policy changes do not invalidate reuse. Video is the exception: Merge
+Ingest publishes only when the merge commit's video rows have the recipe
+fingerprints of the reused run's `video-sweep-manifest`.
 
 When the app's ingest finishes, on success or failure, it sends
 `ingest-results-completed` back with per-run counts (benchmark, eval, trace and
@@ -369,6 +373,15 @@ by that commit, and posts one comment per merge run, updated in place on reruns
 Reuse fails closed when authorized but ineligible or invalid. Pushes to `main`
 never run a sweep: `run-sweep.yml` is PR-only, and without reuse authorization
 the Merge Ingest run fails and nothing is benchmarked or ingested.
+
+## Stored Artifact Sanitization
+
+Benchmark, multi-node, SpeedBench AL, profile, CollectiveX and OperatorX jobs run
+`Redact stored artifacts` (`python -m infx.results.redact`) on the files they upload, right
+before the first upload. Profile traces are redacted before they are uploaded or pushed to the
+trace storage repository. The rules are the app's `log-redaction.ts`, and both repositories test
+them against the same vectors. The `h3-results` video bundle is not redacted, because its
+`SHA256SUMS` and evidence digests seal every file.
 
 ## Repository Scope
 
@@ -382,7 +395,7 @@ configured by these repository variables:
 | Variable          | Default                                                       | Effect                                                                                                                                                                                                                                                         |
 | ----------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `APP_REPO`        | `SemiAnalysisAI/InferenceX-app`                               | App repository that `merge-ingest`, `recover-reused-ingest`, `operatorx-sweep`, and `stage-results` dispatch ingest, video, and staging events to, and the only source the ingest and staging callbacks accept. `FRONTEND_PAT` must be able to dispatch to it. |
-| `STAGING_APP_URL` | `https://inferencemax-app-git-staging-semianalysisai.vercel.app` | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`.                                                   |
+| `STAGING_APP_URL` | Required, no default                                          | Origin of that app's staging site, without a trailing slash. Staged-run comments link to it, and the staging callback accepts chart links only on it. Set it to the app repository's own `STAGING_APP_URL`; the callback fails while it is unset.               |
 
 ## Validation Architecture
 

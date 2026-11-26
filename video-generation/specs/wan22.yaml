@@ -97,3 +97,22 @@ reference:
     note: >-
       Its examples default to guidance 5.0/5.0 and flow_shift 5.0; a comparable
       run must send the generation values above per request.
+
+workload_size:
+  # (81 - 1) / 4 + 1 under the VAE's 4x temporal stride.
+  latent_frames: 21
+  latent_tokens_audio: 0
+  # Classifier-free guidance runs a conditional and an unconditional pass per step.
+  guidance_branches: 2
+  # model.id at model.revision: transformer/config.json; transformer_2 has the same values.
+  # Wan2.2 is a two-expert MoE: each denoising step runs one expert (transformer at high
+  # noise, transformer_2 at low noise), so one expert's weights count per pass.
+  model:
+    # VAE spatial stride 8 x patch size 2.
+    latent_patch_pixels: 16
+    # 40 layers x (self-attention 4 x 5120^2 + cross-attention query and output 2 x 5120^2
+    # + FFN 2 x 5120 x 13824); cross-attention key and value act on text tokens only.
+    dit_weights_per_token: 11953766400
+    # 40 heads x 128.
+    attention_width: 5120
+    layers: 40
