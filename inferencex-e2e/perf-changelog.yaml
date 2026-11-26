@@ -13475,6 +13475,17 @@
   append-only: true
 
 - config-keys:
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-agg
+    - musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Move the GB300 Muse Spark Open Dynamo + SGLang points to lmsysorg/sglang:nightly-dev-cu13-20261119-6b374a55 (digest sha256:cda9ed841f850ee6eb1892b50264af9c76de3add8dd476c2ebc0dbf4c0b3f62c)."
+    - "Aggregated: TP4 at c56 and c76 (170 and 195 GB per-rank HiCache) and two-node TP8 at c8, c15, c16, c21, c26 and c32, replacing TP4 c46 and c50 and TP8 c1 and c36."
+    - "Disaggregated: 3P4D at c672, 1P2D at c176 and 1P3D at c192 with decode-side FlashInfer autotuning disabled, replacing 1P2D c160 and c224, 1P3D c224, 1P4D c32, c56 and c112, 1P5D c120 and 2P3D c352."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5143
+
+- config-keys:
     - glm5.3flash-fp8-mi355x-sglang-agentic-mtp
   description:
     - "Update the SGLang image from v0.5.22-rocm10-mi35x to v0.5.23-rocm10-mi35x."
