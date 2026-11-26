@@ -9,7 +9,7 @@ check_env_vars UMBP_DISTRIBUTED_CACHE_REMOTE_FETCHES UMBP_DISTRIBUTED_RANGED_LOC
 [[ $UMBP_DISTRIBUTED_RANGED_SCRATCH_USE_HUGEPAGES == 1 && $UMBP_ALLOW_4K_FALLBACK == 0 ]]
 [[ $UMBP_DISTRIBUTED_RANGED_SCRATCH_NUMA == 1 ]]
 [[ $UMBP_POOL_MAX_RD_ATOMIC == 1 ]]
-/opt/runtime-venv/bin/python /opt/k31-unified/verify-image.py
+# The calling setup script verifies its image-specific source manifest first.
 printf 'RDMA traffic class: MORI_RDMA_TC=%s MORI_IO_TC=%s MORI_IO_TC_DISABLE=%s\n' "$MORI_RDMA_TC" "$MORI_IO_TC" "$MORI_IO_TC_DISABLE"
 [[ $MORI_RDMA_TC == 104 && $MORI_IO_TC == 104 && $MORI_IO_TC_DISABLE == 0 ]]
 export UMBP_MASTER_ADDRESS="${HEAD_NODE_IP}:25190"
