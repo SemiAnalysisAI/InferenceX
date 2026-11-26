@@ -8241,7 +8241,7 @@ musespark-fp4-gb300-dynamo-sglang-agentic-dflash-disagg:
           dp-attn: false
 
 musespark-fp4-gb300-dynamo-trt-agentic-dflash2-disagg:
-  image: nvcr.io/nvidia/tensorrt-llm/release:gb300-agentx-main-image-pending
+  image: nvcr.io/nvidia/tensorrt-llm/release:musesparkopen-1.4.0a0.dev202611261200
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
   model-prefix: musespark
   runner: cluster:gb300-nv
@@ -8308,7 +8308,7 @@ musespark-fp4-gb300-dynamo-trt-agentic-dflash2-disagg:
         decode: {num-worker: 4, gpus-per-worker: 8, tp: 8, ep: 8, dp-attn: false}
 
 musespark-fp4-gb300-dynamo-trt-agentic-dflash2-agg:
-  image: nvcr.io/nvidia/tensorrt-llm/release:gb300-agentx-main-image-pending
+  image: nvcr.io/nvidia/tensorrt-llm/release:musesparkopen-1.4.0a0.dev202611261200
   model: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
   model-prefix: musespark
   runner: cluster:gb300-nv
