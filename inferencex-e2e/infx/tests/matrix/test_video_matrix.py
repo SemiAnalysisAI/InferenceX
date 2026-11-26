@@ -2,18 +2,18 @@
 
 import pytest
 
-from infx.matrix.generate import generate_config_matrix, trim_conc, with_fingerprints
+from infx.matrix.generate import generate_config_matrix, with_fingerprints
 from infx.matrix.validation import srt_recipe_references
 from infx.workflows.benchmark_schema import validate_matrix
 
 
 @pytest.fixture
 def master():
-    return {"video": {"image": "example/runtime:1", "model": "org/video", "model-prefix": "video",
+    return {"video": {"image": f"example/runtime@sha256:{'a' * 64}", "model": "org/video", "model-prefix": "video",
         "precision": "bf16", "framework": "sglang", "runner": "cluster:fixture", "multinode": False,
         "srt-recipe-dir": "video", "scenarios": {"video-generation": [{"spec": "clip.yaml",
-        "set": "shared-v1",
-        "search-space": [{"gpus": 2, "conc-list": [1, 2, 4], "srt-recipe": "video/agg-tp2.yaml"}]}]}}}
+        "set": "release-v1",
+        "search-space": [{"gpus": 2, "conc-list": [1], "srt-recipe": "video/agg-tp2.yaml"}]}]}}}
 
 
 RUNNERS = {"labels": {"cluster:fixture": ["node"]}, "clusters": {"fixture": {
@@ -25,14 +25,29 @@ VIDEO = ["video-generation"]
 
 def test_video_generation_and_smoke_keep_one_server_job(master):
     [row] = generate_config_matrix(["video"], master, RUNNERS, scenario_types=VIDEO)
-    assert (row["gpus"], row["conc-list"], row["spec"], row["set"]) == (2, [1, 2, 4], "clip.yaml", "shared-v1")
-    assert row["exp-name"] == "video_video_clip_shared-v1_g2"
+    assert (row["gpus"], row["conc-list"], row["spec"], row["set"]) == (2, [1], "clip.yaml", "release-v1")
+    assert row["exp-name"] == "video_video_clip_release-v1_g2"
     validate_matrix([row])
-    assert trim_conc([row])[0]["conc-list"] == [1]
     assert generate_config_matrix(["video"], master, RUNNERS, scenario_types=["fixed-seq-len"]) == []
     assert generate_config_matrix(["video"], master, RUNNERS) == []
-    with pytest.raises(ValueError, match="conc-list"):
-        validate_matrix([{**row, "conc-list": [1, 1]}])
+    rule = r"'conc-list' is \[1, 2\], but a video-generation row must list exactly \[1\]"
+    with pytest.raises(ValueError, match=rule):
+        validate_matrix([{**row, "conc-list": [1, 2]}])
+    master["video"]["scenarios"]["video-generation"][0]["search-space"][0]["conc-list"] = [1, 2]
+    with pytest.raises(ValueError, match=rule):
+        srt_recipe_references(master)
+
+
+def test_video_row_must_name_a_released_set_and_pin_its_image_by_digest(master):
+    [row] = generate_config_matrix(["video"], master, RUNNERS, scenario_types=VIDEO)
+    with pytest.raises(ValueError, match=r"set\n +String should match pattern '\^release-v"):
+        validate_matrix([{**row, "set": "smoke"}])
+    master["video"]["image"] = "example/runtime:1"
+    with pytest.raises(ValueError, match=r"image\n +String should match pattern .*@sha256:"):
+        generate_config_matrix(["video"], master, RUNNERS, scenario_types=VIDEO)
+    master["video"]["scenarios"]["video-generation"][0]["set"] = "smoke"
+    with pytest.raises(ValueError, match=r"video-generation\.0\.set\n +String should match pattern"):
+        srt_recipe_references(master)
 
 
 def test_changelog_entry_for_a_video_config_must_name_video_generation(master, monkeypatch):
