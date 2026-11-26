@@ -169,3 +169,16 @@ fairness:
     diffusers_revision: d8c1b13c756df0059bcdb6e477a1eafcd502098d
     model_revision: 42ed227ee7df40d41602854ae760620d6eb651fe
     rng_policy: cpu_generator_float32_video_then_audio
+workload_size:
+  latent_frames: 37
+  latent_tokens_audio: 414
+  guidance_branches: 1
+  # model.id at model.revision: transformer/config.json and the transformer checkpoint's tensor shapes.
+  model:
+    # VAE spatial stride 16 x patch size 2.
+    latent_patch_pixels: 32
+    # 50 layers x (attention q, k, v and output 4 x 5376 x 7168 + gated FFN 3 x 5376 x 14336).
+    dit_weights_per_token: 19267584000
+    # 56 heads x 128.
+    attention_width: 7168
+    layers: 50

@@ -1,11 +1,13 @@
+import os
 import re
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
-from specs import video_spec
+from specs import released_sets, video_spec
 
 SPECS = Path(__file__).resolve().parents[1] / "specs"
 
@@ -91,6 +93,93 @@ def test_v01_plan_declares_schema_2_with_its_fairness_and_warmup() -> None:
     assert plan["warmup_case"]["case_id"] == "warmup-only"
 
 
+@pytest.fixture
+def sized(spec: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **spec,
+        "generation": {"width": 64, "height": 32, "num_inference_steps": 5, "guidance_scale": 4.0},
+        "workload_size": {
+            "latent_frames": 3,
+            "latent_tokens_audio": 4,
+            "guidance_branches": 2,
+            "model": {
+                "latent_patch_pixels": 16,
+                "dit_weights_per_token": 10,
+                "attention_width": 7,
+                "layers": 2,
+            },
+        },
+    }
+
+
+def _load(document: dict[str, Any], tmp_path: Path) -> dict[str, Any]:
+    path = tmp_path / "spec.yaml"
+    path.write_text(yaml.safe_dump(document))
+    return video_spec.load_spec(path)
+
+
+def test_workload_size_is_computed_from_generation_and_the_declared_inputs(
+    sized: dict[str, Any], tmp_path: Path
+) -> None:
+    # 3 frames x (64 / 16) x (32 / 16) video tokens + 4 audio; 5 steps x 2 branches;
+    # each pass 2 x 28 x 10 + 4 x 28^2 x 7 x 2 = 44464.
+    assert video_spec.workload_size(_load(sized, tmp_path)) == {
+        **sized["workload_size"],
+        "latent_tokens_video": 24,
+        "latent_tokens": 28,
+        "dit_forward_passes": 10,
+        "dit_flops_per_clip": 444640,
+    }
+
+
+def test_workload_size_refuses_a_spec_without_the_inputs(
+    spec: dict[str, Any], tmp_path: Path
+) -> None:
+    with pytest.raises(ValueError, match="the spec declares no workload_size"):
+        video_spec.workload_size(_load(spec, tmp_path))
+
+
+def test_workload_size_stays_outside_the_plan_and_both_hashes(sized: dict[str, Any]) -> None:
+    unsized = {key: value for key, value in sized.items() if key != "workload_size"}
+    assert video_spec.plan_for(sized, "s") == video_spec.plan_for(unsized, "s")
+    assert video_spec.spec_sha256(sized) == video_spec.spec_sha256(unsized)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda doc: doc["workload_size"].update(guidance_branches=0),
+            "workload_size.guidance_branches must be an integer >= 1",
+        ),
+        (
+            lambda doc: doc["workload_size"]["model"].update(latent_patch_pixels=24),
+            "generation.width must divide by workload_size.model.latent_patch_pixels",
+        ),
+        (
+            lambda doc: doc["generation"].update(guidance_scale=1.0),
+            "workload_size.guidance_branches must be 2 when generation.guidance_scale exceeds 1",
+        ),
+        (
+            lambda doc: doc.update(
+                generation={**doc["generation"], "guidance_scale": 1.0},
+                workload_size={**doc["workload_size"], "guidance_branches": 3},
+            ),
+            "must be 2 when generation.guidance_scale exceeds 1, else 1",
+        ),
+    ],
+)
+def test_loader_rejects_an_invalid_workload_size(
+    sized: dict[str, Any],
+    tmp_path: Path,
+    mutate: Callable[[dict[str, Any]], None],
+    message: str,
+) -> None:
+    mutate(sized)
+    with pytest.raises(ValueError, match=re.escape(message)):
+        _load(sized, tmp_path)
+
+
 def _reuse_text(source: str, target: str) -> Callable[[dict[str, Any]], None]:
     return lambda doc: doc["prompts"][target].update(text=doc["prompts"][source]["text"])
 
@@ -153,3 +242,128 @@ def test_canonical_json_bytes_is_sorted_compact_utf8_and_finite() -> None:
     )
     with pytest.raises(ValueError, match="Out of range float values"):
         video_spec.canonical_json_bytes({"a": float("nan")})
+
+
+def _git(repo: Path, *args: str) -> str:
+    identity = ["-c", "user.name=test", "-c", "user.email=test@example.invalid"]
+    environment = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    return subprocess.run(
+        ["git", *identity, *args],
+        cwd=repo,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _commit(repo: Path, spec: dict[str, Any], commit: dict[str, Any]) -> str:
+    """Commit a specs tree and return the commit id.
+
+    ``commit`` maps each set id in ``sets`` to its repetitions; ``steps``, ``file`` and ``loader``
+    override the denoising steps, the spec file written and the loader's source.
+    """
+    specs = repo / released_sets.SPECS
+    loader = (SPECS / "video_spec.py").read_text() + commit.get("loader", "")
+    (specs / "video_spec.py").write_text(loader)
+    document = {
+        **spec,
+        "generation": {"num_inference_steps": commit.get("steps", 40)},
+        "sets": {
+            set_id: {**spec["sets"]["s"], "repetitions": repetitions}
+            for set_id, repetitions in commit["sets"].items()
+        },
+    }
+    (specs / commit.get("file", "clip.yaml")).write_text(yaml.safe_dump(document))
+    _git(repo, "add", "--all")
+    _git(repo, "commit", "--quiet", "--message", "specs")
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _history(repo: Path, spec: dict[str, Any], commits: list[dict[str, Any]]) -> list[str]:
+    """Start a repository with one commit per entry and return the commit ids, oldest first."""
+    (repo / released_sets.SPECS).mkdir(parents=True)
+    _git(repo, "init", "--quiet")
+    return [_commit(repo, spec, commit) for commit in commits]
+
+
+V1 = {"release-v1": 2}
+V2_ADDED = {"sets": V1 | {"release-v2": 2}}
+V2_EDITED = {"sets": V1 | {"release-v2": 3}}
+
+
+@pytest.mark.parametrize(
+    ("commits", "violation"),
+    [
+        # A release-v2 that changes the denoising steps changes release-v1 too.
+        ([{"sets": V1}, {**V2_ADDED, "steps": 39}], "clip.yaml release-v1: plan changed"),
+        ([{"sets": V1}, {"sets": {"release-v2": 2}}], "clip.yaml release-v1: removed"),
+        (
+            [
+                {"sets": V1},
+                {"sets": V1, "loader": "\n\ndef plan_sha256(plan):\n    return _sha256([plan])\n"},
+            ],
+            "clip.yaml release-v1: plan changed",
+        ),
+        # The first and last commits agree on every set the first one has.
+        ([{"sets": V1}, V2_ADDED, V2_EDITED], "clip.yaml release-v2: plan changed"),
+    ],
+)
+def test_a_released_set_cannot_change_or_disappear(
+    spec: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    commits: list[dict[str, Any]],
+    violation: str,
+) -> None:
+    start = _history(tmp_path, spec, commits)[0]
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit, match=violation):
+        released_sets.main(["released_sets", start])
+
+
+@pytest.mark.parametrize(
+    "commits",
+    [
+        [{"sets": V1 | {"draft": 2}}, V2_ADDED, {"sets": V2_ADDED["sets"] | {"release-v3": 2}}],
+        # New generation parameters go in a new spec file.
+        [{"sets": V1}, {"sets": V1, "file": "longer-clip.yaml", "steps": 30}],
+        # Undoing an edit restores the released plan.
+        [{"sets": V1}, V2_ADDED, V2_EDITED, V2_ADDED],
+        # A commit that cannot load its specs is skipped once a later commit loads again.
+        [{"sets": V1}, {"sets": V1, "loader": "\n\nraise RuntimeError\n"}, {"sets": V1}],
+    ],
+)
+def test_history_that_keeps_every_released_plan_passes(
+    spec: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    commits: list[dict[str, Any]],
+) -> None:
+    start = _history(tmp_path, spec, commits)[0]
+    monkeypatch.chdir(tmp_path)
+    released_sets.main(["released_sets", start])
+
+
+def test_a_later_commit_does_not_change_an_older_commits_verdict(
+    spec: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    start, older, newer = _history(tmp_path, spec, [{"sets": V1}, V2_ADDED, V2_EDITED])
+    _git(tmp_path, "checkout", "--quiet", "--detach", older)
+    monkeypatch.chdir(tmp_path)
+    released_sets.main(["released_sets", start])
+    with pytest.raises(SystemExit, match="does not descend"):
+        released_sets.main(["released_sets", newer])
+
+
+def test_a_pull_request_may_edit_a_set_before_it_merges(
+    spec: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (base,) = _history(tmp_path, spec, [{"sets": V1}])
+    _git(tmp_path, "checkout", "--quiet", "-b", "feat/release-v2")
+    _commit(tmp_path, spec, V2_ADDED)
+    _commit(tmp_path, spec, V2_EDITED)
+    _git(tmp_path, "checkout", "--quiet", "--detach", base)
+    _git(tmp_path, "merge", "--quiet", "--no-ff", "--message", "merge", "feat/release-v2")
+    monkeypatch.chdir(tmp_path)
+    released_sets.main(["released_sets", base])
