@@ -137,11 +137,17 @@ def spec_parameters(role: Mapping[str, Any], engine: str) -> dict[str, Any]:
     spec = args.get("speculative_config") or {}
     if not spec:
         return {}
-    return {
+    result = {
         "method": str(spec.get("decoding_type", "")).lower(),
         "num_speculative_tokens": spec.get("max_draft_len"),
         "model": spec.get("speculative_model", ""),
     }
+    if result["method"] == "dspark":
+        # TRT-LLM samples DSpark drafts from the draft distribution only under rejection sampling.
+        result["draft_sample_method"] = (
+            "probabilistic" if spec.get("use_rejection_sampling") is True else "greedy"
+        )
+    return result
 
 
 def verifier(role: Mapping[str, Any], engine: str) -> Fact:

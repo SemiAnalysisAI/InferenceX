@@ -206,6 +206,39 @@ def test_tokenspeed_greedy_dspark_has_no_kimi_k31_curve(golden_dir: Path) -> Non
         )
 
 
+def trtllm_dspark(**config: Any) -> dict[str, Any]:
+    return {"roles": {"decode": {"args": {"speculative_config": {
+        "decoding_type": "DSpark", "max_draft_len": 4,
+        "speculative_model": "Inferact/Kimi-K3.1-Pro-DSpark", **config,
+    }}, "env": {}}}}
+
+
+def test_trtllm_dspark_rejection_sampling_selects_the_probabilistic_curve(
+    golden_dir: Path,
+) -> None:
+    curve = "kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block.yaml"
+    (golden_dir / curve).write_text(yaml.safe_dump({"kimi-k3.1-pro": {"thinking_on": {4: 3.46}}}))
+    recipe = trtllm_dspark(use_rejection_sampling=True)
+    environment = {**ENV, "MODEL_PREFIX": "kimik3.1"}
+    result = apply_native(
+        recipe, build_overrides(recipe, "dynamo-trt", environment, golden_dir=golden_dir)
+    )
+    assert result["roles"]["decode"]["env"] == {"TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS": "2.46"}
+
+
+@pytest.mark.parametrize("config", [{}, {"use_rejection_sampling": False}])
+def test_trtllm_dspark_without_rejection_sampling_has_no_kimi_k31_curve(
+    golden_dir: Path, config: dict[str, Any]
+) -> None:
+    with pytest.raises(
+        ValueError, match=r"No kimik3\.1 dspark golden curve .* draft sampling 'greedy'"
+    ):
+        build_overrides(
+            trtllm_dspark(**config), "dynamo-trt", {**ENV, "MODEL_PREFIX": "kimik3.1"},
+            golden_dir=golden_dir,
+        )
+
+
 @pytest.mark.parametrize("environment", [{"IS_AGENTIC": "0"}, {"SPEC_DECODING": "none"}])
 def test_tokenspeed_non_synthetic_runs_remove_forced_acceptance(
     tmp_path: Path, environment: dict[str, str]
