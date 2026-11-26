@@ -81,7 +81,6 @@ base:
         enable-prefix-caching: true
         tensor-parallel-size: 4
         numa-bind: true
-        gpu-memory-utilization: 0.92
         max-model-len: 1048576
         max-num-batched-tokens: 32768
         # Prefill CUDA graphs up to 8192 tokens; the default capture stops at 512.
@@ -103,7 +102,6 @@ zip_override_tp2_dram:
       args:
         tensor-parallel-size: 2
         max-num-seqs: [48, 48, 60, 72]
-        gpu-memory-utilization: 0.9
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":749000000000,"lazy_offload":true}}'
 
