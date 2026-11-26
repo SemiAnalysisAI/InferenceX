@@ -42,7 +42,9 @@ def golden_dir(tmp_path: Path) -> Path:
     (directory / "glm-5.3-nvfp4__mtp__native__default-default.yaml").write_text(yaml.safe_dump(glm))
     for name in ("probabilistic-block", "probabilistic-default"):
         kimi = {"kimi-k3": {"thinking_on": {3: 3.0}}, "collection": COLLECTION}
-        (directory / f"kimi-k3__dspark__kimi-k3-dspark__{name}.yaml").write_text(yaml.safe_dump(kimi))
+        (directory / f"kimi-k3__dspark__kimi-k3-dspark__{name}.yaml").write_text(
+            yaml.safe_dump(kimi)
+        )
     return directory
 
 
@@ -73,7 +75,10 @@ def test_a_drafting_eval_recipe_plans_the_gate_of_its_golden_curve(golden_dir):
     ("verify", "curve"),
     [
         ({}, "kimi-k3__dspark__kimi-k3-dspark__probabilistic-default"),
-        ({"rejection_sample_method": "block"}, "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block"),
+        (
+            {"rejection_sample_method": "block"},
+            "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
+        ),
     ],
     ids=["standard", "block"],
 )
@@ -161,8 +166,11 @@ def test_dynamo_vllm_data_parallel_workers_across_nodes_are_skipped(
         assert "only the leader's metrics" in gate["error"]
 
 
-def test_the_gate_runs_as_the_benchmark_stage_before_the_eval(tmp_path, golden_dir):
+@pytest.mark.parametrize("concurrency", [None, 8])
+def test_the_gate_runs_as_the_benchmark_stage_before_the_eval(tmp_path, golden_dir, concurrency):
     recipe = vllm_recipe(MTP3)
+    override = {} if concurrency is None else {"AL_GATE_CONCURRENCY": str(concurrency)}
+    recipe["benchmark"] = {"env": override}
     path = tmp_path / "recipe.yaml"
     path.write_text(yaml.safe_dump(recipe))
 
@@ -181,14 +189,13 @@ def test_the_gate_runs_as_the_benchmark_stage_before_the_eval(tmp_path, golden_d
             "AL_GATE_DATASET": "al_gate_dataset/speedbench_coding.jsonl",
             "AL_GATE_OUTPUT_DIR": "/logs", "THINKING_MODE": "thinking_on",
             "EVAL_FRAMEWORK": "lm-eval",
+            **override,
         },
     }  # fmt: skip
 
 
 @pytest.mark.parametrize("environment", [{"EVAL_AL_GATE": ""}, {"MODEL_PREFIX": "glm5.3"}])
-def test_an_eval_without_a_runnable_gate_is_submitted_unchanged(
-    tmp_path, golden_dir, environment
-):
+def test_an_eval_without_a_runnable_gate_is_submitted_unchanged(tmp_path, golden_dir, environment):
     path = tmp_path / "recipe.yaml"
     path.write_text(yaml.safe_dump(vllm_recipe(MTP3)))
 

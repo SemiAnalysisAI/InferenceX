@@ -449,6 +449,7 @@ override_c48:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
+      AL_GATE_CONCURRENCY: '8'
 override_c80:
   roles:
     agg:

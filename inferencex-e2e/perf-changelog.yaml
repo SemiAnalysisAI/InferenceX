@@ -13483,4 +13483,5 @@
     - "Reconcile the effective Hyperloom reference settings clarified after CI: C80 mem-fraction-static 0.87 and C24 hicache-size 298 GiB, replacing the supplied JSON values 0.88 and 200 GiB. Keep the original package inputs as provenance."
     - "Use TP1/EP1, concurrency 1/2/4/8/12/16 without KV offload and 24/48/80 with HiCache DRAM offload. Preserve per-point Hyperloom flags, admission, prefill chunks, decode graph shapes and cache settings. C8 uses one MTP step and two draft tokens; other points use three steps and four draft tokens."
     - "Select synthetic acceptance through the committed InferenceX golden curve, without hard-coded acceptance variables in the recipe; natural evals keep real verification. Pin the served model revision to bd6e49d9abfe0ce1da53a45593daaee83580035b."
+    - "Run the C48 natural acceptance gate at concurrency 8 instead of 64 to investigate its prefill GPU OOM, preserving all 80 prompts, thinking mode, sampling and golden AL. Other points retain the default gate concurrency 64."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5240

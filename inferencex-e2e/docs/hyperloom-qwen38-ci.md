@@ -73,6 +73,8 @@ I do not fix `default-chat-template-kwargs` to the original package's `enable_th
 
 I keep natural evals enabled. Eval-only launches remove synthetic acceptance and use real verification. Before trusting results I check the candidate image's effective draft precision, target/draft KV dtype, and the selected golden identity against current [contribution rules](../../CONTRIBUTING.md#draft-model-precision). The existing Qwen golden identity records default draft KV, whereas C24/C48/C80 explicitly request `fp8_e4m3`; I have not changed the recorded collection facts or claimed a new matching golden collection. I resolve that identity requirement with measured evidence or a compliant recipe adjustment before sign-off and reuse; I distinguish this approval requirement from launching a diagnostic sweep.
 
+C48 sets `benchmark.env.AL_GATE_CONCURRENCY: '8'` for its natural acceptance gate. The gate still sends all 80 SPEED-Bench prompts with the recorded thinking mode, sampling and golden AL. Other points use the default concurrency 64. The C48 performance benchmark remains at concurrency 48 for 3,600 seconds. The gate result records its effective concurrency so this diagnostic can be distinguished from the standard replay.
+
 ## Inspect the generated configuration on Linux
 
 I check out the PR branch and initialize its pinned srt-slurm dependency. From the repository root I run:

@@ -131,7 +131,7 @@ def test_the_gate_replays_the_golden_collection_and_reports_the_verdict(gate, af
     assert gate.document() == {
         "result_filename": "gate", "framework": "vllm", "eval_framework": None,
         "eval_suite": None, "curve": "testmodel_mtp", "thinking_mode": "thinking_on", "draft_tokens": 3, "golden_acceptance_length": 3.2,
-        "error": None, "report_only": True, **verdict,
+        "error": None, "report_only": True, "concurrency": 64, **verdict,
     }  # fmt: skip
     # In vllm bench serve's order (random.seed(0); random.shuffle), rendered client-side.
     sent = [json.loads(line) for line in (gate.raw / "prompts.jsonl").read_text().splitlines()]
@@ -149,6 +149,32 @@ def test_the_gate_replays_the_golden_collection_and_reports_the_verdict(gate, af
         "--extra-inputs": '{"temperature": 0.6, "top_k": 20}',
         "--dataset-sampling-strategy": "sequential",
     }  # fmt: skip
+
+
+def test_concurrency_override_preserves_the_prompts_and_golden_verdict(gate):
+    assert gate.run((1100, 2360), AL_GATE_CONCURRENCY="8") == 0
+
+    argv = gate.argv.read_text().splitlines()
+    assert argv[argv.index("--concurrency") + 1] == "8"
+    assert argv[argv.index("--request-count") + 1] == str(len(PROMPTS))
+    document = gate.document()
+    assert (document["concurrency"], document["golden_acceptance_length"], document["status"]) == (
+        8,
+        3.2,
+        "pass",
+    )
+    assert gate.tokenizer.calls == [
+        {"add_generation_prompt": True, "tokenize": False, "enable_thinking": True},
+    ] * len(PROMPTS)
+
+
+@pytest.mark.parametrize("value", ["", "0", "-1", "8.5", "invalid"])
+def test_invalid_concurrency_is_rejected_before_any_requests(gate, value):
+    with pytest.raises(BenchError, match="AL_GATE_CONCURRENCY"):
+        gate.run(AL_GATE_CONCURRENCY=value)
+
+    assert not gate.argv.exists()
+    assert gate.document()["status"] == "error"
 
 
 def test_failed_requests_make_the_measurement_an_error(gate):

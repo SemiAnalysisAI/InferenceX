@@ -62,7 +62,7 @@ def run(env: Mapping[str, str], runtime: Runtime, golden_dir: Path | None = None
         "draft_tokens": int(tokens) if tokens.isdecimal() else None,
         "golden_acceptance_length": None, "acceptance_length": None, "ratio": None,
         "status": "error", "error": None, "accepted_tokens": None, "verifications": None,
-        "report_only": True,
+        "report_only": True, "concurrency": None,
     }  # fmt: skip
     try:
         rc = _measure(env, runtime, document, golden_dir)
@@ -82,6 +82,13 @@ def _measure(
     if values["AL_GATE"] != "true":
         raise InputError("AL_GATE must be true to run the acceptance-length gate")
     tokens = inputs.parse_positive_int("AL_GATE_DRAFT_TOKENS", values["AL_GATE_DRAFT_TOKENS"])
+    override = env.get("AL_GATE_CONCURRENCY")
+    concurrency = (
+        inputs.parse_positive_int("AL_GATE_CONCURRENCY", override)
+        if override is not None
+        else speedbench.REPLAY_CONCURRENCY
+    )
+    document["concurrency"] = concurrency
     server = replay.server_url(env)
     # trtllm-serve serves Prometheus text at /prometheus/metrics; its /metrics is JSON.
     trtllm = env.get("SRTCTL_FRONTEND_TYPE") == "trtllm_serve"
@@ -137,7 +144,7 @@ def _measure(
         "--tokenizer", values["MODEL"], "--tokenizer-trust-remote-code",
         "--custom-dataset-type", "single_turn", "--input-file", str(raw / "prompts.jsonl"),
         "--dataset-sampling-strategy", "sequential", "--request-count", str(len(prompts)),
-        "--concurrency", str(speedbench.REPLAY_CONCURRENCY),
+        "--concurrency", str(concurrency),
         # JSON keeps each value's type; AIPerf guesses the types of key:value pairs.
         "--extra-inputs", json.dumps(mode["sampling"]),
         "--server-metrics", *metrics_urls, "--output-artifact-dir", str(raw / "aiperf_artifacts"),
