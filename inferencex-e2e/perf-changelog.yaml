@@ -13451,5 +13451,9 @@
   description:
     - "Update Qwen3.5-397B-A17B FP8 H200 SGLang AgentX HiCache points."
     - "Update the SGLang image from lmsysorg/sglang:nightly-dev-20261021-c1c287a4 to lmsysorg/sglang:nightly-dev-20261103-797af717."
+    - "TP8/EP1 points at concurrency 1, 2, 4, 8, 10, 12, 16, 20, 24, 32, 40, 48, 56 and 64 (adds 1, 40, 56 and 64), plus TP4/EP4 at 12."
     - "Drop the TP4/EP4 concurrency-8 point."
+    - "TP8 points other than concurrency 2 and 10 (base recipe) use per-point overrides with the FA3 attention backend and 4, 5 or 6 MTP draft steps by concurrency, and tune prefill-decode-interval, HiCache size (77 or 144 GB) and write policy, and max-mamba-cache-size at 64."
+    - "New agentic-fa3-variants.yaml holds the concurrency 1, 8, 12 and 16 points, which enable SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION; concurrency 8, 12 and 16 also use the MNNVL FlashInfer all-reduce fusion backend with prefill-decode-interval 48, 80 and 96."
+    - "Selected points enable SGLang's SGLANG_OPT_* and SGLANG_Q35MF_* environment optimizations; all of them exist in the pinned image. Stream interval stays 50."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5236
