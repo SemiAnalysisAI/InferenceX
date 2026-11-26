@@ -101,7 +101,7 @@ zip_override_tp2_dram:
       gpus: 2
       args:
         tensor-parallel-size: 2
-        max-num-seqs: [48, 48, 60, 72]
+        max-num-seqs: [48, 64, 80, 96]
         speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":749000000000,"lazy_offload":true}}'
 
@@ -109,5 +109,5 @@ zip_override_tp4_dram:
   roles:
     agg:
       args:
-        max-num-seqs: [64, 64, 96]
+        max-num-seqs: [80, 96, 112]
         kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1499000000000,"lazy_offload":true}}'
