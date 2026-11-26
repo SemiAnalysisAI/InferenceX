@@ -341,12 +341,8 @@ def _power_topology(aggregate: Mapping[str, Any]) -> tuple[int, int, int] | None
     if aggregate.get("is_multinode") is False:
         num_gpus = _gpu_count(aggregate.get("num_gpus"))
         return (0, 0, num_gpus) if disagg is False and num_gpus else None
-    prefill_gpus = _gpu_count(
-        aggregate.get("num_prefill_worker_gpu", aggregate.get("num_prefill_gpu"))
-    )
-    decode_gpus = _gpu_count(
-        aggregate.get("num_decode_worker_gpu", aggregate.get("num_decode_gpu"))
-    )
+    prefill_gpus = _gpu_count(aggregate.get("num_prefill_gpu"))
+    decode_gpus = _gpu_count(aggregate.get("num_decode_gpu"))
     if (
         not isinstance(disagg, bool)
         or prefill_gpus is None

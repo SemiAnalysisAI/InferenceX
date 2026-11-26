@@ -98,16 +98,6 @@ def bind_memory(
             options.pop(key, None)
         options["mem"] = f"{next(iter(limits[role]))}M"
     environment = recipe.setdefault("benchmark", {}).setdefault("env", {})
-    if environment.pop("INFERENCEX_COUNT_RESERVED_SERVING_GPUS", None) == "1":
-        roles = recipe["roles"]
-        if set(roles) != {"prefill", "decode"} or capacity != gpus_per_node:
-            raise ValueError(
-                "Counting reserved serving GPUs requires full-node prefill and decode pools"
-            )
-        for role, spec in roles.items():
-            if not isinstance(spec["nodes"], int):
-                raise ValueError("Counting reserved serving GPUs requires separate worker pools")
-            environment[f"INFERENCEX_{role.upper()}_RESERVED_GPUS"] = str(spec["nodes"] * capacity)
     environment["INFERENCEX_WORKER_MEMORY_MIB"] = str(sum(capacities.values()))
     if "decode" in capacities:
         environment["INFERENCEX_DECODE_MEMORY_MIB"] = str(capacities["decode"])
