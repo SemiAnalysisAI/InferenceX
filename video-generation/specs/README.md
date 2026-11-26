@@ -8,6 +8,13 @@
 
 `wan22.yaml` defines the silent Wan2.2-T2V-A14B text-to-video workload: 832×480, 81 frames at 16 fps, 40 steps, guidance 4.0 for the high-noise expert and 3.0 for the low-noise expert, boundary 0.875, flow shift 12 and an empty negative prompt. vLLM-Omni takes every control per request. SGLang does not read the flow shift or the boundary from a request, so its server refuses to start unless `--flow-shift` and the checkpoint's `model_index.json` `boundary_ratio` equal the spec. SGLang's requests also set `x264_preset: ultrafast` and `output_compression: 63` (CRF 18), the libx264 encoding vLLM-Omni v0.32.0 delivers by default, because SGLang's own default is `fast` at CRF 25. `release-v1` crosses four prompts with five seeds (one warmup); `smoke` runs the first case with the same controls.
 
+A released set never changes (`../STANDARD.md` rule 1).
+A set's plan holds the file's `model` and `generation` blocks, and its `fairness` block in schema version 2, so editing one of them changes every set in that file.
+A release that changes only prompts, seeds or run counts adds the next `release-v<N>` set to the same file.
+A release that changes the model revision, the denoising steps, the resolution or any other `generation` or `fairness` value adds a new spec file whose first set is `release-v1`.
+`h3-v2.yaml` has that shape: the model of `h3.yaml` with another duration, frame count and step count.
+`released_sets.py` compares each released set with the first commit that held it, over the history of `main` since its `RULE_START`.
+
 `h3.yaml` and `wan22.yaml` use schema version 1 and `h3-v2.yaml` uses schema version 2.
 Version 2 adds a `warmup_case` to every set and a `fairness` block that seals the schedule, the requested libx264 ultrafast/CRF 18/yuv420p plus AAC encoding, the disabled cross-request conditioning cache, and the official Diffusers source, model and RNG candidate.
 The loader enforces the version 2 policy once: 20 measured cases with distinct prompt text, one warmup run on a disjoint prompt, a schedule that matches the request, and encoding audio that matches generation.

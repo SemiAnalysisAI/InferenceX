@@ -11,7 +11,8 @@ from infx.srt_slurm.workload import NATIVE_TELEMETRY_BLOCK, SHARED_BLOCKS, TELEM
 ROOT = Path(__file__).resolve().parents[2]
 VIDEO_MODEL = "example/video-model"
 VIDEO_SPEC = "fixture.yaml"
-VIDEO_SET = "fixture-set"
+VIDEO_SET = "release-v1"
+VIDEO_IMAGE = f"example/video@sha256:{'a' * 64}"
 VIDEO_PORT = "30283"
 
 
@@ -87,7 +88,7 @@ VIDEO_RECIPE = "video/agg-tp2.yaml"
 def video_entry(recipe: str = VIDEO_RECIPE) -> dict:
     """A master entry with one 2-GPU video point of ``VIDEO_SPEC``'s set served by ``recipe``."""
     return {
-        "image": "example/video:1", "model": VIDEO_MODEL, "model-prefix": "h3",
+        "image": VIDEO_IMAGE, "model": VIDEO_MODEL, "model-prefix": "h3",
         "precision": "bf16", "framework": "sglang", "runner": "cluster:fixture",
         "multinode": False, "srt-recipe-dir": "fixture",
         "scenarios": {"video-generation": [{"spec": VIDEO_SPEC, "set": VIDEO_SET, "search-space": [
