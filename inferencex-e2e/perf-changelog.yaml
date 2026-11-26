@@ -13456,3 +13456,11 @@
     - "TEP2 prefill: MTP max_draft_len 1, max_num_tokens 16384, TWOSHOT allreduce, 64 NCCL channels, Mamba branch snapshots, breakable prefill CUDA graphs to 16384 tokens and shortest-uncached-first context scheduling. TEP8 decode: TRTLLM MoE backend with MoE TP2 x EP4, max_num_tokens 896 (TEP16: EP8), and a 4194304-token GEN KV-transfer buffer; most TEP decode points admit by priority (waiting_queue_max_wait_s 60 or 120) and defer generation-only KV release. DEP8 decode uses the CUTEDSL MoE backend with attention DP and NIXL agent bounce buffers on both roles."
     - "Frontend: Dynamo KV router with 14400 s session affinity on the first decode node and prefill by KV with conversation affinity; the AgentX client runs on the last decode node. Decode workers on the nine points that admit by priority advertise the KV router with the output_length_prediction request classifier (benchmarks/multi_node/srt-slurm-recipes/configs/dynamo-router-policy-output-length.yaml, mounted at /configs; ai-dynamo/dynamo#18940), and the frontend loads the same policy file so it can install the classifier, which forwards each request's predicted reply length as its TensorRT-LLM priority (ai-dynamo/dynamo#18772), replacing trtllm-serve's output_length_prediction; 2P1D conc 192, 3P2D conc 456 and 512 and 4P1D DEP8 conc 840 keep FCFS admission and route decode by least-loaded."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5147
+
+- config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-agg
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg
+  description:
+    - "Rerun the unchanged MiniMax-M3.1-Flash GB200 Dynamo-vLLM AgentX configs to collect measured GPU and Grace CPU power; the published curve (2026-11-01) predates default-on multinode power collection and carries no power fields."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4863
+  scenario-type: [agentic-coding]
