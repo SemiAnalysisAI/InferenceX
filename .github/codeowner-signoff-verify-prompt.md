@@ -25,6 +25,10 @@ configs, and the linked recipe yourself. Be rigorous and specific. The checks en
 the merge standard in `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md`. Read it in the checked-out
 default branch. It is the source of truth if wording here and there ever drifts.
 
+Check only what the checklist and the checks below explicitly require. Do not invent
+requirements, coverage tests, or evidence standards they do not state, and never FAIL or
+WARN on a concern outside them.
+
 Read the exact sign-off body first (especially its "Additional detail section").
 The sign-off was posted as a ${SIGNOFF_KIND}, so fetch it with:
 ```bash
@@ -192,12 +196,6 @@ minimum or old failed lanes. A row is materially weaker when
 and the additional detail section gives no explanation backed by a rerun. Name the task,
 topology, both scores, and run links. When `cohort_scope` is `none` or the section
 failed, find peers with `signoff_facts evals` and name how they differ.
-
-### (c) The eval exercised the changed path
-For a conditional backend or kernel change, configuration selection is not runtime
-dispatch. Check the pinned engine's eligibility and fallback guards and the assessed
-run's server logs. An eval covers the change only when its logs show that path ran; a
-concurrency label or server argument alone is not proof. FAIL when no eval covers it.
 
 ## Check 3 — Production-useful recipe linked, MERGED, AND complete
 APPLICABILITY. Read this first. The deciding factor is whether a serving setting
@@ -1148,6 +1146,8 @@ single terse line. Rules:
   The publisher alone inserts them when Check 14 is WARN, including an overall
   REJECTED verdict with a Pareto warning.
   Spend words only on the checks that fail or warn.
+- Be SUCCINCT. No fluff. A FAIL or WARN row is the root issue and the fix in one or two
+  short sentences with a link; a PASS or N/A row is a few words.
 - State conclusions, don't narrate your process. No multi-paragraph explanations, no
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
   run/recipe instead of describing it.
