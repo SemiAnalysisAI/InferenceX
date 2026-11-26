@@ -45,7 +45,7 @@ kimik31-r10-1p1d:
           - DECODE_CPU_DRAM_GB=1799
 
 kimik31-r10-1p2d:
-  image: yukiozzz/vllm-openai-rocm@sha256:92b663747ca8104cb7f5d0e908e38238865ae571f02dcbb21ead2228fe12b877
+  image: yukiozzz/vllm-openai-rocm@sha256:7e871297ebe710e62092a16f59b7f20e1c0d1c30eb71e576d0fd7bc450d15055
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds
@@ -53,7 +53,7 @@ kimik31-r10-1p2d:
   framework: vllm
   router:
     name: vllm-router
-    version: 0.1.17  # Supports PD request-load routing with generic session affinity.
+    version: 0.1.17
   kv-p2p-transfer: moriio
   multinode: true
   disagg: true
@@ -68,7 +68,7 @@ kimik31-r10-1p2d:
         kv-offloading: dram
         kv-offload-backend:
           name: umbp
-        srt-recipe: disagg-r10-1p2d.yaml
+        srt-recipe: disagg-shardq576-1p2d.yaml
         prefill:
           num-worker: 1
           tp: 8
@@ -77,7 +77,7 @@ kimik31-r10-1p2d:
           dp-attn: false
           additional-settings:
           - TOTAL_CPU_DRAM_GB=1799
-          - K31_CLEAN_RUN_ID=k31-di-lmhead-1p2d-k4-c64-1124
+          - K31_CLEAN_RUN_ID=k31-shardq576-1p2d-c64-1126
           - K31_MODEL_METADATA_MANIFEST=/infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/k31-pro-metadata-6d0a0202.json
           - MODEL_PATH=/var/lib/hf-hub-cache/models--moonshotai--Kimi-K3.1-Pro/snapshots/6d0a0202956796543364d666ab19c6ad1a494ee1
         decode:
