@@ -13484,3 +13484,14 @@
     - "Aggregated: TP4 at c56 and c76 (170 and 195 GB per-rank HiCache) and two-node TP8 at c8, c15, c16, c21, c26 and c32, replacing TP4 c46 and c50 and TP8 c1 and c36."
     - "Disaggregated: 3P4D at c672, 1P2D at c176 and 1P3D at c192 with decode-side FlashInfer autotuning disabled, replacing 1P2D c160 and c224, 1P3D c224, 1P4D c32, c56 and c112, 1P5D c120 and 2P3D c352."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5143
+
+- config-keys:
+    - musespark-fp4-gb300-dynamo-trt-agentic-dflash2-disagg
+    - musespark-fp4-gb300-dynamo-trt-agentic-dflash2-agg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GB300 AgentX recipes for Muse-Spark-Open NVFP4 with Dynamo and TensorRT-LLM, using the released DFlash2 draft with seven draft tokens, rejection sampling, and FP8 KV cache."
+    - "Use TP4/EP4 prefill with TP4/EP4 or TP8/EP8 decode for disaggregated serving, with Mooncake Store or native host DRAM for prefix caching. The aggregated recipe uses TP8/EP8."
+    - "Use the checkpoint chat template, Dynamo KV routing, golden acceptance for replay, and iteration and KV-cache metrics on every serving role."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
