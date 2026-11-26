@@ -88,7 +88,7 @@ def _validate_kv_offload_env(
 def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, str]:
     """Derive parallelism fields, GPU count, TP, EP and DP-attention from ``env``.
 
-    Multinode runs sum the prefill and decode workers. Raises SystemExit on invalid shapes.
+    Multinode runs sum the two serving pools. Raises SystemExit on invalid shapes.
     """
     is_multinode = _env_bool(env, "IS_MULTINODE")
     tp = _env_int(env, "TP", 1)
@@ -136,7 +136,6 @@ def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, s
         raise SystemExit("PREFILL_HARDWARE and DECODE_HARDWARE must be specified together.")
     num_prefill_gpu = prefill_num_workers * _required_gpu_count(env, "PREFILL_GPUS_PER_WORKER")
     num_decode_gpu = decode_num_workers * _required_gpu_count(env, "DECODE_GPUS_PER_WORKER")
-    num_gpus = num_prefill_gpu + num_decode_gpu
     decode = decode.for_decode(num_decode_gpu)
     tp = prefill.tp + decode.tp
     ep = max(prefill.ep, decode.ep)
@@ -156,6 +155,16 @@ def _gpu_shape(env: Mapping[str, str]) -> tuple[dict[str, Any], int, int, int, s
     if prefill_hardware:
         fields["prefill_hw"] = prefill_hardware
         fields["decode_hw"] = decode_hardware
+    if "INFERENCEX_PREFILL_RESERVED_GPUS" in env or "INFERENCEX_DECODE_RESERVED_GPUS" in env:
+        for role in ("prefill", "decode"):
+            worker_key = f"num_{role}_gpu"
+            name = f"INFERENCEX_{role.upper()}_RESERVED_GPUS"
+            reserved = _required_gpu_count(env, name)
+            if not 0 < fields[worker_key] <= reserved:
+                raise SystemExit(f"{name} must cover a nonempty worker pool")
+            fields[f"num_{role}_worker_gpu"] = fields[worker_key]
+            fields[worker_key] = reserved
+    num_gpus = fields["num_prefill_gpu"] + fields["num_decode_gpu"]
     return fields, num_gpus, tp, ep, dp_attention
 
 

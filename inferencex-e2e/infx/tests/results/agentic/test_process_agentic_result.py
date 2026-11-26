@@ -672,6 +672,30 @@ def test_processor_serializes_shared_expert_gpus(tmp_path: Path):
     assert agg["num_gpus"] == 4
 
 
+def test_multinode_processor_normalizes_throughput_by_reserved_serving_gpus(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "IS_MULTINODE": "true",
+            "DISAGG": "true",
+            "PREFILL_NUM_WORKERS": "2",
+            "PREFILL_GPUS_PER_WORKER": "2",
+            "PREFILL_PP_SIZE": "2",
+            "DECODE_NUM_WORKERS": "1",
+            "DECODE_GPUS_PER_WORKER": "8",
+            "DECODE_TP": "8",
+            "INFERENCEX_PREFILL_RESERVED_GPUS": "8",
+            "INFERENCEX_DECODE_RESERVED_GPUS": "8",
+        },
+    )
+    assert (agg["num_gpus"], agg["num_prefill_gpu"], agg["num_decode_gpu"]) == (16, 8, 8)
+    assert (agg["num_prefill_worker_gpu"], agg["num_decode_worker_gpu"]) == (4, 8)
+    per_gpu = agg["request_metrics"]["throughput"]["per_gpu"]
+    assert per_gpu["total_tput_tps"] == pytest.approx(16.99695)
+
+
 def test_processor_aggregates_full_response_itl_and_interactivity(tmp_path: Path):
     result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"

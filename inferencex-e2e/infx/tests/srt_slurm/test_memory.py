@@ -80,6 +80,30 @@ def test_colocated_roles_reserve_enough_nodes_for_both_roles():
     assert result["benchmark"]["env"]["INFERENCEX_WORKER_MEMORY_MIB"] == "16000"
 
 
+def test_agentx_reserved_gpu_counts_exclude_dedicated_client_node():
+    item = recipe(
+        {"prefill": {"nodes": 5, "gpu_indices": [0, 2]}, "decode": {"nodes": 2}},
+        resources={"gpus_per_node": 4},
+        benchmark={
+            "type": "custom",
+            "command": "true",
+            "placement": {"node": "dedicated"},
+            "env": {"INFERENCEX_COUNT_RESERVED_SERVING_GPUS": "1"},
+        },
+    )
+    result = bind_memory(
+        item, 8000, 4, {"prefill": WorkerResources(5, 2), "decode": WorkerResources(2, 4)},
+    )
+    assert result["roles"]["prefill"]["gpus"] == 2
+    assert result["roles"]["prefill"]["gpu_indices"] == [0, 2]
+    assert result["benchmark"]["env"] == {
+        "INFERENCEX_PREFILL_RESERVED_GPUS": "20",
+        "INFERENCEX_DECODE_RESERVED_GPUS": "8",
+        "INFERENCEX_WORKER_MEMORY_MIB": "36000",
+        "INFERENCEX_DECODE_MEMORY_MIB": "16000",
+    }
+
+
 @pytest.mark.parametrize("engine", ["sglang", "trtllm"])
 def test_dep16_worker_gets_one_full_budget_on_each_hgx8_node(engine):
     result = bind_memory(

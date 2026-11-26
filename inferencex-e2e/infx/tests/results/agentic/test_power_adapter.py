@@ -14,6 +14,19 @@ import pytest
 from infx.tests.results.power.test_aggregate_power_multinode import PRODUCER_SHA, build_package
 
 
+def test_power_topology_uses_worker_gpus_when_serving_reservation_is_reported():
+    from infx.results.agentic.power_adapter import _power_topology
+
+    assert _power_topology({
+        "is_multinode": True,
+        "disagg": True,
+        "num_prefill_gpu": 20,
+        "num_decode_gpu": 8,
+        "num_prefill_worker_gpu": 10,
+        "num_decode_worker_gpu": 8,
+    }) == (10, 8, 0)
+
+
 @pytest.mark.parametrize("require_power", [False, True])
 @pytest.mark.parametrize("failure", [None, "samples_csv_missing", "agentic_gpu_topology_invalid",
                                      "producer_commit_mismatch"])

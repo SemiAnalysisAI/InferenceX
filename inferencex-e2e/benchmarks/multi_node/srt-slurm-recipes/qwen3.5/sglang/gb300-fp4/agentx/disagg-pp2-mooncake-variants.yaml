@@ -296,6 +296,7 @@ base:
         disaggregation-decode-extra-slots: 96
   benchmark:
     env:
+      INFERENCEX_COUNT_RESERVED_SERVING_GPUS: '1'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
       AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'

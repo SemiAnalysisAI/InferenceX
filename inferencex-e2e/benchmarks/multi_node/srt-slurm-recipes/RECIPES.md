@@ -47,6 +47,8 @@ Recipes use `schema: 2`, `engine`, and `roles`. The master config supplies `num-
 
 Keep engine parallelism settings consistent with the master resource request. The launcher executes the bound recipe, applies GPU-proportional DRAM limits to its inference-worker steps. For aggregate recipes use `roles.agg`; `roles.decode.nodes: colocate` places both roles in a shared node pool. The scheduler node count reads the recipe’s existing worker node reservations and includes any auxiliary nodes.
 
+For AgentX recipes that reserve whole GPU nodes in separate prefill and decode pools, set `benchmark.env.INFERENCEX_COUNT_RESERVED_SERVING_GPUS: '1'` to normalize throughput by the GPU capacity of those pools, including idle GPUs on serving nodes. Dedicated infrastructure nodes are excluded and power validation uses the GPUs assigned to workers.
+
 All referenced recipes must be checked in: srt-slurm 2 ships curated examples instead of the historical `recipes/` archive. The initial migration restores 204 previously external recipes and two still-referenced AgentX recipes from InferenceX history. Master-config paths follow the layout above; existing override selectors are preserved.
 
 ## Single-node parallelism validation
