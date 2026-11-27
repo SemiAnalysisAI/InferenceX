@@ -1,0 +1,201 @@
+schema: 2
+
+base:
+  name: dsv41flash-fp4-gb200-tokenspeed-agentic-dspark
+  identity:
+    model:
+      revision: 314113f8a7dadb388215396ba5fbee2c610a04d6
+    container: {}
+    frameworks:
+      tokenspeed: 0.1.1.post20261127
+      tokenspeed-kernel: 0.1.5.post20261127
+      tokenspeed-engine: 0.1.1.post20261127
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  slurm:
+    time_limit: '6:00:00'
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  frontend:
+    type: smg
+    enable_multiple_frontends: false
+    args:
+      reasoning-parser: deepseek_v41
+      tool-call-parser: deepseek_v41
+      # TokenSpeed's own launcher (ts serve) starts smg with these; srtctl adds none of them.
+      policy: passthrough
+      disable-worker-overload-protection: true
+      idle-connection-timeout-secs: 0
+      header-read-timeout-secs: 0
+      max-concurrent-requests: 0
+      request-timeout-secs: 14400
+      disable-circuit-breaker: true
+      disable-retries: true
+      disable-load-monitoring: true
+      tokenizer-cache-enable-l0: true
+      tokenizer-cache-enable-l1: true
+      log-level: warn
+      # A subagent request carries its root session's X-Correlation-ID as X-Dynamo-Parent-Session-ID.
+      routing-key-headers: [x-dynamo-parent-session-id, x-correlation-id]
+      # Pins every request of a routing key to one attention-DP rank of the grouped worker.
+      grouped-dp-sticky: hash
+  engine: tokenspeed
+  setup_script: tokenspeed-nightly.sh
+  environment:
+    # Enroot needs these before container creation because the base image omits them.
+    NVIDIA_VISIBLE_DEVICES: all
+    NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    PYTHONNOUSERSITE: '1'
+    PYTHONUNBUFFERED: '1'
+    PYTHONSAFEPATH: '1'
+    NO_COLOR: '1'
+    TOKENSPEED_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-nightly-v0.1.1.post20261127/tokenspeed-0.1.1.post20261127-py3-none-any.whl#sha256=5466dcbef24e16c5a6710d5a35b9b2338ba3253a2ab03e154d24a63e2c524bec
+    TOKENSPEED_KERNEL_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-kernel-nightly-v0.1.5.post20261127-cu130/tokenspeed_kernel-0.1.5.post20261127-cp312-cp312-manylinux_2_28_aarch64.whl#sha256=39a9d444770445a6a2e4c9ec2f90d9250089a35fab855eb4d804a2e4d7e7319d
+    TOKENSPEED_ENGINE_WHEEL_URL: https://github.com/lightseekorg/whl/releases/download/tokenspeed-engine-v0.1.1.post20261127/tokenspeed_engine-0.1.1.post20261127-cp312-abi3-manylinux_2_28_aarch64.whl#sha256=b73ca536cf082e26d90350503209f8390e3756f7aa31047a2b6b7a77a93a71d7
+    TOKENSPEED_SCHEDULER_VERSION: 0.1.58
+    TOKENSPEED_FLASHINFER_VERSION: 0.7.5
+    TOKENSPEED_CUDA_VERSION: '13.0'
+  roles:
+    agg:
+      nodes: 1
+      env:
+        PYTORCH_CUDA_ALLOC_CONF: per_process_memory_fraction:0.95
+        TOKENSPEED_PREFILL_INDEX_LOGITS_MB: '2048'
+      args:
+        served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
+        revision: 314113f8a7dadb388215396ba5fbee2c610a04d6
+        trust-remote-code: true
+        language-model-only: true
+        reasoning-parser: deepseek_v41
+        max-model-len: 1048576
+        attn-tp-size: 1
+        data-parallel-size: 4
+        ep-size: 4
+        pipeline-parallel-size: 1
+        moe-backend: mega_moe
+        engram-host-table: true
+        gpu-memory-utilization: 0.90
+        chunked-prefill-size: 32768
+        max-prefill-tokens: 32768
+        prefill-graph-max-tokens: 16384
+        speculative-algorithm: DSPARK
+        speculative-num-steps: 5
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 6
+        # The connector selects greedy sampling only for synthetic throughput.
+        sampling-backend: flashinfer
+        # Four ranks x (80 GB Host L2 + 16 GB retraction snapshot) + 189 GiB shared Engram fits in 840 GiB node RAM.
+        kvstore-size: 80
+        retraction-snapshot-host-gb: 16
+        prefill-single-round: true
+        enable-metrics: true
+        metrics-host: 0.0.0.0
+  sbatch_directives:
+    mem: '0'
+    exclusive: ''
+  srun_options:
+    mem: '0'
+    container-remap-root: ''
+  benchmark:
+    env:
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'tokenspeed:'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      KV_OFFLOADING: dram
+
+override_dep4_c128:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 48
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        prefill-attempt-interval: 160
+        prefill-any-attempt-interval: 640
+  benchmark:
+    env:
+      CONC: '128'
+
+override_dep4_c176:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 64
+        cudagraph-capture-sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        prefill-attempt-interval: 160
+        prefill-any-attempt-interval: 640
+  benchmark:
+    env:
+      CONC: '176'
+
+override_dep4_c240:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 128
+        max-cudagraph-capture-size: 40
+        prefill-attempt-interval: 120
+        prefill-any-attempt-interval: 240
+  benchmark:
+    env:
+      CONC: '240'
+
+override_dep4_c256:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 160
+        max-cudagraph-capture-size: 48
+        prefill-attempt-interval: 96
+        prefill-any-attempt-interval: 192
+  benchmark:
+    env:
+      CONC: '256'
+
+override_dep4_c288:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 192
+        max-cudagraph-capture-size: 72
+        prefill-attempt-interval: 80
+        prefill-any-attempt-interval: 80
+  benchmark:
+    env:
+      CONC: '288'
+
+override_dep4_c352:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 256
+        max-cudagraph-capture-size: 88
+        prefill-attempt-interval: 56
+        prefill-any-attempt-interval: 56
+  benchmark:
+    env:
+      CONC: '352'
+
+override_dep4_c448:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 320
+        max-cudagraph-capture-size: 112
+        prefill-attempt-interval: 48
+        prefill-any-attempt-interval: 48
+  benchmark:
+    env:
+      CONC: '448'
+
+override_dep4_c512:
+  roles:
+    agg:
+      args:
+        max-num-seqs: 384
+        max-cudagraph-capture-size: 144
+        prefill-attempt-interval: 32
+        prefill-any-attempt-interval: 32
+  benchmark:
+    env:
+      CONC: '512'
