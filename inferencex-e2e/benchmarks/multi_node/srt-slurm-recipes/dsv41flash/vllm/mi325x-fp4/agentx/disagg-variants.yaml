@@ -51,8 +51,6 @@ base:
   roles:
     prefill:
       nodes: 1
-      workers: 1
-      gpus: 2
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         tensor-parallel-size: 1
@@ -88,8 +86,6 @@ base:
         PYTHONUNBUFFERED: '1'
     decode:
       nodes: 1
-      workers: 1
-      gpus: 4
       args:
         served-model-name: deepseek-ai/DeepSeek-V4.1-Flash
         tensor-parallel-size: 4
