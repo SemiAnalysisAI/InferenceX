@@ -509,3 +509,114 @@ override_4p_dep4_dep16_si20_linker_x1126_wm95:
         MOONCAKE_GLOBAL_SEGMENT_SIZE: 200gb
       args: *gb300-dep4-linker-prefill-args
     decode: *gb300-dep16-decode
+
+# The x1126 point with store event and sampled key-access logging. The master
+# publishes its per-object events on a local socket; a subscriber logs a
+# 1-in-64 key sample (same rule as the prefill workers) plus sequence gaps.
+override_4p_dep4_dep16_si20_linker_x1126_ka:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker-x1126-ka
+  services: &gb300-x1126-ka-services
+    - name: etcd
+      type: etcd
+      placement:
+        node: infra
+    - name: mooncake-master
+      type: mooncake-master
+      preamble: |
+        export PATH="$(dirname "$(python3 -c 'import sys; print(sys.executable)')"):$PATH"
+        if ! command -v mooncake_master >/dev/null; then
+          MC_DIR=$(python3 -c 'import mooncake, os; print(os.path.dirname(mooncake.__file__))')
+          if [ -x "$MC_DIR/mooncake_master" ]; then
+            export PATH="$MC_DIR:$PATH"
+          else
+            pip_install=(python3 -m pip install)
+            if python3 -m pip install --help 2>/dev/null | grep -q -- --break-system-packages; then
+              pip_install+=(--break-system-packages)
+            fi
+            "${pip_install[@]}" --quiet --no-cache-dir --no-deps --force-reinstall \
+              "mooncake-transfer-engine-cuda13==$(python3 -c 'import importlib.metadata as m; print(m.version("mooncake-transfer-engine-cuda13"))')"
+          fi
+        fi
+        command -v mooncake_master
+        cat > /tmp/kvev_sub.py <<'PY'
+        import re, time, zlib
+        import msgpack, zmq
+        sock = zmq.Context().socket(zmq.SUB)
+        sock.setsockopt(zmq.SUBSCRIBE, b"")
+        sock.setsockopt(zmq.RCVHWM, 0)
+        sock.connect("tcp://127.0.0.1:5557")
+        page = re.compile(r"[0-9a-f]{64}")
+        last, gaps, counts, t0 = None, 0, {}, time.time()
+        while True:
+            parts = sock.recv_multipart()
+            seq = int.from_bytes(parts[1], "big")
+            if last is not None and seq != last + 1:
+                gaps += seq - last - 1
+            last = seq
+            for ev in msgpack.unpackb(parts[-1], raw=False)[1]:
+                kind = ev.get("event_type")
+                counts[kind] = counts.get(kind, 0) + 1
+                key = ev.get("object_key") or ""
+                m = page.search(key)
+                if m and zlib.crc32(m.group().encode()) % 64 == 0:
+                    print(f"KVEV {kind} {ev.get('timestamp')} {key}", flush=True)
+            if time.time() - t0 >= 60:
+                print(f"KVEV_STATS seq={last} gaps={gaps} counts={counts}", flush=True)
+                t0 = time.time()
+        PY
+        python3 -u /tmp/kvev_sub.py &
+      args:
+        - --default_kv_lease_ttl=210000
+        - --eviction_high_watermark_ratio=0.985
+        - --eviction_ratio=0.01
+        - --rpc_thread_num=64
+        - --enable_kv_events
+        - --kv_events_bind_endpoint=tcp://*:5557
+        - --kv_events_backend_id=l3
+    - *gb300-x1126-decode-store
+    - <<: *gb300-x1126-decode-store
+      name: store-decode-1
+      args: ["--port", "8801"]
+      readiness:
+        port: 8801
+        timeout_seconds: 600
+    - <<: *gb300-x1126-decode-store
+      name: store-decode-2
+      args: ["--port", "8802"]
+      readiness:
+        port: 8802
+        timeout_seconds: 600
+    - <<: *gb300-x1126-decode-store
+      name: store-decode-3
+      args: ["--port", "8803"]
+      readiness:
+        port: 8803
+        timeout_seconds: 600
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  roles:
+    prefill:
+      nodes: 4
+      env:
+        <<: *gb300-linker-prefill-env
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 200gb
+        SGLANG_LINKER_ACCESS_LOG_MOD: "64"
+        SGLANG_LINKER_TOUCH_INTERVAL_S: "0"
+      args: *gb300-dep4-linker-prefill-args
+    decode: *gb300-dep16-decode
+
+# The same, re-probing device-hit pages in the store at most once a minute.
+override_4p_dep4_dep16_si20_linker_x1126_kb:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker-x1126-kb
+  services: *gb300-x1126-ka-services
+  roles:
+    prefill:
+      nodes: 4
+      env:
+        <<: *gb300-linker-prefill-env
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 200gb
+        SGLANG_LINKER_ACCESS_LOG_MOD: "64"
+        SGLANG_LINKER_TOUCH_INTERVAL_S: "60"
+      args: *gb300-dep4-linker-prefill-args
+    decode: *gb300-dep16-decode

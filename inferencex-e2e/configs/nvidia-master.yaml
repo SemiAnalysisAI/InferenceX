@@ -7008,6 +7008,53 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-x1126-wm95:
         prefill: { num-worker: 4, gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true }
         decode: { num-worker: 1, gpus-per-worker: 16, tp: 16, ep: 16, dp-attn: true }
 
+# The x1126 point with store event and sampled key-access logging.
+minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-x1126-ka:
+  image: lmsysorg/sglang-staging:nightly-cu134-20261121-5f5ef46-arm64-r1@sha256:d35bdb5d6e90fa9c3431f395eddd50d64a21f715e3b1ece32c2e306591a280e7
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.8.0.dev20261121" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  srt-recipe-dir: minimaxm31flash/sglang/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: linker-x1126-ka }
+        conc-list: [680]
+        srt-recipe: disagg-variants.yaml:override_4p_dep4_dep16_si20_linker_x1126_ka
+        prefill: { num-worker: 4, gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, gpus-per-worker: 16, tp: 16, ep: 16, dp-attn: true }
+
+# The same, re-probing device-hit pages in the store at most once a minute.
+minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-x1126-kb:
+  image: lmsysorg/sglang-staging:nightly-cu134-20261121-5f5ef46-arm64-r1@sha256:d35bdb5d6e90fa9c3431f395eddd50d64a21f715e3b1ece32c2e306591a280e7
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.8.0.dev20261121" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  srt-recipe-dir: minimaxm31flash/sglang/gb300-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: linker-x1126-kb }
+        conc-list: [680]
+        srt-recipe: disagg-variants.yaml:override_4p_dep4_dep16_si20_linker_x1126_kb
+        prefill: { num-worker: 4, gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true }
+        decode: { num-worker: 1, gpus-per-worker: 16, tp: 16, ep: 16, dp-attn: true }
 
 # H200 AgentX arm for DeepSeek-V4.1-Flash. Upstream marks h200 verified and says
 # the GB200 NVL4 TP4 layout becomes TP8 on 8-GPU nodes, so this is TP8.
