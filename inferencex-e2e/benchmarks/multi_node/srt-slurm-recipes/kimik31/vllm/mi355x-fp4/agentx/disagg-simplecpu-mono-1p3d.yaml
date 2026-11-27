@@ -24,7 +24,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:4fc768f2ac0133d3437257500be65c58f86bb80bc11be14cdc46001e62e7f7ab7
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:4fc768f2ac0133d3437257500be65c58f86b80bc11be14cdc46001e62e7f7ab7
   args:
     policy: kv_aware
     prefill-policy: kv_aware
@@ -46,7 +46,7 @@ engine:
   connector: moriio
 roles:
   prefill:
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:4fc768f2ac0133d3437257500be65c58f86bb80bc11be14cdc46001e62e7f7ab7
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:4fc768f2ac0133d3437257500be65c58f86b80bc11be14cdc46001e62e7f7ab7
     nodes: 1
     workers: 1
     gpus: 8
@@ -331,7 +331,7 @@ roles:
       KV_OFFLOAD_BACKEND: simplecpu
       DECODE_CPU_DRAM_GB: '0'
       VLLM_ROCM_USE_AITER_MOE: '1'
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:4fc768f2ac0133d3437257500be65c58f86bb80bc11be14cdc46001e62e7f7ab7
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:4fc768f2ac0133d3437257500be65c58f86b80bc11be14cdc46001e62e7f7ab7
 benchmark:
   env:
     AIPERF_BENCHMARK_GRACE_PERIOD: '30'

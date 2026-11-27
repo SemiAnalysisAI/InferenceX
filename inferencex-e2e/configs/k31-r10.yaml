@@ -183,7 +183,7 @@ kimik31-r10-2p3d-umbp:
           - DECODE_CPU_DRAM_GB=1799
 
 kimik31-r10-1p3d-simplecpu-mono:
-  image: yukiozzz/vllm-openai-rocm@sha256:4fc768f2ac0133d3437257500be65c58f86bb80bc11be14cdc46001e62e7f7ab7
+  image: yukiozzz/vllm-openai-rocm@sha256:4fc768f2ac0133d3437257500be65c58f86b80bc11be14cdc46001e62e7f7ab7
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds
