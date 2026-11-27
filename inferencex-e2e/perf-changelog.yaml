@@ -13507,3 +13507,10 @@
     - "Use native MTP and configure prefill HiCache and Mooncake DRAM storage for disaggregated serving."
     - "Pack two PP2 prefill workers onto each GB300 prefill node and place the c890 client on the last decode node."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5233
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the vLLM ROCm nightly image from f5d93296 to 5aea3057, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5270
