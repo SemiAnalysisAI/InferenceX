@@ -13486,6 +13486,29 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5143
 
 - config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-hicache-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Update Qwen3.5-397B-A17B FP8 H200 SGLang AgentX HiCache points."
+    - "Update the SGLang image from lmsysorg/sglang:nightly-dev-20261021-c1c287a4 to lmsysorg/sglang:nightly-dev-20261103-797af717."
+    - "TP8/EP1 points at concurrency 1, 2, 4, 8, 10, 12, 16, 20, 24, 32, 40, 48, 56 and 64 (adds 1, 40, 56 and 64), plus TP4/EP4 at 12."
+    - "Drop the TP4/EP4 concurrency-8 point."
+    - "TP8 points other than concurrency 2 and 10 (base recipe) use per-point overrides with the FA3 attention backend and 4, 5 or 6 MTP draft steps by concurrency, and tune prefill-decode-interval, HiCache size (77 or 144 GB) and write policy, and max-mamba-cache-size at 64."
+    - "New agentic-fa3-variants.yaml holds the concurrency 1, 8, 12 and 16 points, which enable SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION; concurrency 8, 12 and 16 also use the MNNVL FlashInfer all-reduce fusion backend with prefill-decode-interval 48, 80 and 96."
+    - "Selected points enable SGLang's SGLANG_OPT_* and SGLANG_Q35MF_* environment optimizations; all of them exist in the pinned image. Stream interval stays 50."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5236
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-pp2-mooncake
+  scenario-type: [agentic-coding]
+  description:
+    - "Add eight GB300 Qwen3.5-397B-A17B NVFP4 Dynamo-SGLang AgentX configurations with TP1/PP2 prefill and TP8, TP8/EP4, or DEP4 decode."
+    - "Use native MTP and configure prefill HiCache and Mooncake DRAM storage for disaggregated serving."
+    - "Pack two PP2 prefill workers onto each GB300 prefill node and place the c890 client on the last decode node."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5233
+
+- config-keys:
     - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
     - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
   scenario-type: [agentic-coding]
