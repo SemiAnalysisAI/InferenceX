@@ -1131,6 +1131,60 @@ def test_processor_normalizes_tokenspeed_metrics_without_inventing_cache_counter
     _assert_stable_server_metrics_schema(agg)
 
 
+@pytest.mark.parametrize("suffix", ["", "_total"])
+@pytest.mark.parametrize("with_host_cache", [True, False])
+def test_processor_normalizes_tokenspeed_prefix_cache_counters(
+    tmp_path: Path, suffix: str, with_host_cache: bool,
+) -> None:
+    result_dir = _write_fixture(tmp_path)
+    counters = {
+        "prompt_tokens": 1000.0,
+        "generation_tokens": 200.0,
+        "prefix_prompt_tokens": 1200.0,
+        "prefix_device_hit_tokens": 900.0,
+    }
+    if with_host_cache:
+        counters["prefix_host_hit_tokens"] = 120.0
+    metrics = {
+        f"tokenspeed:{stem}{suffix}": {
+            "type": "counter",
+            "series": [{"labels": {"dp_rank": "0"}, "stats": {"total": total}}],
+        }
+        for stem, total in counters.items()
+    }
+    (result_dir / "aiperf_artifacts/server_metrics_export.json").write_text(
+        json.dumps({"metrics": metrics}),
+    )
+
+    agg = _run_processor(result_dir, tmp_path / "out", env_overrides={"FRAMEWORK": "tokenspeed"})
+    server = agg["server_metrics"]
+    cache = server["cache"]
+
+    assert server["adapter"] == "tokenspeed"
+    _assert_stable_server_metrics_schema(agg)
+    assert server["tokens"]["prompt_total"] == 1000
+    assert server["tokens"]["generation_total"] == 200
+    assert cache["gpu_cache_hit_rate"] == pytest.approx(0.75)
+    assert cache["prefix_cache_hits"] == 900
+    assert cache["prefix_cache_queries"] == 1200
+    if with_host_cache:
+        assert cache["cpu_cache_hit_rate"] == pytest.approx(0.1)
+        assert cache["external_cache_hit_rate"] == pytest.approx(0.1)
+        assert cache["overall_cache_hit_rate"] == pytest.approx(0.85)
+        assert cache["external_prefix_cache_hits"] == 120
+        assert cache["external_prefix_cache_queries"] == 1200
+        assert cache["cached_tokens_by_source"] == {"device": 900, "host": 120}
+        assert server["tokens"]["prompt_by_source"]["computed"] == 180
+    else:
+        assert cache["cpu_cache_hit_rate"] is None
+        assert cache["external_cache_hit_rate"] is None
+        assert cache["overall_cache_hit_rate"] == pytest.approx(0.75)
+        assert cache["external_prefix_cache_hits"] is None
+        assert cache["external_prefix_cache_queries"] is None
+        assert cache["cached_tokens_by_source"] == {"device": 900}
+        assert server["tokens"]["prompt_by_source"]["computed"] == 300
+
+
 def test_processor_excludes_warmup_phase_records(tmp_path: Path):
     result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"
