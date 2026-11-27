@@ -13509,6 +13509,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5233
 
 - config-keys:
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-agg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16dcp16-disagg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Add Kimi-K3.1-Pro GB200 vLLM AgentX configs on vllm/vllm-openai:kimi-k31-arm64-cu135-7074371 with optimized parallel configurations."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5199
+
+- config-keys:
     - qwen3.5-fp8-mi355x-atom-agentic-mtp
   description:
     - "Update the ATOM image from rocm/atom-dev:nightly_202610181506 to nightly_202610291449."
