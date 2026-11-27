@@ -6,14 +6,14 @@ base:
     model: {}
     container: {}
     frameworks:
-      vllm: "0.1.dev25356+gdbbc9e310"
-      dynamo: "229be5cff1156859b0e3e43b598ee800b2f81ccc"
+      vllm: "0.1.dev25380+gf4c96184b"
+      dynamo: "ec06c09e7232e24f6faeec4069acdc61e4379916"
 
-  # Dynamo v1.7.0-kimi-k3.1-pro-dev.1, which registers the kimi_k31 model type.
+  # Dynamo main at ec06c09e72, built from source; it registers the kimi_k31 model type.
   dynamo:
     install: true
     source:
-      rev: "229be5cff1156859b0e3e43b598ee800b2f81ccc"
+      rev: "ec06c09e7232e24f6faeec4069acdc61e4379916"
 
   # srtctl's Tachometer exporters slow these workers, and InferenceX does not read their output.
   observability:
@@ -42,13 +42,14 @@ base:
       node: infra
     options:
       max_payload_mb: 32
-  # Every TP rank adds a 190 GB segment of host DRAM to the shared KV store.
+  # Every TP rank adds a 190 GB segment of host DRAM to the shared KV store. When the store is full the
+  # master evicts 2% of it per round.
   - name: mooncake-master
     type: mooncake-master
     args:
     - "--default_kv_lease_ttl=60000"
     - "--eviction_high_watermark_ratio=0.95"
-    - "--eviction_ratio=0.10"
+    - "--eviction_ratio=0.02"
     options:
       store_config:
         metadata_server: "P2PHANDSHAKE"
@@ -75,8 +76,6 @@ base:
     connector:
     dp_launch_mode: per_node
 
-  # Each worker is one B300 node (TP8 x DCP8). KV moves between nodes over AWS EFA: NIXL on its
-  # LIBFABRIC backend for prefill to decode, and the Mooncake store on its EFA transport.
   roles:
     prefill:
       nodes: 1
@@ -105,13 +104,14 @@ base:
           MC_SLICE_SIZE: "1048576"
           # A rank registers tens of GB of GPU KV cache; a 4 GiB cap fails that registration over EFA.
           MC_MAX_MR_SIZE: "68719476736"
-          MC_EFA_NIC_SELECTION: "local"
-          # The 16 EFA devices of a B300 node.
-          MC_MS_FILTERS: "rdmap86s0,rdmap87s0,rdmap101s0,rdmap102s0,rdmap116s0,rdmap117s0,rdmap131s0,rdmap132s0,rdmap146s0,rdmap147s0,rdmap161s0,rdmap162s0,rdmap176s0,rdmap177s0,rdmap191s0,rdmap192s0"
-          FI_EFA_ENABLE_SHM_TRANSFER: "0"
           NIXL_DISABLE_CUDA_ADDR_WA: "1"
           NCCL_P2P_LEVEL: "NVL"
+          # Cluster settings for the b300-dsxe EFA fabric, not Kimi or vLLM settings: do not copy them
+          # into recipes for other clusters.
+          MC_EFA_NIC_SELECTION: "local"
+          MC_MS_FILTERS: '@fabric.rdma-devices'
           MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+          FI_EFA_ENABLE_SHM_TRANSFER: "0"
           WITH_NVIDIA_PEERMEM: "0"
           NCCL_NET_PLUGIN: "none"
           NCCL_TUNER_PLUGIN: "ofi"
@@ -123,21 +123,27 @@ base:
           TOKENSPEED_MLA_FP16_PARTIALS: "0"
           VLLM_ENGINE_READY_TIMEOUT_S: "3600"
           NCCL_DEBUG: "WARN"
+          # Mooncake store: keep the tail pages a request loaded and drop the older tails it consumed.
+          VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
+          VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
         VLLM_ENABLE_GEMM_RS: "1"
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: "1024"
         DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: "1024"
       args:
-        kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false,"lookup_timeout_s":60,"store_tp_size":1,"store_chunk_size":4096}}]}}'
+        kv-transfer-config: &kv_transfer '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false,"lookup_timeout_s":60,"store_tp_size":1,"store_chunk_size":4096,"lookup_prefetch_limit":16,"lookup_prefetch_ttl_s":30}}]}}'
         served-model-name: "moonshotai/Kimi-K3.1-Pro"
         # Prefix matches use 1408-token units, the block size of the DSpark draft's sliding-window KV group
         # with 4 draft tokens, so partial prefix-cache hits stay enabled with that group (1536 at concurrency 1).
         prefix-match-unit: 1408
         load-format: "fastsafetensors"
         kv-cache-dtype: "fp8"
-        attention-config: '{"indexer_kv_dtype":"mxfp4"}'
+        attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
+        # The sparse indexer top-k uses deep_select on the prefill engines.
+        kernel-config: '{"sparse_indexer_topk_backend":"deep_select"}'
         mamba-ssm-cache-dtype: "float32"
         mamba-cache-dtype: "float32"
         gpu-memory-utilization: 0.97
+        numa-bind: true
         tensor-parallel-size: 8
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
@@ -172,6 +178,7 @@ base:
         mamba-ssm-cache-dtype: "float32"
         mamba-cache-dtype: "float32"
         gpu-memory-utilization: 0.95
+        numa-bind: true
         tensor-parallel-size: 8
         decode-context-parallel-size: 8
         dcp-comm-backend: "a2a"
@@ -208,200 +215,303 @@ base:
       AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
 
 # Concurrency 1: DSpark drafts 7 tokens; decode graphs cover 8 to 64 rows. With 7 draft tokens the draft's
-# sliding-window KV group has 1536-token blocks, so prefix matches use 1536-token units.
-override_1p1d:
+# sliding-window KV group has 1536-token blocks, so prefix matches use 1536-token units. Decode turns on the
+# image's small-batch decode kernels (the K31_* switches of the latency_specialized backend).
+override_1p1d_k7:
   roles:
-    prefill: &override_1p1d_prefill
+    prefill: &override_1p1d_k7_prefill
       nodes: 1
-      args: &override_1p1d_prefill_args
+      args: &override_1p1d_k7_prefill_args
         prefix-match-unit: 1536
         speculative-config: &spec_k7 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-    decode: &override_1p1d_decode
+    decode: &override_1p1d_k7_decode
       nodes: 1
-      args: &override_1p1d_decode_args
+      env:
+        <<: &ll_decode_env
+          K31_DCPV8: "1"
+          K31_E32: "1"
+          K31_EXP8: "1"
+          K31_EXP8W: "1"
+          K31_KDA8: "1"
+          K31_KDA8_LEAN: "12:1-8"
+          K31_KDA8_TABLE: "12:1-8;6:1"
+          K31_NP1: "1"
+          K31_NP1_MAX_REQS: "8"
+          K31_S20J: "1"
+          K31_S20OPU: "1"
+          K31_S20QAF: "1"
+          K31_S21E32W: "16"
+          K31_S21N8: "1"
+          K31_S21T8M: "1"
+          K31_S21T8T: "1"
+          K31_S21W40: "1"
+          K31_S22DG: "1"
+          K31_S22IP: "1"
+          K31_S22LC: "1"
+          K31_S22SP: "1"
+          K31_S22T56: "1"
+          K31_S23DR: "1"
+          K31_S23G4: "1"
+          K31_S23KS: "1"
+          K31_S24FM: "1"
+          K31_S31AR: "1"
+          K31_S31DG: "1"
+          K31_S31FC: "1"
+          K31_S31MK: "1"
+          K31_T8M: "1"
+          K31_T8T: "1"
+          K31_T8T_POLL0: "1"
+          K31_T8T_SD15: "1"
+          K31_T8T_VOTE: "1"
+          K31_TCS: "1"
+          K31_TCS45: "1"
+          K31_W112: "1"
+      args: &override_1p1d_k7_decode_args
         prefix-match-unit: 1536
         max-cudagraph-capture-size: 64
         compilation-config: '{"cudagraph_capture_sizes":[8,16,24,32,40,48,56,64]}'
         speculative-config: *spec_k7
 
-override_1p1d_eval:
+override_1p1d_k7_eval:
   roles:
     prefill:
-      <<: *override_1p1d_prefill
+      <<: *override_1p1d_k7_prefill
       args:
-        <<: *override_1p1d_prefill_args
+        <<: *override_1p1d_k7_prefill_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
     decode:
-      <<: *override_1p1d_decode
+      <<: *override_1p1d_k7_decode
       args:
-        <<: *override_1p1d_decode_args
+        <<: *override_1p1d_k7_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-override_1p2d:
+override_1p3d_k5:
   roles:
-    prefill: &override_1p2d_prefill
+    prefill: &override_1p3d_k5_prefill
       nodes: 1
-      args: &override_1p2d_prefill_args {}
-    decode: &override_1p2d_decode
-      nodes: 2
-      args: &override_1p2d_decode_args {}
+      args: &override_1p3d_k5_prefill_args
+        speculative-config: &spec_k5 '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f","method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+    decode: &override_1p3d_k5_decode
+      nodes: 3
+      env:
+        <<: *ll_decode_env
+        # Lays the small-batch decode kernels out for the 6 verify rows of 5 draft tokens.
+        K31_S30K: "6"
+      args: &override_1p3d_k5_decode_args
+        max-cudagraph-capture-size: 384
+        compilation-config: '{"cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,294,300,306,312,318,324,330,336,342,348,354,360,366,372,378,384]}'
+        speculative-config: *spec_k5
 
-override_1p2d_eval:
+override_1p3d_k5_eval:
   roles:
     prefill:
-      <<: *override_1p2d_prefill
+      <<: *override_1p3d_k5_prefill
       args:
-        <<: *override_1p2d_prefill_args
+        <<: *override_1p3d_k5_prefill_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
     decode:
-      <<: *override_1p2d_decode
+      <<: *override_1p3d_k5_decode
       args:
-        <<: *override_1p2d_decode_args
+        <<: *override_1p3d_k5_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-override_1p3d:
+# One prefill and two decode workers; DSpark drafts 4 tokens. Decode turns on the image's small-batch
+# decode kernels. Prefill turns on expert-parallel load balancing (EPLB, no redundant experts) and raises the
+# indexer logits budget to 4096 MB (VLLM_SPARSE_INDEXER_MAX_LOGITS_MB), as at 2P3D c264 and 4P5D c640.
+override_1p2d_k4:
   roles:
-    prefill: &override_1p3d_prefill
+    prefill: &override_1p2d_k4_prefill
       nodes: 1
-      args: &override_1p3d_prefill_args {}
-    decode: &override_1p3d_decode
-      nodes: 3
-      args: &override_1p3d_decode_args {}
+      env:
+        # Lighter host-side work per eager prefill step; same outputs.
+        K31_CPU1: "1"
+        VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "4096"
+      args: &override_1p2d_k4_prefill_args
+        enable-eplb: true
+        eplb-config: '{"window_size":1000,"step_interval":1500,"num_redundant_experts":0,"log_balancedness":true,"log_balancedness_interval":50}'
+    decode: &override_1p2d_k4_decode
+      nodes: 2
+      env: *ll_decode_env
+      args: &override_1p2d_k4_decode_args {}
 
-override_1p3d_eval:
+override_1p2d_k4_eval:
   roles:
     prefill:
-      <<: *override_1p3d_prefill
+      <<: *override_1p2d_k4_prefill
       args:
-        <<: *override_1p3d_prefill_args
+        <<: *override_1p2d_k4_prefill_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
     decode:
-      <<: *override_1p3d_decode
+      <<: *override_1p2d_k4_decode
       args:
-        <<: *override_1p3d_decode_args
+        <<: *override_1p2d_k4_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
 
-# Two prefill and three decode workers. Decode admits up to 128 requests at
-# 0.98 of GPU memory; graphs every 20 rows. The Mooncake store keeps the tail pages a request loaded and
-# drops older tails it consumed, and store lookups start before admission (up to 16 in flight), which cuts
-# store evictions and the prefill work they cause.
-override_2p3d_kv98:
+# Two prefill and three decode workers; DSpark drafts 5 tokens. Decode admits up to 128 requests at 0.98 of
+# GPU memory with graphs every 24 rows. Prefill keeps the base BF16 indexer logits and deep_select top-k and
+# raises the indexer logits budget to 4096 MB (VLLM_SPARSE_INDEXER_MAX_LOGITS_MB), so long-context prefill
+# chunks compute the logits in fewer calls; the frontend sends each request to the least-loaded decode
+# worker with no session affinity. Prefill turns on expert-parallel load balancing
+# (EPLB, no redundant experts): it moves experts between ranks every 1500 steps from the last 1000 steps' load,
+# so the busiest rank waits less; the computation is the same. Prefill and decode use 704-token prefix-match
+# units with sub-block sliding-window KV hits and the DSpark draft's tail hit rule, as at 4P5D c640. Decode
+# runs the MoE of steps above 128 rows on the image's TRT-LLM MoE engine (VLLM_K31_WIDE_ENGINES); steps of up
+# to 128 rows keep the default engine, and both engines use the checkpoint's MXFP4 weights.
+override_2p3d_k5:
   roles:
-    prefill: &override_2p3d_kv98_prefill
+    prefill: &override_2p3d_k5_prefill
       nodes: 2
-      env: &store_tail_cleanup
-        VLLM_MOONCAKE_STORE_KEEP_LOADED_TAIL: "1"
-        VLLM_MOONCAKE_STORE_DROP_CONSUMED_TAILS: "1"
-      args: &override_2p3d_kv98_prefill_args
-        kv-transfer-config: &kv_transfer_prefetch '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["LIBFABRIC"],"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false,"lookup_timeout_s":60,"store_tp_size":1,"store_chunk_size":4096,"lookup_prefetch_limit":16,"lookup_prefetch_ttl_s":30}}]}}'
-    decode: &override_2p3d_kv98_decode
+      env:
+        K31_CPU1: "1"
+        VLLM_SWA_FINE_GRAINED_HITS: "1"
+        VLLM_DFLASH_SWA_TAIL_HITS: "1"
+        VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "4096"
+      args: &override_2p3d_k5_prefill_args
+        speculative-config: *spec_k5
+        prefix-match-unit: 704
+        enable-eplb: true
+        eplb-config: '{"window_size":1000,"step_interval":1500,"num_redundant_experts":0,"log_balancedness":true,"log_balancedness_interval":50}'
+    decode: &override_2p3d_k5_decode
       nodes: 3
-      env: *store_tail_cleanup
-      args: &override_2p3d_kv98_decode_args
-        kv-transfer-config: *kv_transfer_prefetch
+      env:
+        VLLM_SWA_FINE_GRAINED_HITS: "1"
+        VLLM_DFLASH_SWA_TAIL_HITS: "1"
+        VLLM_K31_WIDE_ENGINES: "65-1024:trtllm"
+      args: &override_2p3d_k5_decode_args
+        prefix-match-unit: 704
         gpu-memory-utilization: 0.98
         max-num-seqs: 128
-        max-cudagraph-capture-size: 640
-        compilation-config: '{"cudagraph_capture_sizes":[20,40,60,80,100,120,140,160,180,200,220,240,260,280,300,320,340,360,380,400,420,440,460,480,500,520,540,560,580,600,620,640]}'
-
-override_2p3d_kv98_eval:
-  roles:
-    prefill:
-      <<: *override_2p3d_kv98_prefill
-      args:
-        <<: *override_2p3d_kv98_prefill_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-    decode:
-      <<: *override_2p3d_kv98_decode
-      args:
-        <<: *override_2p3d_kv98_decode_args
-        reasoning-parser: kimi_k3
-        dyn-tool-call-parser: kimi_k3
-        dyn-reasoning-parser: kimi_k3
-        dyn-enable-structural-tag: true
-
-# Four prefill and five decode workers, the highest-throughput point, with the 2P3D decode and store
-# settings plus: the sparse-attention indexer computes its logits in BF16 on prefill and decode, prefill
-# selects the indexer top-k with deep_select, and the Mooncake master evicts 2% of the store per round
-# instead of 10%.
-override_4p5d_kv98:
-  roles:
-    prefill: &override_4p5d_kv98_prefill
-      nodes: 4
-      env: *store_tail_cleanup
-      args: &override_4p5d_kv98_prefill_args
-        attention-config: &indexer_logits_bf16 '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
-        kernel-config: '{"sparse_indexer_topk_backend":"deep_select"}'
-        kv-transfer-config: *kv_transfer_prefetch
-    decode: &override_4p5d_kv98_decode
-      nodes: 5
-      env: *store_tail_cleanup
-      args: &override_4p5d_kv98_decode_args
-        <<: *override_2p3d_kv98_decode_args
-        attention-config: *indexer_logits_bf16
-  services: &services_evict_2pct
-  - name: etcd
-    type: etcd
-    placement:
-      node: infra
-  - name: nats
-    type: nats
-    placement:
-      node: infra
-    options:
-      max_payload_mb: 32
-  - name: mooncake-master
-    type: mooncake-master
+        no-enable-flashinfer-autotune: null
+        enable-flashinfer-autotune: true
+        max-cudagraph-capture-size: 768
+        compilation-config: '{"cudagraph_capture_sizes":[24,48,72,96,120,144,168,192,216,240,264,288,312,336,360,384,408,432,456,480,504,528,552,576,600,624,648,672,696,720,744,768]}'
+        speculative-config: *spec_k5
+  frontend: &frontend_no_affinity
     args:
-    - "--default_kv_lease_ttl=60000"
-    - "--eviction_high_watermark_ratio=0.95"
-    - "--eviction_ratio=0.02"
-    options:
-      store_config:
-        metadata_server: "P2PHANDSHAKE"
-        global_segment_size: "190GB"
-        local_buffer_size: "4GB"
-        protocol: "efa"
-        mode: "embedded"
-        enable_offload: false
+      router-session-affinity-ttl-secs: null
 
-override_4p5d_kv98_eval:
+override_2p3d_k5_eval:
   roles:
     prefill:
-      <<: *override_4p5d_kv98_prefill
+      <<: *override_2p3d_k5_prefill
       args:
-        <<: *override_4p5d_kv98_prefill_args
+        <<: *override_2p3d_k5_prefill_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
     decode:
-      <<: *override_4p5d_kv98_decode
+      <<: *override_2p3d_k5_decode
       args:
-        <<: *override_4p5d_kv98_decode_args
+        <<: *override_2p3d_k5_decode_args
         reasoning-parser: kimi_k3
         dyn-tool-call-parser: kimi_k3
         dyn-reasoning-parser: kimi_k3
         dyn-enable-structural-tag: true
-  services: *services_evict_2pct
+  frontend: *frontend_no_affinity
+
+override_4p5d_k5:
+  roles:
+    prefill: &override_4p5d_k5_prefill
+      nodes: 4
+      env:
+        # Lighter host-side work per eager prefill step; same outputs.
+        K31_CPU1: "1"
+      args: &override_4p5d_k5_prefill_args
+        speculative-config: *spec_k5
+    decode: &override_4p5d_k5_decode
+      nodes: 5
+      args: &override_4p5d_k5_decode_args
+        attention-config: '{"indexer_kv_dtype":"mxfp4","indexer_logits_dtype":"bfloat16"}'
+        gpu-memory-utilization: 0.98
+        max-num-seqs: 128
+        no-enable-flashinfer-autotune: null
+        enable-flashinfer-autotune: true
+        max-cudagraph-capture-size: 768
+        compilation-config: '{"cudagraph_capture_sizes":[24,48,72,96,120,144,168,192,216,240,264,288,312,336,360,384,408,432,456,480,504,528,552,576,600,624,648,672,696,720,744,768]}'
+        speculative-config: *spec_k5
+
+override_4p5d_k5_eval:
+  roles:
+    prefill:
+      <<: *override_4p5d_k5_prefill
+      args:
+        <<: *override_4p5d_k5_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_4p5d_k5_decode
+      args:
+        <<: *override_4p5d_k5_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+
+# Concurrency 640: the 4P5D settings with 704-token prefix-match units. Sliding-window KV hits use sub-block
+# hash units (VLLM_SWA_FINE_GRAINED_HITS) and the DSpark draft's tail hit rule (VLLM_DFLASH_SWA_TAIL_HITS),
+# so the draft's sliding-window group keeps prefix-cache hits at 704-token granularity. Prefill turns on
+# expert-parallel load balancing (EPLB, no redundant experts): it moves experts between ranks every 1500 steps
+# from the last 1000 steps' load, so the busiest rank waits less; the computation is the same. Prefill raises
+# the indexer logits budget to 4096 MB (VLLM_SPARSE_INDEXER_MAX_LOGITS_MB), as at 2P3D c264.
+override_4p5d_k5_pmu704:
+  roles:
+    prefill: &override_4p5d_k5_pmu704_prefill
+      <<: *override_4p5d_k5_prefill
+      env:
+        K31_CPU1: "1"
+        VLLM_SWA_FINE_GRAINED_HITS: "1"
+        VLLM_DFLASH_SWA_TAIL_HITS: "1"
+        VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "4096"
+      args: &override_4p5d_k5_pmu704_prefill_args
+        <<: *override_4p5d_k5_prefill_args
+        prefix-match-unit: 704
+        enable-eplb: true
+        eplb-config: '{"window_size":1000,"step_interval":1500,"num_redundant_experts":0,"log_balancedness":true,"log_balancedness_interval":50}'
+    decode: &override_4p5d_k5_pmu704_decode
+      <<: *override_4p5d_k5_decode
+      env:
+        VLLM_SWA_FINE_GRAINED_HITS: "1"
+        VLLM_DFLASH_SWA_TAIL_HITS: "1"
+      args: &override_4p5d_k5_pmu704_decode_args
+        <<: *override_4p5d_k5_decode_args
+        prefix-match-unit: 704
+
+override_4p5d_k5_pmu704_eval:
+  roles:
+    prefill:
+      <<: *override_4p5d_k5_pmu704_prefill
+      args:
+        <<: *override_4p5d_k5_pmu704_prefill_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
+    decode:
+      <<: *override_4p5d_k5_pmu704_decode
+      args:
+        <<: *override_4p5d_k5_pmu704_decode_args
+        reasoning-parser: kimi_k3
+        dyn-tool-call-parser: kimi_k3
+        dyn-reasoning-parser: kimi_k3
+        dyn-enable-structural-tag: true
