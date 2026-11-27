@@ -13507,3 +13507,11 @@
     - "Use native MTP and configure prefill HiCache and Mooncake DRAM storage for disaggregated serving."
     - "Pack two PP2 prefill workers onto each GB300 prefill node and place the c890 client on the last decode node."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5233
+
+- config-keys:
+    - qwen3.8next-fp4-mi355x-atom-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.8-Flash-Next MXFP4 on MI355X via ATOM (rocm/atom-dev:nightly_202611241524, ATOM main d093bee0a), TP1 with native MTP at three draft tokens, following the ROCm/ATOM#3731 AgentX recipe. Concurrency 1, 2, 4, 8 and 16 run GPU-resident KV with Mono decode (max-num-seqs 160); 32, 48 and 64 run LMCache DRAM offload (208.6 GiB pool, 104.3 GiB GDN state inside it) with Mono off (max-num-seqs 64). MXFP4 experts and the BF16 MTP head stay as shipped; attention and dense layers use online PTPC FP8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4939
