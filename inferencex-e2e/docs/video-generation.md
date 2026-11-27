@@ -12,6 +12,8 @@ H100, H200, B200 or B300 GPUs and SGLang on 1, 2, 4 and 8 H200 GPUs and 4 and
 Ulysses 1, 2 and 4 on 2, 4 and 8 GPUs) using `wan22.yaml` `release-v1`: four
 prompts by five seeds, one warmup, 40 UniPC steps, and 81 silent frames at 16 fps
 and 832×480; its `smoke` set sends the same request controls for one case.
+A workload change adds the next `release-v<N>` set, or a new spec file when it changes the
+model or a generation parameter (`video-generation/specs/README.md`).
 Config presence is not GPU or quality qualification.
 Each deployment's image pin is its `*-video` entry in
 [`configs/nvidia-master.yaml`](../configs/nvidia-master.yaml) or
@@ -54,6 +56,7 @@ turn off. The binder refuses anything else before submission, so a new setting
 needs a reviewed change there, and a new model with its own settings needs one row.
 It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.
+The SGLang work attestation fails when the engine log shows cache-dit running.
 
 The launch receipt records recipe-wide `environment` and server `env` values
 after binding, with server values taking precedence. Use these fields only for
