@@ -45,8 +45,6 @@ base:
   roles:
     prefill:
       nodes: 3
-      workers: 3
-      gpus: 4
       env:
         # The 0831 image contains the PP+spec runtime merged by SGLang #35758,
         # but still carries the pre-merge PP+spec assert in validation_hook.py.
@@ -131,7 +129,6 @@ base:
         pp-async-batch-depth: 1
         disable-cuda-graph: true
     decode:
-      gpus: 4
       env:
         SGLANG_USE_SYMM_MEM_DP_SYNC: 'true'
         SGLANG_TRTLLM_MHA_DECODE_SEQ_LEN_SPLITS: '4'
@@ -239,7 +236,6 @@ override_3p4d_c565:
         speculative-num-draft-tokens: 5
     decode:
       nodes: 4
-      workers: 4
       env:
         SGLANG_DG_CACHE_DIR: /tmp/agentx-followup/c565-cutedsl-g3072/decode-deepgemm-cache
         FLASHINFER_WORKSPACE_BASE: /tmp/agentx-followup/c565-cutedsl-g3072/decode-flashinfer-cache
@@ -261,7 +257,6 @@ override_3p2d_c704:
         speculative-num-draft-tokens: 6
     decode:
       nodes: 2
-      workers: 2
       env:
         SGLANG_DG_CACHE_DIR: /tmp/agentx-upstream-main/decode-deepgemm-cache
         FLASHINFER_WORKSPACE_BASE: /tmp/agentx-upstream-main/decode-flashinfer-cache

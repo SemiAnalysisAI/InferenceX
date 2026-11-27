@@ -6,7 +6,9 @@ base:
     model: {}
     container: {}
   dynamo:
-    install: false
+    install: true
+    source:
+      wheel: "1.8.0.dev20261119"
   environment:
     HF_HUB_OFFLINE: "1"
     HF_HUB_CACHE: /hf_hub_cache
@@ -179,141 +181,48 @@ override_3p4d_tp8_tp8_c672:
   roles:
     prefill:
       nodes: 6
-      workers: 3
-      gpus: 8
+      args:
+        hicache-size: 175
     decode:
       nodes: 8
-      workers: 4
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 56
         max-running-requests: 56
         disaggregation-decode-extra-slots: 56
+        disable-flashinfer-autotune: true
   frontend:
     args:
       router-session-affinity-mode: soft
       router-session-affinity-ttl-secs: 14400
+      router-decode-active-request-weight: 100000
 
-override_2p3d_tp8_tp8_c352:
-  roles:
-    prefill:
-      nodes: 4
-      workers: 2
-      gpus: 8
-    decode:
-      nodes: 6
-      workers: 3
-      gpus: 8
-      args:
-        cuda-graph-max-bs-decode: 40
-        max-running-requests: 40
-        disaggregation-decode-extra-slots: 40
-  frontend:
-    args:
-      router-session-affinity-mode: soft
-      router-session-affinity-ttl-secs: 14400
-
-override_1p2d_tp8_tp8_c224:
+override_1p2d_tp8_tp8_c176:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
-    decode:
-      nodes: 4
-      workers: 2
-      gpus: 8
       args:
-        cuda-graph-max-bs-decode: 36
-        max-running-requests: 36
-        disaggregation-decode-extra-slots: 36
-
-override_1p2d_tp8_tp8_c160:
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
+        hicache-size: 180
     decode:
       nodes: 4
-      workers: 2
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 24
         max-running-requests: 24
         disaggregation-decode-extra-slots: 24
+        disable-flashinfer-autotune: true
 
-override_1p3d_tp8_tp8_c224:
+override_1p3d_tp8_tp8_c192:
   roles:
     prefill:
       nodes: 2
-      workers: 1
-      gpus: 8
+      args:
+        hicache-size: 180
     decode:
       nodes: 6
-      workers: 3
-      gpus: 8
       args:
         cuda-graph-max-bs-decode: 20
         max-running-requests: 20
         disaggregation-decode-extra-slots: 20
-
-override_1p4d_tp8_tp8_c112:
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-    decode:
-      nodes: 8
-      workers: 4
-      gpus: 8
-      args:
-        cuda-graph-max-bs-decode: 6
-        max-running-requests: 6
-        disaggregation-decode-extra-slots: 6
-
-override_1p5d_tp8_tp8_c120:
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-    decode:
-      nodes: 10
-      workers: 5
-      gpus: 8
-      args:
-        cuda-graph-max-bs-decode: 5
-        max-running-requests: 5
-        disaggregation-decode-extra-slots: 5
-
-override_1p4d_tp8_tp8_c56:
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-    decode:
-      nodes: 8
-      workers: 4
-      gpus: 8
-      args:
-        cuda-graph-max-bs-decode: 3
-        max-running-requests: 3
-        disaggregation-decode-extra-slots: 3
-
-override_1p4d_tp8_tp8_c32:
-  roles:
-    prefill:
-      nodes: 2
-      workers: 1
-      gpus: 8
-    decode:
-      nodes: 8
-      workers: 4
-      gpus: 8
-      args:
-        cuda-graph-max-bs-decode: 3
-        max-running-requests: 3
-        disaggregation-decode-extra-slots: 3
+        disable-flashinfer-autotune: true
+  frontend:
+    args:
+      router-decode-active-request-weight: 100000

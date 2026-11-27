@@ -6,7 +6,9 @@ base:
     model: {}
     container: {}
   dynamo:
-    install: false
+    install: true
+    source:
+      wheel: "1.8.0.dev20261119"
   environment:
     HF_HUB_OFFLINE: "1"
     HF_HUB_CACHE: /hf_hub_cache
@@ -50,7 +52,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
       env:
         HF_HUB_OFFLINE: "1"
         PYTHONNOUSERSITE: "1"
@@ -84,6 +85,7 @@ base:
         weight-loader-drop-cache-after-load: false
         model-loader-extra-config: '{"enable_multithread_load":true}'
         stream-interval: 20
+        layernorm-sp-min-tokens: 1024
   sbatch_directives:
     mem: "0"
   srun_options:
@@ -98,33 +100,33 @@ base:
       AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
       AGENTIC_WARMUP_GRACE_PERIOD: "3600"
 
-override_tp4_c56:
+override_tp4_c76:
   roles:
     agg:
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "4096"
       args:
-        mem-fraction-static: 0.95
+        mem-fraction-static: 0.96
         swa-full-tokens-ratio: 0.2
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
+        max-running-requests: 72
+        cuda-graph-max-bs-decode: 72
         chunked-prefill-size: 16384
         max-prefill-tokens: 16384
         cuda-graph-backend-prefill: breakable
         schedule-policy: fcfs
         prefill-decode-interval: 8
         enable-hierarchical-cache: true
-        hicache-size: 140
+        hicache-size: 195
         hicache-write-policy: write_back
         speculative-draft-attention-backend: trtllm_mha
 
-override_tp4_c50:
+override_tp4_c56:
   roles:
     agg:
       env:
         SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "4096"
       args:
-        mem-fraction-static: 0.95
+        mem-fraction-static: 0.96
         swa-full-tokens-ratio: 0.2
         max-running-requests: 32
         cuda-graph-max-bs-decode: 32
@@ -132,33 +134,13 @@ override_tp4_c50:
         max-prefill-tokens: 16384
         cuda-graph-backend-prefill: breakable
         schedule-policy: fcfs
-        prefill-decode-interval: 20
+        prefill-decode-interval: 16
         enable-hierarchical-cache: true
-        hicache-size: 140
+        hicache-size: 170
         hicache-write-policy: write_back
         speculative-draft-attention-backend: trtllm_mha
 
-override_tp4_c46:
-  roles:
-    agg:
-      env:
-        SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "4096"
-      args:
-        mem-fraction-static: 0.95
-        swa-full-tokens-ratio: 0.2
-        max-running-requests: 32
-        cuda-graph-max-bs-decode: 32
-        chunked-prefill-size: 16384
-        max-prefill-tokens: 16384
-        cuda-graph-backend-prefill: breakable
-        schedule-policy: fcfs
-        prefill-decode-interval: 24
-        enable-hierarchical-cache: true
-        hicache-size: 140
-        hicache-write-policy: write_back
-        speculative-draft-attention-backend: trtllm_mha
-
-override_tp8_c36:
+override_tp8_c32:
   roles:
     agg:
       nodes: 2
@@ -171,13 +153,93 @@ override_tp8_c36:
         expert-parallel-size: 8
         mem-fraction-static: 0.88
         swa-full-tokens-ratio: 0.3
-        max-running-requests: 36
-        cuda-graph-max-bs-decode: 36
+        max-running-requests: 8
+        cuda-graph-max-bs-decode: 8
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 128
+        prefill-decode-interval-min-bs: 4
+        speculative-draft-attention-backend: fa4
+
+override_tp8_c26:
+  roles:
+    agg:
+      nodes: 2
+      env:
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 6
+        cuda-graph-max-bs-decode: 6
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 128
+        prefill-decode-interval-min-bs: 4
+        speculative-draft-attention-backend: fa4
+
+override_tp8_c21:
+  roles:
+    agg:
+      nodes: 2
+      env:
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 5
+        cuda-graph-max-bs-decode: 5
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 128
+        prefill-decode-interval-min-bs: 2
+        speculative-draft-attention-backend: fa4
+
+override_tp8_c16:
+  roles:
+    agg:
+      nodes: 2
+      env:
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 3
+        cuda-graph-max-bs-decode: 3
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 256
+        prefill-decode-interval-min-bs: 3
+        speculative-draft-attention-backend: fa4
+
+override_tp8_c15:
+  roles:
+    agg:
+      nodes: 2
+      env:
+        NCCL_CUMEM_ENABLE: "1"
+        NCCL_MNNVL_ENABLE: "1"
+        PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 8
+        mem-fraction-static: 0.88
+        swa-full-tokens-ratio: 0.3
+        max-running-requests: 3
+        cuda-graph-max-bs-decode: 3
         schedule-policy: shortest-prefill-first
         prefill-decode-interval: 128
         speculative-draft-attention-backend: fa4
 
-override_tp8_c1:
+override_tp8_c8:
   roles:
     agg:
       nodes: 2
@@ -192,5 +254,6 @@ override_tp8_c1:
         swa-full-tokens-ratio: 0.3
         max-running-requests: 1
         cuda-graph-max-bs-decode: 1
-        prefill-decode-interval: 64
-        speculative-draft-attention-backend: trtllm_mha
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 128
+        speculative-draft-attention-backend: fa4

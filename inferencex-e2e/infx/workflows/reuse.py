@@ -321,9 +321,11 @@ def main() -> int:
                 token,
                 args.pinned_run_command,
             )
+            # The selected run lets video-reuse-check validate it against this head's plan.
+            source: dict[str, str] = {}
             if authorized:
                 pr = github.api(args.repo, f"/pulls/{args.pr_number}", token)
-                resolve_reusable_run(
+                run = resolve_reusable_run(
                     args.repo,
                     args.workflow_id,
                     args.pr_number,
@@ -333,6 +335,11 @@ def main() -> int:
                     incompatible_labels=incompatible_labels,
                     command=args.pinned_run_command,
                 )
+                source = {
+                    "source_run_id": str(run["id"]),
+                    "source_run_attempt": str(run.get("run_attempt") or "1"),
+                    "source_head_sha": source_head_sha(args.repo, run, token),
+                }
             outputs = result(
                 enabled=False,
                 skip_pr_sweep=authorized,
@@ -342,6 +349,7 @@ def main() -> int:
                     else f"PR #{args.pr_number} has no {args.pinned_run_command} authorization"
                 ),
                 source_pr_number=str(args.pr_number),
+                **source,
             )
         write_outputs(args.github_output, outputs)
         print(json.dumps(outputs, indent=2))

@@ -22,7 +22,9 @@ import yaml
 from infx import yamlio
 from infx.config import repository_root
 from infx.fastcopy import deepcopy
+from infx.launch.resources import worker_resources
 from infx.results.metadata import parse_component_metadata
+from infx.srt_slurm.memory import bind_memory, bind_worker_resources
 from infx.srt_slurm.spec_identity import speculation_facts
 from infx.srt_slurm.synthetic_acceptance import (
     ENGINES,
@@ -69,9 +71,9 @@ _WORKFLOW_ENV = (
     "SPEC_ALGORITHM", "SPEC_DRAFT_MODEL",
 )  # fmt: skip
 _MULTINODE_ENV = (
-    "SPEC_DECODING", "KV_OFFLOADING", "TOTAL_CPU_DRAM_GB", "DECODE_CPU_DRAM_GB", "PREFILL_DWDP_SIZE",
+    "SPEC_DECODING", "KV_OFFLOADING", "PREFILL_DWDP_SIZE",
     *(f"{role}_{field}" for role in ("PREFILL", "DECODE")
-      for field in ("NUM_WORKERS", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
+      for field in ("NUM_WORKERS", "GPUS_PER_WORKER", "TP", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "EP", "DP_ATTN")),
 )  # fmt: skip
 _SINGLE_NODE_ENV = (
     "TP", "EP_SIZE", "PP_SIZE", "DCP_SIZE", "PCP_SIZE", "DP_ATTENTION", "GPU_COUNT", "SPEC_DECODING",
@@ -352,6 +354,15 @@ def bind_workload(
         identity["container"]["image"] = image.replace("#", "/", 1)
     benchmark = bound.setdefault("benchmark", {})
     workload = benchmark.setdefault("env", {})
+    for name in (
+        "GPU_COUNT",
+        "PREFILL_NUM_WORKERS",
+        "DECODE_NUM_WORKERS",
+        "PREFILL_GPUS_PER_WORKER",
+        "DECODE_GPUS_PER_WORKER",
+    ):
+        if name in environment:
+            workload[name] = environment[name]
     if not agentic:
         workload.update(
             (name, str(_positive(_required(environment, name), name))) for name in ("ISL", "OSL")
@@ -418,6 +429,7 @@ def bind_multinode(
     bound = bind_workload(
         selected, environment, agentic=agentic, multinode=True, client_env=client_env
     )
+    bind_worker_resources(bound, worker_resources(environment))
     bind_speculation(bound, environment)
     return name, bound
 
@@ -475,6 +487,16 @@ def selects_dedicated_discovery(recipe: str, *, agentic: bool, root: Path) -> bo
     """
     _, selected = select_multinode(recipe, agentic=agentic, root=root, expand=expand_variants)
     return discovery_on_dedicated_node(selected)
+
+
+def selects_frontend_image(recipe: str, *, agentic: bool, root: Path) -> str | None:
+    """The image of its own that the frontend of the variant ``recipe`` selects runs in, if any.
+
+    The launcher stages it like the job's main image: steps that share a registry image on
+    one node otherwise import it at once and collide in enroot's layer cache.
+    """
+    _, selected = select_multinode(recipe, agentic=agentic, root=root, expand=expand_variants)
+    return (selected.get("frontend") or {}).get("container_image") or None
 
 
 def bind_speculation(recipe: dict[str, Any], environment: Mapping[str, str]) -> None:
@@ -578,6 +600,8 @@ def main(argv: list[str] | None = None) -> None:
         help="a launcher-owned benchmark client setting",
     )
     add_fabric_argument(parser)
+    parser.add_argument("--available-memory-mib", type=int, required=True)
+    parser.add_argument("--gpus-per-node", type=int, required=True)
     args = parser.parse_args(argv)
     try:
         root = repository_root()
@@ -590,6 +614,9 @@ def main(argv: list[str] | None = None) -> None:
             client_env=dict(args.client_env),
         )
         bound = resolve_fabric(bound, args.fabric)
+        bind_memory(
+            bound, args.available_memory_mib, args.gpus_per_node, worker_resources(os.environ)
+        )
         check_setup_script(bound, Path(args.recipe.partition(":")[0]), root)
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
         parser.error(str(error))

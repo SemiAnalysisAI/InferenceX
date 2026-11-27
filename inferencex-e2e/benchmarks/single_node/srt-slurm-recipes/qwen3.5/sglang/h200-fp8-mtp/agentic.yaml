@@ -15,8 +15,6 @@ base:
   roles:
     agg:
       nodes: 1
-      workers: 1
-      gpus: 8
       args:
         served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
         trust-remote-code: true
@@ -46,7 +44,7 @@ override_gpu_kv:
     env:
       KV_OFFLOADING: none
 # HiCache extends RadixAttention. Hybrid GDN/Mamba allocates one KV and one
-# Mamba host pool per rank: 1234 GB / TP8 / 2 pools = 77 GB each.
+# Mamba host pool per rank, 77 GB each (1232 GB across TP8).
 override_hicache:
   roles:
     agg:
@@ -60,7 +58,6 @@ override_hicache:
   benchmark:
     env:
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 # The same HiCache arm with the experts TP-sharded (EP1) on a later nightly.
 override_hicache_ep1:
   roles:
@@ -76,12 +73,10 @@ override_hicache_ep1:
   benchmark:
     env:
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
-# TP4/EP4 HiCache on half the node: 617 GB / TP4 / 2 pools = 77 GB each.
+# TP4/EP4 HiCache on half the node: 77 GB per pool, 616 GB across TP4.
 override_hicache_tp4_c8:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -96,11 +91,9 @@ override_hicache_tp4_c8:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '617'
 override_hicache_tp4_c12:
   roles:
     agg:
-      gpus: 4
       args:
         tensor-parallel-size: 4
         expert-parallel-size: 4
@@ -115,7 +108,6 @@ override_hicache_tp4_c12:
     env:
       CONC: '12'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '617'
 # EP1 HiCache arm on the FA3 attention backend, with the EAGLE depth set per concurrency.
 override_hicache_ep1_fa3_k5_c4:
   roles:
@@ -135,7 +127,6 @@ override_hicache_ep1_fa3_k5_c4:
     env:
       CONC: '4'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 override_hicache_ep1_fa3_k5_c8:
   roles:
     agg:
@@ -154,31 +145,13 @@ override_hicache_ep1_fa3_k5_c8:
     env:
       CONC: '8'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
-override_hicache_ep1_fa3_k5_c12:
-  roles:
-    agg:
-      args:
-        expert-parallel-size: 1
-        attention-backend: fa3
-        speculative-num-steps: 5
-        speculative-num-draft-tokens: 6
-        page-size: 64
-        enable-hierarchical-cache: true
-        hicache-size: 77
-        hicache-io-backend: kernel
-        hicache-mem-layout: page_first
-        hicache-write-policy: write_through_selective
-  benchmark:
-    env:
-      CONC: '12'
-      KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 override_hicache_ep1_fa3_k6_c24:
   roles:
     agg:
       args:
         expert-parallel-size: 1
+        prefill-decode-interval: 3
+        prefill-decode-interval-min-bs: 2
         attention-backend: fa3
         speculative-num-steps: 6
         speculative-num-draft-tokens: 7
@@ -188,11 +161,20 @@ override_hicache_ep1_fa3_k6_c24:
         hicache-io-backend: kernel
         hicache-mem-layout: page_first
         hicache-write-policy: write_through_selective
+      env:
+        SGLANG_ENABLE_EAGLE_POST_VERIFY_CUDA_GRAPH: '1'
+        SGLANG_ENABLE_GDN_PREFILL_GRAPH_EXTEND: '1'
+        SGLANG_OPT_CUDA_GRAPH_FILL_FAST_PATH: '1'
+        SGLANG_Q35MF_BK_VEC_COPY: '1'
+        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
+        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_MKH_N3B: '1'
+        SGLANG_Q35MF_MKH_N3C: '1'
   benchmark:
     env:
       CONC: '24'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
 override_hicache_ep1_fa3_k6_c32:
   roles:
     agg:
@@ -211,7 +193,36 @@ override_hicache_ep1_fa3_k6_c32:
     env:
       CONC: '32'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
+override_hicache_ep1_fa3_k5_c40:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        prefill-decode-interval: 3
+        prefill-decode-interval-min-bs: 4
+        attention-backend: fa3
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 144
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+      env:
+        SGLANG_ENABLE_EAGLE_POST_VERIFY_CUDA_GRAPH: '1'
+        SGLANG_ENABLE_GDN_PREFILL_GRAPH_EXTEND: '1'
+        SGLANG_OPT_CUDA_GRAPH_FILL_FAST_PATH: '1'
+        SGLANG_Q35MF_BK_VEC_COPY: '1'
+        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
+        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_MKH_N3B: '1'
+        SGLANG_Q35MF_MKH_N3C: '1'
+  benchmark:
+    env:
+      CONC: '40'
+      KV_OFFLOADING: dram
 override_hicache_ep1_fa3_k4_c48:
   roles:
     agg:
@@ -230,4 +241,96 @@ override_hicache_ep1_fa3_k4_c48:
     env:
       CONC: '48'
       KV_OFFLOADING: dram
-      TOTAL_CPU_DRAM_GB: '1234'
+override_hicache_ep1_fa3_k4_c56:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        prefill-decode-interval: 3
+        prefill-decode-interval-min-bs: 4
+        attention-backend: fa3
+        speculative-num-steps: 4
+        speculative-num-draft-tokens: 5
+        page-size: 64
+        max-running-requests: 56
+        cuda-graph-max-bs-decode: 56
+        enable-hierarchical-cache: true
+        hicache-size: 144
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through
+      env:
+        SGLANG_ENABLE_EAGLE_POST_VERIFY_CUDA_GRAPH: '1'
+        SGLANG_ENABLE_GDN_PREFILL_GRAPH_EXTEND: '1'
+        SGLANG_OPT_CUDA_GRAPH_FILL_FAST_PATH: '1'
+        SGLANG_Q35MF_BK_VEC_COPY: '1'
+        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
+        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_MKH_N3B: '1'
+        SGLANG_Q35MF_MKH_N3C: '1'
+  benchmark:
+    env:
+      CONC: '56'
+      KV_OFFLOADING: dram
+override_hicache_ep1_fa3_k4_c64:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        attention-backend: fa3
+        speculative-num-steps: 4
+        speculative-num-draft-tokens: 5
+        page-size: 64
+        mem-fraction-static: 0.88
+        max-running-requests: 64
+        cuda-graph-max-bs-decode: 64
+        max-mamba-cache-size: 900
+        enable-hierarchical-cache: true
+        hicache-size: 144
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through
+      env:
+        SGLANG_ENABLE_EAGLE_POST_VERIFY_CUDA_GRAPH: '1'
+        SGLANG_ENABLE_GDN_PREFILL_GRAPH_EXTEND: '1'
+        SGLANG_OPT_CUDA_GRAPH_FILL_FAST_PATH: '1'
+        SGLANG_Q35MF_BK_VEC_COPY: '1'
+        SGLANG_Q35MF_EDGE_PACKED_VERIFY_BCAST: '1'
+        SGLANG_Q35MF_EDGE_SHM_SYNC: '1'
+        SGLANG_Q35MF_EDGE_SPARSE_VERIFY_SAMPLING: '1'
+        SGLANG_Q35MF_MKH_N3B: '1'
+        SGLANG_Q35MF_MKH_N3C: '1'
+  benchmark:
+    env:
+      CONC: '64'
+      KV_OFFLOADING: dram
+override_hicache_ep1_fa3_k6_c20:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        attention-backend: fa3
+        speculative-num-steps: 6
+        speculative-num-draft-tokens: 7
+        schedule-policy: shortest-prefill-first
+        prefill-decode-interval: 32
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+      env:
+        SGLANG_ENABLE_EAGLE_POST_VERIFY_CUDA_GRAPH: '1'
+        SGLANG_OPT_CUDA_GRAPH_FILL_FAST_PATH: '1'
+        SGLANG_OPT_SCHEDULER_SHM_SYNC: '1'
+        SGLANG_OPT_SMALL_FIELD_COPY_VECTORIZED: '1'
+        SGLANG_OPT_SPEC_COMPACT_VERIFY_SAMPLING: '1'
+        SGLANG_OPT_SPEC_PACKED_VERIFY_BCAST: '1'
+        SGLANG_OPT_SPEC_POST_VERIFY_ONE_LAUNCH_LOAD: '1'
+        SGLANG_OPT_SPEC_VERIFY_REUSE_STAGED_INPUTS: '1'
+  benchmark:
+    env:
+      CONC: '20'
+      KV_OFFLOADING: dram
