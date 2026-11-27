@@ -398,9 +398,17 @@ clusters:
     models:
       entries:
         DeepSeek-V4.1-Flash: {root: data-models, dir: DeepSeek-V4.1-Flash}
+        GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
+        GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
+        GLM-5.3-Flash: {root: scratch, dir: GLM-5.3-Flash}
+        GLM-5.3-Flash-NVFP4: {root: scratch, dir: GLM-5.3-Flash-NVFP4}
+        GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
+        Kimi-K3: {root: scratch, dir: Kimi-K3}
         Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
+        MiniMax-M3.1-Flash: {root: scratch, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: data-models, dir: Qwen3.5-397B-A17B-FP8}
+        Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
     scheduler: slurm
     slurm:
       partition: batch_1
@@ -431,12 +439,26 @@ clusters:
     arch: x86_64
     models:
       entries:
-        DeepSeek-R1-0528: {root: models, dir: DeepSeek-R1-0528}
-        GLM-5.2-FP8: {root: models, dir: GLM-5.2-FP8}
+        DeepSeek-V4.1-Flash: {root: hf-hub-cache, dir: DeepSeek-V4.1-Flash}
+        GLM-5.2-FP8: {root: hf-hub-cache, dir: GLM-5.2-FP8}
+        GLM-5.2-NVFP4: {root: models, dir: GLM-5.2-NVFP4}
         GLM-5.3-Flash: {root: hf-hub-cache, dir: GLM-5.3-Flash}
+        Hy3-FP8: {root: hf-hub-cache, dir: Hy3-FP8}
+        Inkling-NVFP4: {root: models, dir: Inkling-NVFP4}
+        Kimi-K2.6-NVFP4: {root: hf-hub-cache, dir: Kimi-K2.6-NVFP4}
+        Kimi-K2.7-Code-NVFP4: {root: models, dir: Kimi-K2.7-Code-NVFP4}
+        Kimi-K3: {root: hf-hub-cache, dir: Kimi-K3}
         Kimi-K3.1-Pro: {root: hf-hub-cache, dir: Kimi-K3.1-Pro}
+        MiniMax-M3.1-Flash: {root: hf-hub-cache, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: hf-hub-cache, dir: Muse-Spark-Open-816B-A42B-NVFP4}
+        Qwen3-30B-A3B-Thinking-2507-Eagle3: {root: hf-hub-cache, dir: Qwen3-30B-A3B-Thinking-2507-Eagle3}
         Qwen3.5-397B-A17B-FP8: {root: hf-hub-cache, dir: Qwen3.5-397B-A17B-FP8}
+        Qwen3.5-397B-A17B-NVFP4: {root: hf-hub-cache, dir: Qwen3.5-397B-A17B-NVFP4}
+        Qwen3.5-397B-A17B-NVFP4-V2: {root: hf-hub-cache, dir: Qwen3.5-397B-A17B-NVFP4-V2}
+        Qwen3.8-2.4T-A95B-FP8: {root: hf-hub-cache, dir: Qwen3.8-2.4T-A95B-FP8}
+        Qwen3.8-Flash-Next-FP8: {root: hf-hub-cache, dir: Qwen3.8-Flash-Next-FP8}
+        speedbench-qwen3.827b-bf16: {root: hf-hub-cache, dir: speedbench-qwen3.827b-bf16}
+        speedbench-qwen3.827b-fp8: {root: hf-hub-cache, dir: speedbench-qwen3.827b-fp8}
     scheduler: slurm
     slurm:
       partition: main
@@ -489,19 +511,20 @@ clusters:
     models:
       download-root: writable-models
       entries:
-        DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
-        DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
-        DeepSeek-R1-0528-FP4-V2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
-        deepseek-r1-fp4: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
+        DeepSeek-V4.1-Flash: {root: scratch, dir: DeepSeek-V4.1-Flash}
         GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
         GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
         GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
         GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
+        GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
+        Kimi-K3: {root: scratch, dir: Kimi-K3}
         Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
-        Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4}
+        Qwen3.5-397B-A17B-NVFP4: {root: data-models, dir: Qwen3.5-397B-A17B-NVFP4}
+        Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
+        Qwen3.8-Flash-Next-FP8: {root: scratch, dir: Qwen3.8-Flash-Next-FP8}
         Qwen3.8-Flash-Next-NVFP4: {root: scratch, dir: Qwen3.8-Flash-Next-NVFP4}
     scheduler: slurm
     slurm:
@@ -550,31 +573,23 @@ clusters:
     models:
       download-root: writable-models
       entries:
-        DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
-        DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
-        DeepSeek-R1-0528-FP4-V2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
-        deepseek-r1-fp4: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
-        DeepSeek-V4-Pro: {root: scratch, dir: DeepSeek-V4-Pro}
-        DeepSeek-V4-Pro-0813: {root: data-models, dir: DeepSeek-V4-Pro-0813}
-        DeepSeek-V4-Pro-0813@scratch: {root: scratch, dir: DeepSeek-V4-Pro-0813}
+        DeepSeek-V4-Flash: {root: scratch, dir: DeepSeek-V4-Flash}
         DeepSeek-V4.1-Flash: {root: data-models, dir: DeepSeek-V4.1-Flash}
-        DeepSeek-V4-Pro-NVFP4: {root: scratch, dir: DeepSeek-V4-Pro-NVFP4}
         GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
-        GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
-        GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
+        GLM-5.2-NVFP4: {root: data-models, dir: GLM-5.2-NVFP4}
         GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
         GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
+        GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
+        Kimi-K2.6-NVFP4: {root: data-models, dir: Kimi-K2.6-NVFP4}
         Kimi-K3: {root: scratch, dir: Kimi-K3}
         Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
-        MiniMax-M3: {root: scratch, dir: MiniMax-M3}
-        MiniMax-M3-MXFP8: {root: scratch, dir: MiniMax-M3-MXFP8}
-        MiniMax-M3-NVFP4: {root: scratch, dir: MiniMax-M3-NVFP4}
         MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
+        Muse-Spark-Open-816B-A42B: {root: data-models, dir: Muse-Spark-Open-816B-A42B}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
-        Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4}
+        Qwen3.5-397B-A17B-NVFP4: {root: data-models, dir: Qwen3.5-397B-A17B-NVFP4}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
-        Qwen3.8-2.4T-A95B-FP8: {root: scratch, dir: Qwen3.8-2.4T-A95B-FP8}
+        Qwen3.8-2.4T-A95B-FP8: {root: data-models, dir: Qwen3.8-2.4T-A95B-FP8}
     scheduler: slurm
     slurm:
       partition: batch_1
@@ -620,17 +635,19 @@ clusters:
     arch: aarch64
     models:
       entries:
-        deepseek-r1-0528: {root: lustre-models, dir: deepseek-r1-0528}
-        deepseek-r1-0528-fp4-v2: {root: lustre-models, dir: deepseek-r1-0528-fp4-v2}
-        MiniMax-M3.1-Flash: {root: lustre-models, dir: MiniMax-M3.1-Flash}
+        DeepSeek-V4-Pro-0813: {root: sa-shared-models, dir: DeepSeek-V4-Pro-0813}
+        DeepSeek-V4.1-Flash: {root: numa1, dir: DeepSeek-V4.1-Flash}
+        GLM-5.2-FP8: {root: numa1, dir: GLM-5.2-FP8}
+        GLM-5.2-NVFP4: {root: sa-shared-models, dir: GLM-5.2-NVFP4}
         GLM-5.3-Flash: {root: lustre-models, dir: GLM-5.3-Flash}
         GLM-5.3-Flash-NVFP4: {root: lustre-models, dir: GLM-5.3-Flash-NVFP4}
-        Qwen3.5-397B-A17B-NVFP4-V2: {root: lustre-models, dir: Qwen3.5-397B-A17B-NVFP4-V2}
-        Muse-Spark-Open-816B-A42B-NVFP4: {root: lustre-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
-        GLM-5.2-NVFP4: {root: sa-shared-models, dir: GLM-5.2-NVFP4}
-        DeepSeek-R1-0528: {root: numa1, dir: DeepSeek-R1-0528}
-        DeepSeek-R1-0528-NVFP4-v2: {root: numa1, dir: DeepSeek-R1-0528-NVFP4-v2}
+        Kimi-K3: {root: numa1, dir: Kimi-K3}
         Kimi-K3.1-Pro: {root: numa1, dir: Kimi-K3.1-Pro}
+        MiniMax-M3.1-Flash: {root: lustre-models, dir: MiniMax-M3.1-Flash}
+        Muse-Spark-Open-816B-A42B-NVFP4: {root: lustre-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
+        Qwen3.5-397B-A17B-FP8: {root: numa1, dir: Qwen3.5-397B-A17B-FP8}
+        Qwen3.5-397B-A17B-NVFP4: {root: lustre-models, dir: Qwen3.5-397B-A17B-NVFP4}
+        Qwen3.5-397B-A17B-NVFP4-V2: {root: lustre-models, dir: Qwen3.5-397B-A17B-NVFP4-V2}
     scheduler: slurm
     slurm:
       partition: batch
@@ -679,17 +696,21 @@ clusters:
     arch: aarch64
     models:
       entries:
-        DeepSeek-R1-0528: {root: scratch, dir: DeepSeek-R1-0528}
-        DeepSeek-R1-0528-NVFP4-v2: {root: scratch, dir: DeepSeek-R1-0528-NVFP4-v2}
-        GLM-5.2-NVFP4: {root: scratch, dir: GLM-5.2-NVFP4}
+        DeepSeek-V4.1-Flash: {root: scratch, dir: DeepSeek-V4.1-Flash}
+        DeepSeek-V4.1-Flash-1017-NVFP4: {root: scratch, dir: DeepSeek-V4.1-Flash-1017-NVFP4}
+        GLM-5.2-FP8: {root: scratch, dir: GLM-5.2-FP8}
         GLM-5.3-Flash: {root: data-models, dir: GLM-5.3-Flash}
         GLM-5.3-Flash-NVFP4: {root: data-models, dir: GLM-5.3-Flash-NVFP4}
+        GLM-5.3-NVFP4: {root: scratch, dir: GLM-5.3-NVFP4}
+        Kimi-K3: {root: scratch, dir: Kimi-K3}
         Kimi-K3.1-Pro: {root: scratch, dir: Kimi-K3.1-Pro}
         MiniMax-M3.1-Flash: {root: data-models, dir: MiniMax-M3.1-Flash}
         Muse-Spark-Open-816B-A42B-NVFP4: {root: data-models, dir: Muse-Spark-Open-816B-A42B-NVFP4}
+        Muse-Spark-Open-DFlash2: {root: data-models, dir: Muse-Spark-Open-DFlash2}
         Qwen3.5-397B-A17B-FP8: {root: scratch, dir: Qwen3.5-397B-A17B-FP8}
         Qwen3.5-397B-A17B-NVFP4-V2: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
         Qwen3.5-397B-A17B-NVFP4: {root: scratch, dir: Qwen3.5-397B-A17B-NVFP4-V2}
+        Qwen3.8-Flash-Next-FP8: {root: hf-hub-cache, dir: Qwen3.8-Flash-Next-FP8}
     scheduler: slurm
     slurm:
       partition: batch_1
@@ -831,7 +852,6 @@ clusters:
     models:
       entries:
         Kimi-K3.1-Pro: {root: hf-hub-cache, dir: models--moonshotai--Kimi-K3.1-Pro/snapshots/d9e99b0792a5e93b78ea9bea62a68167e36ddd9e}
-        DeepSeek-R1-0528-MXFP4-v2: {root: it-share-data, dir: DeepSeek-R1-0528-MXFP4-v2}
         GLM-5.3: {root: it-share-data, dir: GLM-5.3}
         Qwen3.5-397B-A17B-FP8: {root: it-share-data, dir: Qwen3.5-397B-A17B-FP8}
     scheduler: slurm
