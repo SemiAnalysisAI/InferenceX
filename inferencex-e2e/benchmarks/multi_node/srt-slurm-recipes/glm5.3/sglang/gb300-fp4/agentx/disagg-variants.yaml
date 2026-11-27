@@ -1,20 +1,21 @@
 schema: 2
 
 base:
-  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg
+  name: glm5.3-fp4-gb300-dynamo-sglang-agentx-disagg
   identity:
     model: {}
     container: {}
     frameworks:
-      dynamo: 1.6.0.dev20261016
-      sglang: 0.0.0.dev1+gc15edf314
+      dynamo: 1.8.0.dev20261119
+      sglang: 0.0.0.dev1+ga8ac86595
   resources:
     gpu_type: gb300
     gpus_per_node: 4
+  # Dynamo 1.7 and older pass Engine.async_generate(data_parallel_rank=), which this SGLang rejects.
   dynamo:
     install: true
     source:
-      wheel: 1.6.0.dev20261016
+      wheel: 1.8.0.dev20261119
   # Tachometer's per-node exporters slow decode steps and add host memory;
   # InferenceX does not read its output.
   observability:
@@ -50,7 +51,7 @@ base:
         NCCL_CUMEM_ENABLE: '1'
         NVSHMEM_REMOTE_TRANSPORT: none
       args:
-        served-model-name: nvidia/GLM-5.2-NVFP4
+        served-model-name: nvidia/GLM-5.3-NVFP4
         trust-remote-code: true
         watchdog-timeout: 1000000
         quantization: modelopt_fp4
@@ -60,7 +61,9 @@ base:
         chunked-prefill-size: 16384
         max-prefill-tokens: 16384
         max-running-requests: 16
-        disable-cuda-graph: true
+        # This SGLang refuses --disable-cuda-graph at parse time.
+        disable-decode-cuda-graph: true
+        disable-prefill-cuda-graph: true
         moe-runner-backend: flashinfer_cutedsl
         fp4-gemm-backend: flashinfer_cutedsl
         weight-loader-prefetch-checkpoints: true
@@ -97,7 +100,7 @@ base:
         NCCL_CUMEM_ENABLE: '1'
         NVSHMEM_REMOTE_TRANSPORT: none
       args:
-        served-model-name: nvidia/GLM-5.2-NVFP4
+        served-model-name: nvidia/GLM-5.3-NVFP4
         trust-remote-code: true
         watchdog-timeout: 1000000
         quantization: modelopt_fp4
@@ -154,42 +157,8 @@ base:
     mem: '0'
     container-remap-root: ''
 
-override_1p5d_pp4_tp4_c30:
-  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-1p5d-pp4-tp4-c30
-  roles:
-    prefill:
-      args:
-        hicache-size: 100
-        active-decode-blocks-threshold: None
-        active-prefill-tokens-threshold: None
-        active-prefill-tokens-threshold-frac: None
-    decode:
-      nodes: 5
-      args:
-        tensor-parallel-size: 4
-        disaggregation-decode-enable-radix-cache: true
-        max-running-requests: 24
-        cuda-graph-max-bs-decode: 24
-
-override_1p3d_pp4_tp4_c40:
-  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-1p3d-pp4-tp4-c40
-  roles:
-    prefill:
-      args:
-        hicache-size: 100
-        active-decode-blocks-threshold: None
-        active-prefill-tokens-threshold: None
-        active-prefill-tokens-threshold-frac: None
-    decode:
-      nodes: 3
-      args:
-        tensor-parallel-size: 4
-        disaggregation-decode-enable-radix-cache: true
-        max-running-requests: 24
-        cuda-graph-max-bs-decode: 24
-
 override_1p1d_pp4_dep8_c56:
-  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-1p1d-pp4-dep8-c56
+  name: glm5.3-fp4-gb300-dynamo-sglang-agentx-disagg-1p1d-pp4-dep8-c56
   roles:
     prefill:
       args:
@@ -200,10 +169,9 @@ override_1p1d_pp4_dep8_c56:
       nodes: 2
       args:
         tensor-parallel-size: 8
-        data-parallel-size: 8
+        attn-dp-size: 8
         expert-parallel-size: 8
-        enable-dp-attention: true
-        moe-a2a-backend: flashinfer
+        moe-a2a-backend: flashinfer_nvlink_one_sided
         moe-runner-backend: flashinfer_trtllm
         speculative-moe-a2a-backend: none
         speculative-moe-runner-backend: flashinfer_trtllm
@@ -213,7 +181,7 @@ override_1p1d_pp4_dep8_c56:
         cuda-graph-max-bs-decode: 32
 
 override_3p1d_pp4_dep8_c216:
-  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-3p1d-pp4-dep8-c216
+  name: glm5.3-fp4-gb300-dynamo-sglang-agentx-disagg-3p1d-pp4-dep8-c216
   roles:
     prefill:
       nodes: 3
@@ -224,10 +192,9 @@ override_3p1d_pp4_dep8_c216:
       nodes: 2
       args:
         tensor-parallel-size: 8
-        data-parallel-size: 8
+        attn-dp-size: 8
         expert-parallel-size: 8
-        enable-dp-attention: true
-        moe-a2a-backend: flashinfer
+        moe-a2a-backend: flashinfer_nvlink_one_sided
         moe-runner-backend: flashinfer_trtllm
         speculative-moe-a2a-backend: none
         speculative-moe-runner-backend: flashinfer_trtllm
@@ -236,7 +203,7 @@ override_3p1d_pp4_dep8_c216:
         cuda-graph-max-bs-decode: 32
 
 override_3p1d_pp4_dep8_c264:
-  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-3p1d-pp4-dep8-hicache185-c264
+  name: glm5.3-fp4-gb300-dynamo-sglang-agentx-disagg-3p1d-pp4-dep8-hicache185-c264
   roles:
     prefill:
       nodes: 3
@@ -251,10 +218,9 @@ override_3p1d_pp4_dep8_c264:
       nodes: 2
       args:
         tensor-parallel-size: 8
-        data-parallel-size: 8
+        attn-dp-size: 8
         expert-parallel-size: 8
-        enable-dp-attention: true
-        moe-a2a-backend: flashinfer
+        moe-a2a-backend: flashinfer_nvlink_one_sided
         moe-runner-backend: flashinfer_trtllm
         speculative-moe-a2a-backend: none
         speculative-moe-runner-backend: flashinfer_trtllm
@@ -264,7 +230,7 @@ override_3p1d_pp4_dep8_c264:
         cuda-graph-max-bs-decode: 32
 
 override_4p1d_pp4_dep16_c256:
-  name: glm5.2-fp4-gb300-dynamo-sglang-agentx-disagg-4p1d-pp4-dep16-c256
+  name: glm5.3-fp4-gb300-dynamo-sglang-agentx-disagg-4p1d-pp4-dep16-c256
   roles:
     prefill:
       nodes: 4
@@ -272,10 +238,9 @@ override_4p1d_pp4_dep16_c256:
       nodes: 4
       args:
         tensor-parallel-size: 16
-        data-parallel-size: 16
+        attn-dp-size: 16
         expert-parallel-size: 16
-        enable-dp-attention: true
-        moe-a2a-backend: flashinfer
+        moe-a2a-backend: flashinfer_nvlink_one_sided
         moe-runner-backend: flashinfer_trtllm
         speculative-moe-a2a-backend: none
         speculative-moe-runner-backend: flashinfer_trtllm
