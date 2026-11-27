@@ -13492,6 +13492,6 @@
     - agentic-coding
   description:
     - "Add GB300 AgentX recipes for Muse-Spark-Open NVFP4 with Dynamo and TensorRT-LLM, using the released DFlash2 draft with seven draft tokens, rejection sampling, and FP8 KV cache."
-    - "Use TP4/EP4 prefill with TP4/EP4 or TP8/EP8 decode for disaggregated serving, with Mooncake Store or native host DRAM for prefix caching. The aggregated recipe uses TP8/EP8."
+    - "Use TP4/EP4 prefill with TP4/EP4 or TP8/EP8 decode for disaggregated serving, with Mooncake Store or native host DRAM for prefix caching. The aggregated recipes use TP8/EP8 with no KV offload, and TP4/EP4 at concurrency 64 with 192.2 GB of native host DRAM per rank."
     - "Use the checkpoint chat template, Dynamo KV routing, golden acceptance for replay, and iteration and KV-cache metrics on every serving role."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5264

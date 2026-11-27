@@ -8326,6 +8326,13 @@ musespark-fp4-gb300-dynamo-trt-agentic-dflash2-agg:
         conc-list: [1]
         srt-recipe: agg-dynamo-dflash2-variants.yaml:override_agg_tep8_b1_c1
         worker: {num-worker: 1, gpus-per-worker: 8, tp: 8, ep: 8, dp-attn: false}
+    - search-space:
+      - spec-decoding: draft_model
+        kv-offloading: dram
+        kv-offload-backend: {name: native, version: 1.4.0a0}
+        conc-list: [64]
+        srt-recipe: agg-dynamo-dflash2-variants.yaml:override_agg_tep4_b64_c64
+        worker: {num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: false}
 
 musespark-fp4-gb300-trt-agentic-dflash:
   image: nvcr.io/nvidia/tensorrt-llm/release:1.4.0a0.dev202610221558
