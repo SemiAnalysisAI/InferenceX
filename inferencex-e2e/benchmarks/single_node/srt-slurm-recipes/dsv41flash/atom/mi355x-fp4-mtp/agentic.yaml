@@ -6,7 +6,7 @@ base:
     gpus_per_node: 8
   frontend:
     type: atomesh
-    container_image: rocm/atom-dev@sha256:160a4ec49379e7f1980a4e783254366b1d5c643b012abca57a21c0bcbbfe83a7
+    container_image: rocm/atom-dev@sha256:19e56a127f6efc07e33442fbd018d00f5a72d253403a4d54e735705b19e3245b
     enable_multiple_frontends: false
   observability:
     enabled: false
@@ -127,12 +127,26 @@ override_tp4_c4:
 override_tp4_c8:
   roles:
     agg:
+      args: &hi_args
+        # The V4.1 mono hi decode path only serves a BF16 KV cache.
+        kv_cache_dtype: bf16
       env:
         ATOM_ENABLE_PREFILL_DELAYER: '1'
         ATOM_PREFILL_DECODE_INTERVAL: '192'
   benchmark:
     env:
       CONC: '8'
+
+override_tp4_c16:
+  roles:
+    agg:
+      args: *hi_args
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '96'
+  benchmark:
+    env:
+      CONC: '16'
 
 override_tp4_c32:
   roles:
@@ -190,3 +204,179 @@ override_tp2_c256_dep:
     env:
       CONC: '256'
       AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_tp8_c1:
+  roles:
+    agg:
+      args: *c1_args
+      env: *c1_env
+  benchmark:
+    env:
+      CONC: '1'
+
+override_tp8_c2:
+  roles:
+    agg:
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '192'
+  benchmark:
+    env:
+      CONC: '2'
+
+override_tp8_c4:
+  roles:
+    agg:
+      env:
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '192'
+  benchmark:
+    env:
+      CONC: '4'
+
+override_dep4_c64:
+  roles:
+    agg:
+      args:
+        enable-dp-attention: true
+        enable-expert-parallel: true
+        dp-load-balance: least_tokens
+      env: *dp_env
+  benchmark:
+    env:
+      CONC: '64'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: '1'
+
+override_dep8_c128:
+  # The ionic driver charges each KV registration against the soft RLIMIT_MEMLOCK.
+  setup_script: raise-memlock-soft-limit.sh
+  health_check:
+    max_attempts: 720
+    interval_seconds: 5
+  services: &mc_store
+    - &mc_master
+      name: mc-master
+      type: generic
+      start: before_workers
+      critical: true
+      inherit_discovery_env: false
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_master, --rpc_port=26051, --rpc_thread_num=32, --enable_http_metadata_server=true, --http_metadata_server_host=0.0.0.0, --http_metadata_server_port=26080, --metrics_port=26090, --default_kv_lease_ttl=10000, --eviction_high_watermark_ratio=0.90, --eviction_ratio=0.05, --allocation_strategy=random, --memory_allocator=offset, --client_ttl=10]
+      env: &mc_env
+        # A Mooncake process that sees a GPU probes every buffer through HIP.
+        HIP_VISIBLE_DEVICES: "-1"
+        CUDA_VISIBLE_DEVICES: "-1"
+        # Peers with different QP counts cannot connect.
+        MC_NUM_QP_PER_EP: "1"
+        MC_GID_INDEX: "@fabric.rdma-gid-index"
+      readiness:
+        port: 26051
+        timeout_seconds: 300
+    - &mc_owner
+      <<: *mc_master
+      name: mc-owner-numa0
+      # 2 x 256 GiB of CPU DRAM. Each owner registers on rdma0-7, so every GPU's worker reaches it on its own rail.
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "0", mooncake_client, "--host={node_ip}", --port=26052, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, "--device_names=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7", --global_segment_size=274877906944, --local_buffer_size=0, --threads=4]
+      env:
+        <<: *mc_env
+        GLIBC_TUNABLES: glibc.malloc.hugetlb=1
+        MC_MAX_MR_SIZE: "68719476736"
+        MC_TCP_BIND_ADDRESS: "{node_ip}"
+      preamble: ulimit -l unlimited 2>/dev/null || ulimit -S -l "$(ulimit -H -l)"
+      readiness:
+        log:
+          pattern: Starting real client service
+        timeout_seconds: 1800
+        interval_seconds: 5
+    - <<: *mc_owner
+      name: mc-owner-numa1
+      command: [python3, /app/ATOM/.github/scripts/atomesh/numa_exec.py, "1", mooncake_client, "--host={node_ip}", --port=26053, --master_server_address=127.0.0.1:26051, --metadata_server=http://127.0.0.1:26080/metadata, --protocol=rdma, "--device_names=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7", --global_segment_size=274877906944, --local_buffer_size=0, --threads=4]
+  roles:
+    agg: &dep8_agg
+      args:
+        enable-dp-attention: true
+        enable-expert-parallel: true
+        # MegaMoE: 48 routed experts per rank, top-6; the shared expert stays a separate FP8 GEMM.
+        moe-backend: mega
+        prefill-admit-policy: adaptive
+        api-server-count: 4
+        # Routes each request to the rank whose prefix is in its cache or the shared Store.
+        dp-load-balance: share_cache
+        # Online EPLB: no placement file, no redundant experts.
+        enable-eplb: true
+        eplb-config: '{"num_redundant_experts":0,"load_window_size":200,"rebalance_interval":800,"rebalance_layers_per_chunk":4}'
+        cudagraph-capture-sizes: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,56,64,72,80,96,128]'
+      env:
+        GPU_MAX_HW_QUEUES: '5'
+        MORI_SHMEM_HEAP_SIZE: 16G
+        ATOM_DP_SESSION_AFFINITY: '0'
+        ATOM_DP_LB_REQ_EQUIV: '512'
+        ATOM_ENABLE_PREFILL_DELAYER: '1'
+        ATOM_PREFILL_DECODE_INTERVAL: '0'
+        ATOM_FRONTEND_PREFIX_HASH: '1'
+        ATOM_DP_LM_HEAD_MODE: 'off'
+        ATOM_PRELOAD: '0'
+        ATOM_KV_OFFLOAD: mooncake_store
+        ATOM_KV_OFFLOAD_EXTRA_CONFIG: '{{"mooncake_store.master":"127.0.0.1:26051","mooncake_store.metadata":"http://127.0.0.1:26080/metadata","mooncake_store.protocol":"rdma","mooncake_store.load_pool_mib":1024,"mooncake_store.save_pool_mib":256}}'
+        MOONCAKE_DISABLE_HIP_DMABUF: '0'
+        MC_NUM_QP_PER_EP: '1'
+        MC_MAX_MR_SIZE: '1073741824'
+        MC_GID_INDEX: "@fabric.rdma-gid-index"
+        # The fabric is rail-isolated: each worker reaches the owners through its own GPU's NIC.
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        OFFLOAD_MIN_LOAD_TOKENS: '512'
+        OFFLOAD_MIN_SAVE_TOKENS: '512'
+        OFFLOAD_MAX_PENDING_SAVES: '8'
+        ATOM_DSPARK_LEAN_HEAD: '1'
+        ATOM_V41_DRAFT_ATTN_NO_CAT: '1'
+        ATOM_DSPARK_FUSED_PROLOGUE: '1'
+        T2_DRAFT_ATTN: '64,16,4'
+        T2_DRAFT_ATTN_2BUF: '1'
+        # 1 feeds the target layers' shared-expert input to MegaMoE; the DSpark draft layers are never merged.
+        AITER_MEGA_SHARED_IN: '1'
+        ATOM_GRAPH_SIDE_STREAMS: '0'
+        AITER_FLYDSL_ROUTER_TOP6: '1'
+        AITER_FLYDSL_ROUTER_TOP3: '1'
+        AITER_MEGA_MHC_SMALL_M: '1'
+  benchmark:
+    env:
+      CONC: '128'
+      KV_OFFLOADING: 'dram'
+
+override_dep8_c256:
+  setup_script: raise-memlock-soft-limit.sh
+  health_check:
+    max_attempts: 720
+    interval_seconds: 5
+  services: *mc_store
+  roles:
+    agg: *dep8_agg
+  benchmark:
+    env:
+      CONC: '256'
+      KV_OFFLOADING: 'dram'
+
+override_dep8_c384:
+  setup_script: raise-memlock-soft-limit.sh
+  health_check:
+    max_attempts: 720
+    interval_seconds: 5
+  services: *mc_store
+  roles:
+    agg: *dep8_agg
+  benchmark:
+    env:
+      CONC: '384'
+      KV_OFFLOADING: 'dram'
+
+override_dep8_c512:
+  setup_script: raise-memlock-soft-limit.sh
+  health_check:
+    max_attempts: 720
+    interval_seconds: 5
+  services: *mc_store
+  roles:
+    agg: *dep8_agg
+  benchmark:
+    env:
+      CONC: '512'
+      KV_OFFLOADING: 'dram'
