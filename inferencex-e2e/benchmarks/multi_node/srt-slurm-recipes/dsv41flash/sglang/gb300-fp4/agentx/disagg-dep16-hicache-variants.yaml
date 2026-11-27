@@ -210,15 +210,19 @@ base:
       AIPERF_DATASET_MMAP_CACHE_ENABLED: "true"
 
 
-override_5p1d_dep2_dep32_b18_c4000:
-  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep32-hicache-5p1d-dep2-dep32-b18-c4000
+override_6p1d_dep2_dep32_b24_c4000:
+  name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep32-hicache-6p1d-dep2-dep32-b24-c4000
+  frontend:
+    args:
+      router-session-affinity-mode: soft
+      router-decode-active-request-weight: "1000000"
   roles:
     prefill:
       nodes: 3
       args:
         hicache-ratio: 2.7
         mem-fraction-static: 0.85
-        engram-config: '{"placement":"cpu","replication":"group_shards","group_size":10,"group_store":"/logs/engram-group-store"}'
+        engram-config: '{"placement":"cpu","replication":"group_shards","group_size":12,"group_store":"/logs/engram-group-store"}'
     decode:
       nodes: 8
       env:
@@ -229,9 +233,9 @@ override_5p1d_dep2_dep32_b18_c4000:
         expert-parallel-size: 32
         ep-num-redundant-experts: 32
         load-balance-method: total_requests
-        max-running-requests: 576
-        cuda-graph-max-bs-decode: 18
-        disaggregation-decode-extra-slots: 80
+        max-running-requests: 768
+        cuda-graph-max-bs-decode: 24
+        disaggregation-decode-extra-slots: 128
 
 override_12p1d_dep2_dep32_b72_c10288:
   name: dsv41flash-fp4-gb300-dynamo-sglang-agentx-disagg-dep32-hicache-12p1d-dep2-dep32-b72-c10288
