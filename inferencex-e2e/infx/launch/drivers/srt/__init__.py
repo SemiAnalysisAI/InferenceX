@@ -46,8 +46,12 @@ from infx.launch.request import (
     SingleNodeRequest,
     VideoRequest,
 )
-from infx.srt_slurm.video import PACKAGE_MOUNT, load_spec, video_package
-from infx.srt_slurm.workload import BOUND_RECIPE, selects_dedicated_discovery
+from infx.srt_slurm.video import PACKAGE_MOUNT, video_package
+from infx.srt_slurm.workload import (
+    BOUND_RECIPE,
+    selects_dedicated_discovery,
+    selects_frontend_image,
+)
 
 if TYPE_CHECKING:
     from infx.clusters import Cluster
@@ -136,10 +140,9 @@ def run_video(launch: Launch) -> int:
             return rc
         selected, bound, runtime_args = submit.bound_arguments(root / "arguments")
         event.set(recipe=selected.removeprefix(f"{run.workspace}/"))
-        collect.stage_video_identity(run, Path(bound))
-        spec = load_spec(request.video_spec, root=run.workspace, set_id=request.video_set)
+        plan = collect.stage_video_identity(run, Path(bound))
         models.download_video_model(
-            run.cluster, run.env, hf_cache, request.model, spec["plan"]["model_revision"]
+            run.cluster, run.env, hf_cache, request.model, plan["model_revision"]
         )
         fetched = root / "fetched-outputs"
         submitted = submit.Submitted(manifest=run.workspace / submit.VIDEO_SUBMISSION)
@@ -309,7 +312,10 @@ def run_multinode(launch: Launch) -> int:
             "/usr/bin/python3" if shared and os.access("/usr/bin/python3", os.X_OK) else None
         )
         install_srtctl(run, checkout, python=system_python)
-        config.write_lane_config(run, lane, checkout, decision, model_paths)
+        frontend_image = selects_frontend_image(
+            mirrored, agentic=request.is_agentic, root=repository_root()
+        )
+        config.write_lane_config(run, lane, checkout, decision, model_paths, frontend_image)
         if rc := run_setup(run, checkout, cpu_power_exporter=decision.cpu):
             return rc
         infmax = compute_workspace(run, checkout, shared=shared)
