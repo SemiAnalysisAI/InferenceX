@@ -1,0 +1,129 @@
+base:
+  schema: 2
+  name: glm5.3-fp8-mi355x-sglang-agentic-throughput
+  resources:
+    gpu_type: mi355x
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      args:
+        served-model-name: zai-org/GLM-5.3
+        trust-remote-code: true
+        kv-cache-dtype: fp8_e4m3
+        dsa-prefill-backend: triton
+        dsa-decode-backend: triton
+        tool-call-parser: glm47
+        reasoning-parser: glm45
+        # 32k chunks interleave decode between prefill chunks and keep per-chunk
+        # activation headroom low enough for 0.85.
+        chunked-prefill-size: 32768
+        mem-fraction-static: 0.85
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+        watchdog-timeout: 1800
+        enable-metrics: true
+      env:
+        PYTHONNOUSERSITE: '1'
+        # Outlast AIPerf's pooled connections past Uvicorn's keep-alive.
+        SGLANG_TIMEOUT_KEEP_ALIVE: '900'
+        # The DSA indexer uses the precompiled HIP Top-K op.
+        SGLANG_OPT_USE_TOPK_V2: 'false'
+  benchmark:
+    env:
+      # Warmup can leave bytes unacknowledged past AIPerf's 30 s default.
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
+
+override_tp8_c8_hicache:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 16
+        cuda-graph-max-bs-decode: 16
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.0
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+
+override_tp8_c10_hicache:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        max-running-requests: 20
+        cuda-graph-max-bs-decode: 20
+        enable-hierarchical-cache: true
+        hicache-ratio: 1.0
+        hicache-write-policy: write_through_selective
+        hicache-io-backend: direct
+        hicache-mem-layout: page_first_direct
+  benchmark:
+    env:
+      CONC: '10'
+      KV_OFFLOADING: dram
+
+override_tp8_c16_dcp4:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        # DCP4 shards the FP8 KV over four ranks (10.5M tokens), so the GPU pool
+        # holds the C16/C24 working set without HiCache.
+        dcp-size: 4
+        # Breakable prefill graphs fail with DCP>1 on this image.
+        cuda-graph-backend-prefill: disabled
+        max-running-requests: 32
+        cuda-graph-max-bs-decode: 32
+        max-prefill-tokens: 16384
+        # Batch long prefills instead of interleaving them one by one with decode.
+        # Keep 32k chunks: 16k chunks exhaust memory in the DSA indexer on a cold start.
+        prefill-max-requests: 2
+        enable-prefill-delayer: true
+        prefill-delayer-max-delay-ms: 800
+        prefill-delayer-max-delay-passes: 32
+        prefill-delayer-queue-min-ratio: 0.5
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: none
+
+override_tp8_c24_dcp4:
+  roles:
+    agg:
+      args:
+        tensor-parallel-size: 8
+        expert-parallel-size: 1
+        dcp-size: 4
+        cuda-graph-backend-prefill: disabled
+        max-running-requests: 48
+        cuda-graph-max-bs-decode: 48
+        max-prefill-tokens: 16384
+        prefill-max-requests: 2
+        enable-prefill-delayer: true
+        prefill-delayer-max-delay-ms: 800
+        prefill-delayer-max-delay-passes: 32
+        prefill-delayer-queue-min-ratio: 0.5
+  benchmark:
+    env:
+      CONC: '24'
+      KV_OFFLOADING: none

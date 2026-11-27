@@ -13516,3 +13516,13 @@
   description:
     - "Add Kimi-K3.1-Pro GB200 vLLM AgentX configs on vllm/vllm-openai:kimi-k31-arm64-cu135-7074371 with optimized parallel configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5199
+
+- config-keys:
+    - glm5.3-fp8-mi355x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run GLM-5.3 FP8 MI355X SGLang AgentX on the pinned ROCm10 20261119 image at TP8/EP1. C1/2/4 use Triton DSA, EAGLE MTP 3/1/4, GPU-resident FP8 KV, the AMD monokernel and admission/decode graph caps of 80."
+    - "C8/10 use Triton DSA, EAGLE MTP 3/1/4, admission/decode graph caps of twice the concurrency, and HiCache with a host-to-device KV ratio of 1.0 and selective write-through."
+    - "C16/24 use TP8/DCP4 with GPU-resident FP8 KV (no HiCache), Triton DSA, EAGLE MTP 3/1/4, admission/decode graph caps of twice the concurrency, eager prefill, and the prefill delayer with at most two prefill requests per batch."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5168
