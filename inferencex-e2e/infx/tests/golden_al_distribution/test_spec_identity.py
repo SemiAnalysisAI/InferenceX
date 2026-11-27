@@ -142,6 +142,17 @@ def test_trtllm_relaxed_acceptance_is_its_own_verifier() -> None:
     assert run.verify == Fact("relaxed", "explicit")
 
 
+def test_trtllm_dspark_rejection_sampling_matches_the_kimi_k31_draft_sampler() -> None:
+    config = {
+        "decoding_type": "DSpark", "max_draft_len": 4,
+        "speculative_model": "Inferact/Kimi-K3.1-Pro-DSpark", "use_rejection_sampling": True,
+    }  # fmt: skip
+    result = audit("kimik3.1", _role(speculative_config=config), "dynamo-trt")
+    assert result["curve"] == "kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block"
+    assert not [f for f in result["findings"] if f[1] == "draft_sample"]
+    assert ["mismatch", "verify", "standard (documented)", "block (explicit)"] in result["findings"]
+
+
 def test_atom_verifier_is_unknown_and_reported_unverified() -> None:
     args = {"method": "dspark", "num-speculative-tokens": 4, "draft-model": "Inferact/Kimi-K3-DSpark"}
     findings = audit("kimik3", _role(**args), "atom")["findings"]

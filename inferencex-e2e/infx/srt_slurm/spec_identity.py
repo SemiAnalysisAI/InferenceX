@@ -82,8 +82,13 @@ def _sglang(args: Mapping[str, Any], method: str) -> dict[str, Fact]:
     }
 
 
-def _trtllm() -> dict[str, Fact]:
-    return {"draft_sample": DEFAULT, "adaptive": NOT_ADAPTIVE, "topology": CHAIN}
+def _trtllm(spec: Mapping[str, Any]) -> dict[str, Fact]:
+    sampler = spec.get("draft_sample_method")
+    return {
+        "draft_sample": DEFAULT if sampler is None else Fact(sampler, "documented"),
+        "adaptive": NOT_ADAPTIVE,
+        "topology": CHAIN,
+    }
 
 
 def _atom(method: str) -> dict[str, Fact]:
@@ -152,7 +157,7 @@ def run_collection(model_prefix: str, role: Mapping[str, Any], framework: str) -
     facts = {
         "vllm": lambda: _vllm(spec),
         "sglang": lambda: _sglang(args, method),
-        "trtllm": _trtllm,
+        "trtllm": lambda: _trtllm(spec),
         "atom": lambda: _atom(method),
         "tilert": _tilert,
         "tokenspeed": lambda: _tokenspeed(args),
