@@ -12751,3 +12751,9 @@
   description:
     - Add experimental 1P3D c18/c9 with P-only SimpleCPU caching and direct MoRIIO decode consumers. Enable latency-specialized decode at three sequences, K4 and 5/10/15-row graphs using the frozen base image plus audited seq3 support. Keep GMU 0.95 and 5 GiB headroom; local GPU validation was unavailable, so these runs provide first integration evidence.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p3d-simplecpu-mono
+  description:
+    - Evaluate the clean native576 monokernel image with decode-only native query publication, peer sparse attention and fused BF16 post. Preserve real weights, three decode sequences, K4, P-only SimpleCPU, GMU 0.95, 5 GiB headroom and one-hour profiling. GPU correctness and dispatch checks pass; dummy model measurements do not establish an overall speedup.
+  pr-link: XXX
