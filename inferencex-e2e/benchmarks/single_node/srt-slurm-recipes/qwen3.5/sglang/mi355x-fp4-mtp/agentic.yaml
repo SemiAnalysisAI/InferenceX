@@ -37,6 +37,9 @@ base:
         speculative-num-steps: 3
         speculative-eagle-topk: 1
         speculative-num-draft-tokens: 4
+        # Level 2 (default since sglang#49886) keeps one Mamba checkpoint per path, which drops
+        # AgentX GPU prefix hits from 95% to 91% at c12 and from 87% to 78% at c80 on the FP8 arm.
+        hybrid-cache-checkpoints-level: 3
         enable-metrics: true
         enable-cache-report: true
       env:

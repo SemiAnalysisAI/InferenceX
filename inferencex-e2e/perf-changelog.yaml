@@ -13507,3 +13507,12 @@
     - "Use native MTP and configure prefill HiCache and Mooncake DRAM storage for disaggregated serving."
     - "Pack two PP2 prefill workers onto each GB300 prefill node and place the c890 client on the last decode node."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5233
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261109 to lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261126, pinned by digest to the scheduled nightly push (amd64 sha256:857a9bbc46bb807aa49fbf6a7fc4944c9b72e9eba6d9f5e4b2c8ba8adc0eb2ec): ROCm 10.0.0, Ubuntu 24.04, SGLang 91fee1bd8a, AITER 581579ab, ROCm-fork Triton 3.8.0 at 669b31ac. Same image as qwen3.5-fp8-mi355x-sglang-agentic-mtp in #5261."
+    - "All points: add --hybrid-cache-checkpoints-level 3. sglang#49886 (2026-11-13) made level 2 the default, which checkpoints hybrid Mamba state only at fork points and request ends with one state per path. On the FP8 arm with this image (run 45830733513), level 2 cut the GPU prefix-cache hit rate from 95.4% to 90.6% at concurrency 12 and from 87.3% to 77.7% at concurrency 80 against the 20261109 sweep. Level 3 restores per-chunk checkpoints, the behavior of the 20261109 image."
+    - "No monokernel: sgl-amd-mono's qwen35_a17b serves block-FP8 only and refuses MXFP4 checkpoints. Every other recipe setting is unchanged: ROCM_QUICK_REDUCE_QUANTIZATION=INT4, mem-fraction-static 0.8 under the aiter 0.85 scaling, stream-interval 50, the HiCache settings and the TP4 and TP2 concurrency grids."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
