@@ -215,6 +215,8 @@ kimik31-r10-1p3d-simplecpu-mono:
           ep: 8
           dp-attn: false
           additional-settings:
+          - K31_VLLM_SOURCE_SHA=d0d14a48571e71ab68b50db9887886c852f575d0
+          - K31_VLLM_RECORD_SHA256=d43b2eb11caec5780890bc4ed8f410491ce96f3351d4ed0ad71e52b5919d7eef
           - TOTAL_CPU_DRAM_GB=1799
           - K31_CLEAN_RUN_ID=k31-native576-c18-1128
           - K31_MODEL_METADATA_MANIFEST=/infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/k31-pro-metadata-6d0a0202.json
@@ -226,4 +228,6 @@ kimik31-r10-1p3d-simplecpu-mono:
           ep: 1
           dp-attn: false
           additional-settings:
+          - K31_VLLM_SOURCE_SHA=d0d14a48571e71ab68b50db9887886c852f575d0
+          - K31_VLLM_RECORD_SHA256=d43b2eb11caec5780890bc4ed8f410491ce96f3351d4ed0ad71e52b5919d7eef
           - DECODE_CPU_DRAM_GB=0

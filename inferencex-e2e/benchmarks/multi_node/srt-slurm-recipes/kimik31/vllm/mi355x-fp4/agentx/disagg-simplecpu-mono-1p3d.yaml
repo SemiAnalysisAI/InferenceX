@@ -84,6 +84,8 @@ roles:
       cache-aware-prefill-admission: true
       kernel-config: '{"amd_kernels":{"disabled_routes":["moe","norm","overlap"]}}'
     env:
+      K31_VLLM_SOURCE_SHA: d0d14a48571e71ab68b50db9887886c852f575d0
+      K31_VLLM_RECORD_SHA256: d43b2eb11caec5780890bc4ed8f410491ce96f3351d4ed0ad71e52b5919d7eef
       VLLM_USE_V2_MODEL_RUNNER: '1'
       VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
       VLLM_ROCM_USE_AITER: '1'
@@ -226,6 +228,8 @@ roles:
       kernel-config: '{"amd_kernels":{"enabled":true}}'
       watermark: 0.02
     env:
+      K31_VLLM_SOURCE_SHA: d0d14a48571e71ab68b50db9887886c852f575d0
+      K31_VLLM_RECORD_SHA256: d43b2eb11caec5780890bc4ed8f410491ce96f3351d4ed0ad71e52b5919d7eef
       VLLM_USE_V2_MODEL_RUNNER: '1'
       VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
       VLLM_ROCM_USE_AITER: '1'
