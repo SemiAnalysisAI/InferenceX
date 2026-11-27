@@ -4704,6 +4704,8 @@ qwen3.5-fp8-h200-sglang-agentic-mtp:
       - { gpus-per-worker: 8, tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 8, 12, 16], srt-recipe: agentic.yaml }
       - { gpus-per-worker: 8, tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 12, 16], srt-recipe: agentic.yaml }
 
+# TP2 at 16, 20 and 24 agents also runs with an FP8 KV cache and HiCache host-DRAM
+# offload. Concurrency 1-16 on GPU KV are unchanged.
 qwen3.8next-fp8-h200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.23-cu130@sha256:f832b5c39559c9caa900b22ad37c76fcce66470676855c42052102c537812f1f
   model: Qwen/Qwen3.8-Flash-Next-FP8
@@ -4717,6 +4719,7 @@ qwen3.8next-fp8-h200-sglang-agentic-mtp:
     agentic-coding:
     - search-space:
       - { gpus-per-worker: 2, tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 8, 12, 14, 16], srt-recipe: agentic.yaml }
+      - { gpus-per-worker: 2, tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 20, 24], srt-recipe: agentic.yaml }
       - { gpus-per-worker: 4, tp: 4, ep: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 8], srt-recipe: agentic.yaml }
 
 glm5.3flash-fp8-h200-sglang-agentic-mtp:
