@@ -12745,3 +12745,9 @@
   description:
     - Run the frozen ShardQ FP8-Q/PV and 576-byte KV stack with real K3.1 Pro and released DSpark weights at c64. Use autoKV, GMU 0.95 and 5 GiB headroom on both roles, decode 32 sequences and graphs through 160 tokens, prefill admission share 0.5, and decode multistream/VUP reduce-scatter. Preserve three 1799 GB UMBP pools and standard one-hour profiling.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p3d-simplecpu-mono
+  description:
+    - Add experimental 1P3D c18/c9 with P-only SimpleCPU caching and direct MoRIIO decode consumers. Enable latency-specialized decode at three sequences, K4 and 5/10/15-row graphs using the frozen base image plus audited seq3 support. Keep GMU 0.95 and 5 GiB headroom; local GPU validation was unavailable, so these runs provide first integration evidence.
+  pr-link: XXX

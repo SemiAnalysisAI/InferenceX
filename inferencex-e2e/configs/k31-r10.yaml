@@ -181,3 +181,49 @@ kimik31-r10-2p3d-umbp:
           additional-settings:
           - TOTAL_CPU_DRAM_GB=1799
           - DECODE_CPU_DRAM_GB=1799
+
+kimik31-r10-1p3d-simplecpu-mono:
+  image: yukiozzz/vllm-openai-rocm@sha256:4fc768f2ac0133d3437257500be65c58f86bb80bc11be14cdc46001e62e7f7ab7
+  model: moonshotai/Kimi-K3.1-Pro
+  model-prefix: kimik3.1
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  router:
+    name: vllm-router
+    version: 0.1.17
+  kv-p2p-transfer: moriio
+  multinode: true
+  disagg: true
+  srt-recipe-dir: kimik31/vllm/mi355x-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.6
+      search-space:
+      - spec-decoding: mtp
+        conc-list:
+        - 18
+        - 9
+        kv-offloading: dram
+        kv-offload-backend:
+          name: simplecpu
+        srt-recipe: disagg-simplecpu-mono-1p3d.yaml
+        prefill:
+          num-worker: 1
+          tp: 8
+          dcp-size: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - TOTAL_CPU_DRAM_GB=1799
+          - K31_CLEAN_RUN_ID=k31-1p3d-simplecpu-mono-1127
+          - K31_MODEL_METADATA_MANIFEST=/infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/k31-pro-metadata-6d0a0202.json
+          - MODEL_PATH=/var/lib/hf-hub-cache/models--moonshotai--Kimi-K3.1-Pro/snapshots/6d0a0202956796543364d666ab19c6ad1a494ee1
+        decode:
+          num-worker: 3
+          tp: 8
+          dcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - DECODE_CPU_DRAM_GB=0
