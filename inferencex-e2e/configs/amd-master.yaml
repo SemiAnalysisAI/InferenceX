@@ -741,7 +741,7 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
 # golden AL 3.51 for throughput, real block verification for evals, adaptive
 # verification off on ROCm.
 dsv41flash-fp4-mi325x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-7c3a9302f5ac2441ad199134129e973d22a46797@sha256:f049ae6061c2fbc180f441146daceea2ba1b980149eb8e887998412bd227b04e
+  image: vllm/vllm-openai-rocm:nightly-de7cf7f8cb5dc47d2e65207e0fabbe2c8f0d73b3@sha256:001bb9087d9d56b390069434babbd799c39a254be2f0c7ca7b3a2174c243a3a8
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi325x-amd
@@ -935,7 +935,7 @@ glm5.2-fp4-mi355x-atom-disagg-agentic-mtp:
 # Two GPUs per server doubles the servers per node and is the layout that
 # decides whether DSv4.1-Flash is throughput- or interactivity-bound here.
 dsv41flash-fp4-mi325x-vllm-disagg-agentic-dspark:
-  image: vllm/vllm-openai-rocm:nightly-7c3a9302f5ac2441ad199134129e973d22a46797@sha256:f049ae6061c2fbc180f441146daceea2ba1b980149eb8e887998412bd227b04e
+  image: vllm/vllm-openai-rocm:nightly-de7cf7f8cb5dc47d2e65207e0fabbe2c8f0d73b3@sha256:001bb9087d9d56b390069434babbd799c39a254be2f0c7ca7b3a2174c243a3a8
   model: deepseek-ai/DeepSeek-V4.1-Flash
   model-prefix: dsv41flash
   runner: cluster:mi325x-amd
