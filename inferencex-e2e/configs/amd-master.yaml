@@ -820,6 +820,23 @@ glm5.2-fp4-mi355x-sglang-agentic-mtp:
       - { gpus-per-worker: 4, tp: 4, ep: 4, dcp-size: 4, kv-offloading: none, conc-list: [16, 24, 40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
       - { gpus-per-worker: 8, tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp, srt-recipe: agentic.yaml }
 
+glm5.2-fp4-mi355x-infera-sglang-agentic:
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261117@sha256:e016f33423250be30bde9e0888d159b67b01e00944de1edc11f36dd1f3dd0269
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: infera-sglang
+  multinode: false
+  # One aggregated server has no routing choice, so these points serve SGLang directly.
+  srt-recipe-dir: glm5.2/sglang/mi355x-fp4-mtp
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { gpus-per-worker: 4, tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 10, 12, 14, 16], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, dcp-size: 4, kv-offloading: none, conc-list: [16, 24, 40, 48], spec-decoding: mtp, srt-recipe: agentic.yaml }
+      - { gpus-per-worker: 8, tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2], spec-decoding: mtp, srt-recipe: agentic.yaml }
+
 # GLM-5.2 MXFP4 AgentX on MI355X: stock SGLang prefill/decode disaggregation behind the
 # Infera router (infera-sglang). Workers start through infera.engine.sglang and register in
 # etcd; the router routes kv-aware with prefill session affinity and decode input demand.

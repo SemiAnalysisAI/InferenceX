@@ -223,7 +223,14 @@ def validate_recipe(recipe: dict[str, Any], environment: Mapping[str, str]) -> N
     workload = benchmark["env"]
     engine_config = recipe["engine"]
     engine = engine_config["type"] if isinstance(engine_config, dict) else engine_config
-    if environment["FRAMEWORK"] not in {"sglang", "trt", "atom", "vllm", "tokenspeed"}:
+    if environment["FRAMEWORK"] not in {
+        "sglang",
+        "infera-sglang",
+        "trt",
+        "atom",
+        "vllm",
+        "tokenspeed",
+    }:
         raise ValueError(f"Unsupported single-node framework: {environment['FRAMEWORK']!r}")
     spec = spec_parameters(role, engine)
     if spec and spec["method"] not in {"eagle", "eagle3", "nextn", "mtp", "dspark", "dflash"}:

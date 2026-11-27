@@ -13509,10 +13509,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5233
 
 - config-keys:
+    - glm5.2-fp4-mi355x-infera-sglang-agentic
     - glm5.2-fp4-mi355x-infera-sglang-agentic-disagg
   scenario-type:
     - agentic-coding
   description:
+    - "Add glm5.2-fp4-mi355x-infera-sglang-agentic, the aggregated twin of the PD key, so both topologies form one infera-sglang curve: the search space and recipe of glm5.2-fp4-mi355x-sglang-agentic-mtp (glm5.2/sglang/mi355x-fp4-mtp) unchanged at concurrency 1-48, on the PD key's image lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261117 (pinned by digest). The aggregated points serve SGLang directly without the Infera router, since one aggregated server has no routing choice."
     - "Add GLM-5.2 MXFP4 AgentX on MI355X with stock, unpatched SGLang (lmsysorg/sglang-rocm:v0.5.23-rocm720-mi35x-20261117, pinned by digest) prefill/decode disaggregation behind the Infera router (framework infera-sglang, infera-router 0.3.3 installed by infera-sglang.sh). Workers start through infera.engine.sglang and register in etcd; the router routes kv-aware with prefill session affinity and decode input demand."
     - "Prefill TP1 x PP4 (layers 20/20/20/18) with write-back HiCache at 250 GB per stage; decode TP + DP attention; EAGLE MTP 5/1/6 on both roles; Mooncake KV transfer. Shapes: 1P1D with an 8-GPU decode at concurrency 32, 48, 64, 88 (decode request weight 1,000,000); 1P1D with a 4-GPU decode at 64, 80."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5138
