@@ -25,6 +25,13 @@ KIMI_REQUIREMENTS = (
     "jsonschema==4.25.1",
     "pytest==8.4.2",
 )
+# The BEAM scripts truncate chats with the bundled Kimi-K2.6 tokenizer, loaded through
+# transformers' remote code; the pins are the verifier's own lockfile resolution.
+BEAM_REQUIREMENTS = (
+    "transformers==5.14.1",
+    "tiktoken==0.12.0",
+    "tokenizers==0.22.2",
+)
 MINIMAX_REQUIREMENTS = (
     "jsonschema==4.25.1",
     "loguru==0.7.3",
@@ -304,6 +311,12 @@ _KIMI = Suite(
     results=("results_kimi_vendor_*.json",),
     requirements=KIMI_REQUIREMENTS,
 )
+_BEAM = Suite(
+    label="Kimi BEAM (1M)",
+    adapter="kimi_beam_eval.py",
+    results=("results_kimi_beam_*.json",),
+    requirements=(*KIMI_REQUIREMENTS, *BEAM_REQUIREMENTS),
+)
 _BFCL = Suite(
     label="BFCL",
     adapter="bfcl_adapter.py",
@@ -318,6 +331,7 @@ PROVIDERS: dict[str, Provider] = {
             "kimi_tool_call_schema_full": replace(
                 _KIMI, requirements=(*KIMI_REQUIREMENTS, "pytest-xdist==3.8.0")
             ),
+            "kimi_beam_1m": _BEAM,
         },
         python_minor=12,
         prepare=_prepare_kimi,
