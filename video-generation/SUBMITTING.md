@@ -31,6 +31,8 @@ row. To add a deployment that must stay separately selectable, copy the row unde
 distinct key with its own recipe. A new model, engine API, topology, or model-view
 format needs maintainer adapter validation before it can be a recipe-only
 contribution.
+A workload change adds the next `release-v<N>` set, or a new spec file when it changes the
+model or a generation parameter ([specs/README.md](specs/README.md)).
 
 ## 2. Change the recipe and config row
 

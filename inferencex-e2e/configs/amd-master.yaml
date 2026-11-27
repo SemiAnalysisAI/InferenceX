@@ -1333,7 +1333,7 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
     agentic-coding:
     - search-space:
       - { gpus-per-worker: 8, tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [6, 10, 28], srt-recipe: agentic.yaml }
-      - { gpus-per-worker: 4, tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [28, 36, 40], srt-recipe: agentic.yaml }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [28, 36, 40, 58], srt-recipe: agentic.yaml }
 
 musespark-fp4-mi355x-tokenspeed-agentic-dflash:
   image: lightseekorg/tokenspeed-runner-amd:rocm7.2.4-pytorch-2.14.0-gfx950@sha256:25949b7a6306e9fbc0165091cc67d9bded9965ed1d664b55f9966e7df0b05e51
