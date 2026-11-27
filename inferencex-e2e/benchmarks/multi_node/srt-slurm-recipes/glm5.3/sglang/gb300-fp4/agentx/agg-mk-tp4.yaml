@@ -1,5 +1,5 @@
 schema: 2
-name: glm5.3-fp4-gb300-dynamo-sglang-agentx-agg-mk-tp4-c4-mrr1-mtp3
+name: glm5.3-fp4-gb300-dynamo-sglang-agentx-agg-mk-tp4-c4-mrr4-mtp3
 identity:
   model: {}
   container: {}
@@ -67,8 +67,8 @@ roles:
       watchdog-timeout: 1800
       enable-cache-report: true
       enable-metrics: true
-      max-running-requests: 1
-      cuda-graph-max-bs-decode: 1
+      max-running-requests: 4
+      cuda-graph-max-bs-decode: 4
 health_check:
   max_attempts: 540
   interval_seconds: 10
