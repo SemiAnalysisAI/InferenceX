@@ -1,0 +1,127 @@
+base:
+  schema: 2
+  name: qwen3.5-fp8-h200-sglang-agentic-fa3
+  resources:
+    gpu_type: h200
+    gpus_per_node: 8
+  frontend:
+    type: sglang
+    enable_multiple_frontends: false
+  observability:
+    enabled: false
+    tachometer:
+      enabled: false
+  engine: sglang
+  roles:
+    agg:
+      nodes: 1
+      args:
+        served-model-name: Qwen/Qwen3.5-397B-A17B-FP8
+        trust-remote-code: true
+        tensor-parallel-size: 8
+        data-parallel-size: 1
+        expert-parallel-size: 8
+        quantization: fp8
+        kv-cache-dtype: fp8_e4m3
+        mamba-ssm-dtype: bfloat16
+        attention-backend: flashinfer
+        enable-flashinfer-allreduce-fusion: true
+        mem-fraction-static: 0.8
+        stream-interval: 50
+        scheduler-recv-interval: 10
+        tokenizer-worker-num: 6
+        enable-metrics: true
+        speculative-algorithm: EAGLE
+        speculative-num-steps: 3
+        speculative-eagle-topk: 1
+        speculative-num-draft-tokens: 4
+      env:
+        PYTHONNOUSERSITE: '1'
+        SGLANG_ENABLE_SPEC_V2: '1'
+
+override_hicache_ep1_fa3_k6_mega_c1:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        attention-backend: fa3
+        speculative-num-steps: 6
+        speculative-num-draft-tokens: 7
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+      env:
+        SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
+  benchmark:
+    env:
+      CONC: '1'
+      KV_OFFLOADING: dram
+override_hicache_ep1_fa3_k5_mega_pdi48_c8:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        flashinfer-allreduce-fusion-backend: mnnvl
+        prefill-decode-interval: 48
+        attention-backend: fa3
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+      env:
+        SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
+  benchmark:
+    env:
+      CONC: '8'
+      KV_OFFLOADING: dram
+override_hicache_ep1_fa3_k5_mega_pdi80_c12:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        flashinfer-allreduce-fusion-backend: mnnvl
+        prefill-decode-interval: 80
+        attention-backend: fa3
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+      env:
+        SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
+  benchmark:
+    env:
+      CONC: '12'
+      KV_OFFLOADING: dram
+override_hicache_ep1_fa3_k5_mega_pdi96_c16:
+  roles:
+    agg:
+      args:
+        expert-parallel-size: 1
+        flashinfer-allreduce-fusion-backend: mnnvl
+        prefill-decode-interval: 96
+        attention-backend: fa3
+        speculative-num-steps: 5
+        speculative-num-draft-tokens: 6
+        page-size: 64
+        enable-hierarchical-cache: true
+        hicache-size: 77
+        hicache-io-backend: kernel
+        hicache-mem-layout: page_first
+        hicache-write-policy: write_through_selective
+      env:
+        SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION: '1'
+  benchmark:
+    env:
+      CONC: '16'
+      KV_OFFLOADING: dram
