@@ -289,6 +289,13 @@ def _checksums(output):
 
 def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
     logs, workspace = _native_job(tmp_path)
+    for sidecar in workspace.glob("power_validation_*.json"):
+        validation = json.loads(sidecar.read_text())
+        validation["producer"].update(
+            source_metric="gpu_power_usage",
+            power_scope="gpu_device_power_as_reported_by_amd_device_metrics_exporter",
+        )
+        sidecar.write_text(json.dumps(validation))
     output = tmp_path / "h3-results"
     environ = {
         "GITHUB_RUN_ID": "123",
@@ -358,6 +365,12 @@ def test_bundle_joins_cells_power_and_identity_into_the_app_layout(tmp_path):
         )
         power = json.loads((output / cell["power"]["path"]).read_text())
         assert power["valid"] and power["phases"] == cell["power"]["phases"]
+        assert power["source"] == "srt-slurm"
+        assert power["semantics"]["sensor"] == "gpu_power_usage"
+        assert (
+            power["semantics"]["scope"]
+            == "gpu_device_power_as_reported_by_amd_device_metrics_exporter"
+        )
         assert power["phases"]["measurement"]["aggregate"]["joules_per_valid_clip"] == 18000.25
         assert power["phases"]["measurement"]["aggregate"]["observed_peak_power_w"] == 1201.0
         assert len(power["sample_series"]) == 70 and set(power["per_gpu"]) == set(
@@ -386,6 +399,7 @@ def test_bundle_counts_malformed_power_samples_instead_of_hiding_them(tmp_path):
     )
     power = json.loads((output / "gpu/c1/power.json").read_text())
     assert power["malformed_sample_rows"] == 2
+    assert power["semantics"]["sensor"] is None and power["semantics"]["scope"] is None
     assert len(power["sample_series"]) == 70
 
 
@@ -585,13 +599,16 @@ def test_reuse_validates_every_selected_native_deployment_and_preserves_checkout
         validate_video_artifacts(artifacts, run_id="123", run_attempt="2", head_sha="c" * 40)
 
 
-def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
+# An identity file staged before the size existed has no workload_size key.
+@pytest.mark.parametrize("staged_size", [{"workload_size": {"latent_tokens": 37710}}, {}])
+def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path, staged_size):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     identity = {
         "plan_sha256": PLAN_SHA,
         "workload_plan": PLAN,
         "engine": {"name": "vllm-omni", "revision": "a" * 40},
+        **staged_size,
     }
     (workspace / "video-identity.json").write_text(json.dumps(identity))
     output = tmp_path / "bundle"
@@ -609,6 +626,7 @@ def test_startup_failure_preserves_declared_plan_and_engine_identity(tmp_path):
     matrix = json.loads((output / "serving-smoke.json").read_text())
     assert result["status"] == "failed" and result["power_verified"] is False
     assert {key: manifest[key] for key in identity} == identity
+    assert manifest["workload_size"] == staged_size.get("workload_size")
     assert matrix["engine"] == identity["engine"] and matrix["plan"] == identity["workload_plan"]
     assert "video-identity.json" in manifest["evidence"]
 

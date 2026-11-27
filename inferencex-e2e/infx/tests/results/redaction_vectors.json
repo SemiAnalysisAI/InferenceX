@@ -1,0 +1,384 @@
+{
+  "cases": [
+    {
+      "name": "private ipv4 kept",
+      "input": "connect http://10.0.0.11:8000/v1",
+      "output": "connect http://10.0.0.11:8000/v1"
+    },
+    {
+      "name": "private 172.16/12 kept",
+      "input": "peer 172.16.5.4:9100 ready",
+      "output": "peer 172.16.5.4:9100 ready"
+    },
+    {
+      "name": "cgnat kept",
+      "input": "peer 100.64.1.9 up",
+      "output": "peer 100.64.1.9 up"
+    },
+    {
+      "name": "link-local kept",
+      "input": "metadata 169.254.169.254",
+      "output": "metadata 169.254.169.254"
+    },
+    {
+      "name": "loopback and unspecified kept",
+      "input": "bind 0.0.0.0:8000 then 127.0.0.1:9000",
+      "output": "bind 0.0.0.0:8000 then 127.0.0.1:9000"
+    },
+    {
+      "name": "public ipv4",
+      "input": "ssh-keygen -F 198.51.100.7",
+      "output": "ssh-keygen -F ***REDACTED***"
+    },
+    {
+      "name": "public ipv4 keeps port",
+      "input": "http://198.51.100.8:8000/v1",
+      "output": "http://***REDACTED***:8000/v1"
+    },
+    {
+      "name": "sentence-final public ipv4",
+      "input": "Host IP: 198.51.100.9.",
+      "output": "Host IP: ***REDACTED***."
+    },
+    {
+      "name": "public in address json value",
+      "input": "{\"MASTER_ADDR\": \"203.0.113.7\"}",
+      "output": "{\"MASTER_ADDR\": \"***REDACTED***\"}"
+    },
+    {
+      "name": "public inside longer json value",
+      "input": "{\"cmd\": \"1.2.3.4 foo\"}",
+      "output": "{\"cmd\": \"***REDACTED*** foo\"}"
+    },
+    {
+      "name": "pip pin kept",
+      "input": "\"z3-solver==4.15.4.0\",",
+      "output": "\"z3-solver==4.15.4.0\","
+    },
+    {
+      "name": "wheel name kept",
+      "input": "nvidia_cudnn_cu13-9.20.0.48-py3-none-any.whl",
+      "output": "nvidia_cudnn_cu13-9.20.0.48-py3-none-any.whl"
+    },
+    {
+      "name": "json version map kept",
+      "input": "{\"opencv-python-headless\":\"4.13.0.92\"}",
+      "output": "{\"opencv-python-headless\":\"4.13.0.92\"}"
+    },
+    {
+      "name": "longer dotted run kept",
+      "input": "build 1.2.3.4.5",
+      "output": "build 1.2.3.4.5"
+    },
+    {
+      "name": "ipv6 unique-local kept",
+      "input": "addr [fd00:1:2::3]:29500",
+      "output": "addr [fd00:1:2::3]:29500"
+    },
+    {
+      "name": "ipv6 link-local kept",
+      "input": "via fe80::1c2:3ff:fe4d:5e6f",
+      "output": "via fe80::1c2:3ff:fe4d:5e6f"
+    },
+    {
+      "name": "ipv6 loopback kept",
+      "input": "listen [::1]:8000",
+      "output": "listen [::1]:8000"
+    },
+    {
+      "name": "ipv6 global",
+      "input": "addr [2001:db8::7]:29500",
+      "output": "addr [***REDACTED***]:29500"
+    },
+    {
+      "name": "mac address kept",
+      "input": "mac 02:00:00:00:00:01",
+      "output": "mac 02:00:00:00:00:01"
+    },
+    {
+      "name": "timestamp kept",
+      "input": "[W826 06:57:11.697279908 TCPStore.cpp:125]",
+      "output": "[W826 06:57:11.697279908 TCPStore.cpp:125]"
+    },
+    {
+      "name": "oracle vcn domain",
+      "input": "remote=[node-a.subnet1.vcn1.oraclevcn.com]:29501",
+      "output": "remote=[node-a.***REDACTED***]:29501"
+    },
+    {
+      "name": "internal node name kept",
+      "input": "node-b.cluster.internal: timedatectl NTPSynchronized=yes",
+      "output": "node-b.cluster.internal: timedatectl NTPSynchronized=yes"
+    },
+    {
+      "name": "gpu uuid kept",
+      "input": "GPU-00000000-0000-0000-0000-000000000001",
+      "output": "GPU-00000000-0000-0000-0000-000000000001"
+    },
+    {
+      "name": "hf token",
+      "input": "HF_TOKEN=hf_abcdefghijklmnopqrstuvwxyzABCDEF12",
+      "output": "HF_TOKEN=***REDACTED***"
+    },
+    {
+      "name": "github token",
+      "input": "token ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": "token ***REDACTED***"
+    },
+    {
+      "name": "url password, private host kept",
+      "input": "postgres://reader:s3cret@10.1.2.3:5432/db",
+      "output": "postgres://reader:***REDACTED***@10.1.2.3:5432/db"
+    },
+    {
+      "name": "url password with empty user",
+      "input": "redis://:s3cret@10.1.2.4:6379",
+      "output": "redis://:***REDACTED***@10.1.2.4:6379"
+    },
+    {
+      "name": "compact json url next to an email",
+      "input": "{\"url\":\"http://10.0.0.5:8000\",\"owner\":\"a@example.com\"}",
+      "output": "{\"url\":\"http://10.0.0.5:8000\",\"owner\":\"***REDACTED***\"}"
+    },
+    {
+      "name": "jwt access token",
+      "input": "(b'X-Xet-Access-Token', b'eyJhbGciOiJIUzI1NiJ9.eyJyZXBvSWQiOiIxMjMiLCJhY2Nlc3MiOiJSRUFEIn0.c2lnbmF0dXJlLWJ5dGVz')",
+      "output": "(b'X-Xet-Access-Token', b'***REDACTED***')"
+    },
+    {
+      "name": "lone base64 json segment kept",
+      "input": "payload eyJyZXBvSWQiOiIxMjMiLCJhY2Nlc3MiOiJSRUFEIn0",
+      "output": "payload eyJyZXBvSWQiOiIxMjMiLCJhY2Nlc3MiOiJSRUFEIn0"
+    },
+    {
+      "name": "pip installed version kept",
+      "input": "Requirement already satisfied: nvidia-cudnn-cu13==9.19.0.56 in /opt/conda/lib/python3.12/site-packages (from torch==2.11.0) (9.19.0.56)",
+      "output": "Requirement already satisfied: nvidia-cudnn-cu13==9.19.0.56 in /opt/conda/lib/python3.12/site-packages (from torch==2.11.0) (9.19.0.56)"
+    },
+    {
+      "name": "public ipv4 in parentheses",
+      "input": "connected (198.51.100.10)",
+      "output": "connected (***REDACTED***)"
+    },
+    {
+      "name": "public mq_connect_ip",
+      "input": "master_addr=127.0.0.1, mq_connect_ip=203.0.113.20 (local), world_size=8",
+      "output": "master_addr=127.0.0.1, mq_connect_ip=***REDACTED*** (local), world_size=8"
+    },
+    {
+      "name": "email in a home path",
+      "input": "Using cache directory: /home/jane.doe@example.com/.cache/torch_compile_cache/rank_1",
+      "output": "Using cache directory: /home/***REDACTED***/.cache/torch_compile_cache/rank_1"
+    },
+    {
+      "name": "email with subdomains and sentence period",
+      "input": "contact ops+ci@mail.example.co.uk.",
+      "output": "contact ***REDACTED***."
+    },
+    {
+      "name": "short home username kept",
+      "input": "/home/cam/.cache/huggingface",
+      "output": "/home/cam/.cache/huggingface"
+    },
+    {
+      "name": "scp-style git remote kept",
+      "input": "git clone git@gitlab.example.com:example-org/repo.git",
+      "output": "git clone git@gitlab.example.com:example-org/repo.git"
+    },
+    {
+      "name": "url userinfo without password kept",
+      "input": "fetch https://deploy@git.example.com/org/repo.git",
+      "output": "fetch https://deploy@git.example.com/org/repo.git"
+    },
+    {
+      "name": "user at host without tld kept",
+      "input": "ssh root@node-12 hostname",
+      "output": "ssh root@node-12 hostname"
+    },
+    {
+      "name": "version specifiers and image digests kept",
+      "input": "dynamo-llm@1.3.0 npm i @scope/pkg@2.0.0 image:cu130@sha256:0123abcd",
+      "output": "dynamo-llm@1.3.0 npm i @scope/pkg@2.0.0 image:cu130@sha256:0123abcd"
+    },
+    {
+      "name": "decorator kept",
+      "input": "@torch.compile(dynamic=True) and @functools.lru_cache",
+      "output": "@torch.compile(dynamic=True) and @functools.lru_cache"
+    },
+    {
+      "name": "public ipv4 after ansi colour code",
+      "input": "\u001b[2mpeer\u001b[0m\u001b[2m=\u001b[0m198.51.100.7:8000",
+      "output": "\u001b[2mpeer\u001b[0m\u001b[2m=\u001b[0m***REDACTED***:8000"
+    },
+    {
+      "name": "hf token after ansi colour code",
+      "input": "\u001b[32mINFO\u001b[0mhf_abcdefghijklmnopqrstuvwxyzABCDEF12",
+      "output": "\u001b[32mINFO\u001b[0m***REDACTED***"
+    },
+    {
+      "name": "email after ansi colour code keeps the code",
+      "input": "\u001b[0mjane@example.com",
+      "output": "\u001b[0m***REDACTED***"
+    },
+    {
+      "name": "public ipv4 after escaped newline and before escaped tab",
+      "input": "b'connect\\n198.51.100.7\\tok'",
+      "output": "b'connect\\n***REDACTED***\\tok'"
+    },
+    {
+      "name": "github token after escaped newline",
+      "input": "b'line\\nghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      "output": "b'line\\n***REDACTED***'"
+    },
+    {
+      "name": "public ipv6 after escaped newline",
+      "input": "b'via\\n2001:db8::9'",
+      "output": "b'via\\n***REDACTED***'"
+    },
+    {
+      "name": "email after escaped newline keeps the escape",
+      "input": "b'owner\\njane@example.com'",
+      "output": "b'owner\\n***REDACTED***'"
+    },
+    {
+      "name": "authorization bearer header",
+      "input": "headers={'Authorization': 'Bearer abcdefghijklmnop1234'}",
+      "output": "headers={'Authorization': 'Bearer ***REDACTED***'}"
+    },
+    {
+      "name": "authorization basic header",
+      "input": "curl -H \"Authorization: Basic dXNlcjpwYXNzd29yZA==\"",
+      "output": "curl -H \"Authorization: Basic ***REDACTED***\""
+    },
+    {
+      "name": "bare bearer token",
+      "input": "token type Bearer abcdefghijklmnopqrstuvwxyz ok",
+      "output": "token type Bearer ***REDACTED*** ok"
+    },
+    {
+      "name": "basic and bearer in prose kept",
+      "input": "Basic information: the bearer of bad news",
+      "output": "Basic information: the bearer of bad news"
+    },
+    {
+      "name": "secret assignments",
+      "input": "WANDB_API_KEY=0123456789abcdef0123456789abcdef01234567 \"DB_PASSWORD\": \"s3cret-pass\" AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY",
+      "output": "WANDB_API_KEY=***REDACTED*** \"DB_PASSWORD\": \"***REDACTED***\" AWS_SECRET_ACCESS_KEY: ***REDACTED***"
+    },
+    {
+      "name": "placeholder and numeric assignments kept",
+      "input": "HF_TOKEN=$HF_TOKEN DB_PASSWORD=<your-password> MAX_NUM_BATCHED_TOKEN=16384 SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token hf_token=None",
+      "output": "HF_TOKEN=$HF_TOKEN DB_PASSWORD=<your-password> MAX_NUM_BATCHED_TOKEN=16384 SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token hf_token=None"
+    },
+    {
+      "name": "nvidia api key",
+      "input": "key nvapi-abcdefghijklmnopqrstuvwxyz0123456789",
+      "output": "key ***REDACTED***"
+    },
+    {
+      "name": "aws temporary access key",
+      "input": "aws ASIAABCDEFGHIJKLMNOP",
+      "output": "aws ***REDACTED***"
+    },
+    {
+      "name": "url password with uppercase scheme",
+      "input": "Postgres://reader:s3cret@db.example.com/x",
+      "output": "Postgres://reader:***REDACTED***@db.example.com/x"
+    },
+    {
+      "name": "url password with json-escaped slashes",
+      "input": "\"url\": \"https:\\/\\/user:s3cret@10.0.0.9\\/path\"",
+      "output": "\"url\": \"https:\\/\\/user:***REDACTED***@10.0.0.9\\/path\""
+    },
+    {
+      "name": "internal tld after at sign kept",
+      "input": "ssh root@im-b200-c006.nsc-sa.internal; user@worker.svc.cluster.local; ops@nas.lan",
+      "output": "ssh root@im-b200-c006.nsc-sa.internal; user@worker.svc.cluster.local; ops@nas.lan"
+    },
+    {
+      "name": "matrix multiply call kept",
+      "input": "attn = q@k.transpose(-2, -1)",
+      "output": "attn = q@k.transpose(-2, -1)"
+    },
+    {
+      "name": "pip list version column kept",
+      "input": "Package                  Version\nnvidia-cudnn-cu12        9.10.2.21\n",
+      "output": "Package                  Version\nnvidia-cudnn-cu12        9.10.2.21\n"
+    },
+    {
+      "name": "conda environment version column kept",
+      "input": "[conda] nvidia-cudnn-cu12 9.10.2.21 pypi_0 pypi",
+      "output": "[conda] nvidia-cudnn-cu12 9.10.2.21 pypi_0 pypi"
+    },
+    {
+      "name": "public ipv4 in a two-column line",
+      "input": "peer  198.51.100.7\nnode-1 198.51.100.8",
+      "output": "peer  ***REDACTED***\nnode-1 ***REDACTED***"
+    },
+    {
+      "name": "non-ascii text next to an ip and a token",
+      "input": "地址198.51.100.7 密钥hf_abcdefghijklmnopqrstuvwxyzABCDEF12",
+      "output": "地址***REDACTED*** 密钥***REDACTED***"
+    },
+    {
+      "name": "aligned address key/value lines",
+      "input": "MASTER_ADDR   203.0.113.7\nmq_connect_ip  203.0.113.8\nnode-a    203.0.113.9\nWORKER_PUBLIC_V4   198.51.100.30",
+      "output": "MASTER_ADDR   ***REDACTED***\nmq_connect_ip  ***REDACTED***\nnode-a    ***REDACTED***\nWORKER_PUBLIC_V4   ***REDACTED***"
+    },
+    {
+      "name": "aligned package rows kept",
+      "input": "opencv-python-headless    4.13.0.92\nnvidia-cublas-cu12        12.8.4.1",
+      "output": "opencv-python-headless    4.13.0.92\nnvidia-cublas-cu12        12.8.4.1"
+    },
+    {
+      "name": "public ipv4 after erase-line code",
+      "input": "\u001b[2K198.51.100.7 up",
+      "output": "\u001b[2K***REDACTED*** up"
+    },
+    {
+      "name": "hf token after cursor-up code",
+      "input": "\u001b[1Ahf_abcdefghijklmnopqrstuvwxyzABCDEF12",
+      "output": "\u001b[1A***REDACTED***"
+    },
+    {
+      "name": "escaped ansi codes in a repr",
+      "input": "'\\x1b[0m198.51.100.7' '\\033[1;31m203.0.113.4'",
+      "output": "'\\x1b[0m***REDACTED***' '\\033[1;31m***REDACTED***'"
+    },
+    {
+      "name": "email after escaped unicode ansi code keeps the code",
+      "input": "\"\\u001b[32mjane@example.com\"",
+      "output": "\"\\u001b[32m***REDACTED***\""
+    },
+    {
+      "name": "json-escaped secret assignment",
+      "input": "{\\\"MY_SECRET_TOKEN\\\":\\\"abcdef1234567890\\\"}",
+      "output": "{\\\"MY_SECRET_TOKEN\\\":\\\"***REDACTED***\\\"}"
+    },
+    {
+      "name": "lower-case secret assignments",
+      "input": "hf_token=abcdefgh12345678 api_key: sk_live_abcdefgh1234 my_secret_token=zyxwvut98765",
+      "output": "hf_token=***REDACTED*** api_key: ***REDACTED*** my_secret_token=***REDACTED***"
+    },
+    {
+      "name": "command-line secret flags",
+      "input": "--hf-token abcdefgh12345678 --model x --api-key=abcdefgh12345678",
+      "output": "--hf-token ***REDACTED*** --model x --api-key=***REDACTED***"
+    },
+    {
+      "name": "tokenizer settings and placeholder flags kept",
+      "input": "eos_token=</s> pad_token=<pad> unk_token=[UNK] max_num_batched_tokens=16384 hf_token=None api_key=EMPTY --api-key EMPTY --tokenizer-mode auto --max-num-batched-tokens 8192",
+      "output": "eos_token=</s> pad_token=<pad> unk_token=[UNK] max_num_batched_tokens=16384 hf_token=None api_key=EMPTY --api-key EMPTY --tokenizer-mode auto --max-num-batched-tokens 8192"
+    },
+    {
+      "name": "bearer before a source path kept",
+      "input": "bearer src/auth/middleware/handlers.py",
+      "output": "bearer src/auth/middleware/handlers.py"
+    },
+    {
+      "name": "bearer token with slashes and digits",
+      "input": "Bearer abcdefghijklmnop/qrst1234",
+      "output": "Bearer ***REDACTED***"
+    }
+  ]
+}
