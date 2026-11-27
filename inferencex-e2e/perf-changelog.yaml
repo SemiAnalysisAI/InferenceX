@@ -13265,6 +13265,7 @@
   description:
     - "Update the vLLM image from cu134-nightly-cf5cea2d to cu134-nightly-f5d93296."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5141
+
 - config-keys:
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark
     - dsv41flash-fp4-mi355x-vllm-agentic-dspark-tp8-c1
