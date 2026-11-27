@@ -1,0 +1,1713 @@
+schema: 2
+
+base:
+  name: musespark-fp4-gb300-dynamo-trt-agentx-disagg
+  dynamo:
+    install: true
+    source:
+      wheel: 1.7.0.dev20261102
+    request_plane: tcp
+  identity:
+    frameworks:
+      dynamo: 1.7.0.dev20261102
+  environment:
+    HF_HUB_OFFLINE: '1'
+    HF_HUB_CACHE: /hf_hub_cache
+    DYN_TOKEN_IDS_AS_BYTES: '1'
+    DYN_REQUEST_PLANE_CODEC: msgpack
+    DYN_LIFECYCLE_TRACE_ENABLED: '0'
+    OTEL_EXPORT_ENABLED: '0'
+    PIP_CONFIG_FILE: /dev/null
+    PIP_INDEX_URL: https://pypi.org/simple
+    PIP_EXTRA_INDEX_URL: https://pypi.nvidia.com
+  services:
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+    extra_fatal_log_patterns: [Hang detected after \d+ seconds, 'Fatal error detected, initiating shutdown']
+  resources:
+    gpu_type: gb300
+    gpus_per_node: 4
+  engine:
+    type: trtllm
+    served_model_name: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+    publish_metrics: true
+    numa_cpu_bind: true
+    numa_memory_bind: preferred
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    placement:
+      node: head
+    args:
+      router-mode: kv
+    env:
+      ETCD_LEASE_TTL: '120'
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_TOKENIZER: fastokens
+      DYN_TOKENIZER_CACHE_BYTES: '8589934592'
+      DYN_REQUEST_PLANE: tcp
+      DYN_FRONTEND_ENABLE_KV_EVENTS: '0'
+  roles:
+    prefill:
+      args:
+        stream_interval: 20
+      env:
+        PYTHONNOUSERSITE: '1'
+        TQDM_DISABLE: '1'
+        HF_HUB_OFFLINE: '1'
+        DYN_CUSTOM_JINJA_TEMPLATE: /model/chat_template.jinja
+        DYN_ROUTER_MODE: kv
+        DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: '14400'
+        DYN_ENGINE_CONV_AFFINITY: '1'
+    decode:
+      env:
+        PYTHONNOUSERSITE: '1'
+        TQDM_DISABLE: '1'
+        HF_HUB_OFFLINE: '1'
+        DYN_CUSTOM_JINJA_TEMPLATE: /model/chat_template.jinja
+        DYN_ROUTER_MODE: least-loaded
+  benchmark:
+    placement:
+      node: head
+    env:
+      SERVED_MODEL_NAME: meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+      TOKENIZER: /model
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: trtllm_kv_cache_utilization
+      AIPERF_HTTP_TCP_USER_TIMEOUT: '900000'
+      AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: '14400'
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126
+    colocate_with_frontend: true
+  observability:
+    enabled: false
+    enable_otel: false
+    tachometer:
+      enabled: false
+  sbatch_directives:
+    exclusive: ''
+    mem: '0'
+    no-requeue: ''
+
+override_2p2d_tep4_tep8b31_c240_mc:
+  name: musespark-trt-dynamo-gb300-2p2d-tep4-tep8-b31-c240-mc-dflash7
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      gpus: 4
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        ENROOT_ALLOW_DEV: 'yes'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_ARENA_RESERVE: '0'
+        OMP_NUM_THREADS: '1'
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        MPI_UCX_TLS: rc,ud,sm,self
+        OMPI_MCA_coll: ^ucc,hcoll
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TLLM_KV_CACHE_MANAGER_V2_STREAM_ORDERED_EVENTS: '1'
+        TLLM_KV_CACHE_MANAGER_V2_KEY_CHAIN_MEMO: '1'
+        TLLM_KV_CACHE_MANAGER_V2_LAZY_SLOT_SCRUB: '1'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        PYTHONNOUSERSITE: '1'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_DFLASH_CTX_NO_HOST_SYNC: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PENDING: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_KEY_CACHE: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PRIORITIZE: '1'
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        TRTLLM_KV_SWA_DEMOTE_ANCHORS: '1'
+        TRTLLM_KV_SWA_FORK_ANCHOR: '1'
+        NCCL_MIN_NCHANNELS: '64'
+        NCCL_MAX_NCHANNELS: '64'
+        MUSESPARK_OPEN_EXPERT_PLACEMENT: /configs/musespark-gb300-prefill-expert-placement.json
+        TRTLLM_MCB_DIAG: '1'
+        GLOG_logtostderr: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_TE_METRIC: '1'
+        TRTLLM_MOONCAKE_STORE_RESAVE_MIN_TOKENS: '32768'
+        TRTLLM_STORE_HOST_DONOR_MAX_LENT_GIB: '640'
+        TRTLLM_MCB_LOAD_AHEAD: '1'
+        TRTLLM_MOONCAKE_STORE_BATCH_COPY: '1'
+        TRTLLM_MOONCAKE_STORE_LOCAL_STORED_SET: '1'
+        TRTLLM_MOONCAKE_STORE_LOOKUP_STAGED: '1'
+        TRTLLM_MOONCAKE_STORE_LOOKUP_REUSE_MS: '1000'
+        TRTLLM_MOONCAKE_STORE_LOCAL_STORED_FROM_LOADS: '1'
+        TRTLLM_MOONCAKE_STORE_SOFTPIN: '1'
+        TRTLLM_MOONCAKE_STORE_RANK_LOCAL_LOOKUP: '1'
+        TRTLLM_KV_CONNECTOR_META_BCAST_KEEP_ROOT: '1'
+        TRTLLM_MOONCAKE_STORE_WINDOW_KEEP: '3'
+        TRTLLM_M31_KVRG: '1'
+        TRTLLM_EXECUTOR_THREAD_PIN: '1'
+        TRTLLM_MOONCAKE_STORE_SNAPSHOT_STREAM: '1'
+        TRTLLM_MOONCAKE_STORE_CHAIN_MEMO_MB: '256'
+        LD_PRELOAD: /usr/lib/aarch64-linux-gnu/libtcmalloc_minimal.so.4
+        TRTLLM_MOONCAKE_STORE_PROBE_CHUNK: '1024'
+        TRTLLM_MOONCAKE_STORE_PGFIX_FAST: '1'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 64
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        disable_overlap_scheduler: false
+        enable_attention_dp: false
+        enable_chunked_prefill: true
+        kv_cache_config:
+          block_reuse_config:
+            policy: all_reusable
+            swa_endpoint_rewind_tokens: 1024
+          dtype: fp8
+          enable_block_reuse: true
+          enable_partial_reuse: true
+          free_gpu_memory_fraction: 0.9
+          host_cache_size: 0
+          pool_ratio: [0.25, 0.75]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+          iteration_stats_interval: 20
+        max_batch_size: 64
+        max_num_tokens: 16384
+        max_seq_len: 996672
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 4
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/ctx
+        pipeline_parallel_size: 1
+        prefill_capture_num_tokens: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560,
+          2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192, 8704, 9216, 9728, 10240, 10752, 11264, 11776,
+          12288, 12800, 13312, 13824, 14336, 14848, 15360, 15872, 16384]
+        prefill_cuda_graph_backend: breakable
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        tensor_parallel_size: 4
+        trust_remote_code: true
+        enable_tokenization_cache: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        kv_connector_config:
+          connector: mooncake-store
+          context_only: true
+        store_host_donor:
+          late_size_per_node: auto
+          device_name: '@fabric.rdma-devices'
+      mooncake_store_config:
+        role: both
+        global_segment_size: 0
+    decode:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      env:
+        ENROOT_ALLOW_DEV: 'yes'
+        HF_HUB_OFFLINE: '1'
+        MIMALLOC_ARENA_RESERVE: '0'
+        MPI_UCX_TLS: rc,ud,sm,self
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        NCCL_MNNVL_ENABLE: '1'
+        OMPI_MCA_coll: ^ucc,hcoll
+        OMP_NUM_THREADS: '1'
+        PYTHONNOUSERSITE: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRANSFORMERS_OFFLINE: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TLLM_FMHA_LIBS: -fallback
+        GLOG_logtostderr: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        TRTLLM_STORE_HOST_DONOR_MAX_LENT_GIB: '640'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+            28, 29, 30, 31]
+          max_batch_size: 31
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        enable_attention_dp: false
+        enable_iter_perf_stats: true
+        enable_tokenization_cache: true
+        iter_perf_stats_interval: 20
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+          enable_partial_reuse: false
+          free_gpu_memory_fraction: 0.9
+          host_cache_size: 0
+          iteration_stats_interval: 20
+          pool_ratio: [0.05, 0.95]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+        max_batch_size: 31
+        max_num_tokens: 512
+        max_seq_len: 997696
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+          max_num_tokens: 512
+        moe_expert_parallel_size: 8
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/gen
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        stream_interval: 20
+        tensor_parallel_size: 8
+        trust_remote_code: true
+        store_host_donor:
+          late_size_per_node: auto
+          device_name: '@fabric.rdma-devices'
+  services:
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
+  - name: mooncake-master
+    type: mooncake-master
+    placement:
+      node: head
+    args: [--eviction_high_watermark_ratio=0.95, --tenant_eviction_high_watermark_ratio=0.95, --allocation_strategy=random,
+      --default_kv_lease_ttl=60000, --eviction_ratio=0.03]
+    env:
+      GLOG_logtostderr: '1'
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        protocol: rdma
+        local_buffer_size: 1GiB
+        stage_through_host: false
+        model_key: musespark-open-nvfp4-fp8kv-dflash2
+        transfer_batch_size: 512
+        device_name: '@fabric.rdma-devices'
+
+override_2p3d_tep4_tep8b16_c244_mc:
+  name: musespark-trt-dynamo-gb300-2p3d-tep4-tep8-b16-c244-mc-dflash7
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      gpus: 4
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        ENROOT_ALLOW_DEV: 'yes'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_ARENA_RESERVE: '0'
+        OMP_NUM_THREADS: '1'
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        MPI_UCX_TLS: rc,ud,sm,self
+        OMPI_MCA_coll: ^ucc,hcoll
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TLLM_KV_CACHE_MANAGER_V2_STREAM_ORDERED_EVENTS: '1'
+        TLLM_KV_CACHE_MANAGER_V2_KEY_CHAIN_MEMO: '1'
+        TLLM_KV_CACHE_MANAGER_V2_LAZY_SLOT_SCRUB: '1'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        PYTHONNOUSERSITE: '1'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_DFLASH_CTX_NO_HOST_SYNC: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PENDING: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_KEY_CACHE: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PRIORITIZE: '1'
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        TRTLLM_KV_SWA_DEMOTE_ANCHORS: '1'
+        TRTLLM_KV_SWA_FORK_ANCHOR: '1'
+        NCCL_MIN_NCHANNELS: '64'
+        NCCL_MAX_NCHANNELS: '64'
+        MUSESPARK_OPEN_EXPERT_PLACEMENT: /configs/musespark-gb300-prefill-expert-placement.json
+        TRTLLM_MCB_DIAG: '1'
+        GLOG_logtostderr: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_TE_METRIC: '1'
+        TRTLLM_MOONCAKE_STORE_RESAVE_MIN_TOKENS: '32768'
+        TRTLLM_STORE_HOST_DONOR_MAX_LENT_GIB: '640'
+        TRTLLM_MCB_LOAD_AHEAD: '1'
+        TRTLLM_MOONCAKE_STORE_BATCH_COPY: '1'
+        TRTLLM_MOONCAKE_STORE_LOCAL_STORED_SET: '1'
+        TRTLLM_MOONCAKE_STORE_LOOKUP_STAGED: '1'
+        TRTLLM_MOONCAKE_STORE_LOOKUP_REUSE_MS: '1000'
+        TRTLLM_MOONCAKE_STORE_LOCAL_STORED_FROM_LOADS: '1'
+        TRTLLM_MOONCAKE_STORE_SOFTPIN: '1'
+        TRTLLM_MOONCAKE_STORE_RANK_LOCAL_LOOKUP: '1'
+        TRTLLM_KV_CONNECTOR_META_BCAST_KEEP_ROOT: '1'
+        TRTLLM_MOONCAKE_STORE_WINDOW_KEEP: '3'
+        TRTLLM_M31_KVRG: '1'
+        TRTLLM_EXECUTOR_THREAD_PIN: '1'
+        TRTLLM_MOONCAKE_STORE_SNAPSHOT_STREAM: '1'
+        TRTLLM_MOONCAKE_STORE_CHAIN_MEMO_MB: '256'
+        LD_PRELOAD: /usr/lib/aarch64-linux-gnu/libtcmalloc_minimal.so.4
+        TRTLLM_MOONCAKE_STORE_PROBE_CHUNK: '1024'
+        TRTLLM_MOONCAKE_STORE_PGFIX_FAST: '1'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 64
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        disable_overlap_scheduler: false
+        enable_attention_dp: false
+        enable_chunked_prefill: true
+        kv_cache_config:
+          block_reuse_config:
+            policy: all_reusable
+            swa_endpoint_rewind_tokens: 1024
+          dtype: fp8
+          enable_block_reuse: true
+          enable_partial_reuse: true
+          free_gpu_memory_fraction: 0.9
+          host_cache_size: 0
+          pool_ratio: [0.25, 0.75]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+          iteration_stats_interval: 20
+        max_batch_size: 64
+        max_num_tokens: 16384
+        max_seq_len: 996672
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 4
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/ctx
+        pipeline_parallel_size: 1
+        prefill_capture_num_tokens: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560,
+          2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192, 8704, 9216, 9728, 10240, 10752, 11264, 11776,
+          12288, 12800, 13312, 13824, 14336, 14848, 15360, 15872, 16384]
+        prefill_cuda_graph_backend: breakable
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        tensor_parallel_size: 4
+        trust_remote_code: true
+        enable_tokenization_cache: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        kv_connector_config:
+          connector: mooncake-store
+          context_only: true
+        store_host_donor:
+          late_size_per_node: auto
+          device_name: '@fabric.rdma-devices'
+      mooncake_store_config:
+        role: both
+        global_segment_size: 0
+    decode:
+      nodes: 6
+      workers: 3
+      gpus: 8
+      env:
+        ENROOT_ALLOW_DEV: 'yes'
+        HF_HUB_OFFLINE: '1'
+        MIMALLOC_ARENA_RESERVE: '0'
+        MPI_UCX_TLS: rc,ud,sm,self
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        NCCL_MNNVL_ENABLE: '1'
+        OMPI_MCA_coll: ^ucc,hcoll
+        OMP_NUM_THREADS: '1'
+        PYTHONNOUSERSITE: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRANSFORMERS_OFFLINE: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        GLOG_logtostderr: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        TRTLLM_STORE_HOST_DONOR_MAX_LENT_GIB: '640'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+          max_batch_size: 16
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        enable_attention_dp: false
+        enable_iter_perf_stats: true
+        enable_tokenization_cache: true
+        iter_perf_stats_interval: 20
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+          enable_partial_reuse: false
+          free_gpu_memory_fraction: 0.85
+          host_cache_size: 0
+          iteration_stats_interval: 20
+          pool_ratio: [0.05, 0.95]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+        max_batch_size: 16
+        max_num_tokens: 128
+        max_seq_len: 997696
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+          max_num_tokens: 512
+        moe_expert_parallel_size: 8
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/gen
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        stream_interval: 20
+        tensor_parallel_size: 8
+        trust_remote_code: true
+        store_host_donor:
+          late_size_per_node: auto
+          device_name: '@fabric.rdma-devices'
+  services:
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
+  - name: mooncake-master
+    type: mooncake-master
+    placement:
+      node: head
+    args: [--eviction_high_watermark_ratio=0.95, --tenant_eviction_high_watermark_ratio=0.95, --allocation_strategy=random,
+      --default_kv_lease_ttl=60000, --eviction_ratio=0.03]
+    env:
+      GLOG_logtostderr: '1'
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        protocol: rdma
+        local_buffer_size: 1GiB
+        stage_through_host: false
+        model_key: musespark-open-nvfp4-fp8kv-dflash2
+        transfer_batch_size: 512
+        device_name: '@fabric.rdma-devices'
+
+override_1p2d_tep4_tep8b8_c100_mc:
+  name: musespark-trt-dynamo-gb300-1p2d-tep4-tep8-b8-c100-mc-dflash7
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        ENROOT_ALLOW_DEV: 'yes'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_ARENA_RESERVE: '0'
+        OMP_NUM_THREADS: '1'
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        MPI_UCX_TLS: rc,ud,sm,self
+        OMPI_MCA_coll: ^ucc,hcoll
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TLLM_KV_CACHE_MANAGER_V2_STREAM_ORDERED_EVENTS: '1'
+        TLLM_KV_CACHE_MANAGER_V2_KEY_CHAIN_MEMO: '1'
+        TLLM_KV_CACHE_MANAGER_V2_LAZY_SLOT_SCRUB: '1'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        PYTHONNOUSERSITE: '1'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_DFLASH_CTX_NO_HOST_SYNC: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PENDING: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_KEY_CACHE: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PRIORITIZE: '1'
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        TRTLLM_KV_SWA_DEMOTE_ANCHORS: '1'
+        TRTLLM_KV_SWA_FORK_ANCHOR: '1'
+        NCCL_MIN_NCHANNELS: '64'
+        NCCL_MAX_NCHANNELS: '64'
+        TRTLLM_M31_KVRG: '1'
+        TRTLLM_EXECUTOR_THREAD_PIN: '1'
+        LD_PRELOAD: /usr/lib/aarch64-linux-gnu/libtcmalloc_minimal.so.4
+        TRTLLM_MCB_DIAG: '1'
+        GLOG_logtostderr: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_TE_METRIC: '1'
+        TRTLLM_MOONCAKE_STORE_RESAVE_MIN_TOKENS: '32768'
+        TRTLLM_STORE_HOST_DONOR_MAX_LENT_GIB: '640'
+        TRTLLM_MCB_LOAD_AHEAD: '1'
+        TRTLLM_MOONCAKE_STORE_BATCH_COPY: '1'
+        TRTLLM_MOONCAKE_STORE_LOCAL_STORED_SET: '1'
+        TRTLLM_MOONCAKE_STORE_LOOKUP_STAGED: '1'
+        TRTLLM_MOONCAKE_STORE_LOOKUP_REUSE_MS: '1000'
+        TRTLLM_MOONCAKE_STORE_LOCAL_STORED_FROM_LOADS: '1'
+        TRTLLM_MOONCAKE_STORE_SOFTPIN: '1'
+        TRTLLM_MOONCAKE_STORE_RANK_LOCAL_LOOKUP: '1'
+        TRTLLM_KV_CONNECTOR_META_BCAST_KEEP_ROOT: '1'
+        TRTLLM_MOONCAKE_STORE_WINDOW_KEEP: '3'
+        TRTLLM_MOONCAKE_STORE_SNAPSHOT_STREAM: '1'
+        TRTLLM_MOONCAKE_STORE_CHAIN_MEMO_MB: '256'
+        TRTLLM_MOONCAKE_STORE_PROBE_CHUNK: '1024'
+        TRTLLM_MOONCAKE_STORE_PGFIX_FAST: '1'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 64
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        disable_overlap_scheduler: false
+        enable_attention_dp: false
+        enable_chunked_prefill: true
+        kv_cache_config:
+          block_reuse_config:
+            policy: all_reusable
+            swa_endpoint_rewind_tokens: 1024
+          dtype: fp8
+          enable_block_reuse: true
+          enable_partial_reuse: true
+          free_gpu_memory_fraction: 0.9
+          host_cache_size: 0
+          pool_ratio: [0.25, 0.75]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+          iteration_stats_interval: 20
+        max_batch_size: 64
+        max_num_tokens: 16384
+        max_seq_len: 996672
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 4
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/ctx
+        pipeline_parallel_size: 1
+        prefill_capture_num_tokens: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560,
+          2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192, 8704, 9216, 9728, 10240, 10752, 11264, 11776,
+          12288, 12800, 13312, 13824, 14336, 14848, 15360, 15872, 16384]
+        prefill_cuda_graph_backend: breakable
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        tensor_parallel_size: 4
+        trust_remote_code: true
+        enable_tokenization_cache: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        kv_connector_config:
+          connector: mooncake-store
+          context_only: true
+        store_host_donor:
+          late_size_per_node: auto
+          device_name: '@fabric.rdma-devices'
+      mooncake_store_config:
+        role: both
+        global_segment_size: 0
+    decode:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      env:
+        ENROOT_ALLOW_DEV: 'yes'
+        HF_HUB_OFFLINE: '1'
+        MIMALLOC_ARENA_RESERVE: '0'
+        MPI_UCX_TLS: rc,ud,sm,self
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        NCCL_MNNVL_ENABLE: '1'
+        OMPI_MCA_coll: ^ucc,hcoll
+        OMP_NUM_THREADS: '1'
+        PYTHONNOUSERSITE: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRANSFORMERS_OFFLINE: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        GLOG_logtostderr: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        TRTLLM_STORE_HOST_DONOR_MAX_LENT_GIB: '640'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8]
+          max_batch_size: 8
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        enable_attention_dp: false
+        enable_iter_perf_stats: true
+        enable_tokenization_cache: true
+        iter_perf_stats_interval: 20
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+          enable_partial_reuse: false
+          free_gpu_memory_fraction: 0.75
+          host_cache_size: 0
+          iteration_stats_interval: 20
+          pool_ratio: [0.05, 0.95]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+        max_batch_size: 8
+        max_num_tokens: 64
+        max_seq_len: 997696
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+          max_num_tokens: 512
+        moe_expert_parallel_size: 8
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/gen
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        stream_interval: 20
+        tensor_parallel_size: 8
+        trust_remote_code: true
+        store_host_donor:
+          late_size_per_node: auto
+          device_name: '@fabric.rdma-devices'
+  services:
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
+  - name: mooncake-master
+    type: mooncake-master
+    placement:
+      node: head
+    args: [--eviction_high_watermark_ratio=0.95, --tenant_eviction_high_watermark_ratio=0.95, --allocation_strategy=random,
+      --default_kv_lease_ttl=60000, --eviction_ratio=0.03]
+    env:
+      GLOG_logtostderr: '1'
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        protocol: rdma
+        local_buffer_size: 1GiB
+        stage_through_host: false
+        model_key: musespark-open-nvfp4-fp8kv-dflash2
+        transfer_batch_size: 512
+        device_name: '@fabric.rdma-devices'
+
+override_1p2d_tep4_tep8b4_c58:
+  name: musespark-trt-dynamo-gb300-1p2d-tep4-tep8-b4-c58-dflash7
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        ENROOT_ALLOW_DEV: 'yes'
+        HF_HUB_OFFLINE: '1'
+        MIMALLOC_ARENA_RESERVE: '0'
+        MPI_UCX_TLS: rc,ud,sm,self
+        MUSESPARK_OPEN_EXPERT_PLACEMENT: /configs/musespark-gb300-prefill-expert-placement.json
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        NCCL_MAX_NCHANNELS: '64'
+        NCCL_MIN_NCHANNELS: '64'
+        NCCL_MNNVL_ENABLE: '1'
+        OMPI_MCA_coll: ^ucc,hcoll
+        OMP_NUM_THREADS: '1'
+        PYTHONNOUSERSITE: '1'
+        TLLM_KV_CACHE_MANAGER_V2_KEY_CHAIN_MEMO: '1'
+        TLLM_KV_CACHE_MANAGER_V2_LAZY_SLOT_SCRUB: '1'
+        TLLM_KV_CACHE_MANAGER_V2_STREAM_ORDERED_EVENTS: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRANSFORMERS_OFFLINE: '1'
+        TRTLLM_DFLASH_CTX_NO_HOST_SYNC: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_KV_HOST_TIER_COLLAPSE: '1'
+        TRTLLM_KV_HOST_TIER_DROP_PAGE_CACHE: '1'
+        TRTLLM_KV_SWA_DEMOTE_ANCHORS: '1'
+        TRTLLM_KV_SWA_FORK_ANCHOR: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SCHED_PREFIX_SKIP_KEY_CACHE: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PENDING: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PRIORITIZE: '1'
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_KV_SWA_ENDPOINT_RETIRE: '1'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 64
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        disable_overlap_scheduler: false
+        enable_attention_dp: false
+        enable_chunked_prefill: true
+        enable_iter_perf_stats: true
+        enable_tokenization_cache: true
+        iter_perf_stats_interval: 20
+        kv_cache_config:
+          block_reuse_config:
+            policy: all_reusable
+            swa_endpoint_rewind_tokens: 1024
+          dtype: fp8
+          enable_block_reuse: true
+          enable_partial_reuse: true
+          free_gpu_memory_fraction: 0.9
+          host_cache_size: 192199786496
+          iteration_stats_interval: 20
+          pool_ratio: [0.25, 0.75]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+        max_batch_size: 64
+        max_num_tokens: 8192
+        max_seq_len: 996672
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 4
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/ctx
+        pipeline_parallel_size: 1
+        prefill_capture_num_tokens: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560,
+          2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192]
+        prefill_cuda_graph_backend: breakable
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        tensor_parallel_size: 4
+        trust_remote_code: true
+    decode:
+      nodes: 4
+      workers: 2
+      gpus: 8
+      env:
+        ENROOT_ALLOW_DEV: 'yes'
+        HF_HUB_OFFLINE: '1'
+        MIMALLOC_ARENA_RESERVE: '0'
+        MPI_UCX_TLS: rc,ud,sm,self
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        NCCL_MNNVL_ENABLE: '1'
+        OMPI_MCA_coll: ^ucc,hcoll
+        OMP_NUM_THREADS: '1'
+        PYTHONNOUSERSITE: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRANSFORMERS_OFFLINE: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          batch_sizes: [1, 2, 3, 4]
+          max_batch_size: 4
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        enable_attention_dp: false
+        enable_iter_perf_stats: true
+        enable_tokenization_cache: true
+        iter_perf_stats_interval: 20
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+          enable_partial_reuse: false
+          free_gpu_memory_fraction: 0.85
+          host_cache_size: 0
+          iteration_stats_interval: 20
+          pool_ratio: [0.05, 0.95]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+        max_batch_size: 4
+        max_num_tokens: 32
+        max_seq_len: 997696
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+          max_num_tokens: 512
+        moe_expert_parallel_size: 8
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/gen
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        stream_interval: 20
+        tensor_parallel_size: 8
+        trust_remote_code: true
+
+override_1p3d_tep4_tep8b2_c54:
+  name: musespark-trt-dynamo-gb300-1p3d-tep4-tep8-b2-c54-dflash7
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        ENROOT_ALLOW_DEV: 'yes'
+        HF_HUB_OFFLINE: '1'
+        MIMALLOC_ARENA_RESERVE: '0'
+        MPI_UCX_TLS: rc,ud,sm,self
+        MUSESPARK_OPEN_EXPERT_PLACEMENT: /configs/musespark-gb300-prefill-expert-placement.json
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        NCCL_MAX_NCHANNELS: '64'
+        NCCL_MIN_NCHANNELS: '64'
+        NCCL_MNNVL_ENABLE: '1'
+        OMPI_MCA_coll: ^ucc,hcoll
+        OMP_NUM_THREADS: '1'
+        PYTHONNOUSERSITE: '1'
+        TLLM_KV_CACHE_MANAGER_V2_KEY_CHAIN_MEMO: '1'
+        TLLM_KV_CACHE_MANAGER_V2_LAZY_SLOT_SCRUB: '1'
+        TLLM_KV_CACHE_MANAGER_V2_STREAM_ORDERED_EVENTS: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRANSFORMERS_OFFLINE: '1'
+        TRTLLM_DFLASH_CTX_NO_HOST_SYNC: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_KV_HOST_TIER_COLLAPSE: '1'
+        TRTLLM_KV_HOST_TIER_DROP_PAGE_CACHE: '1'
+        TRTLLM_KV_SWA_DEMOTE_ANCHORS: '1'
+        TRTLLM_KV_SWA_FORK_ANCHOR: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SCHED_PREFIX_SKIP_KEY_CACHE: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PENDING: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PRIORITIZE: '1'
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 64
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        disable_overlap_scheduler: false
+        enable_attention_dp: false
+        enable_chunked_prefill: true
+        enable_iter_perf_stats: true
+        enable_tokenization_cache: true
+        iter_perf_stats_interval: 20
+        kv_cache_config:
+          block_reuse_config:
+            policy: all_reusable
+            swa_endpoint_rewind_tokens: 1024
+          dtype: fp8
+          enable_block_reuse: true
+          enable_partial_reuse: true
+          free_gpu_memory_fraction: 0.9
+          host_cache_size: 192199786496
+          iteration_stats_interval: 20
+          pool_ratio: [0.25, 0.75]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+        max_batch_size: 64
+        max_num_tokens: 8192
+        max_seq_len: 996672
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 4
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/ctx
+        pipeline_parallel_size: 1
+        prefill_capture_num_tokens: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560,
+          2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192]
+        prefill_cuda_graph_backend: breakable
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        tensor_parallel_size: 4
+        trust_remote_code: true
+    decode:
+      nodes: 6
+      workers: 3
+      gpus: 8
+      env:
+        ENROOT_ALLOW_DEV: 'yes'
+        HF_HUB_OFFLINE: '1'
+        MIMALLOC_ARENA_RESERVE: '0'
+        MPI_UCX_TLS: rc,ud,sm,self
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        NCCL_MNNVL_ENABLE: '1'
+        OMPI_MCA_coll: ^ucc,hcoll
+        OMP_NUM_THREADS: '1'
+        PYTHONNOUSERSITE: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRANSFORMERS_OFFLINE: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          batch_sizes: [1, 2]
+          max_batch_size: 2
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        enable_attention_dp: false
+        enable_iter_perf_stats: true
+        enable_tokenization_cache: true
+        iter_perf_stats_interval: 20
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+          enable_partial_reuse: false
+          free_gpu_memory_fraction: 0.85
+          host_cache_size: 0
+          iteration_stats_interval: 20
+          pool_ratio: [0.05, 0.95]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+        max_batch_size: 2
+        max_num_tokens: 16
+        max_seq_len: 997696
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+          max_num_tokens: 512
+        moe_expert_parallel_size: 8
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/gen
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        stream_interval: 20
+        tensor_parallel_size: 8
+        trust_remote_code: true
+
+override_1p4d_tep4_tep8b1_c44:
+  name: musespark-trt-dynamo-gb300-1p4d-tep4-tep8-b1-c44-dflash7
+  roles:
+    prefill:
+      nodes: 1
+      workers: 1
+      gpus: 4
+      env:
+        ENROOT_ALLOW_DEV: 'yes'
+        HF_HUB_OFFLINE: '1'
+        MIMALLOC_ARENA_RESERVE: '0'
+        MPI_UCX_TLS: rc,ud,sm,self
+        MUSESPARK_OPEN_EXPERT_PLACEMENT: /configs/musespark-gb300-prefill-expert-placement.json
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        NCCL_MAX_NCHANNELS: '64'
+        NCCL_MIN_NCHANNELS: '64'
+        NCCL_MNNVL_ENABLE: '1'
+        OMPI_MCA_coll: ^ucc,hcoll
+        OMP_NUM_THREADS: '1'
+        PYTHONNOUSERSITE: '1'
+        TLLM_KV_CACHE_MANAGER_V2_KEY_CHAIN_MEMO: '1'
+        TLLM_KV_CACHE_MANAGER_V2_LAZY_SLOT_SCRUB: '1'
+        TLLM_KV_CACHE_MANAGER_V2_STREAM_ORDERED_EVENTS: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRANSFORMERS_OFFLINE: '1'
+        TRTLLM_DFLASH_CTX_NO_HOST_SYNC: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_KV_HOST_TIER_COLLAPSE: '1'
+        TRTLLM_KV_HOST_TIER_DROP_PAGE_CACHE: '1'
+        TRTLLM_KV_SWA_DEMOTE_ANCHORS: '1'
+        TRTLLM_KV_SWA_FORK_ANCHOR: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SCHED_PREFIX_SKIP_KEY_CACHE: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PENDING: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PRIORITIZE: '1'
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 64
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        disable_overlap_scheduler: false
+        enable_attention_dp: false
+        enable_chunked_prefill: true
+        kv_cache_config:
+          block_reuse_config:
+            policy: all_reusable
+            swa_endpoint_rewind_tokens: 1024
+          dtype: fp8
+          enable_block_reuse: true
+          enable_partial_reuse: true
+          free_gpu_memory_fraction: 0.75
+          host_cache_size: 154618822656
+          pool_ratio: [0.25, 0.75]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+          iteration_stats_interval: 20
+        max_batch_size: 64
+        max_num_tokens: 8192
+        max_seq_len: 996672
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 4
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/ctx
+        pipeline_parallel_size: 1
+        prefill_capture_num_tokens: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560,
+          2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192]
+        prefill_cuda_graph_backend: breakable
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        tensor_parallel_size: 4
+        trust_remote_code: true
+        enable_tokenization_cache: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+    decode:
+      nodes: 8
+      workers: 4
+      gpus: 8
+      env:
+        ENROOT_ALLOW_DEV: 'yes'
+        HF_HUB_OFFLINE: '1'
+        MIMALLOC_ARENA_RESERVE: '0'
+        MPI_UCX_TLS: rc,ud,sm,self
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        NCCL_MNNVL_ENABLE: '1'
+        OMPI_MCA_coll: ^ucc,hcoll
+        OMP_NUM_THREADS: '1'
+        PYTHONNOUSERSITE: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRANSFORMERS_OFFLINE: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TLLM_FMHA_LIBS: -fallback
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          batch_sizes: [1]
+          max_batch_size: 1
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        enable_attention_dp: false
+        enable_iter_perf_stats: true
+        enable_tokenization_cache: true
+        iter_perf_stats_interval: 20
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+          enable_partial_reuse: false
+          free_gpu_memory_fraction: 0.9
+          host_cache_size: 0
+          iteration_stats_interval: 20
+          pool_ratio: [0.05, 0.95]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+        max_batch_size: 1
+        max_num_tokens: 512
+        max_seq_len: 997696
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+          max_num_tokens: 512
+        moe_expert_parallel_size: 8
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/gen
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        stream_interval: 20
+        tensor_parallel_size: 8
+        trust_remote_code: true
+
+override_2p3d_tep4_tep4b40_c244_mc:
+  name: musespark-trt-dynamo-gb300-2p3d-tep4-tep4-b40-c244-mc-dflash7
+  roles:
+    prefill:
+      nodes: 2
+      workers: 2
+      gpus: 4
+      env:
+        TLLM_LOG_LEVEL: INFO
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        ENROOT_ALLOW_DEV: 'yes'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        MIMALLOC_ARENA_RESERVE: '0'
+        OMP_NUM_THREADS: '1'
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        MPI_UCX_TLS: rc,ud,sm,self
+        OMPI_MCA_coll: ^ucc,hcoll
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SCHED_SHORTEST_PREFILL_FIRST: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TLLM_KV_CACHE_MANAGER_V2_STREAM_ORDERED_EVENTS: '1'
+        TLLM_KV_CACHE_MANAGER_V2_KEY_CHAIN_MEMO: '1'
+        TLLM_KV_CACHE_MANAGER_V2_LAZY_SLOT_SCRUB: '1'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        HF_HUB_OFFLINE: '1'
+        TRANSFORMERS_OFFLINE: '1'
+        PYTHONNOUSERSITE: '1'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_DFLASH_CTX_NO_HOST_SYNC: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PENDING: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_KEY_CACHE: '1'
+        TRTLLM_SCHED_PREFIX_SKIP_PRIORITIZE: '1'
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_KV_TRANSFER_NUM_THREADS: '4'
+        TRTLLM_KV_SWA_DEMOTE_ANCHORS: '1'
+        TRTLLM_KV_SWA_FORK_ANCHOR: '1'
+        NCCL_MIN_NCHANNELS: '64'
+        NCCL_MAX_NCHANNELS: '64'
+        MUSESPARK_OPEN_EXPERT_PLACEMENT: /configs/musespark-gb300-prefill-expert-placement.json
+        TRTLLM_MCB_DIAG: '1'
+        GLOG_logtostderr: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        MC_TE_METRIC: '1'
+        TRTLLM_MOONCAKE_STORE_RESAVE_MIN_TOKENS: '32768'
+        TRTLLM_STORE_HOST_DONOR_MAX_LENT_GIB: '640'
+        TRTLLM_MCB_LOAD_AHEAD: '1'
+        TRTLLM_MOONCAKE_STORE_BATCH_COPY: '1'
+        TRTLLM_MOONCAKE_STORE_LOCAL_STORED_SET: '1'
+        TRTLLM_MOONCAKE_STORE_LOOKUP_STAGED: '1'
+        TRTLLM_MOONCAKE_STORE_LOOKUP_REUSE_MS: '1000'
+        TRTLLM_MOONCAKE_STORE_LOCAL_STORED_FROM_LOADS: '1'
+        TRTLLM_MOONCAKE_STORE_SOFTPIN: '1'
+        TRTLLM_MOONCAKE_STORE_RANK_LOCAL_LOOKUP: '1'
+        TRTLLM_KV_CONNECTOR_META_BCAST_KEEP_ROOT: '1'
+        TRTLLM_MOONCAKE_STORE_WINDOW_KEEP: '3'
+        TRTLLM_M31_KVRG: '1'
+        TRTLLM_EXECUTOR_THREAD_PIN: '1'
+        TRTLLM_MOONCAKE_STORE_SNAPSHOT_STREAM: '1'
+        TRTLLM_MOONCAKE_STORE_CHAIN_MEMO_MB: '256'
+        LD_PRELOAD: /usr/lib/aarch64-linux-gnu/libtcmalloc_minimal.so.4
+        TRTLLM_MOONCAKE_STORE_PROBE_CHUNK: '1024'
+        TRTLLM_MOONCAKE_STORE_PGFIX_FAST: '1'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          max_batch_size: 64
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        disable_overlap_scheduler: false
+        enable_attention_dp: false
+        enable_chunked_prefill: true
+        kv_cache_config:
+          block_reuse_config:
+            policy: all_reusable
+            swa_endpoint_rewind_tokens: 1024
+          dtype: fp8
+          enable_block_reuse: true
+          enable_partial_reuse: true
+          free_gpu_memory_fraction: 0.9
+          host_cache_size: 0
+          pool_ratio: [0.25, 0.75]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+          iteration_stats_interval: 20
+        max_batch_size: 64
+        max_num_tokens: 16384
+        max_seq_len: 996672
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+        moe_expert_parallel_size: 4
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/ctx
+        pipeline_parallel_size: 1
+        prefill_capture_num_tokens: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024, 1280, 1536, 1792, 2048, 2304, 2560,
+          2816, 3072, 3584, 4096, 4608, 5120, 5632, 6144, 6656, 7168, 7680, 8192, 8704, 9216, 9728, 10240, 10752, 11264, 11776,
+          12288, 12800, 13312, 13824, 14336, 14848, 15360, 15872, 16384]
+        prefill_cuda_graph_backend: breakable
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        tensor_parallel_size: 4
+        trust_remote_code: true
+        enable_tokenization_cache: true
+        enable_iter_perf_stats: true
+        iter_perf_stats_interval: 20
+        kv_connector_config:
+          connector: mooncake-store
+          context_only: true
+        store_host_donor:
+          late_size_per_node: auto
+          device_name: '@fabric.rdma-devices'
+      mooncake_store_config:
+        role: both
+        global_segment_size: 0
+    decode:
+      nodes: 3
+      workers: 3
+      gpus: 4
+      env:
+        ENROOT_ALLOW_DEV: 'yes'
+        HF_HUB_OFFLINE: '1'
+        MIMALLOC_ARENA_RESERVE: '0'
+        MPI_UCX_TLS: rc,ud,sm,self
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_GRAPH_MIXING_SUPPORT: '0'
+        NCCL_MNNVL_ENABLE: '1'
+        OMPI_MCA_coll: ^ucc,hcoll
+        OMP_NUM_THREADS: '1'
+        PYTHONNOUSERSITE: '1'
+        TLLM_LOG_LEVEL: INFO
+        TLLM_NUMA_AWARE_WORKER_AFFINITY: '1'
+        TLLM_PROFILE_LOG_RANKS: '0'
+        TRANSFORMERS_OFFLINE: '1'
+        TRTLLM_DFLASH_WINDOWED_CTX_ARENA: '1'
+        TRTLLM_DISAGG_DRAFT_WINDOW_LOG_INTERVAL_S: '60'
+        TRTLLM_DISAGG_SHARED_DRAFT_KV: '1'
+        TRTLLM_ENABLE_PDL: '1'
+        TRTLLM_HANG_DETECTION_TIMEOUT: '1800'
+        TRTLLM_KVCACHE_TIME_OUTPUT_PATH: /logs/kv_time
+        TRTLLM_KV_BOUNCE_NONBLOCKING_STREAMS: '1'
+        TRTLLM_LOW_M_GEMM_BACKEND: auto
+        TRTLLM_SERVER_DISABLE_GC: '1'
+        TRTLLM_SKIP_KV_CACHE_ESTIMATION: '0'
+        TRTLLM_WORKER_DISABLE_GC: '1'
+        GLOG_logtostderr: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        TRTLLM_STORE_HOST_DONOR_MAX_LENT_GIB: '640'
+        NCCL_MAX_NCHANNELS: '64'
+        NCCL_MIN_NCHANNELS: '64'
+        TLLM_KV_CACHE_MANAGER_V2_KEY_CHAIN_MEMO: '1'
+        TLLM_KV_CACHE_MANAGER_V2_LAZY_SLOT_SCRUB: '1'
+        TLLM_KV_CACHE_MANAGER_V2_STREAM_ORDERED_EVENTS: '1'
+      args:
+        allreduce_strategy: NCCL
+        attn_backend: TRTLLM
+        cache_transceiver_config:
+          backend: NIXL
+          kv_cache_bounce_size_mb: 1024
+          kv_transfer_timeout_ms: 600000
+          max_tokens_in_buffer: 1048576
+          transceiver_runtime: PYTHON
+          agent_bounce_buffer_enable: true
+          agent_bounce_params:
+            max_average_descriptor_size: 4MB
+            min_descriptor_count: '1'
+        cuda_graph_config:
+          enable_padding: true
+          batch_sizes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+            28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40]
+          max_batch_size: 40
+        custom_tokenizer: musespark_open
+        disable_mm_encoder: true
+        enable_attention_dp: false
+        enable_iter_perf_stats: true
+        enable_tokenization_cache: true
+        iter_perf_stats_interval: 20
+        kv_cache_config:
+          dtype: fp8
+          enable_block_reuse: false
+          enable_partial_reuse: false
+          free_gpu_memory_fraction: 0.9
+          host_cache_size: 0
+          iteration_stats_interval: 20
+          pool_ratio: [0.05, 0.95]
+          tokens_per_block: 32
+          use_kv_cache_manager_v2: true
+        max_batch_size: 40
+        max_num_tokens: 320
+        max_seq_len: 997696
+        modeling_v2: require
+        moe_config:
+          backend: TRTLLM
+          max_num_tokens: 512
+        moe_expert_parallel_size: 4
+        perf_metrics_max_requests: 100000
+        perf_metrics_output_dir: /logs/perf_metrics/gen
+        pipeline_parallel_size: 1
+        print_iter_log: true
+        return_perf_metrics: true
+        scheduler_config:
+          capacity_scheduler_policy: MAX_UTILIZATION
+        speculative_config:
+          decoding_type: DFlash
+          max_draft_len: 7
+          speculative_model: /hf_hub_cache/models--RadixArk--Muse-Spark-Open-DFlash2/snapshots/46c90f412549c472941a68382d91a99e5e6372a0
+          use_rejection_sampling: true
+        stream_interval: 20
+        tensor_parallel_size: 4
+        trust_remote_code: true
+        store_host_donor:
+          late_size_per_node: auto
+          device_name: '@fabric.rdma-devices'
+  services:
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
+  - name: mooncake-master
+    type: mooncake-master
+    placement:
+      node: head
+    args: [--eviction_high_watermark_ratio=0.95, --tenant_eviction_high_watermark_ratio=0.95, --allocation_strategy=random,
+      --default_kv_lease_ttl=60000, --eviction_ratio=0.03]
+    env:
+      GLOG_logtostderr: '1'
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        protocol: rdma
+        local_buffer_size: 1GiB
+        stage_through_host: false
+        model_key: musespark-open-nvfp4-fp8kv-dflash2
+        transfer_batch_size: 512
+        device_name: '@fabric.rdma-devices'
