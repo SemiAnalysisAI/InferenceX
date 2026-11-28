@@ -1,7 +1,9 @@
-# Submit an H3 video deployment
+# Submit a VideoGenX deployment
 
-Follow these steps to add or change an H3 (VideoGenX) deployment, from choosing a
-config to a published result. Each step links the section that holds its detail.
+Follow these steps to add or change a VideoGenX deployment, from choosing a
+config to a published result. Every deployment must meet
+[VideoGenX Standard v0.1](STANDARD.md); this guide covers the
+mechanics. Each step links the section that holds its detail.
 [Native video delivery](../inferencex-e2e/docs/video-generation.md) explains how the
 sweep runs, what a result bundle contains, and how reuse is validated.
 
@@ -23,12 +25,13 @@ The configured deployments are the `*-video` keys in
 [`nvidia-master.yaml`](../inferencex-e2e/configs/nvidia-master.yaml) and
 [`amd-master.yaml`](../inferencex-e2e/configs/amd-master.yaml). Each key names its
 recipe directory under
-[`srt-slurm-recipes/h3/`](../inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/h3/).
+[`srt-slurm-recipes/`](../inferencex-e2e/benchmarks/single_node/srt-slurm-recipes/).
 
-Start from an existing combination. Keep its frozen workload, model revision,
-concurrency population, and measurement boundary. To change a deployment, edit its
-row. To add a deployment that must stay separately selectable, copy the row under a
-distinct key with its own recipe. A new model, engine API, topology, or model-view
+Start from an existing combination. Keep everything the
+[standard](STANDARD.md) fixes: workload, model revision,
+concurrency and measurement boundary. To change a deployment, edit its row. To add
+a deployment that must stay separately selectable, copy the row under a distinct
+key with its own recipe. A new model, engine API, topology, or model-view
 format needs maintainer adapter validation before it can be a recipe-only
 contribution.
 A workload change adds the next `release-v<N>` set, or a new spec file when it changes the
@@ -48,10 +51,7 @@ binding.
   The binder rejects any other value, and the server records it as the engine
   revision.
 - Pin the image by SHA256 digest, and use its real interpreter and architecture.
-  The A100, H100, H200, and B200 SGLang rows, the B200, H200, H100 and A100 vLLM-Omni H3 rows, and
-  the H100, H200, B200 and B300 vLLM-Omni Wan2.2 rows use the public CUDA amd64 image. The MI355X SGLang
-  row uses its ROCm MI35x build, and the MI355X vLLM-Omni row the public
-  `vllm/vllm-omni-rocm` amd64 image.
+  Each row's current image is in its master config entry.
 
 Name the recipe `<model-prefix>/<engine>/<gpu>-<precision>/video/agg-<layout>.yaml`, which
 extends the [recipe naming convention](../inferencex-e2e/benchmarks/multi_node/srt-slurm-recipes/RECIPES.md#directory-and-filename-convention).
@@ -117,22 +117,26 @@ every label and modifier.
 
 ## 6. Confirm the run qualifies
 
-The qualifying run is a full sweep of the final changelog matrix on a commit in the
-PR. Its `validate-video-results` job must pass. That job checks the
+The qualifying run is a full regular sweep whose video rows carry the same recipe
+fingerprints as the merged commit's video rows. It may come from any PR, as rule 13 of
+the [standard](STANDARD.md#rules-for-a-result) states. Its `validate-video-results`
+job must pass. That job checks the
 [reuse conditions](../inferencex-e2e/docs/video-generation.md) against the retained
-evidence of every selected deployment. A valid `release-v1` deployment needs 20
-valid measured C1 clips plus its separate warmup. Keep failed attempts. An ad hoc
-diagnostic run cannot replace the qualifying sweep.
+evidence of every selected deployment. A deployment qualifies as rule 11 of the
+standard defines. Keep failed attempts. An ad hoc diagnostic run cannot replace the
+qualifying sweep.
 
 Inspect the run's artifacts:
 
 - `video-sweep-manifest` identifies the selected attempt and deployments.
 - Each `h3-results-*` bundle holds `manifest.json`, `ci.json`, `SHA256SUMS`, and the
   request, media, and power evidence under `gpu/c*/`.
-- Each cell's `gpu/c*/attestation.json` checks, from the engine's own startup
-  arguments and log, that every request ran the declared shape, seed, and denoising
-  steps without step caching, quantization, LoRA, or sparse attention. A failed
-  attestation leaves the cell unverified.
+- For SGLang, each cell's `gpu/c*/attestation.json` checks, from the engine's own
+  startup arguments and log, that no cache-dit config, quantization or LoRA is set,
+  that the conditioning cache is off, and that every request ran the declared shape,
+  seed and denoising steps. It does not prove the whole lossless tier;
+  [Enforcement on main](STANDARD.md#enforcement-on-main) lists what it misses. A
+  failed attestation leaves the cell unverified.
 
 Never hand-edit a bundle to make its result eligible. If a deployment fails, see
 [Troubleshoot a run](#troubleshoot-a-run).
@@ -173,11 +177,7 @@ clip against the public Diffusers reference videos. It uploads the scores as the
 automatically. A maintainer dispatches it with that run's `run_id` and
 `run_attempt`.
 
-PSNR measures how closely each clip matches the reference implementation's output
-for the same prompt and seed. Other hardware and engines legitimately diverge from
-that output, so the score is not a quality grade. `quality.json` keeps
-`quality_status: unjudged` and `release_qualified: false`, and no workflow gates
-reuse or merge on the score.
+The score is advisory: the [standard](STANDARD.md#recorded-not-gating) records it and never gates on it.
 [Reference PSNR](README.md#reference-psnr) describes the method and the reasons a
 clip stays unscored.
 

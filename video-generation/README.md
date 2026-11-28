@@ -3,8 +3,8 @@
 **English** | [中文](README_zh.md)
 
 This package is the client and server side of the `video-generation` benchmark
-scenario: MiniMax-H3 served by one diffusion engine on one node, the selected
-frozen YAML workload sent at every configured concurrency, each generated clip
+scenario: MiniMax-H3 or Wan2.2-T2V-A14B served by one diffusion engine on one node,
+the selected frozen YAML workload sent one request at a time, each generated clip
 decoded and validated, and every cell's
 measured window published to srt-slurm's native GPU power telemetry.
 
@@ -12,13 +12,19 @@ InferenceX owns scheduling and results. `inferencex-e2e/configs/nvidia-master.ya
 and `amd-master.yaml` declare the deployments (`h3-bf16-<sku>-<engine>-video`), `infx.matrix` plans
 them from `perf-changelog.yaml`, `run-sweep.yml` runs the `video` bucket through
 `benchmark-tmpl.yml`, and `python -m infx.launch run` takes the `srt-video` path:
-the SKU recipe under `benchmarks/single_node/srt-slurm-recipes/h3/` starts the
+the SKU recipe under `benchmarks/single_node/srt-slurm-recipes/<model>/` starts the
 engine through `python3 -m infx.bench video serve` as a generic service and runs
 `python3 -m infx.bench video client` as `benchmark.type: custom`. This directory
-is mounted into the job as `/video-package`. H100, H200, B200 and MI355X select
-`h3-v2.yaml/release-v1`: 20 distinct measured prompts at C1. See
+is mounted into the job as `/video-package`. Each `*-video` entry in the master
+configs names its spec and set. See
 [native video delivery](../inferencex-e2e/docs/video-generation.md) for
 artifact identity, reuse validation and post-merge publication.
+
+## VideoGenX Standard
+
+[`STANDARD.md`](STANDARD.md) holds the rules a result must meet to count toward
+VideoGenX v0.1, the lossless tier, and what the code on `main` checks today.
+[`SUBMITTING.md`](SUBMITTING.md) walks through adding or changing a deployment.
 
 ## Entry points
 

@@ -2,21 +2,26 @@
 
 [English](README.md) | **中文**
 
-本目录是 `video-generation` 基准场景的客户端与服务端：MiniMax-H3 由一个
-diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载按每个配置的并发度发送，每段生成的视频都会被解码并校验，每个单元的
+本目录是 `video-generation` 基准场景的客户端与服务端：MiniMax-H3 或 Wan2.2-T2V-A14B
+由一个 diffusion 引擎在单节点上提供服务，选定的冻结 YAML 工作负载每次只发送一个请求，每段生成的视频都会被解码并校验，每个单元的
 测量窗口会发布给 srt-slurm 的原生 GPU 功耗遥测。
 
 调度与结果由 InferenceX 负责。`inferencex-e2e/configs/nvidia-master.yaml`
 与 `amd-master.yaml` 声明部署（`h3-bf16-<sku>-<engine>-video`），`infx.matrix` 根据
 `perf-changelog.yaml` 生成计划，`run-sweep.yml` 通过 `benchmark-tmpl.yml`
 运行 `video` 桶，`python -m infx.launch run` 走 `srt-video` 路径：
-`benchmarks/single_node/srt-slurm-recipes/h3/` 下的 SKU 配方通过
+`benchmarks/single_node/srt-slurm-recipes/<model>/` 下的 SKU 配方通过
 `python3 -m infx.bench video serve` 把引擎作为 generic service 启动，
 并以 `benchmark.type: custom` 运行 `python3 -m infx.bench video client`。
-本目录以 `/video-package` 挂载进任务。H100、H200、B200 与 MI355X 选用
-`h3-v2.yaml/release-v1`，在 C1 测量 20 个不同 prompt。
-产物身份、复用校验与合并后发布见
+本目录以 `/video-package` 挂载进任务。master 配置中的每个 `*-video` 条目都写明
+所用的 spec 与集合。产物身份、复用校验与合并后发布见
 [原生视频交付](../inferencex-e2e/docs/video-generation.md)。
+
+## VideoGenX 标准
+
+[`STANDARD.md`](STANDARD.md)（英文）写明结果计入 VideoGenX v0.1 须满足的规则、
+无损档的范围，以及 `main` 上的代码目前检查到哪一步。新增或修改部署的步骤见
+[`SUBMITTING.md`](SUBMITTING.md)（英文）。
 
 ## 入口
 
