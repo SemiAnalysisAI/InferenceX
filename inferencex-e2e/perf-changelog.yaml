@@ -13548,3 +13548,11 @@
   description:
     - "Rerun the unchanged Muse Spark Open NVFP4 GB300 TensorRT-LLM AgentX config to collect GPU and Grace CPU power."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5276
+
+- config-keys:
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
+    - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the vLLM image from kimi-k31-arm64-cu130 to kimi-k31-mc-f4c9618-arm64."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5177
