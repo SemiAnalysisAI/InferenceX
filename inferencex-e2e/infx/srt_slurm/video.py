@@ -440,6 +440,14 @@ _REVIEWED_MODELS = {
 # A model without a row adds nothing to its engine's registry.
 _NO_ADDITIONS = _ReviewedModel(flags={name: {} for name in _REVIEWED}, vllm_omni_default_on=())
 
+# The flags each precision a row declares must pass, per engine, so the label names what ran: an
+# fp8 row has to quantize and a bf16 row may not. vLLM-Omni's --quantization fp8 converts the BF16
+# checkpoint's DiT linears to FP8 when it loads them.
+_PRECISION_FLAGS: dict[str, dict[str, dict[str, str]]] = {
+    "sglang": {"bf16": {}},
+    "vllm-omni": {"bf16": {}, "fp8": {"--quantization": "fp8"}},
+}
+
 
 def _refuse_value(
     engine: str, kind: str, name: str, value: str, allowed: frozenset[str] | None
@@ -557,8 +565,22 @@ def bind_video(
         raise ValueError("video service requires a pinned VIDEO_RUNTIME_REVISION")
     reviewed = _REVIEWED[runtime]
     additions = _REVIEWED_MODELS.get(model, _NO_ADDITIONS)
+    precision = bound["model"]["precision"]
+    precision_flags = _PRECISION_FLAGS[runtime].get(precision)
+    if precision_flags is None:
+        raise ValueError(f"{reviewed.engine} video rows have no reviewed {precision} precision")
+    # Only the row's precision grants a precision flag, even if a registry above lists it.
+    owned = {flag for spec in _PRECISION_FLAGS[runtime].values() for flag in spec}
+    allowed = {**reviewed.flags, **additions.flags[runtime]}
     flags = _refuse_unreviewed(
-        replace(reviewed, flags={**reviewed.flags, **additions.flags[runtime]}),
+        replace(
+            reviewed,
+            flags={
+                **{flag: values for flag, values in allowed.items() if flag not in owned},
+                **{flag: frozenset({value}) for flag, value in precision_flags.items()},
+            },
+            required=reviewed.required | frozenset(precision_flags),
+        ),
         arguments,
         {**(bound.get("environment") or {}), **service["env"]},
         service.get("preamble"),
