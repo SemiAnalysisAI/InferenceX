@@ -69,6 +69,9 @@ base:
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         OMP_NUM_THREADS: '1'
         HF_HUB_OFFLINE: '1'
+        # srtctl's pre-download reads HF_HOME from role env only.
+        HF_HOME: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache/hub
         PYTHONUNBUFFERED: '1'
     decode:
       nodes: 1
@@ -100,6 +103,9 @@ base:
         VLLM_ENGINE_READY_TIMEOUT_S: '3600'
         OMP_NUM_THREADS: '1'
         HF_HUB_OFFLINE: '1'
+        # srtctl's pre-download reads HF_HOME from role env only.
+        HF_HOME: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache/hub
         PYTHONUNBUFFERED: '1'
 
 override_1p1d_tp4_c128_seqs132:

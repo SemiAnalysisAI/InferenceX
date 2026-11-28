@@ -80,6 +80,13 @@ SRT_LANES: dict[tuple[str, LaunchPath], SrtLane] = {
         frameworks=any_of("dynamo-sglang", "dynamo-trt", "vllm"),
         time_limit="4:00:00",
     ),
+    ("mi325x-amd", LaunchPath.SRT_MULTI): SrtLane(
+        frameworks=any_of("vllm"),
+        mounts=(
+            LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),
+            LaneMount(Match(), "hf-hub-cache", "/hf_hub_cache/hub"),
+        ),
+    ),
     ("mi355x-amds", LaunchPath.SRT_MULTI): SrtLane(
         mounts=(
             LaneMount(Match(), "aiperf-cache", "/aiperf_mmap_cache"),
