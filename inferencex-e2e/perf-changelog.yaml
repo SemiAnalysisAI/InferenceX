@@ -13523,3 +13523,11 @@
     - "Rerun the unchanged Qwen3.5 FP4 GB200 Dynamo-SGLang AgentX config to collect GPU and Grace CPU power."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4414
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  scenario-type: [agentic-coding]
+  description:
+    - "Rerun the unchanged GLM-5.2 NVFP4 GB300 Dynamo-SGLang AgentX configs to collect GPU and Grace CPU power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5275
