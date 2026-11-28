@@ -9171,6 +9171,33 @@ wan22-bf16-b200-vllm-omni-video:
             srt-recipe: video/agg-cfg2-ulysses4.yaml
             conc-list: [1]
 
+wan22-fp8-b200-vllm-omni-video:
+  image: vllm/vllm-omni:v0.32.0@sha256:6b44ee504a0dc3a21eacf72e7dc5da318b7bcc8ed0e349dc928e67278414430c
+  model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+  model-prefix: wan22
+  runner: cluster:b200-nscale
+  precision: fp8
+  framework: vllm-omni
+  multinode: false
+  srt-recipe-dir: wan22/vllm-omni/b200-fp8
+  scenarios:
+    video-generation:
+      - spec: wan22.yaml
+        set: release-v1
+        search-space:
+          - gpus: 1
+            srt-recipe: video/agg-tp1.yaml
+            conc-list: [1]
+          - gpus: 2
+            srt-recipe: video/agg-cfg2.yaml
+            conc-list: [1]
+          - gpus: 4
+            srt-recipe: video/agg-cfg2-ulysses2.yaml
+            conc-list: [1]
+          - gpus: 8
+            srt-recipe: video/agg-cfg2-ulysses4.yaml
+            conc-list: [1]
+
 wan22-bf16-b300-vllm-omni-video:
   image: vllm/vllm-omni:v0.32.0@sha256:6b44ee504a0dc3a21eacf72e7dc5da318b7bcc8ed0e349dc928e67278414430c
   model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
