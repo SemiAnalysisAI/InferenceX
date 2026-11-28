@@ -687,3 +687,24 @@ override_4p_dep4_dep16_si20_linker_x1126_kd:
         SGLANG_LINKER_TOUCH_INTERVAL_S: "0"
       args: *gb300-dep4-linker-prefill-args
     decode: *gb300-dep16-decode
+
+# x1126 with part of each GPU's HBM lent to the Mooncake store as a segment.
+# MOONCAKE_HBM_SEGMENT_SIZE is per GPU and comes out of the KV cache budget.
+# Decode workers run no store client, so they start a lend-only client.
+override_4p_dep4_dep16_si20_linker_x1126_hb:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker-x1126-hb
+  services: *gb300-x1126-services
+  roles:
+    prefill:
+      nodes: 4
+      env:
+        <<: *gb300-linker-prefill-env
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 200gb
+        MOONCAKE_HBM_SEGMENT_SIZE: 64gb
+      args: *gb300-dep4-linker-prefill-args
+    decode:
+      <<: *gb300-dep16-decode
+      env:
+        MOONCAKE_PROTOCOL: rdma
+        MOONCAKE_DEVICE: "@fabric.rdma-devices"
+        MOONCAKE_HBM_SEGMENT_SIZE: 20gb
