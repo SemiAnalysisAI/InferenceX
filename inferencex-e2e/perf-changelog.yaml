@@ -13516,3 +13516,10 @@
   description:
     - "Add Kimi-K3.1-Pro GB200 vLLM AgentX configs on vllm/vllm-openai:kimi-k31-arm64-cu135-7074371 with optimized parallel configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5199
+
+- config-keys:
+    - musespark-fp4-gb300-trt-agentic-dflash
+  scenario-type: [agentic-coding]
+  description:
+    - "Rerun the unchanged Muse Spark Open NVFP4 GB300 TensorRT-LLM AgentX config to collect GPU and Grace CPU power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
