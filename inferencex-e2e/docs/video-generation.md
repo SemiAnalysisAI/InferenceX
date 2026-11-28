@@ -54,6 +54,8 @@ for it, each flag and switch at most once, and SGLang rows must set
 adds: the flags only its rows may pass, and the vLLM-Omni caches its rows must
 turn off. The binder refuses anything else before submission, so a new setting
 needs a reviewed change there, and a new model with its own settings needs one row.
+`_PRECISION_FLAGS` ties flags to the row's `precision`: a vLLM-Omni `fp8` row must pass
+`--quantization fp8` and a `bf16` row may not. SGLang has reviewed only `bf16`.
 It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses an
 image without a SHA256 digest and records the digest in its launch receipt.
 The SGLang work attestation fails when the engine log shows cache-dit running.
