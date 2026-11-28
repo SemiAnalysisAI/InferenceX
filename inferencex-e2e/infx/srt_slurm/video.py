@@ -569,12 +569,14 @@ def bind_video(
     precision_flags = _PRECISION_FLAGS[runtime].get(precision)
     if precision_flags is None:
         raise ValueError(f"{reviewed.engine} video rows have no reviewed {precision} precision")
+    # Only the row's precision grants a precision flag, even if a registry above lists it.
+    owned = {flag for spec in _PRECISION_FLAGS[runtime].values() for flag in spec}
+    allowed = {**reviewed.flags, **additions.flags[runtime]}
     flags = _refuse_unreviewed(
         replace(
             reviewed,
             flags={
-                **reviewed.flags,
-                **additions.flags[runtime],
+                **{flag: values for flag, values in allowed.items() if flag not in owned},
                 **{flag: frozenset({value}) for flag, value in precision_flags.items()},
             },
             required=reviewed.required | frozenset(precision_flags),

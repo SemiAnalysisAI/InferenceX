@@ -167,7 +167,11 @@ def test_an_fp8_row_must_quantize_on_an_engine_that_reviewed_fp8(native_fragment
     with pytest.raises(ValueError, match="vLLM-Omni rows must set --quantization"):
         video.prepare(write(raw), fp8, root=ROOT)
 
-    server["args"] += ["--quantization", "fp8"]
+    server["args"] += ["--quantization", "int8"]
+    with pytest.raises(ValueError, match="flag --quantization='int8' is not a reviewed value"):
+        video.prepare(write(raw), fp8, root=ROOT)
+
+    server["args"][-1] = "fp8"
     assert video.prepare(write(raw), fp8, root=ROOT)["model"]["precision"] == "fp8"
 
     server.update(args=sglang_args, env={"VIDEO_RUNTIME_REVISION": "b" * 40})
