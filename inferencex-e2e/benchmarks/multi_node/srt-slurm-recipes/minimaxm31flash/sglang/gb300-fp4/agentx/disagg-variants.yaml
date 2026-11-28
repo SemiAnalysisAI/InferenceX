@@ -516,11 +516,13 @@ override_4p_dep4_dep16_si20_linker_x1126_wm95:
 override_4p_dep4_dep16_si20_linker_x1126_ka:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker-x1126-ka
   services: &gb300-x1126-ka-services
-    - name: etcd
+    - &gb300-x1126-ka-etcd
+      name: etcd
       type: etcd
       placement:
         node: infra
-    - name: mooncake-master
+    - &gb300-x1126-ka-master
+      name: mooncake-master
       type: mooncake-master
       preamble: |
         export PATH="$(dirname "$(python3 -c 'import sys; print(sys.executable)')"):$PATH"
@@ -574,19 +576,22 @@ override_4p_dep4_dep16_si20_linker_x1126_ka:
         - --kv_events_bind_endpoint=tcp://*:5557
         - --kv_events_backend_id=l3
     - *gb300-x1126-decode-store
-    - <<: *gb300-x1126-decode-store
+    - &gb300-x1126-ka-store-1
+      <<: *gb300-x1126-decode-store
       name: store-decode-1
       args: ["--port", "8801"]
       readiness:
         port: 8801
         timeout_seconds: 600
-    - <<: *gb300-x1126-decode-store
+    - &gb300-x1126-ka-store-2
+      <<: *gb300-x1126-decode-store
       name: store-decode-2
       args: ["--port", "8802"]
       readiness:
         port: 8802
         timeout_seconds: 600
-    - <<: *gb300-x1126-decode-store
+    - &gb300-x1126-ka-store-3
+      <<: *gb300-x1126-decode-store
       name: store-decode-3
       args: ["--port", "8803"]
       readiness:
@@ -618,5 +623,67 @@ override_4p_dep4_dep16_si20_linker_x1126_kb:
         MOONCAKE_GLOBAL_SEGMENT_SIZE: 200gb
         SGLANG_LINKER_ACCESS_LOG_MOD: "64"
         SGLANG_LINKER_TOUCH_INTERVAL_S: "60"
+      args: *gb300-dep4-linker-prefill-args
+    decode: *gb300-dep16-decode
+
+override_4p_dep4_dep16_si20_linker_x1126_kc:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker-x1126-kc
+  services:
+    - *gb300-x1126-ka-etcd
+    - <<: *gb300-x1126-ka-master
+      args:
+        - --default_kv_lease_ttl=30000
+        - --eviction_high_watermark_ratio=0.985
+        - --eviction_ratio=0.01
+        - --rpc_thread_num=64
+        - --enable_kv_events
+        - --kv_events_bind_endpoint=tcp://*:5557
+        - --kv_events_backend_id=l3
+    - *gb300-x1126-decode-store
+    - *gb300-x1126-ka-store-1
+    - *gb300-x1126-ka-store-2
+    - *gb300-x1126-ka-store-3
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  roles:
+    prefill:
+      nodes: 4
+      env:
+        <<: *gb300-linker-prefill-env
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 200gb
+        SGLANG_LINKER_ACCESS_LOG_MOD: "64"
+        SGLANG_LINKER_TOUCH_INTERVAL_S: "0"
+      args: *gb300-dep4-linker-prefill-args
+    decode: *gb300-dep16-decode
+
+override_4p_dep4_dep16_si20_linker_x1126_kd:
+  name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker-x1126-kd
+  services:
+    - *gb300-x1126-ka-etcd
+    - <<: *gb300-x1126-ka-master
+      args:
+        - --default_kv_lease_ttl=60000
+        - --eviction_high_watermark_ratio=0.985
+        - --eviction_ratio=0.01
+        - --rpc_thread_num=64
+        - --enable_kv_events
+        - --kv_events_bind_endpoint=tcp://*:5557
+        - --kv_events_backend_id=l3
+    - *gb300-x1126-decode-store
+    - *gb300-x1126-ka-store-1
+    - *gb300-x1126-ka-store-2
+    - *gb300-x1126-ka-store-3
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
+  roles:
+    prefill:
+      nodes: 4
+      env:
+        <<: *gb300-linker-prefill-env
+        MOONCAKE_GLOBAL_SEGMENT_SIZE: 200gb
+        SGLANG_LINKER_ACCESS_LOG_MOD: "64"
+        SGLANG_LINKER_TOUCH_INTERVAL_S: "0"
       args: *gb300-dep4-linker-prefill-args
     decode: *gb300-dep16-decode
