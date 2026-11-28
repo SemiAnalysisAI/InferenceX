@@ -41,12 +41,16 @@ the Python client. Keep the native serve and client entrypoints and the telemetr
 binding.
 
 - Put the complete engine command after the `--` in `services[].args`.
-- Put nonsecret process settings in `services[].env` or the recipe-wide
-  `environment`. [Native video delivery](../inferencex-e2e/docs/video-generation.md)
+- Put nonsecret process settings in `services[].env`.
+  [Native video delivery](../inferencex-e2e/docs/video-generation.md)
   lists the placeholders the binder substitutes and the names it rejects.
 - Set `services[].env.VIDEO_RUNTIME_REVISION` to the engine's 40-character commit.
   The binder rejects any other value, and the server records it as the engine
   revision.
+- Set only the keys `_RECIPE_KEYS` in
+  [`video.py`](../inferencex-e2e/infx/srt_slurm/video.py) lists, on the one `video-server`
+  service; the binder rejects any other key, so a recipe cannot change the image, the node
+  pool or the srun options.
 - Pin the image by SHA256 digest, and use its real interpreter and architecture.
   The A100, H100, H200, and B200 SGLang rows, the B200, H200, H100 and A100 vLLM-Omni H3 rows, and
   the H100, H200, B200 and B300 vLLM-Omni Wan2.2 rows use the public CUDA amd64 image. The MI355X SGLang

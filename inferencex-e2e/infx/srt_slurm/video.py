@@ -5,7 +5,7 @@ import importlib.util
 import json
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
@@ -51,13 +51,20 @@ VIDEO_ENV = (
     "VIDEO_RUNTIME",
     "VIDEO_RUNTIME_REVISION",
 )
-_BOUND_KEYS = (
-    ("model",),
-    ("slurm",),
-    ("telemetry",),
-    ("resources", "gpus_per_node"),
-    ("benchmark", "concurrencies"),
-    *(("benchmark", "env", name) for name in VIDEO_ENV),
+_SERVER = "video-server"
+# Every key a recipe may set. The config row, VIDEO_BLOCK and the binder supply the rest: the
+# image, the node pool, the client and every srun option.
+_RECIPE_KEYS = frozenset(
+    {
+        ("schema",),
+        ("name",),
+        ("resources", "gpu_type"),
+        ("services", "name"),
+        ("services", "args"),
+        ("services", "env"),
+        ("services", "preamble"),
+        ("services", "readiness", "timeout_seconds"),
+    }
 )
 _SERVICE_ENV = (
     "VIDEO_SPEC_PATH",
@@ -113,79 +120,58 @@ def video_package(root: Path) -> Path:
     return root.parent / VIDEO_PACKAGE
 
 
-def _restated(shared: Mapping[str, Any], fragment: Mapping[str, Any], depth: int) -> list[str]:
-    """The keys of ``fragment``, down to ``depth`` nested mappings, that ``shared`` sets."""
-    found = []
-    for key, value in fragment.items():
-        if key == "name" or key not in shared:
-            continue
-        if depth and isinstance(shared[key], Mapping) and isinstance(value, Mapping):
-            found.extend(f"{key}.{inner}" for inner in _restated(shared[key], value, depth - 1))
+def _set_keys(block: Mapping[str, Any], prefix: tuple[str, ...]) -> Iterator[tuple[str, ...]]:
+    """The key paths ``block`` sets, entering a mapping only where ``_RECIPE_KEYS`` goes deeper."""
+    for key, value in block.items():
+        path = (*prefix, key)
+        deeper = any(allowed[: len(path)] == path for allowed in _RECIPE_KEYS - {path})
+        if deeper and isinstance(value, Mapping):
+            yield from _set_keys(value, path)
         else:
-            found.append(key)
-    return found
+            yield path
 
 
-def check_video_fragment(
-    raw: Mapping[str, Any],
-    source: Path,
-    shared: Mapping[str, Any],
-    services: Mapping[str, Mapping[str, Any]],
-) -> None:
-    """Reject a fragment that sets a launcher-owned or shared key, or carries engine roles.
+def _dotted(paths: Iterable[tuple[str, ...]]) -> str:
+    return ", ".join(sorted(".".join(map(str, path)) for path in paths))
 
-    ``shared`` is the shared block and ``services`` its services by name. The fragment may
-    add to a shared block, and each of its services to the one of its name, but neither may
-    set a key the shared one already sets.
-    """
-    found = [
-        f"{'.'.join(key)} (= {value!r})"
-        for key in _BOUND_KEYS
-        for present, value in (_lookup(raw, key),)
-        if present
-    ]
-    if "base" in raw or any(key.startswith(("override_", "zip_override_")) for key in raw):
-        raise ValueError(f"{source}: video fragments do not take variant bundles")
-    if raw.get("roles"):
-        raise ValueError(f"{source}: video fragments own no engine roles; the server is a service")
-    if found:
+
+def check_video_fragment(raw: Mapping[str, Any], source: Path) -> None:
+    """Refuse a recipe that sets a key outside ``_RECIPE_KEYS`` or any service but the server."""
+    services = raw.get("services")
+    if (
+        not isinstance(services, list)
+        or len(services) != 1
+        or not isinstance(services[0], Mapping)
+        or services[0].get("name") != _SERVER
+    ):
+        raise ValueError(f"{source}: a video recipe declares exactly one service, {_SERVER!r}")
+    recipe = {key: value for key, value in raw.items() if key != "services"}
+    refused = {*_set_keys(recipe, ()), *_set_keys(services[0], ("services",))} - _RECIPE_KEYS
+    if refused:
         raise ValueError(
-            f"{source}: remove {', '.join(found)} from the fragment; the launcher sets them"
+            f"{source}: remove {_dotted(refused)}; a video recipe sets only {_dotted(_RECIPE_KEYS)}"
         )
-    blocks = {key: value for key, value in shared.items() if key != "services"}
-    scopes = [("the fragment", blocks, raw, 2)]
-    if isinstance(raw.get("services"), list):
-        scopes += [
-            (f"service {service['name']!r}", services.get(service["name"], {}), service, 1)
-            for service in raw["services"]
-        ]
-    for where, fixed, declared, depth in scopes:
-        restated = _restated(fixed, declared, depth)
-        if restated:
-            raise ValueError(
-                f"{source}: remove {', '.join(restated)} from {where}; "
-                f"{VIDEO_BLOCK} sets them for every recipe"
-            )
 
 
 def compose_video_recipe(path: Path, *, root: Path) -> dict[str, Any]:
-    """The fragment at ``path`` over the shared video and native telemetry blocks.
-
-    Each fragment service also merges over the shared service of the same name. The fragment
-    may extend what the shared blocks set but not restate it.
-    """
+    """The fragment at ``path`` over the shared video and native telemetry blocks, its server
+    over the shared service of that name."""
     raw = yaml.safe_load(path.read_text())
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: recipe must be a mapping")
+    check_video_fragment(raw, path)
     shared = merge_blocks(_block(root / VIDEO_BLOCK), _block(root / NATIVE_TELEMETRY_BLOCK))
-    # infx.matrix.changed binds a base revision's recipes with this code; its block may hold none.
-    by_name = {service["name"]: service for service in shared.get("services", [])}
-    check_video_fragment(raw, path, shared, by_name)
+    by_name = {service["name"]: service for service in shared["services"]}
+    [server] = raw["services"]
+    restated = [
+        name for name in sorted(by_name[_SERVER]["env"]) if _lookup(server, ("env", name))[0]
+    ]
+    if restated:
+        raise ValueError(
+            f"{path}: remove env.{', env.'.join(restated)}; {VIDEO_BLOCK} sets them for every recipe"
+        )
     recipe = merge_blocks(shared, raw)
-    if isinstance(raw.get("services"), list):
-        recipe["services"] = [
-            merge_blocks(by_name.get(service["name"], {}), service) for service in raw["services"]
-        ]
+    recipe["services"] = [merge_blocks(by_name[_SERVER], server)]
     return recipe
 
 
@@ -223,14 +209,6 @@ def load_spec(name: str, *, root: Path, set_id: str) -> dict[str, Any]:
         raise ValueError(f"VIDEO_SET {set_id!r} is not defined in {name}")
     plan = module.plan_for(source, set_id)
     return {"plan": plan, "plan_sha256": module.plan_sha256(plan)}
-
-
-def _pool_service(recipe: Mapping[str, Any]) -> dict[str, Any]:
-    services = recipe.get("services")
-    owners = [s for s in services or [] if isinstance(s, Mapping) and s.get("nodes")]
-    if len(owners) != 1:
-        raise ValueError("video recipes declare exactly one service that owns nodes (the server)")
-    return owners[0]
 
 
 def _argument(command: list[str], flag: str) -> str:
@@ -529,12 +507,10 @@ def bind_video(
     }
     bound.update((key, deepcopy(value)) for key, value in recipe.items() if key not in bound)
     bound["resources"] = {**bound.get("resources", {}), "gpus_per_node": gpus}
-    service = _pool_service(bound)
+    [service] = bound["services"]
     recipe_env_keys = _declared_server_env_keys(bound, service)
     benchmark = bound.setdefault("benchmark", {})
     workload = benchmark.setdefault("env", {})
-    if workload.get("VIDEO_SERVER_SERVICE") != service["name"]:
-        raise ValueError("benchmark.env.VIDEO_SERVER_SERVICE must name the server service")
     runtime = _required(environment, "FRAMEWORK")
     arguments = _bind_command(
         service,

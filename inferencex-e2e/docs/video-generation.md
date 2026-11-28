@@ -58,8 +58,7 @@ It forwards every point's image as `VIDEO_CONTAINER_IMAGE`; the server refuses a
 image without a SHA256 digest and records the digest in its launch receipt.
 The SGLang work attestation fails when the engine log shows cache-dit running.
 
-The launch receipt records recipe-wide `environment` and server `env` values
-after binding, with server values taking precedence. Use these fields only for
+The launch receipt records the server `env` values after binding. Use `env` only for
 nonsecret settings: credential-like names and launcher-owned workload, device,
 service-discovery and power variables are rejected before submission. Inherited
 credentials are not copied into the receipt. The rendered recipe fingerprint
@@ -86,9 +85,9 @@ runtime, preserving per-concurrency outputs and native power windows. Its reques
 timeout and environment are supplied by that block. The block also holds the
 `video-server` service every recipe starts: its command, node pool, readiness probe,
 port, and offline-mode environment. A recipe's `video-server` entry merges over it,
-so a recipe lists only its `args`, its own `env`, and `readiness.timeout_seconds`. A recipe
-may not restate a key the block sets, in `frontend`, `benchmark` or the service, even with
-the same value: the binder refuses the recipe and names the key.
+so a recipe lists only its `args`, its own `env`, and `readiness.timeout_seconds`.
+`_RECIPE_KEYS` in [`video.py`](../infx/srt_slurm/video.py) lists every key a recipe may set;
+the binder refuses any other key, and any service but `video-server`, and names it.
 
 `perf-changelog.yaml` → `infx.matrix.plan` → `run-sweep.yml` →
 `benchmark-tmpl.yml` → `infx.launch` → native srt-slurm service/client → result bundle.
