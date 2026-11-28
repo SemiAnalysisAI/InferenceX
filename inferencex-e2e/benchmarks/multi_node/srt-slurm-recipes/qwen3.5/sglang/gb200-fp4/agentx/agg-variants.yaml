@@ -16,7 +16,7 @@ base:
       options:
         max_payload_mb: 8
   dynamo:
-    # The v0.5.22 image ships ai-dynamo 1.6.0.dev20261015.
+    # The v0.5.23 image ships ai-dynamo 1.7.0.dev20261029.
     install: false
     request_plane: tcp
   environment:
