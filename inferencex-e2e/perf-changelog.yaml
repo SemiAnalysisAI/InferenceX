@@ -12757,3 +12757,9 @@
   description:
     - Evaluate the clean native576 monokernel image with decode-only native query publication, peer sparse attention and fused BF16 post. Preserve real weights, three decode sequences, K4, P-only SimpleCPU, GMU 0.95, 5 GiB headroom and one-hour profiling. GPU correctness and dispatch checks pass; dummy model measurements do not establish an overall speedup.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p3d-simplecpu-mono
+  description:
+    - Evaluate the clean 7eb66e3325 heterogeneous READ image with DCP8 prefill and TP8/DCP1 native576 decode. Preserve seq3/K4, P-only SimpleCPU, GMU 0.95/H5 and full one-hour profiling. Use block interleave1280 and a separate notification port range; fail initialization if the release listener cannot bind. Dummy local decode TPOT improves 2.45-4.26 percent for short-input seq1-3; this does not establish real-weight FAST gains.
+  pr-link: XXX

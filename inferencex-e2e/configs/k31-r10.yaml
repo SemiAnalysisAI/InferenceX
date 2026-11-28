@@ -183,7 +183,7 @@ kimik31-r10-2p3d-umbp:
           - DECODE_CPU_DRAM_GB=1799
 
 kimik31-r10-1p3d-simplecpu-mono:
-  image: yukiozzz/vllm-openai-rocm@sha256:961650f4877739f8a249c7fc709424a9331982dfba8d03e0279e7d598e100ba0
+  image: yukiozzz/vllm-openai-rocm@sha256:8de062a51b3fc07fbad889740a3cabaa812db7c87a5e39c0eb45bc62289da0d7
   model: moonshotai/Kimi-K3.1-Pro
   model-prefix: kimik3.1
   runner: cluster:mi355x-amds
@@ -215,8 +215,8 @@ kimik31-r10-1p3d-simplecpu-mono:
           ep: 8
           dp-attn: false
           additional-settings:
-          - K31_VLLM_SOURCE_SHA=d0d14a48571e71ab68b50db9887886c852f575d0
-          - K31_VLLM_RECORD_SHA256=d43b2eb11caec5780890bc4ed8f410491ce96f3351d4ed0ad71e52b5919d7eef
+          - K31_VLLM_SOURCE_SHA=7eb66e3325c4691662aba72c638e35206f3ebe5f
+          - K31_VLLM_RECORD_SHA256=d0c3a8ae02606cc4b9eb5141af68efcdf20edbb3e143fce63b4496932ce4a9d6
           - TOTAL_CPU_DRAM_GB=1799
           - K31_CLEAN_RUN_ID=k31-native576-c18-1128
           - K31_MODEL_METADATA_MANIFEST=/infmax-workspace/benchmarks/multi_node/srt-slurm-recipes/configs/k31-pro-metadata-6d0a0202.json
@@ -224,10 +224,10 @@ kimik31-r10-1p3d-simplecpu-mono:
         decode:
           num-worker: 3
           tp: 8
-          dcp-size: 8
+          dcp-size: 1
           ep: 1
           dp-attn: false
           additional-settings:
-          - K31_VLLM_SOURCE_SHA=d0d14a48571e71ab68b50db9887886c852f575d0
-          - K31_VLLM_RECORD_SHA256=d43b2eb11caec5780890bc4ed8f410491ce96f3351d4ed0ad71e52b5919d7eef
+          - K31_VLLM_SOURCE_SHA=7eb66e3325c4691662aba72c638e35206f3ebe5f
+          - K31_VLLM_RECORD_SHA256=d0c3a8ae02606cc4b9eb5141af68efcdf20edbb3e143fce63b4496932ce4a9d6
           - DECODE_CPU_DRAM_GB=0

@@ -24,7 +24,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:961650f4877739f8a249c7fc709424a9331982dfba8d03e0279e7d598e100ba0
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:8de062a51b3fc07fbad889740a3cabaa812db7c87a5e39c0eb45bc62289da0d7
   args:
     policy: kv_aware
     prefill-policy: kv_aware
@@ -46,7 +46,7 @@ engine:
   connector: moriio
 roles:
   prefill:
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:961650f4877739f8a249c7fc709424a9331982dfba8d03e0279e7d598e100ba0
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:8de062a51b3fc07fbad889740a3cabaa812db7c87a5e39c0eb45bc62289da0d7
     nodes: 1
     workers: 1
     gpus: 8
@@ -70,11 +70,11 @@ roles:
       compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":4096,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[256,512,768,1024,1536,2048,3072,4096]}'
       speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","num_speculative_tokens":4,"method":"dspark","attention_backend":"KIMI_K3_FLYDSL_SWA_GQA","draft_sample_method":"probabilistic","rejection_sample_method":"block","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f"}'
       additional-config: '{"kda_prefill_backend":"fused","k31_pd_preparation":true,"k31_sp_aux_projection":true}'
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false,"defer_timeout":300,"use_dmabuf_kv":true}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1799000000000,"lazy_offload":false}}]}}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"MoRIIOConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":true,"notify_port":18400,"defer_timeout":300,"use_dmabuf_kv":true}},{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":1799000000000,"lazy_offload":false}}]}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
       prefix-match-unit: 1280
-      cp-kv-cache-interleave-size: 1
+      cp-kv-cache-interleave-size: 1280
       mamba-ssm-cache-dtype: float32
       mamba-cache-mode: align
       block-size: 64
@@ -84,8 +84,8 @@ roles:
       cache-aware-prefill-admission: true
       kernel-config: '{"amd_kernels":{"disabled_routes":["moe","norm","overlap"]}}'
     env:
-      K31_VLLM_SOURCE_SHA: d0d14a48571e71ab68b50db9887886c852f575d0
-      K31_VLLM_RECORD_SHA256: d43b2eb11caec5780890bc4ed8f410491ce96f3351d4ed0ad71e52b5919d7eef
+      K31_VLLM_SOURCE_SHA: 7eb66e3325c4691662aba72c638e35206f3ebe5f
+      K31_VLLM_RECORD_SHA256: d0c3a8ae02606cc4b9eb5141af68efcdf20edbb3e143fce63b4496932ce4a9d6
       VLLM_USE_V2_MODEL_RUNNER: '1'
       VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
       VLLM_ROCM_USE_AITER: '1'
@@ -207,14 +207,14 @@ roles:
       kv-cache-dtype: fp8
       stream-interval: 10
       seed: 42
-      decode-context-parallel-size: 8
+      decode-context-parallel-size: 1
       dcp-comm-backend: a2a
       max-num-seqs: 3
       max-num-batched-tokens: 15
       compilation-config: '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":15,"custom_ops":["+fused_rms_norm_gated"],"cudagraph_capture_sizes":[5,10,15]}'
       speculative-config: '{"model":"Inferact/Kimi-K3.1-Pro-DSpark","num_speculative_tokens":4,"method":"dspark","draft_sample_method":"probabilistic","rejection_sample_method":"block","revision":"e4e6e6261e9f8b6d5f249f9627eb6b109d762d5f"}'
       additional-config: '{"kda_prefill_backend":"fused","k31_pd_preparation":true,"k31_sp_aux_projection":true,"decode_backend":"latency_specialized"}'
-      kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":false,"use_dmabuf_kv":true}}'
+      kv-transfer-config: '{"kv_connector":"MoRIIOConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_connector_extra_config":{"backend":"rdma","read_mode":true,"notify_port":18400,"use_dmabuf_kv":true}}'
       attention-config: '{"indexer_kv_dtype":"mxfp4"}'
       hf-overrides: '{"text_config":{"dsa_config":{"indexer_use_fp8":true}}}'
       prefix-match-unit: 1280
@@ -228,8 +228,8 @@ roles:
       kernel-config: '{"amd_kernels":{"enabled":true}}'
       watermark: 0.02
     env:
-      K31_VLLM_SOURCE_SHA: d0d14a48571e71ab68b50db9887886c852f575d0
-      K31_VLLM_RECORD_SHA256: d43b2eb11caec5780890bc4ed8f410491ce96f3351d4ed0ad71e52b5919d7eef
+      K31_VLLM_SOURCE_SHA: 7eb66e3325c4691662aba72c638e35206f3ebe5f
+      K31_VLLM_RECORD_SHA256: d0c3a8ae02606cc4b9eb5141af68efcdf20edbb3e143fce63b4496932ce4a9d6
       VLLM_USE_V2_MODEL_RUNNER: '1'
       VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
       VLLM_ROCM_USE_AITER: '1'
@@ -315,8 +315,8 @@ roles:
       VLLM_ROCM_K31_MEGA_MOE_MAIN_MTPR: '1024'
       VLLM_ROCM_DCP_A2A_CHUNK_ROWS: '2048'
       VLLM_ROCM_DCP_FORCE_KVGATHER: '0'
-      VLLM_ROCM_DCP_SHARDQ: '1'
-      VLLM_ROCM_DCP_SHARDQ_FP8_Q: '1'
+      VLLM_ROCM_DCP_SHARDQ: '0'
+      VLLM_ROCM_DCP_SHARDQ_FP8_Q: '0'
       VLLM_ROCM_MLA_FP8_KV: '1'
       VLLM_DCP_Q_REPLICATE: '0'
       PATH: /configs/k31-worker-bin:/opt/runtime-venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -336,7 +336,7 @@ roles:
       KV_OFFLOAD_BACKEND: simplecpu
       DECODE_CPU_DRAM_GB: '0'
       VLLM_ROCM_USE_AITER_MOE: '1'
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:961650f4877739f8a249c7fc709424a9331982dfba8d03e0279e7d598e100ba0
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:8de062a51b3fc07fbad889740a3cabaa812db7c87a5e39c0eb45bc62289da0d7
 benchmark:
   env:
     AIPERF_BENCHMARK_GRACE_PERIOD: '30'
