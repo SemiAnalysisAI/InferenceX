@@ -11,6 +11,34 @@ from infx.results.topology import Parallelism, validate_parallelism
 from .request_metrics import compute_request_metrics
 from .server_metrics import compute_server_metrics
 
+# Eviction under load costs up to ~0.2 on healthy runs; a wider gap points at the metric.
+SERVER_HIT_RATE_WARN_GAP = 0.25
+
+
+def _server_hit_rate_warnings(
+    disagg: bool, server_nested: dict[str, Any], request_nested: dict[str, Any]
+) -> list[str]:
+    """Return warnings for a server KV hit rate that cannot be trusted as a prefill hit rate."""
+    warnings: list[str] = []
+    roles = {source.get("role") for source in server_nested.get("sources") or []}
+    if disagg and roles and "prefill" not in roles:
+        warnings.append(
+            "Disaggregated run, but no server metrics endpoint is labelled prefill; "
+            "the server KV cache hit rate counts every endpoint"
+        )
+    server_hit_rate = server_nested["cache"].get("gpu_cache_hit_rate")
+    theoretical_hit_rate = request_nested["cache"].get("theoretical_cache_hit_rate")
+    if (
+        server_hit_rate is not None
+        and theoretical_hit_rate is not None
+        and server_hit_rate < theoretical_hit_rate - SERVER_HIT_RATE_WARN_GAP
+    ):
+        warnings.append(
+            f"Server KV cache hit rate {server_hit_rate:.1%} is more than "
+            f"{SERVER_HIT_RATE_WARN_GAP:.0%} below the theoretical {theoretical_hit_rate:.1%}"
+        )
+    return warnings
+
 
 def _env_int(env: Mapping[str, str], name: str, default: int = 0) -> int:
     """Return ``env[name]`` as an int, or ``default`` when unset or empty."""
@@ -241,6 +269,8 @@ def build_result(
         records=records,
         server_logs=server_logs,
     )
+
+    warnings.extend(_server_hit_rate_warnings(agg["disagg"], server_nested, request_nested))
 
     if "total_tput_tps" in request_flat and num_gpus > 0:
         request_nested["throughput"]["per_gpu"] = {

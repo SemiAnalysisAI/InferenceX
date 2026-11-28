@@ -15,6 +15,8 @@ from infx.results.agentic.common import (
 
 from .base import ServerMetricsBackend, counter_int
 
+_OPENENGINE_PREFIX = "trtllm_openengine_"
+
 
 class TrtllmBackend(ServerMetricsBackend):
     name = "trtllm"
@@ -176,7 +178,8 @@ def _first_counter_total(
 def _endpoint_roles(metrics: dict[str, dict[str, Any]]) -> dict[str, str]:
     """Map every scraped endpoint URL in ``metrics`` to its role, ``worker`` when no series names one."""
     roles: dict[str, str] = {}
-    for entry in metrics.values():
+    openengine_phases: dict[str, set[str]] = {}
+    for metric_name, entry in metrics.items():
         if not isinstance(entry, dict):
             continue
         series_list = entry.get("series")
@@ -195,6 +198,15 @@ def _endpoint_roles(metrics: dict[str, dict[str, Any]]) -> dict[str, str]:
                 role = _normalize_role(mode)
                 if role in {"prefill", "decode", "combined"} or roles[endpoint] == "worker":
                     roles[endpoint] = role
+            elif metric_name.startswith(_OPENENGINE_PREFIX):
+                phase = _normalize_role(label_value(series, "phase") or "")
+                if phase in {"prefill", "decode"}:
+                    openengine_phases.setdefault(endpoint, set()).add(phase)
+    # A Dynamo sidecar serves TRT-LLM's own OpenEngine endpoint, whose series carry no Dynamo
+    # role label; the phase on its RPC series names the role the engine serves.
+    for endpoint, phases in openengine_phases.items():
+        if roles[endpoint] == "worker":
+            roles[endpoint] = phases.pop() if len(phases) == 1 else "combined"
     return roles
 
 
