@@ -13518,6 +13518,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5199
 
 - config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  description:
+    - "Rerun the unchanged Qwen3.5 FP4 GB200 Dynamo-SGLang AgentX config to collect GPU and Grace CPU power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4414
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp16-disagg
     - kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg
   scenario-type: [agentic-coding]
