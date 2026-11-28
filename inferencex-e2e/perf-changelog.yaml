@@ -13548,3 +13548,10 @@
   description:
     - "Rerun the unchanged Muse Spark Open NVFP4 GB300 TensorRT-LLM AgentX config to collect GPU and Grace CPU power."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5276
+
+- config-keys:
+    - qwen3.5-fp8-b200-dynamo-sglang-agentic-disagg-mtp
+  description:
+    - "Update the SGLang image from v0.5.22-cu130 to nightly-dev-cu13-20261025-65633129, pinned by digest."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4477
+  scenario-type: [agentic-coding]
