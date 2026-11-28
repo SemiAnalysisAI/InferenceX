@@ -13543,6 +13543,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5265
 
 - config-keys:
+    - musespark-fp4-gb300-trt-agentic-dflash
+  scenario-type: [agentic-coding]
+  description:
+    - "Rerun the unchanged Muse Spark Open NVFP4 GB300 TensorRT-LLM AgentX config to collect GPU and Grace CPU power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5276
+
+- config-keys:
     - qwen3.5-fp8-b300-sglang-agentic-mtp
   description:
     - "Update SGLang image from v0.5.16-cu130 to v0.5.22-cu130 and rename --cuda-graph-max-bs to --cuda-graph-max-bs-decode."
