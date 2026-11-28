@@ -120,6 +120,19 @@ jobs:
       checks: read # Read check-runs on PR commits.
     outputs:
       verification-succeeded: ${{ steps.outcome.outputs.succeeded }}
+    env:
+      VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
+      VERIFIER_CLAUDE_ARGS: |
+        --model 'claude-opus-5-5'
+        --allowedTools "Agent,Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(docker manifest inspect:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_facts:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
+        --disallowedTools "Read(//proc/**),Write(//proc/**)"
+      # claude-code-action hides the transcript, so log only why the agent stopped and what it was denied.
+      CLAUDE_RUN_SUMMARY_JQ: |
+        .[] | select(.type == "result")
+        | "Stop: \(.subtype) after \(.num_turns) turns",
+          "Final message:", (.result // "(none)"),
+          "Permission denials (\(.permission_denials | length)):",
+          (.permission_denials[]? | "- \(.tool_name): \(.tool_input.command // .tool_input.file_path // .tool_input.url // (.tool_input | tostring))")
     steps:
       - name: Checkout trusted workflow code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -174,6 +187,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
           github_token: ${{ github.token }}
@@ -185,35 +199,50 @@ jobs:
           settings: |
             {"fastMode": true}
 
-          claude_args: |
-            --model 'claude-opus-5-5'
-            --allowedTools "Read,Write,Glob,Grep,WebFetch,mcp__github_ci__*,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh run download:*),Bash(git log:*),Bash(git show:*),Bash(docker manifest inspect:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.pareto_coverage:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_facts:*),Bash(uv run --project inferencex-e2e --locked python -m infx.workflows.signoff_validate:*)"
-            --disallowedTools "Read(//proc/**),Write(//proc/**)"
+          claude_args: ${{ env.VERIFIER_CLAUDE_ARGS }}
           prompt: |
             Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the
             instructions in it exactly — it is your complete task specification,
             already rendered with this run's PR number, head SHA, and sign-off
-            metadata.
+            metadata. Wait for any delegated checks to finish, then write the
+            verdict file before ending your turn.
+
+      - name: Summarize Claude run
+        if: always() && steps.claude.outputs.execution_file != ''
+        continue-on-error: true
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        # Agent text can be steered by the PR, so print it with workflow commands disabled.
+        run: |
+          token="$(openssl rand -hex 16)"
+          echo "::stop-commands::$token"
+          trap 'echo "::$token::"' EXIT
+          jq -r "$CLAUDE_RUN_SUMMARY_JQ" "$EXECUTION_FILE"
 
       - name: Record verification outcome
         id: outcome
         if: always()
         env:
           CLAUDE_SUCCEEDED: ${{ steps.claude.outcome == 'success' }}
-          VERDICT_PATH: /tmp/codeowner-signoff-verdict.md
         run: |
-          succeeded=false
           if [[ "$CLAUDE_SUCCEEDED" == true && -f "$VERDICT_PATH" ]]; then
-            succeeded=true
+            echo "succeeded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "succeeded=false" >> "$GITHUB_OUTPUT"
+            if [[ "$CLAUDE_SUCCEEDED" == true ]]; then
+              echo "::error::Verifier did not write $VERDICT_PATH"
+            else
+              echo "::error::Claude verifier did not complete successfully"
+            fi
+            exit 1
           fi
-          echo "succeeded=$succeeded" >> "$GITHUB_OUTPUT"
 
       - name: Upload verdict
         if: always() && steps.outcome.outputs.succeeded == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codeowner-signoff-verdict
-          path: /tmp/codeowner-signoff-verdict.md
+          path: ${{ env.VERDICT_PATH }}
           if-no-files-found: error
           retention-days: 7
 

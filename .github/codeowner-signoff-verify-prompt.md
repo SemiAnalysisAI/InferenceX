@@ -25,6 +25,10 @@ configs, and the linked recipe yourself. Be rigorous and specific. The checks en
 the merge standard in `inferencex-e2e/docs/PR_REVIEW_CHECKLIST.md`. Read it in the checked-out
 default branch. It is the source of truth if wording here and there ever drifts.
 
+Check only what the checklist and the checks below explicitly require. Do not invent
+requirements, coverage tests, or evidence standards they do not state, and never FAIL or
+WARN on a concern outside them.
+
 Read the exact sign-off body first (especially its "Additional detail section").
 The sign-off was posted as a ${SIGNOFF_KIND}, so fetch it with:
 ```bash
@@ -192,12 +196,6 @@ minimum or old failed lanes. A row is materially weaker when
 and the additional detail section gives no explanation backed by a rerun. Name the task,
 topology, both scores, and run links. When `cohort_scope` is `none` or the section
 failed, find peers with `signoff_facts evals` and name how they differ.
-
-### (c) The eval exercised the changed path
-For a conditional backend or kernel change, configuration selection is not runtime
-dispatch. Check the pinned engine's eligibility and fallback guards and the assessed
-run's server logs. An eval covers the change only when its logs show that path ran; a
-concurrency label or server argument alone is not proof. FAIL when no eval covers it.
 
 ## Check 3 — Production-useful recipe linked, MERGED, AND complete
 APPLICABILITY. Read this first. The deciding factor is whether a serving setting
@@ -635,7 +633,9 @@ THE STANDARD: the draft must be served as it ships. The BASELINE is the served
 checkpoint's own draft head or draft weights, in the precision they are stored in,
 loaded by the pinned upstream image with its default handling and no draft-related
 settings from the submission. PASS when the effective draft precision matches that
-baseline. FAIL when the submission makes the draft cheaper than that baseline.
+baseline. FAIL when the submission makes the draft cheaper than that baseline. The
+draft KV-cache dtype is judged only by the DRAFT KV-CACHE RULE below, not by this
+baseline comparison.
 
 EXPLICIT PROHIBITION: `SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE` must not be enabled
 going forward. FAIL Check 13 if the effective recipe enables it (`=1` or any
@@ -671,9 +671,31 @@ because they predate the rule.
   computation faster without lowering weight or activation precision below what ships
   (fused or default lower-precision kernels for that model, scheduling) are allowed.
 
+DRAFT KV-CACHE RULE: besides the framework's default draft KV-cache dtype, the storage
+dtype of the draft's own KV cache may be `bf16`, `fp16`, `fp32`, `fp8`, `fp8_e4m3`, or
+`fp8_e5m2` (or the pinned framework's spelling), even below the framework default or
+different from the target KV-cache dtype, only when (1) it is set through launch flags
+or engine config fields documented by the pinned image, not checkpoint-file edits,
+patches, or undocumented environment variables; (2) for golden/synthetic-acceptance
+runs, the golden AL identity used for that run in
+`inferencex-e2e/infx/golden_al_distribution/identities.yaml` records the same
+`draft_kv_cache_dtype` (a condition checked from the committed file, not an AL-based
+exemption); and (3) it changes only the draft KV storage dtype and the attention-input
+cast the pinned framework applies automatically to read it, not draft weight,
+activation, or GEMM precision or how the draft reads the target's KV pool (ATOM
+DeepSeek-V4.1 `DSparkConfig.draft_kv_dtype=fp8`, MXFP8 with OPUS A8W8, is NOT covered).
+Any other draft KV-cache dtype (`int8`, `int4`, `fp8_per_token_head`, MXFP8, FP4,
+NVFP4, MXFP4, ...) is allowed only as the framework default. For each affected
+configuration, report the effective draft KV-cache dtype, the framework default, and,
+for synthetic-acceptance runs, the golden identity key and its `draft_kv_cache_dtype`.
+PASS this aspect with that note when allowed; FAIL when a non-default draft KV-cache
+dtype is outside the list or does not match the golden identity; WARN when the
+effective value or identity cannot be resolved.
+
 FAIL when the submission lowers draft precision below the baseline: online or offline
-quantization of draft weights, activations, or computation; dtype or KV-cache dtype
-overrides aimed at the draft that go below the framework default; substituting a
+quantization of draft weights, activations, or computation; weight, activation, or
+compute dtype overrides aimed at the draft that go below the framework default; a
+draft KV-cache dtype that the DRAFT KV-CACHE RULE does not allow; substituting a
 precision-converted or differently quantized draft checkpoint, or a head from a
 different release than the target; patching the pinned image so the draft loads or
 computes at a different precision than it does by default (an engine-patch waiver does
@@ -702,7 +724,8 @@ its separate speculative-algorithm/configuration requirements.
   `SGLANG_GLM_NEXTN_MOE_PTPC=1`. These are inspection leads, not a string denylist:
   resolve variables and inherited defaults, and determine whether the effective path
   lowers draft precision below the baseline. A draft path or an explicit setting that
-  restates the default is not a violation; an omitted flag alone is not proof of
+  restates the default is not a violation, and neither is a draft KV-cache dtype
+  allowed by the DRAFT KV-CACHE RULE; an omitted flag alone is not proof of
   compliance.
 - Inspect generic online-quantization configs too, even when their flag names do not
   mention draft models. For ATOM's `--online_quant_config` (space or `=` form),
@@ -742,7 +765,8 @@ its separate speculative-algorithm/configuration requirements.
   a claimed unchanged AL, or a new AL measurement does not override this rule.
   Golden/synthetic AgentX acceptance (Check 11) does not demonstrate preserved draft
   precision and cannot excuse lowering it.
-- PASS only when the effective draft path is verified to match the shipped baseline.
+- PASS only when the effective draft path is verified to match the shipped baseline,
+  apart from a draft KV-cache dtype allowed by the DRAFT KV-CACHE RULE.
   If evidence is missing or inaccessible, WARN as "Draft precision could not be
   verified", naming the missing evidence and requesting human review; do not
   assert that a precision change was proven or report PASS. This includes an
@@ -1122,6 +1146,8 @@ single terse line. Rules:
   The publisher alone inserts them when Check 14 is WARN, including an overall
   REJECTED verdict with a Pareto warning.
   Spend words only on the checks that fail or warn.
+- Be SUCCINCT. No fluff. A FAIL or WARN row is the root issue and the fix in one or two
+  short sentences with a link; a PASS or N/A row is a few words.
 - State conclusions, don't narrate your process. No multi-paragraph explanations, no
   restating the checklist, no hedging ("if X then maybe Y"). Make the call. Link the
   run/recipe instead of describing it.

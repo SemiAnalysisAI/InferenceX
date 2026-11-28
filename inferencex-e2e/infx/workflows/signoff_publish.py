@@ -33,7 +33,8 @@ NVIDIA_OVERVIEW_WARNING = (
     "model/framework coverage is missing or unverified. See Check 16."
 )
 INVALID = (
-    f"{REJECT}\n\nThe verifier did not produce a valid verdict. Retry the sign-off verification."
+    "## **VERIFICATION FAILED**\n\n"
+    "The verifier did not produce a valid verdict. Retry the sign-off verification."
 )
 
 
