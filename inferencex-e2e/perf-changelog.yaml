@@ -13516,3 +13516,20 @@
   description:
     - "Add Kimi-K3.1-Pro GB200 vLLM AgentX configs on vllm/vllm-openai:kimi-k31-arm64-cu135-7074371 with optimized parallel configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5199
+
+- config-keys:
+    - dsv41flash-fp4-mi325x-vllm-disagg-agentic-dspark
+    - dsv41flash-fp4-mi325x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add DeepSeek-V4.1-Flash FP4 MI325X vLLM AgentX 1P1D NIXL disaggregation. One prefill worker on 2 GPUs (TP1 + DP2 attention) feeds one TP4 decode worker, 6 chips total. Throughput per chip counts prefill plus decode chips, the same basis the aggregated rows use."
+    - "Refresh the existing aggregated key dsv41flash-fp4-mi325x-vllm-agentic-dspark onto the same image, vllm/vllm-openai-rocm:nightly-de7cf7f8 (was nightly-rocm100-f5d93296). The aggregated and disaggregated points are only comparable as a single curve when both are measured on one vLLM build; f5d93296 is a 2026-11-11 commit and de7cf7f8 is 2026-11-27, so the previously published aggregated numbers were taken on an older engine than the disaggregated ones. Re-running the aggregated ladder on the shared image removes that confound. No aggregated recipe settings change; only the image pin moves."
+    - "Against the mi325x_vllm aggregated frontier as published on 2026-11-20, all five disaggregated points are non-dominated and join the combined Pareto frontier, and the aggregated TP2 c32 point (380.24 tok/s/chip at P90 interactivity 26.31) is displaced. The five points are 458.51 at 21.39, 450.78 at 23.87, 411.48 at 32.36, 308.29 at 48.43 and 192.71 at 80.52. The two highest-throughput points sit left of where the published curve currently ends. These are our-cluster measurements pending a harness sweep, and the aggregated half of the comparison is the pre-refresh image."
+    - "Above P90 interactivity ~80 the aggregated configuration is stronger: the fixed 2-chip prefill cost stops paying for itself once effective decode concurrency falls (17 at conc 32, 4 at conc 16), so concurrency 16 is dominated and is not included."
+    - "Prefill is held at a fixed shape across every concurrency (max-num-seqs 64, max-num-batched-tokens 8192, engram cpu_offload true), following the InferenceX GB300 dsv41flash reference recipe, which also scales prefill by adding workers rather than resizing one. engram cpu_offload on prefill is structural: with it false the 2-GPU prefill OOMs. max-num-batched-tokens must stay 8192; 32768 crashes in warmup with hipErrorLaunchOutOfResources, and agentic GSM8K does not catch it because its ~1k-token prompts never build a large prefill batch."
+    - "Decode max-num-batched-tokens is 10 x max-num-seqs, matching the GB300 pure-decode rule. The cudagraph grid is step 6 (dspark 5 speculative tokens plus 1) up to max-num-seqs x 6. monokernel is enabled but inert at these batch sizes: the DSv4 mono decode path reports <= 42 rows, which with 6 token slots per request covers about 7 concurrent requests, well below the 112-132 these points run."
+    - "Decode max-num-seqs at conc 128 is 112 or 132 rather than the usual 2 x concurrency. Above roughly 132 concurrent decoding requests the decode engine aborts with HSA_STATUS_ERROR_OUT_OF_RESOURCES (surfaced as hipErrorLaunchOutOfResources) while GPU KV cache is only ~27% used; the failure is non-KV VRAM headroom exhaustion, not KV capacity, and scales at roughly 66-92 MB per concurrently decoding request."
+    - "Two conc-128 points differ only by engram cpu_offload on decode. With it true the GPU KV cache grows from 9,568,927 to 36,330,056 tokens and TTFT p50 drops from 29.7 s to 11.0 s, trading P90 interactivity 32.36 for 23.87 and 411.48 tok/s/chip for 450.78. Both are on the frontier, at different points on the curve."
+    - "Correctness validated with agentic GSM8K at concurrency 64 over the disaggregated path: 93.63% exact match, against 93.25% for the previous cross-node PD configuration and 93.33% single-node."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5169

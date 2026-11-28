@@ -810,6 +810,10 @@ clusters:
         workspace-mounts: *amd-exporter-config
         network-interface: ""
         single-node-time-limit: 480
+        host-setup:
+          script: runners/srt-slurm/hooks/mi325x-amd/setup.sh
+          timeout-s: 4200
+          nodes: all
         gpus-per-node-directive: true
         segment-directive: false
         cpu-power-exporter: {source: rapl}
