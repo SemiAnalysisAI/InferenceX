@@ -114,6 +114,7 @@ def _as_vllm(raw):
 
 @pytest.mark.parametrize(("fault", "refusal"), [
     ({"args": ["--cache-backend", "tea_cache"]}, "argument '--cache-backend'"),
+    ({"args": ["--quantization", "fp8"]}, "argument '--quantization'"),
     ({"args": ["--quantization=fp8"]}, "argument '--quantization=fp8'"),
     ({"args": ["-qfp8"]}, "argument '-qfp8'"),
     ({"args": ["--diffusion_attention_back", "FLASH_ATTN"]}, "argument '--diffusion_attention_back'"),
@@ -154,6 +155,24 @@ def test_sglang_recipe_binds_only_reviewed_settings(native_fragment, args, env, 
     server["env"] |= env
     with pytest.raises(ValueError, match=re.escape(refusal)):
         video.prepare(write(raw), {**ENV, "FRAMEWORK": "sglang"}, root=ROOT)
+
+
+def test_an_fp8_row_must_quantize_on_an_engine_that_reviewed_fp8(native_fragment):
+    raw, write = native_fragment
+    fp8 = {**ENV, "PRECISION": "fp8"}
+    sglang_args = raw["services"][0]["args"] + ["--disable-conditioning-cache"]
+    _as_vllm(raw)
+    [server] = raw["services"]
+    server["env"]["OMNI_DIFFUSION_PROMPT_EMBED_CACHE"] = "0"
+    with pytest.raises(ValueError, match="vLLM-Omni rows must set --quantization"):
+        video.prepare(write(raw), fp8, root=ROOT)
+
+    server["args"] += ["--quantization", "fp8"]
+    assert video.prepare(write(raw), fp8, root=ROOT)["model"]["precision"] == "fp8"
+
+    server.update(args=sglang_args, env={"VIDEO_RUNTIME_REVISION": "b" * 40})
+    with pytest.raises(ValueError, match="SGLang video rows have no reviewed fp8 precision"):
+        video.prepare(write(raw), {**fp8, "FRAMEWORK": "sglang"}, root=ROOT)
 
 
 def test_sglang_recipe_must_reach_the_engine_through_the_harness_and_fix_its_mode(native_fragment):
