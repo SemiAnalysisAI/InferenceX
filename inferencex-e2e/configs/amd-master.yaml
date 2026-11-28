@@ -1134,7 +1134,7 @@ minimaxm31flash-fp4-mi355x-sglang-agentic-dspark:
 # (ROCm/ATOM recipes/MiniMax-M3-Agentic-InferenceX.md). Seven-token DSpark uses
 # golden AL 4.04 for throughput and real acceptance for eval.
 minimaxm31flash-fp4-mi355x-atom-agentic-dspark:
-  image: rocm/atom-dev:nightly_202611200431
+  image: rocm/atom-dev:nightly_202611251520@sha256:4affcbe6927a8a111e9597e64445db69100d7eaf5bc88b73c5caa7a91d650395
   model: amd/MiniMax-M3.1-Flash-Quark-MXFP4
   model-prefix: minimaxm31flash
   runner: cluster:mi355x-amds
