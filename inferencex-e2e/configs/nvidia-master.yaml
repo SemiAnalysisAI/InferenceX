@@ -7103,7 +7103,7 @@ minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-x1126-kd:
         decode: { num-worker: 1, gpus-per-worker: 16, tp: 16, ep: 16, dp-attn: true }
 
 minimaxm31flash-fp4-gb300-dynamo-sglang-agentic-dspark-disagg-x1126-hb:
-  image: lmsysorg/sglang-staging:nightly-cu134-20261121-5f5ef46-arm64-r2@sha256:2e28beb5fa25abd7c1cc9f70a915ab9cb3be53d8ac019a42dfe27b66bbf08fed
+  image: lmsysorg/sglang-staging:nightly-cu134-20261121-5f5ef46-arm64-r3@sha256:e64eacf5de9fd54f4d7d83b16d944de5830f6461148aa9cca60680f08c7fc8b6
   model: MiniMaxAI/MiniMax-M3.1-Flash
   model-prefix: minimaxm31flash
   runner: cluster:gb300-nv

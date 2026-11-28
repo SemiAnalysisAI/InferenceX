@@ -693,7 +693,161 @@ override_4p_dep4_dep16_si20_linker_x1126_kd:
 # Decode workers run no store client, so they start a lend-only client.
 override_4p_dep4_dep16_si20_linker_x1126_hb:
   name: minimaxm31flash-fp4-gb300-dynamo-sglang-agentx-disagg-4p-dep4-dep16-si20-linker-x1126-hb
-  services: *gb300-x1126-services
+  services:
+    - *gb300-x1126-ka-etcd
+    # The master log gets segment use by role every 60 s, master counters, and
+    # the segment each sampled object lands in (same page sample as the
+    # prefill access log).
+    - <<: *gb300-x1126-ka-master
+      preamble: |
+        export PATH="$(dirname "$(python3 -c 'import sys; print(sys.executable)')"):$PATH"
+        MC_DIR=$(python3 -c 'import mooncake, os; print(os.path.dirname(mooncake.__file__))')
+        command -v mooncake_master >/dev/null || export PATH="$MC_DIR:$PATH"
+        command -v mooncake_master
+        cat > /tmp/l3_obs.py <<'PY'
+        # Master-side L3 observer: segment use by role every 60 s, and the segment
+        # each sampled object lands in (the same page sample as the Linker access log).
+        import json, os, re, threading, time, urllib.parse, urllib.request, zlib
+        import msgpack, zmq
+
+        ADMIN = "http://127.0.0.1:9003"
+        PERIOD = float(os.environ.get("L3OBS_PERIOD", "60"))
+        MOD = int(os.environ.get("L3OBS_SAMPLE_MOD", "64"))
+        PLACE_MOD = int(os.environ.get("L3OBS_PLACE_MOD", "16"))
+        HBM = {64 << 30: "hbm-prefill", 20 << 30: "hbm-decode"}
+        COUNTER = re.compile(r"^master_[a-z_]*(put|get_replica_list|evict|alloc|remove|exist)[a-z_]*_total$")
+        PAGE = re.compile(r"[0-9a-f]{64}")
+        segs = []  # (endpoint, base, size, kind)
+        lock = threading.Lock()
+
+
+        def get(path):
+            with urllib.request.urlopen(ADMIN + path, timeout=10) as r:
+                return r.read().decode()
+
+
+        def refresh_segments():
+            clients = {}
+            for s in json.loads(get("/get_segments_detail")).get("segments", []):
+                clients.setdefault(s["segment_name"], []).append(s)
+            out, roles = [], {}
+            for name, lst in clients.items():
+                has_prefill_hbm = any(s["size_bytes"] == 64 << 30 for s in lst)
+                used = lst[0]["allocator_used_bytes"]  # reported per client, not per segment
+                dram = sum(s["size_bytes"] for s in lst if s["size_bytes"] not in HBM)
+                hbm = sum(s["size_bytes"] for s in lst if s["size_bytes"] in HBM)
+                role = "prefill" if has_prefill_hbm else ("hbm-decode" if hbm else "store")
+                a = roles.setdefault(role, [0, 0, 0, 0, 0])
+                a[0] += 1
+                a[1] += used > 0
+                a[2] += used
+                a[3] += dram + hbm
+                a[4] += max(0, used - dram) if role == "prefill" else 0
+                for s in lst:
+                    kind = HBM.get(s["size_bytes"]) or ("dram-prefill" if has_prefill_hbm else "dram-store")
+                    out.append((s["te_endpoint"], int(s["base_address"], 16), s["size_bytes"], kind))
+            with lock:
+                segs[:] = out
+            return roles
+
+
+        def stats_loop():
+            while True:
+                time.sleep(PERIOD)
+                try:
+                    roles = refresh_segments()
+                    g = 2 ** 30
+                    parts = []
+                    for rname, (n, ne, used, cap, over) in sorted(roles.items()):
+                        p = f"{rname}: n={n} nonempty={ne} used={used / g:.1f}/{cap / g:.1f}GiB"
+                        if rname == "prefill":
+                            p += f" in_hbm>={over / g:.1f}GiB"
+                        parts.append(p)
+                    vals = {}
+                    for line in get("/metrics").splitlines():
+                        name, _, v = line.partition(" ")
+                        if COUNTER.match(name) and v not in ("0", "0.0"):
+                            vals[name[len("master_"):-len("_total")]] = v
+                    print(f"SEGSTATS {int(time.time())} " + " | ".join(parts), flush=True)
+                    print(f"MASTERCTR {int(time.time())} {json.dumps(vals, sort_keys=True)}", flush=True)
+                except Exception as e:
+                    print(f"SEGSTATS error {e!r}", flush=True)
+
+
+        def place(key):
+            try:
+                data = json.loads(get("/query_key?key=" + urllib.parse.quote(key, safe=""))).get("data", [])
+            except Exception as e:
+                return f"error:{type(e).__name__}"
+            kinds = []
+            with lock:
+                table = list(segs)
+            for d in data:
+                ep, addr = d.get("transport_endpoint_"), int(d.get("buffer_address_", 0))
+                kind = next((k for e, b, sz, k in table if e == ep and b <= addr < b + sz), "unknown")
+                kinds.append(f"{kind}@{ep}")
+            return ",".join(kinds) or "none"
+
+
+        def events_loop():
+            sock = zmq.Context().socket(zmq.SUB)
+            sock.setsockopt(zmq.SUBSCRIBE, b"")
+            sock.setsockopt(zmq.RCVHWM, 0)
+            sock.connect("tcp://127.0.0.1:5557")
+            last, gaps, counts, placed, t0 = None, 0, {}, {}, time.time()
+            while True:
+                parts = sock.recv_multipart()
+                seq = int.from_bytes(parts[1], "big")
+                if last is not None and seq != last + 1:
+                    gaps += seq - last - 1
+                last = seq
+                for ev in msgpack.unpackb(parts[-1], raw=False)[1]:
+                    kind = ev.get("event_type")
+                    counts[kind] = counts.get(kind, 0) + 1
+                    key = ev.get("object_key") or ""
+                    m = PAGE.search(key)
+                    if not m:
+                        continue
+                    h = zlib.crc32(m.group().encode())
+                    if h % MOD:
+                        continue
+                    print(f"KVEV {kind} {ev.get('timestamp')} {key}", flush=True)
+                    if kind in ("stored", "BlockStored") and (h // MOD) % PLACE_MOD == 0:
+                        where = place(key)
+                        k = where.split("@")[0]
+                        placed[k] = placed.get(k, 0) + 1
+                        print(f"PLACE {int(time.time() * 1000)} {key} {where}", flush=True)
+                if time.time() - t0 >= PERIOD:
+                    print(f"KVEV_STATS seq={last} gaps={gaps} counts={counts} placed={placed}", flush=True)
+                    t0 = time.time()
+
+
+        time.sleep(5)
+        while True:
+            try:
+                refresh_segments()
+                break
+            except Exception:
+                time.sleep(5)
+        threading.Thread(target=stats_loop, daemon=True).start()
+        events_loop()
+        PY
+        (python3 -u /tmp/l3_obs.py &)
+      args:
+        - --default_kv_lease_ttl=210000
+        - --eviction_high_watermark_ratio=0.985
+        - --eviction_ratio=0.01
+        - --rpc_thread_num=64
+        - --enable_kv_events
+        - --kv_events_bind_endpoint=tcp://*:5557
+        - --kv_events_backend_id=l3
+    - *gb300-x1126-decode-store
+    - *gb300-x1126-ka-store-1
+    - *gb300-x1126-ka-store-2
+    - *gb300-x1126-ka-store-3
+    - name: otel-collector
+      type: otel-collector
+      enabled: false
   roles:
     prefill:
       nodes: 4
@@ -701,6 +855,11 @@ override_4p_dep4_dep16_si20_linker_x1126_hb:
         <<: *gb300-linker-prefill-env
         MOONCAKE_GLOBAL_SEGMENT_SIZE: 200gb
         MOONCAKE_HBM_SEGMENT_SIZE: 64gb
+        SGLANG_LINKER_ACCESS_LOG_MOD: "64"
+        SGLANG_LINKER_TOUCH_INTERVAL_S: "0"
+        MC_STORE_CLIENT_METRIC_INTERVAL: "60"
+        MC_TE_METRIC: "1"
+        MC_TE_METRIC_INTERVAL_SECONDS: "60"
       args: *gb300-dep4-linker-prefill-args
     decode:
       <<: *gb300-dep16-decode
@@ -708,3 +867,4 @@ override_4p_dep4_dep16_si20_linker_x1126_hb:
         MOONCAKE_PROTOCOL: rdma
         MOONCAKE_DEVICE: "@fabric.rdma-devices"
         MOONCAKE_HBM_SEGMENT_SIZE: 20gb
+        MC_STORE_CLIENT_METRIC_INTERVAL: "60"
