@@ -1171,7 +1171,7 @@ dsv41flash-fp4-mi355x-atom-agentic-dspark:
 
 glm5.3-fp4-mi355x-sglang-agentic-mtp:
   # Dated nightly: this Quark checkpoint needs sgl-project/sglang#40776, which v0.5.22 predates.
-  image: lmsysorg/sglang-rocm:v0.5.22-rocm10-mi35x-20261025@sha256:bb3370918fb7fc4adce40d4192e61ad7dbccbc8159e2f6063318120d0bc0e949
+  image: lmsysorg/sglang-rocm:v0.5.23-rocm10-mi35x-20261127@sha256:235b2a4f83ac071b081324bb338dc87210263f997448666ad489141c3594d777
   model: amd/GLM-5.3-Quark-MXFP4-AttnFP8
   model-prefix: glm5.3
   runner: cluster:mi355x-amds
