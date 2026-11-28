@@ -95,6 +95,8 @@ def lookup_command(args: argparse.Namespace) -> None:
         spec["model"] = args.draft_model
     if args.draft_sample_method:
         spec["draft_sample_method"] = args.draft_sample_method
+    if args.draft_kv_cache_dtype:
+        spec["kv_cache_dtype"] = args.draft_kv_cache_dtype
     value = golden_length(args.model, spec, args.thinking, args.golden_dir, args.verify)
     if args.json:
         print(
@@ -146,6 +148,10 @@ def main(argv: list[str] | None = None) -> int:
         "--draft-sample-method",
         choices=("greedy", "probabilistic"),
         help="Kimi DSpark draft sampler",
+    )
+    lookup_parser.add_argument(
+        "--draft-kv-cache-dtype",
+        help="the draft's KV cache dtype (vLLM speculative-config kv_cache_dtype), e.g. fp8",
     )
     lookup_parser.add_argument(
         "--verify",

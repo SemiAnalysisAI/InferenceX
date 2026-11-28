@@ -166,6 +166,7 @@ gh workflow run speedbench-al.yml \
 | Kimi K3 | DSpark（概率采样草稿 + 块验证） | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-block.yaml) |
 | Kimi K3 | DSpark（概率采样草稿） | [`kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml`](kimi-k3__dspark__kimi-k3-dspark__probabilistic-default.yaml) |
 | Kimi K3.1 Pro | DSpark（概率采样草稿 + 块验证） | [`kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block.yaml`](kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block.yaml) |
+| Kimi K3.1 Pro | DSpark（概率采样草稿 + 块验证，fp8 草稿 KV） | [`kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block__draft-kv-fp8.yaml`](kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block__draft-kv-fp8.yaml) |
 | Kimi K3.1 Pro | DFLASH（RadixArk 草稿 + 块验证） | [`kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block.yaml`](kimi-k3.1-pro__dflash__kimi-k3.1-dflash2-preview__default-block.yaml) |
 | MiniMax-M3 | EAGLE3 | [`minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3__default-default.yaml) |
 | MiniMax-M3 | EAGLE3（GQA） | [`minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml`](minimax-m3__eagle3__minimax-m3-eagle3-gqa__default-default.yaml) |
@@ -185,11 +186,11 @@ gh workflow run speedbench-al.yml \
 
 ## 曲线身份与命名
 
-每个曲线文件命名为 `<model>__<method>__<draft>__<draft_sample>-<verify>.yaml`：曲线的模型键、方法（模型原生头为 `mtp`，以及 `eagle3`、`dspark`、`dflash`）、草稿模型（`native` 或草稿模型名），以及收集脚本设置的草稿采样器和验证器（沿用引擎默认值时为 `default`）。
+每个曲线文件命名为 `<model>__<method>__<draft>__<draft_sample>-<verify>.yaml`：曲线的模型键、方法（模型原生头为 `mtp`，以及 `eagle3`、`dspark`、`dflash`）、草稿模型（`native` 或草稿模型名），以及收集脚本设置的草稿采样器和验证器（沿用引擎默认值时为 `default`）。按 `draft_kv_cache_dtype` 选择的曲线在末尾加 `__draft-kv-<dtype>`。
 
 [`identities.yaml`](identities.yaml) 为每条曲线提供两个块。新曲线合并前必须同时具备二者；测试会据此检查每个文件名。
 
-`select` 决定哪些运行使用该曲线。`curve_name` 返回最具体的匹配曲线（声明 `draft_family`、`draft_sample`、`verify` 最多的那条），没有匹配或最具体的多条并列时报错。
+`select` 决定哪些运行使用该曲线。`curve_name` 返回最具体的匹配曲线（声明 `draft_family`、`draft_sample`、`verify`、`draft_kv_cache_dtype` 最多的那条），没有匹配或最具体的多条并列时报错。
 
 | 键 | 含义 |
 | --- | --- |
@@ -198,6 +199,7 @@ gh workflow run speedbench-al.yml \
 | `draft_family` | 仅在同一模型的曲线因草稿模型而不同时设置：草稿模型名含 `gqa` 时为 `gqa`，否则为 `default` |
 | `draft_sample` | 仅在同一模型的曲线因草稿采样器而不同时设置：运行的 `draft_sample_method` 必须与之相等 |
 | `verify` | 仅在同一模型的曲线因验证器而不同时设置：`standard`、`block` 或 `relaxed`。运行的验证器按审计相同的方式读取；未知验证器（ATOM、TileRT）不会匹配设置了 `verify` 的曲线 |
+| `draft_kv_cache_dtype` | 仅在同一模型的曲线因草稿 KV cache dtype 而不同时设置：运行的 vLLM speculative config 中归一化后的 `kv_cache_dtype` 必须与之相等（`fp8_e4m3` 即 `fp8`）。未设置该项的运行选择不含此键的曲线 |
 
 `collection` 记录曲线的测量方式：`engine`、`draft`、`draft_sample`（`greedy`、`probabilistic`）、`verify`（`standard`、`block`、`relaxed`）、`adaptive`、`topology`（`chain`、`tree-topk<N>`）、`draft_precision`（草稿权重的量化方式）、`draft_kv_cache_dtype` 和 `kv_cache_dtype`（目标模型的）。`provisional: true` 表示该曲线并非针对该模型测量。每项为 `{value, source}`：
 
@@ -227,7 +229,7 @@ python -m infx.golden_al_distribution lookup qwen3.5 mtp 3          # 3.39（默
 python -m infx.golden_al_distribution lookup kimik3 dspark 7 --draft-sample-method probabilistic --json
 ```
 
-`lookup` 接受 InferenceX 模型前缀、引擎的方法名（`mtp`、`eagle`、`nextn`、`eagle3`、`dspark`、`dflash`）以及 `num_speculative_tokens`。`--draft-model` 用于选择 MiniMax GQA 曲线，`--draft-sample-method` 用于在两条 Kimi DSpark 曲线之间选择。缺少曲线或数值时以非零状态退出，与启动时的失败方式一致。
+`lookup` 接受 InferenceX 模型前缀、引擎的方法名（`mtp`、`eagle`、`nextn`、`eagle3`、`dspark`、`dflash`）以及 `num_speculative_tokens`。`--draft-model` 用于选择 MiniMax GQA 曲线，`--draft-sample-method` 用于在两条 Kimi DSpark 曲线之间选择，`--draft-kv-cache-dtype fp8` 选择以 fp8 草稿 KV cache 收集的曲线。缺少曲线或数值时以非零状态退出，与启动时的失败方式一致。
 
 ## 主要参考资料
 

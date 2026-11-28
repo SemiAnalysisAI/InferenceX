@@ -59,6 +59,31 @@ def test_verify_selector_wins_and_unknown_verifiers_keep_the_general_curve(tmp_p
         curve_name("m", spec, tmp_path, None)
 
 
+def test_draft_kv_cache_dtype_selector_wins_for_matching_runs(tmp_path) -> None:
+    fp8 = _identity("m")
+    fp8["select"]["draft_kv_cache_dtype"] = "fp8"
+    identities = {"general": _identity("m"), "fp8": fp8}
+    (tmp_path / "identities.yaml").write_text(yaml.safe_dump(identities))
+    for dtype in ("fp8", "fp8_e4m3", "FP8"):
+        assert curve_name("m", {"method": "mtp", "kv_cache_dtype": dtype}, tmp_path) == "fp8"
+    for spec in ({"method": "mtp"}, {"method": "mtp", "kv_cache_dtype": "auto"}):
+        assert curve_name("m", spec, tmp_path) == "general"
+    assert curve_name("m", {"method": "mtp", "kv_cache_dtype": "bf16"}, tmp_path) == "general"
+    del identities["general"]
+    (tmp_path / "identities.yaml").write_text(yaml.safe_dump(identities))
+    with pytest.raises(ValueError, match="curves need draft_kv_cache_dtype=fp8"):
+        curve_name("m", {"method": "mtp"}, tmp_path)
+
+
+def test_draft_kv_cache_dtype_selector_names_the_curve_and_is_normalized() -> None:
+    data = _identity("m")
+    data["select"]["draft_kv_cache_dtype"] = "fp8"
+    assert canonical_name("m", parse_identity("x", data)) == "m__mtp__native__default-default__draft-kv-fp8"
+    data["select"]["draft_kv_cache_dtype"] = "fp8_e4m3"
+    with pytest.raises(ValueError, match="normalized dtype"):
+        parse_identity("bad", data)
+
+
 @pytest.mark.parametrize(
     ("field", "fact", "message"),
     [

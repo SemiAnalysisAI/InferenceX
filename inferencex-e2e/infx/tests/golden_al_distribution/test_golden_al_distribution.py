@@ -108,6 +108,21 @@ def test_collection_settings_sit_beside_the_model(tmp_path: Path) -> None:
             {"method": "dspark", "draft_sample_method": "probabilistic"},
             "kimi-k3__dspark__kimi-k3-dspark__probabilistic-block",
         ),
+        (
+            "kimik3.1",
+            {"method": "dspark", "draft_sample_method": "probabilistic"},
+            "kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block",
+        ),
+        (
+            "kimik3.1",
+            {"method": "dspark", "draft_sample_method": "probabilistic", "kv_cache_dtype": "fp8"},
+            "kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block__draft-kv-fp8",
+        ),
+        (
+            "kimik3.1",
+            {"method": "dspark", "draft_sample_method": "probabilistic", "kv_cache_dtype": "fp8_e4m3"},
+            "kimi-k3.1-pro__dspark__kimi-k3.1-pro-dspark__probabilistic-block__draft-kv-fp8",
+        ),
     ],
 )
 def test_curve_name_resolves_committed_curves(model, spec, expected) -> None:
