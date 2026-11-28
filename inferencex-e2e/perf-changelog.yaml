@@ -12763,3 +12763,9 @@
   description:
     - Evaluate the clean 7eb66e3325 heterogeneous READ image with DCP8 prefill and TP8/DCP1 native576 decode. Preserve seq3/K4, P-only SimpleCPU, GMU 0.95/H5 and full one-hour profiling. Use block interleave1280 and a separate notification port range; fail initialization if the release listener cannot bind. Dummy local decode TPOT improves 2.45-4.26 percent for short-input seq1-3; this does not establish real-weight FAST gains.
   pr-link: XXX
+
+- config-keys:
+    - kimik31-r10-1p3d-simplecpu-mono
+  description:
+    - Let the worker topology allocate MoRIIO notification ports instead of pinning a local test port. Validate all four allocated worker commands before rerunning the same clean heterogeneous READ image and one-hour c18 workload.
+  pr-link: XXX
