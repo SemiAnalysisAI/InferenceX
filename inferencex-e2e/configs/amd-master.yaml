@@ -1269,7 +1269,7 @@ dsv41flash-fp4-mi355x-tilert-agentic-dspark:
 # SGLang cookbook MI355X FP8 Low Latency recipe on four GPUs: HBM-only KV up to
 # c32, the cookbook HiCache L1 + L2 tier above it.
 glm5.3flash-fp8-mi355x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.22-rocm10-mi35x@sha256:1438dd8b9000adaefb5828edb1cc5713992815d4296f4ad1a1e98dee4e9c7e5f
+  image: lmsysorg/sglang:v0.5.23-rocm10-mi35x@sha256:cff45eca86da10fbe140f85df196ef241e932bbae8036afa45942e633c3ed6c5
   model: zai-org/GLM-5.3-Flash
   model-prefix: glm5.3flash
   runner: cluster:mi355x-amds
