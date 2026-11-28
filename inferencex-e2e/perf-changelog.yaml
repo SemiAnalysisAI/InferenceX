@@ -13554,4 +13554,4 @@
   scenario-type: [video-generation]
   description:
     - "Add vLLM-Omni v0.32.0 Wan2.2-T2V-A14B FP8 rows (--quantization fp8) on 1, 2, 4 and 8 B200 GPUs with the BF16 rows' wan22.yaml release-v1 workload and layouts."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5280
