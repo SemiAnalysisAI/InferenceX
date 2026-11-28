@@ -4,7 +4,7 @@ base:
   dynamo:
     install: true
     source:
-      rev: ad6f7d54ce7b99c53576b10482755c93c921fbac
+      rev: 61c37bc33c3e88da3facaa39fa2b5caf616740ba
 
   slurm:
     time_limit: '8:00:00'

@@ -13530,5 +13530,5 @@
     - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve
   scenario-type: [agentic-coding]
   description:
-    - "Rerun Qwen3.5 FP8 GB300 Dynamo-SGLang AgentX with etcd and NATS on the infra node so every point collects GPU and Grace CPU power."
+    - "Rerun Qwen3.5 FP8 GB300 Dynamo-SGLang AgentX on Dynamo rev 61c37bc3 with etcd and NATS on the infra node so every point collects GPU and Grace CPU power."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5277
