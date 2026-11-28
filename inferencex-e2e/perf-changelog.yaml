@@ -13543,6 +13543,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5265
 
 - config-keys:
+    - musespark-fp4-gb300-trt-agentic-dflash
+  scenario-type: [agentic-coding]
+  description:
+    - "Rerun the unchanged Muse Spark Open NVFP4 GB300 TensorRT-LLM AgentX config to collect GPU and Grace CPU power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5276
+
+- config-keys:
     - glm5.3-fp4-gb300-dynamo-sglang-agentic-agg
     - glm5.3-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
