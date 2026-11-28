@@ -13548,3 +13548,11 @@
   description:
     - "Rerun the unchanged Muse Spark Open NVFP4 GB300 TensorRT-LLM AgentX config to collect GPU and Grace CPU power."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5276
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang-agentic
+    - qwen3.5-fp8-h100-sglang-agentic-mtp
+  description:
+    - "Update the Qwen3.5 FP8 H100 SGLang AgentX image to lmsysorg/sglang:v0.5.22-cu130 with HiCache write_through."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4634
+  scenario-type: [agentic-coding]
