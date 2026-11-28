@@ -13534,6 +13534,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5252
 
 - config-keys:
+    - minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-cu135-disagg
+  scenario-type:
+    - agentic-coding
+  append-only: true
+  description:
+    - "Add AgentX concurrency 460 with one DEP8 prefill worker, one DEP32 decode worker and a 40GB decode Mooncake HBM pool."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5265
+
+- config-keys:
     - musespark-fp4-gb300-trt-agentic-dflash
   scenario-type: [agentic-coding]
   description:
