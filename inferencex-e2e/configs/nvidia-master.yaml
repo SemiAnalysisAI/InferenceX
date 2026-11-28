@@ -10211,3 +10211,25 @@ qwen3.8next-fp4-b300-tokenspeed-agentic-mtp:
       - { gpus-per-worker: 1, tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [56], srt-recipe: agg-variants.yaml:override_tp1_c56 }
       - { gpus-per-worker: 1, tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [80], srt-recipe: agg-variants.yaml:override_tp1_c80 }
       - { gpus-per-worker: 1, tp: 1, ep: 1, dp-attn: false, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: kvstore }, conc-list: [108], srt-recipe: agg-variants.yaml:override_tp1_c108 }
+
+dsv41flash-fp4-gb200-tokenspeed-agentic-dspark:
+  image: ghcr.io/lightseekorg/tokenspeed-runner:cu130-torch-2.14.0-flashinfer-0.7.5@sha256:d6ad92efc714869bb077deab19b4e5a979a01d782ea8aef248a594f9004737ed
+  model: deepseek-ai/DeepSeek-V4.1-Flash
+  model-prefix: dsv41flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: tokenspeed
+  multinode: false
+  router: { name: smg, version: 1.16.0.post20261121 }
+  srt-recipe-dir: dsv41flash/tokenspeed/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: kvstore }, spec-decoding: mtp, conc-list: [128], srt-recipe: agg-variants.yaml:override_dep4_c128 }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: kvstore }, spec-decoding: mtp, conc-list: [176], srt-recipe: agg-variants.yaml:override_dep4_c176 }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: kvstore }, spec-decoding: mtp, conc-list: [240], srt-recipe: agg-variants.yaml:override_dep4_c240 }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: kvstore }, spec-decoding: mtp, conc-list: [256], srt-recipe: agg-variants.yaml:override_dep4_c256 }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: kvstore }, spec-decoding: mtp, conc-list: [288], srt-recipe: agg-variants.yaml:override_dep4_c288 }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: kvstore }, spec-decoding: mtp, conc-list: [352], srt-recipe: agg-variants.yaml:override_dep4_c352 }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: kvstore }, spec-decoding: mtp, conc-list: [448], srt-recipe: agg-variants.yaml:override_dep4_c448 }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: kvstore }, spec-decoding: mtp, conc-list: [512], srt-recipe: agg-variants.yaml:override_dep4_c512 }

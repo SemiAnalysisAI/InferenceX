@@ -13523,3 +13523,11 @@
     - "Rerun the unchanged Qwen3.5 FP4 GB200 Dynamo-SGLang AgentX config to collect GPU and Grace CPU power."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4414
   scenario-type: [agentic-coding]
+
+- config-keys:
+    - dsv41flash-fp4-gb200-tokenspeed-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add single-node GB200 DeepSeek-V4.1-Flash FP4 TokenSpeed (0.1.1.post20261127) + SMG (1.16.0.post20261121) AgentX DEP4 configurations with DSpark (5 steps, 6 verify tokens), shared host-NUMA Engram tables, 80 GB/rank Host L2 KVStore, 16 GB/rank retraction snapshot pool, and prefill-single-round gating across concurrencies 128, 176, 240, 256, 288, 352, 448, and 512."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5278
