@@ -293,3 +293,32 @@ override_2p1d_dep8_dep16_c800:
         max-num-seqs: 24
         max-cudagraph-capture-size: 192
         eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+
+override_1p1d_dep8_dep32_c460:
+  name: minimaxm31flash-gb200-disagg-mooncake-cu135-1p1d-dep8-dep32-c460
+  frontend:
+    worker_selection:
+      instances:
+      - name: prefill-least-loaded
+        type: dynamo-two-tier-cost-fn
+        parameters:
+          cache_threshold: 0.8
+  roles:
+    prefill:
+      nodes: 2
+      args:
+        gpu-memory-utilization: 0.93
+        kv-cache-memory-bytes: 93952409600
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"lookup_prefetch_limit":64,"lookup_prefetch_ttl_s":10,"enable_offload":false,"hbm_pool":{"segment_size":22548578304}}}]}}'
+    decode:
+      env:
+        VLLM_MINIMAX_M3_QKV_FUSED_EPILOGUE_SMALL_M: '1'
+        VLLM_MINIMAX_M3_INPUT_NORM_MXFP8: '1'
+        VLLM_FLASHINFER_MXFP8_COLD_CHAIN_LAUNCHES: '16'
+        VLLM_TOPP_SPLIT_FUSED: '1'
+      args:
+        kv-cache-memory-bytes: 62277025792
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120,"background_receiver":true}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"save_decode_cache":false,"enable_lookup":false,"hbm_pool":{"segment_size":"40GB"}}}]}}'
+        max-num-seqs: 6
+        max-cudagraph-capture-size: 48
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":0,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
