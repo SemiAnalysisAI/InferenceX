@@ -13518,6 +13518,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5199
 
 - config-keys:
+    - qwen3.5-fp4-gb200-dynamo-sglang-agentic-mtp
+  description:
+    - "Rerun the unchanged Qwen3.5 FP4 GB200 Dynamo-SGLang AgentX config to collect GPU and Grace CPU power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/4414
+  scenario-type: [agentic-coding]
+
+- config-keys:
     - qwen3.5-fp8-mi325x-sglang-agentic-mtp
   description:
     - "Update SGLang image from lmsysorg/sglang:v0.5.22-rocm720-mi30x to v0.5.23-rocm720-mi30x."
