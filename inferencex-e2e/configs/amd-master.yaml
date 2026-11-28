@@ -1316,7 +1316,27 @@ musespark-fp4-mi355x-sglang-agentic-dflash:
     agentic-coding:
     - search-space:
       - { gpus-per-worker: 8, tp: 8, ep: 8, kv-offloading: none, spec-decoding: draft_model, conc-list: [6, 10, 28], srt-recipe: agentic.yaml }
-      - { gpus-per-worker: 4, tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [28, 36, 40], srt-recipe: agentic.yaml }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: hicache }, spec-decoding: draft_model, conc-list: [28, 36, 40, 58], srt-recipe: agentic.yaml }
+
+musespark-fp4-mi355x-tokenspeed-agentic-dflash:
+  image: lightseekorg/tokenspeed-runner-amd:rocm7.2.4-pytorch-2.14.0-gfx950@sha256:25949b7a6306e9fbc0165091cc67d9bded9965ed1d664b55f9966e7df0b05e51
+  model: amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4
+  model-prefix: musespark
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: tokenspeed
+  multinode: false
+  router: { name: smg, version: 1.16.0.post20261121 }
+  srt-recipe-dir: musespark/tokenspeed/mi355x-fp4
+  scenarios:
+    agentic-coding:
+    # A TP4 server's worker memory limit is its 4/8 share of the node's
+    # 3,079,397 MiB: 1,539,698 MiB. The recipe's host KV store is 360 GB x 4
+    # ranks = 1,440 GB (1,373,291 MiB) at concurrency 28, 36 and 40, leaving
+    # 166,407 MiB for the server processes. TP8 points have no store.
+    - search-space:
+      - { gpus-per-worker: 8, tp: 8, ep: 1, kv-offloading: none, spec-decoding: draft_model, conc-list: [1, 2, 4, 6, 8, 10, 16, 28], srt-recipe: agentic.yaml }
+      - { gpus-per-worker: 4, tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: kvstore }, spec-decoding: draft_model, conc-list: [28, 36, 40], srt-recipe: agentic.yaml }
 
 kimik3.1-fp4-mi355x-sglang-agentic-dflash:
   image: lmsysorg/sglang:dev-kimi-k31-pro-mi35x@sha256:5901db1401ad7b8bc62ac67175f6f013b1b868e2a2dab063ee8848e7290fa9a7
@@ -1371,7 +1391,7 @@ kimik3.1-fp4-mi355x-tokenspeed-agentic-dspark:
   precision: fp4
   framework: tokenspeed
   multinode: false
-  router: { name: smg, version: 1.16.0.post20261118 }
+  router: { name: smg, version: 1.16.0.post20261121 }
   srt-recipe-dir: kimik3.1/tokenspeed/mi355x-fp4
   scenarios:
     agentic-coding:
