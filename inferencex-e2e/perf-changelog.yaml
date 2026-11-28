@@ -13516,3 +13516,12 @@
   description:
     - "Add Kimi-K3.1-Pro GB200 vLLM AgentX configs on vllm/vllm-openai:kimi-k31-arm64-cu135-7074371 with optimized parallel configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5199
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-agg-pareto
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-pareto
+    - qwen3.5-fp8-gb300-dynamo-sglang-agentic-pp-midcurve
+  scenario-type: [agentic-coding]
+  description:
+    - "Rerun Qwen3.5 FP8 GB300 Dynamo-SGLang AgentX with etcd and NATS on the infra node so every point collects GPU and Grace CPU power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
