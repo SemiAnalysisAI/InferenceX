@@ -32,7 +32,7 @@ services:
       - --ring
       - "1"
       # Precision only: vLLM-Omni quantizes both experts' transformer-block linears to FP8 at
-      # load; attention, the text encoder and the VAE stay BF16.
+      # load; attention kernels, the text encoder and the VAE stay BF16.
       - --quantization
       - fp8
       - --vae-use-tiling
