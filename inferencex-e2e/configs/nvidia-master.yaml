@@ -9443,6 +9443,77 @@ minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-disagg:
         prefill: { num-worker: 2, gpus-per-worker: 4, tp: 4, ep: 4, dp-attn: true }
         decode: { num-worker: 1, gpus-per-worker: 8, tp: 8, ep: 8, dp-attn: true }
 
+minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-cu135-agg:
+  image: vllm/vllm-openai:minimax-m31-flash-arm64-cu135-ddd43a5@sha256:af9226f5a9575088611050e71bf7666d90e4faac41dd8166fb9d63cfa27f88c8
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.6.0.dev20261023
+  multinode: true
+  disagg: false
+  srt-recipe-dir: minimaxm31flash/vllm/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1]
+        srt-recipe: agg-cu135-variants.yaml:override_tp4_c1
+        worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [8]
+        srt-recipe: agg-cu135-variants.yaml:override_tp4_c8
+        worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [15]
+        srt-recipe: agg-cu135-variants.yaml:override_tp4_c15
+        worker: { num-worker: 1, gpus-per-worker: 4, tp: 4, ep: 1, dp-attn: false }
+
+minimaxm31flash-fp4-gb200-dynamo-vllm-agentic-dspark-cu135-disagg:
+  image: vllm/vllm-openai:minimax-m31-flash-arm64-cu135-ddd43a5@sha256:af9226f5a9575088611050e71bf7666d90e4faac41dd8166fb9d63cfa27f88c8
+  model: MiniMaxAI/MiniMax-M3.1-Flash
+  model-prefix: minimaxm31flash
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router:
+    name: dynamo-router
+    version: 1.6.0.dev20261023
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  srt-recipe-dir: minimaxm31flash/vllm/gb200-fp4/agentx
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1+hbm }
+        conc-list: [940]
+        srt-recipe: disagg-cu135-variants.yaml:override_2p1d_dep8_dep32_c940
+        prefill: { num-worker: 2, gpus-per-worker: 8, tp: 8, ep: 8, dp-attn: true }
+        decode: { num-worker: 1, gpus-per-worker: 32, tp: 32, ep: 32, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1+hbm }
+        conc-list: [800]
+        srt-recipe: disagg-cu135-variants.yaml:override_2p1d_dep8_dep16_c800
+        prefill: { num-worker: 2, gpus-per-worker: 8, tp: 8, ep: 8, dp-attn: true }
+        decode: { num-worker: 1, gpus-per-worker: 16, tp: 16, ep: 16, dp-attn: true }
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: 0.3.13.post1+hbm }
+        conc-list: [460]
+        srt-recipe: disagg-cu135-variants.yaml:override_1p1d_dep8_dep32_c460
+        prefill: { num-worker: 1, gpus-per-worker: 8, tp: 8, ep: 8, dp-attn: true }
+        decode: { num-worker: 1, gpus-per-worker: 32, tp: 32, ep: 32, dp-attn: true }
+
 kimik3.1-fp4-gb200-vllm-agentic-dspark-tp8pp2-agg:
   image: vllm/vllm-openai:kimi-k31-arm64-cu130@sha256:52b793567651780dc529647a211a3d15cec11ebc872ac7492636d7d75340eab4
   model: moonshotai/Kimi-K3.1-Pro
