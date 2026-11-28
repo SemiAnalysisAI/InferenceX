@@ -1,0 +1,295 @@
+schema: 2
+base:
+  name: minimaxm31flash-gb200-disagg-mooncake-cu135
+  observability:
+    tachometer:
+      enabled: false
+  identity:
+    frameworks:
+      dynamo: 1.6.0.dev20261023
+  dynamo:
+    install: true
+    source:
+      wheel: 1.6.0.dev20261023
+    request_plane: tcp
+    event_plane: zmq
+    sidecar: true
+    # Above the ephemeral port range, since vLLM-rs binds its gRPC port only after its engine starts.
+    sidecar_port: 65001
+    sidecar_args:
+    - --grpc-startup-deadline-secs
+    - '3600'
+    - --dyn-tool-call-parser
+    - minimax_m3
+    - --dyn-reasoning-parser
+    - minimax_m3
+  resources:
+    gpu_type: gb200
+    gpus_per_node: 4
+  health_check:
+    max_attempts: 1440
+    interval_seconds: 5
+  environment:
+    PYTHONHASHSEED: '0'
+    NCCL_NET_GDR_C2C: '1'
+    NVSHMEM_REMOTE_TRANSPORT: none
+    NVSHMEM_ENABLE_NIC_PE_MAPPING: '1'
+    NVSHMEM_HCA_PE_MAPPING: mlx5_0:1:1,mlx5_1:1:1,mlx5_2:1:1,mlx5_3:1:1
+  services:
+  - name: etcd
+    type: etcd
+    placement:
+      node: infra
+  - name: mooncake-master
+    type: mooncake-master
+    args:
+    - --default_kv_lease_ttl=210000
+    - --eviction_high_watermark_ratio=0.985
+    - --eviction_ratio=0.01
+    options:
+      store_config:
+        metadata_server: P2PHANDSHAKE
+        global_segment_size: 188.875GB
+        local_buffer_size: 128MB
+        protocol: rdma
+        device_name: '@fabric.rdma-devices'
+        enable_offload: false
+  - name: otel-collector
+    type: otel-collector
+    enabled: false
+  frontend:
+    type: dynamo
+    enable_multiple_frontends: false
+    numa_bind: true
+    args:
+      router-mode: kv
+      active-decode-blocks-threshold: None
+      active-prefill-tokens-threshold: None
+      active-prefill-tokens-threshold-frac: None
+      no-router-kv-events: true
+    env:
+      DYN_ROUTER_SESSION_AFFINITY_MODE: soft
+      DYN_ROUTER_TEMPERATURE: '0'
+      DYN_ROUTER_QUEUE_THRESHOLD: None
+      DYN_ROUTER_TTL_SECS: '3600'
+      DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: '3600'
+      DYN_LOG: warn
+      HF_HOME: /hf_hub_cache
+      HF_HUB_CACHE: /hf_hub_cache
+      DYN_TCP_CONNECT_TIMEOUT: '120'
+      DYN_TCP_CHANNEL_BUFFER: '128'
+      DYN_TCP_REQUEST_TIMEOUT: '60'
+      DYN_TCP_POOL_SIZE: '8192'
+      DYN_TOKENIZER: fastokens
+      DYN_TOKENIZER_CACHE: '1'
+      DYN_TOKENIZER_CACHE_BYTES: '8000000000'
+    worker_selection:
+      prefill: prefill-least-loaded
+    placement:
+      node: dedicated
+  engine:
+    type: vllm
+    connector: null
+    dp_launch_mode: per_node
+  roles:
+    prefill:
+      kv_events: false
+      env:
+        HF_HOME: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        PYTHONUNBUFFERED: '1'
+        DYN_TCP_CONNECT_TIMEOUT: '120'
+        UCX_CUDA_IPC_ENABLE_MNNVL: 'n'
+        UCX_MEMTYPE_CACHE: 'n'
+        UCX_TLS: rc,cuda_copy
+        UCX_MEMTYPE_REG_WHOLE: 'n'
+        UCX_RNDV_PIPELINE_ERROR_HANDLING: 'y'
+        UCX_MODULE_DIR: /usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx
+        NIXL_UCX_SGL_ENABLE: '1'
+        NCCL_IB_HCA: '@fabric.rdma-devices'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        UCX_NET_DEVICES: '@fabric.rdma-device-ports'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '8'
+        MC_SLICE_SIZE: '1048576'
+        MC_MAX_MR_SIZE: '4294967296'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
+        VLLM_RS_TOKEN_IDS_AS_BYTES: '1'
+        VLLM_MOONCAKE_STORE_HBM_POOL: '1'
+        DG_NVFP4_MOE_BLOCK_M: '192'
+        DG_NVFP4_MOE_DECODE_SHAPED: '0'
+        VLLM_MOONCAKE_STORE_SIZE_CLASS_SPLIT: '1'
+        VLLM_KV_CACHE_LAYOUT: BLHNC
+        VLLM_DFLASH_DRAFT_KV_TAIL: '1'
+        VLLM_MINIMAX_M3_MSA_MXFP8_OUTPUT: '1'
+        VLLM_MEGAMOE_NVFP4_ROW_STAGING: '1'
+        VLLM_MEGAMOE_STAGING_OVERLAP: '1'
+        VLLM_DRAFT_KV_POOL: '1'
+        VLLM_DRAFT_KV_POOL_NUM_BLOCKS: '1700'
+        VLLM_MINIMAX_M3_QKV_FUSED_EPILOGUE_MIN_TOKENS: '24'
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        language-model-only: true
+        trust-remote-code: true
+        enable-expert-parallel: true
+        # The checkpoint is QAT-trained for an NVFP4 KV cache.
+        kv-cache-dtype: nvfp4
+        # MSA sparse/index cache needs 128-token blocks.
+        block-size: 128
+        attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
+        max-model-len: 1048576
+        # AgentX requires a stream interval of 20 to 60 tokens; vLLM defaults to 1.
+        stream-interval: 20
+        load-format: fastsafetensors
+        kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        tensor-parallel-size: 1
+        max-num-seqs: 64
+        max-num-batched-tokens: 16384
+        long-prefill-token-threshold: 4096
+        prefill-schedule-interval: 1
+        enable-prefix-caching: true
+        compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+        max-cudagraph-capture-size: 2048
+        data-parallel-size: 8
+        data-parallel-rpc-port: 13355
+    decode:
+      nodes: 8
+      env:
+        HF_HOME: /hf_hub_cache
+        HF_HUB_CACHE: /hf_hub_cache
+        VLLM_FLOAT32_MATMUL_PRECISION: high
+        VLLM_ENGINE_READY_TIMEOUT_S: '7200'
+        PYTHONUNBUFFERED: '1'
+        DYN_TCP_CONNECT_TIMEOUT: '120'
+        UCX_CUDA_IPC_ENABLE_MNNVL: 'n'
+        UCX_MEMTYPE_CACHE: 'n'
+        UCX_TLS: rc,cuda_copy
+        UCX_MEMTYPE_REG_WHOLE: 'n'
+        UCX_RNDV_PIPELINE_ERROR_HANDLING: 'y'
+        UCX_MODULE_DIR: /usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx
+        NIXL_UCX_SGL_ENABLE: '1'
+        NCCL_IB_HCA: '@fabric.rdma-devices'
+        VLLM_USE_V2_MODEL_RUNNER: '1'
+        UCX_NET_DEVICES: '@fabric.rdma-device-ports'
+        VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_LIMIT: '1024'
+        DYN_BACKEND_ADMISSION_ENGINE_REQUEST_WAITING_LIMIT: '1024'
+        DYN_BACKEND_ADMISSION_REQUEST_QUEUE_LIMIT: '2048'
+        VLLM_MOONCAKE_LOAD_RECV_THREADS: '4'
+        MC_SLICE_SIZE: '1048576'
+        MC_MAX_MR_SIZE: '4294967296'
+        MC_ENABLE_DEST_DEVICE_AFFINITY: '1'
+        WITH_NVIDIA_PEERMEM: '0'
+        VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
+        VLLM_RS_TOKEN_IDS_AS_BYTES: '1'
+        VLLM_MOONCAKE_STORE_HBM_POOL: '1'
+        VLLM_KV_CACHE_LAYOUT: BLHNC
+        VLLM_DFLASH_DRAFT_KV_TAIL: '1'
+        NCCL_CUMEM_ENABLE: '1'
+        NCCL_MNNVL_ENABLE: '1'
+        NCCL_NVLS_ENABLE: '1'
+        VLLM_ALLREDUCE_USE_SYMM_MEM: '0'
+        VLLM_MINIMAX_M3_MSA_MXFP8_OUTPUT: '1'
+        VLLM_MEGAMOE_NVFP4_ROW_STAGING: '1'
+        VLLM_DRAFT_KV_POOL: '1'
+        VLLM_DRAFT_KV_POOL_NUM_BLOCKS: '1800'
+        VLLM_MINIMAX_M3_QKV_FUSED_EPILOGUE_MIN_TOKENS: '24'
+        VLLM_MEGAMOE_FUSED_ROUTING: '1'
+      args:
+        served-model-name: MiniMaxAI/MiniMax-M3.1-Flash
+        language-model-only: true
+        trust-remote-code: true
+        enable-expert-parallel: true
+        # The checkpoint is QAT-trained for an NVFP4 KV cache.
+        kv-cache-dtype: nvfp4
+        # MSA sparse/index cache needs 128-token blocks.
+        block-size: 128
+        attention-config: '{"indexer_kv_dtype":"nvfp4","use_prefill_query_quantization":true}'
+        max-model-len: 1048576
+        # AgentX requires a stream interval of 20 to 60 tokens; vLLM defaults to 1.
+        stream-interval: 20
+        load-format: fastsafetensors
+        kernel-config: '{"moe_backend":"deep_gemm_mega_moe"}'
+        speculative-config: '{"method":"dspark","num_speculative_tokens":7,"attention_backend":"FLASHINFER_TS","kv_cache_dtype":"fp8","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+        tensor-parallel-size: 1
+        gpu-memory-utilization: 0.92
+        max-num-batched-tokens: 8192
+        watermark: 0.02
+        max-num-inflight-kv-loads: 64
+        max-async-kv-loads-per-step: 4
+        compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+        enable-eplb: true
+        data-parallel-size: 32
+        enable-prefix-caching: true
+        data-parallel-rpc-port: 13345
+  sbatch_directives:
+    cpus-per-task: '72'
+    mem: '0'
+  srun_options:
+    container-remap-root: ''
+  benchmark:
+    env:
+      AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
+      AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+      AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'vllm:'
+      AIPERF_SERVER_METRICS_COLLECTION_INTERVAL: '1.0'
+    placement:
+      node: dedicated
+
+override_2p1d_dep8_dep32_c940:
+  name: minimaxm31flash-gb200-disagg-mooncake-cu135-2p1d-dep8-dep32-c940
+  frontend:
+    worker_selection:
+      instances:
+      - name: prefill-least-loaded
+        type: dynamo-two-tier-cost-fn
+        parameters:
+          cache_threshold: 0.8
+  roles:
+    prefill:
+      nodes: 4
+      args:
+        gpu-memory-utilization: 0.93
+        kv-cache-memory-bytes: 93952409600
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"lookup_prefetch_limit":64,"lookup_prefetch_ttl_s":10,"enable_offload":false,"hbm_pool":{"segment_size":22548578304}}}]}}'
+    decode:
+      args:
+        kv-cache-memory-bytes: 95563022336
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120,"background_receiver":true}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"save_decode_cache":false,"enable_lookup":false,"hbm_pool":{"segment_size":"53GB"}}}]}}'
+        max-num-seqs: 14
+        max-cudagraph-capture-size: 112
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":0,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
+
+override_2p1d_dep8_dep16_c800:
+  name: minimaxm31flash-gb200-disagg-mooncake-cu135-2p1d-dep8-dep16-c800
+  frontend:
+    worker_selection:
+      instances:
+      - name: prefill-least-loaded
+        type: dynamo-two-tier-cost-fn
+        parameters:
+          cache_threshold: 0.8
+  roles:
+    prefill:
+      nodes: 4
+      args:
+        gpu-memory-utilization: 0.93
+        kv-cache-memory-bytes: 93952409600
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"lookup_prefetch_limit":64,"lookup_prefetch_ttl_s":10,"enable_offload":false,"hbm_pool":{"segment_size":22548578304}}}]}}'
+    decode:
+      nodes: 4
+      args:
+        data-parallel-size: 16
+        kv-cache-memory-bytes: 102005473280
+        kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"backends":["UCX"],"enforce_handshake_compat":false,"kv_lease_duration":120,"background_receiver":true}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false,"save_decode_cache":false,"enable_lookup":false,"hbm_pool":{"segment_size":"42GB"}}}]}}'
+        max-num-seqs: 24
+        max-cudagraph-capture-size: 192
+        eplb-config: '{"communicator":"symm_mem","num_redundant_experts":16,"window_size":1000,"step_interval":3000,"use_async":true,"log_balancedness":true,"log_balancedness_interval":3000}'
