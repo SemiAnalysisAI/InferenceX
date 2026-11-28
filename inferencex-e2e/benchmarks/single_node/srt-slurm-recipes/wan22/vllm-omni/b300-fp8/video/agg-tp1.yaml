@@ -1,0 +1,55 @@
+schema: 2
+name: wan22-vllm-omni-agg-tp1
+
+resources:
+  gpu_type: b300
+
+services:
+  - name: video-server
+    args:
+      - --model-view
+      - snapshot
+      - --
+      - vllm
+      - serve
+      - "{model_path}"
+      - --served-model-name
+      - "{model_id}"
+      - --omni
+      - --host
+      - 0.0.0.0
+      - --port
+      - "30283"
+      - --num-gpus
+      - "{gpus_per_node}"
+      # Deployment only: one GPU runs both CFG branches with no sequence parallelism.
+      - --tensor-parallel-size
+      - "1"
+      - --cfg-parallel-size
+      - "1"
+      - --usp
+      - "1"
+      - --ring
+      - "1"
+      # Precision only: vLLM-Omni quantizes both experts' transformer-block linears to FP8 at
+      # load; attention kernels, the text encoder and the VAE stay BF16.
+      - --quantization
+      - fp8
+      - --vae-use-tiling
+      - --init-timeout
+      - "3600"
+      - --stage-init-timeout
+      - "3600"
+    env:
+      VIDEO_RUNTIME_REVISION: 5917730a4b02aedb44d374173cdc1b10484ccd52
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+      # b300-dsxe serves Wan from the runner-home HF cache on a network filesystem, where the
+      # engine's multi-thread mmap shard loader reads at ~10 MB/s; one sequential pass first fills
+      # the page cache (the text encoder alone already streams at ~240 MB/s from the same cache).
+      VIDEO_PREFETCH_MODEL: "1"
+      # The release set reuses each prompt across five seeds; cached text embeddings would skip work.
+      OMNI_DIFFUSION_PROMPT_EMBED_CACHE: "0"
+      VLLM_OMNI_VIDEO_SYNC_TIMEOUT: "14400"
+      VLLM_OMNI_SERVER_STORAGE__PATH: /logs/video/server/storage
+    readiness:
+      timeout_seconds: 3600
