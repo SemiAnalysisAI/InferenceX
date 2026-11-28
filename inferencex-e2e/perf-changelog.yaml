@@ -13516,3 +13516,10 @@
   description:
     - "Add Kimi-K3.1-Pro GB200 vLLM AgentX configs on vllm/vllm-openai:kimi-k31-arm64-cu135-7074371 with optimized parallel configurations."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5199
+
+- config-keys:
+    - glm5.3-fp4-mi355x-sglang-agentic-mtp
+  scenario-type: [agentic-coding]
+  description:
+    - "Update the SGLang image from v0.5.22-rocm10-mi35x-20261025 to v0.5.23-rocm10-mi35x-20261127."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/5274
