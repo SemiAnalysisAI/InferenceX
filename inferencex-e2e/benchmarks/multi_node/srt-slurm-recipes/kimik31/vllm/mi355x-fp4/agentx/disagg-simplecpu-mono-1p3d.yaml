@@ -24,7 +24,7 @@ frontend:
   enable_multiple_frontends: false
   placement:
     node: head
-  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:8de062a51b3fc07fbad889740a3cabaa812db7c87a5e39c0eb45bc62289da0d7
+  container_image: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:72eeb164aee35cbce9eaabcd90bd5ec2c8d40ad5d996c4c6b394479c4fd2ee88
   args:
     policy: kv_aware
     prefill-policy: kv_aware
@@ -46,7 +46,7 @@ engine:
   connector: moriio
 roles:
   prefill:
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:8de062a51b3fc07fbad889740a3cabaa812db7c87a5e39c0eb45bc62289da0d7
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:72eeb164aee35cbce9eaabcd90bd5ec2c8d40ad5d996c4c6b394479c4fd2ee88
     nodes: 1
     workers: 1
     gpus: 8
@@ -84,8 +84,8 @@ roles:
       cache-aware-prefill-admission: true
       kernel-config: '{"amd_kernels":{"disabled_routes":["moe","norm","overlap"]}}'
     env:
-      K31_VLLM_SOURCE_SHA: 7eb66e3325c4691662aba72c638e35206f3ebe5f
-      K31_VLLM_RECORD_SHA256: d0c3a8ae02606cc4b9eb5141af68efcdf20edbb3e143fce63b4496932ce4a9d6
+      K31_VLLM_SOURCE_SHA: 28df625498e67dea665f4c9ac0026f5803239fa3
+      K31_VLLM_RECORD_SHA256: 84dc2e3d4f9c2f6fc958c8d8295eb5e80bb230631212c9ea7fd701ea592e6a42
       VLLM_USE_V2_MODEL_RUNNER: '1'
       VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
       VLLM_ROCM_USE_AITER: '1'
@@ -228,8 +228,8 @@ roles:
       kernel-config: '{"amd_kernels":{"enabled":true}}'
       watermark: 0.02
     env:
-      K31_VLLM_SOURCE_SHA: 7eb66e3325c4691662aba72c638e35206f3ebe5f
-      K31_VLLM_RECORD_SHA256: d0c3a8ae02606cc4b9eb5141af68efcdf20edbb3e143fce63b4496932ce4a9d6
+      K31_VLLM_SOURCE_SHA: 28df625498e67dea665f4c9ac0026f5803239fa3
+      K31_VLLM_RECORD_SHA256: 84dc2e3d4f9c2f6fc958c8d8295eb5e80bb230631212c9ea7fd701ea592e6a42
       VLLM_USE_V2_MODEL_RUNNER: '1'
       VLLM_ROCM_USE_AITER_MOE_SITUV2: '1'
       VLLM_ROCM_USE_AITER: '1'
@@ -304,6 +304,7 @@ roles:
       MORI_IO_LOG_LEVEL: info
       MORI_IO_QP_MAX_RD_ATOMIC: '1'
       VLLM_KIMI_SD_DSA: native576
+      VLLM_KIMI_SD_LOCAL_KV_SPLITS: '8'
       VLLM_KIMI_SD_STATS_INTERVAL: '0'
       VLLM_KIMI_AKR: '1'
       VLLM_KIMI_AKR_K1: '0'
@@ -336,7 +337,7 @@ roles:
       KV_OFFLOAD_BACKEND: simplecpu
       DECODE_CPU_DRAM_GB: '0'
       VLLM_ROCM_USE_AITER_MOE: '1'
-    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:8de062a51b3fc07fbad889740a3cabaa812db7c87a5e39c0eb45bc62289da0d7
+    container: registry-1.docker.io#yukiozzz/vllm-openai-rocm:sha256:72eeb164aee35cbce9eaabcd90bd5ec2c8d40ad5d996c4c6b394479c4fd2ee88
 benchmark:
   env:
     AIPERF_BENCHMARK_GRACE_PERIOD: '30'
